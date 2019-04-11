@@ -25,7 +25,7 @@ impl From<&Algorithm> for i16 {
 type UserId = String;
 
 #[derive(Clone)]
-struct Challenge(Vec<u8>);
+pub struct Challenge(Vec<u8>);
 
 impl std::fmt::Debug for Challenge {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -41,28 +41,30 @@ impl std::fmt::Display for Challenge {
 
 // We have to remember the challenges we issued, so keep a reference ...
 
-pub struct Webauthn {
+pub struct Webauthn<T> {
     rng: StdRng,
-    chals: BTreeMap<UserId, Challenge>,
-    creds: BTreeMap<UserId, Vec<CredentialID>>,
-    rp: String,
+    config: T,
     pkcp: Vec<PubKeyCredParams>,
 }
 
-impl Webauthn {
-    pub fn new(rp: String, alg: Vec<Algorithm>) -> Self {
-        Webauthn {
-            rng: StdRng::from_entropy(),
-            chals: BTreeMap::new(),
-            creds: BTreeMap::new(),
-            rp: rp,
-            pkcp: alg
+impl<T> Webauthn<T> {
+    pub fn new(config: T) -> Self
+    where
+        T: WebauthnConfig,
+    {
+        let pkcp = config
+                .get_credential_algorithms()
                 .iter()
                 .map(|a| PubKeyCredParams {
                     type_: "public-key".to_string(),
                     alg: a.into(),
                 })
-                .collect(),
+                .collect();
+        Webauthn {
+            // rng: config.get_rng(),
+            rng: StdRng::from_entropy(),
+            config: config,
+            pkcp: pkcp,
         }
     }
 
@@ -74,32 +76,50 @@ impl Webauthn {
         )
     }
 
-    pub fn generate_challenge_register(&mut self, username: UserId) -> CreationChallengeResponse {
-        let chal = self.generate_challenge();
-
+    fn generate_challenge_response(
+        &mut self,
+        username: &UserId,
+        chal: &Challenge,
+    ) -> CreationChallengeResponse
+        where T: WebauthnConfig
+    {
         println!("Challenge for {} -> {:?}", username, chal);
-        let c = CreationChallengeResponse::new(
-            self.rp.clone(),
+        CreationChallengeResponse::new(
+            self.config.get_relying_party_id(),
             username.clone(),
             username.clone(),
             username.clone(),
             chal.to_string(),
             self.pkcp.clone(),
-            AUTHENTICATOR_TIMEOUT,
-        );
+            self.config.get_authenticator_timeout(),
+        )
+        // Now, do we persist the challenge here for tests so we can
+        // byyass the RNG parts?
+        // Or do we do it in the challenge_register, and have the test
+        // just pass in the challenge to the verify so that tests
+        // don't need a config at all?
+    }
 
-        // Do we need any other data?
-        // Ensure single challenge at a time? Other?
-        self.chals.insert(username, chal);
+    pub fn generate_challenge_register(&mut self, username: UserId) -> CreationChallengeResponse 
+        where T: WebauthnConfig
+    {
+        let chal = self.generate_challenge();
+        let c = self.generate_challenge_response(&username, &chal);
+
+        self.config.persist_challenge(username, chal);
         c
     }
 
-    pub fn generate_challenge_login(&mut self, username: UserId) -> RequestChallengeResponse {
+    pub fn generate_challenge_login(&mut self, username: UserId) -> RequestChallengeResponse
+        where T: WebauthnConfig
+    {
         let chal = self.generate_challenge();
 
         // Get the user's existing creds if any.
 
-        let uc = self.creds.get(username.as_str());
+        let uc = self.config.retrieve_credentials(username.as_str());
+
+        /*
         let ac = match uc {
             Some(creds) => creds
                 .iter()
@@ -111,6 +131,7 @@ impl Webauthn {
             None => Vec::new(),
         };
         println!("Creds for {} -> {:?}", username, ac);
+        */
 
         unimplemented!();
     }
@@ -162,7 +183,6 @@ impl Webauthn {
 
         // If validation is successful, obtain a list of acceptable trust anchors (attestation root certificates or ECDAA-Issuer public keys) for that attestation type and attestation statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 
-
         // 16: Assess the attestation trustworthiness using the outputs of the verification procedure in step 14, as follows: (SEE RFC)
         // If the attestation statement attStmt successfully verified but is not trustworthy per step 16 above, the Relying Party SHOULD fail the registration ceremony.
 
@@ -180,3 +200,82 @@ impl Webauthn {
         None
     }
 }
+
+pub trait WebauthnConfig {
+    fn get_relying_party_id(&self) -> String;
+
+    fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()>;
+
+    fn retrieve_challenge(&self, userid: &str) -> Option<Challenge>;
+
+    fn persist_credential(&mut self, userid: UserId) -> Result<(), ()>;
+
+    fn retrieve_credentials(&self, userid: &str) -> Option<Vec<()>>;
+
+    fn get_credential_algorithms(&self) -> Vec<Algorithm> {
+        vec![Algorithm::ALG_ECDSA_SHA256]
+    }
+
+    fn get_authenticator_timeout(&self) -> u32 {
+        AUTHENTICATOR_TIMEOUT
+    }
+
+    /*
+    fn get_rng(&self) -> dyn rand::Rng {
+        StdRng::from_entropy()
+    }
+    */
+}
+
+pub struct WebauthnEphemeralConfig {
+    chals: BTreeMap<UserId, Challenge>,
+    creds: BTreeMap<UserId, Vec<CredentialID>>,
+    rp: String,
+}
+
+impl WebauthnConfig for WebauthnEphemeralConfig {
+    fn get_relying_party_id(&self) -> String {
+        self.rp.clone()
+    }
+
+    fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()> {
+        self.chals.insert(userid, challenge);
+        Ok(())
+    }
+
+    fn retrieve_challenge(&self, userid: &str) -> Option<Challenge> {
+        unimplemented!();
+        None
+    }
+
+    fn persist_credential(&mut self, userid: UserId) -> Result<(), ()> {
+        unimplemented!();
+    }
+
+    fn retrieve_credentials(&self, userid: &str) -> Option<Vec<()>> {
+        unimplemented!();
+        None
+    }
+}
+
+impl WebauthnEphemeralConfig {
+    pub fn new(rp: &str) -> Self {
+        WebauthnEphemeralConfig {
+            chals: BTreeMap::new(),
+            creds: BTreeMap::new(),
+            rp: rp.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+
+    #[test]
+    fn test_ephemeral() {
+        
+    }
+}
+
+

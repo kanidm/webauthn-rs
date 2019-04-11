@@ -37,17 +37,15 @@ struct IndexTemplate {
 struct AppState<'a> {
     // Maintain a map of all the lists and their items.
     db: BTreeMap<&'a str, Vec<&'a str>>,
-    wan: Arc<Mutex<Webauthn>>,
+    wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>,
 }
 
 impl<'a> AppState<'a> {
     fn new() -> Self {
+        let wan_c = WebauthnEphemeralConfig::new("http://127.0.0.1:8000/auth");
         let s = AppState {
             db: BTreeMap::new(),
-            wan: Arc::new(Mutex::new(Webauthn::new(
-                "http://127.0.0.1:8000/auth".to_string(),
-                vec![Algorithm::ALG_ECDSA_SHA256],
-            ))),
+            wan: Arc::new(Mutex::new(Webauthn::new(wan_c))),
         };
         s
     }
