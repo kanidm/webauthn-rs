@@ -3,12 +3,13 @@ const cose_alg_ECDSA_w_SHA256 = -7;
 const cose_alg_ECDSA_w_SHA512 = -36;
 
 // Need to manage the username better here?
-const CHALLENGE_URL = "/auth/challenge/xxx";
+const REG_CHALLENGE_URL = "/auth/challenge/register/xxx";
+const LGN_CHALLENGE_URL = "/auth/challenge/login/xxx";
 const REGISTER_URL = "/auth/register";
 const LOGIN_URL = "/auth/login";
 
 function register() {
-  fetch(CHALLENGE_URL, {method: "POST"})
+  fetch(REG_CHALLENGE_URL, {method: "POST"})
     .then(res => res.json())
     .then(challenge => {
       console.log("challenge");
@@ -42,7 +43,7 @@ function register() {
 }
 
 function login() {
-  fetch(CHALLENGE_URL, {method: "POST"})
+  fetch(LGN_CHALLENGE_URL, {method: "POST"})
     .then(res => res.json())
     .then(challenge => {
       console.log("challenge");

@@ -62,13 +62,25 @@ fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
     HttpResponse::Ok().content_type("text/html").body(s)
 }
 
-fn challenge((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
+fn challenge_register((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
     let chal = {
         state
             .wan
             .lock()
             .expect("Failed to lock!")
-            .generate_challenge(username.into_inner())
+            .generate_challenge_register(username.into_inner())
+    };
+    println!("{:?}", chal);
+    HttpResponse::Ok().json(chal)
+}
+
+fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
+    let chal = {
+        state
+            .wan
+            .lock()
+            .expect("Failed to lock!")
+            .generate_challenge_login(username.into_inner())
     };
     println!("{:?}", chal);
     HttpResponse::Ok().json(chal)
@@ -118,8 +130,11 @@ fn main() {
             .resource("", |r| r.f(index_view))
             .resource("/", |r| r.f(index_view))
             // Need a challenge generation
-            .resource("/challenge/{username}", |r| {
-                r.method(http::Method::POST).with(challenge)
+            .resource("/challenge/register/{username}", |r| {
+                r.method(http::Method::POST).with(challenge_register)
+            })
+            .resource("/challenge/login/{username}", |r| {
+                r.method(http::Method::POST).with(challenge_login)
             })
             // Need a registration
             .resource("/register", |r| {

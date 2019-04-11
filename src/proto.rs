@@ -8,6 +8,8 @@ use byteorder::{BigEndian, ByteOrder};
 // These are the three primary communication structures you will
 // need to handle.
 
+pub type CredentialID = Vec<u8>;
+
 #[derive(Debug, Serialize)]
 struct RelayingParty {
     name: String,
@@ -31,36 +33,41 @@ pub struct PubKeyCredParams {
 pub struct AllowCredentials {
     #[serde(rename = "type")]
     pub(crate) type_: String,
-    pub(crate) id: String,
+    pub(crate) id: CredentialID,
 }
 
+// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize)]
-struct PublicKey {
-    challenge: String,
+struct PublicKeyCredentialCreationOptions {
     rp: RelayingParty,
     user: User,
+    // Should this just be bytes?
+    challenge: String,
     pubKeyCredParams: Vec<PubKeyCredParams>,
-    allowCredentials: Vec<AllowCredentials>,
+    timeout: u32,
+    // excludeCredentials
+    // authenticatorSelection
+    // attestation
+    // extensions
 }
 
 #[derive(Debug, Serialize)]
-pub struct ChallengeResponse {
-    publicKey: PublicKey,
+pub struct CreationChallengeResponse {
+    publicKey: PublicKeyCredentialCreationOptions,
 }
 
-impl ChallengeResponse {
+impl CreationChallengeResponse {
     pub fn new(
-        challenge: String,
         relaying_party: String,
         user_id: String,
         user_name: String,
         user_display_name: String,
+        challenge: String,
         pkcp: Vec<PubKeyCredParams>,
-        ac: Vec<AllowCredentials>,
-    ) -> ChallengeResponse {
-        ChallengeResponse {
-            publicKey: PublicKey {
-                challenge: challenge,
+        timeout: u32,
+    ) -> CreationChallengeResponse {
+        CreationChallengeResponse {
+            publicKey: PublicKeyCredentialCreationOptions {
                 rp: RelayingParty {
                     name: relaying_party,
                 },
@@ -69,10 +76,38 @@ impl ChallengeResponse {
                     name: user_name,
                     displayName: user_display_name,
                 },
+                challenge: challenge,
                 pubKeyCredParams: pkcp,
-                allowCredentials: ac,
+                timeout: timeout,
             },
         }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct PublicKeyCredentialRequestOptions {
+    challenge: String,
+    rpId: String,
+    timeout: u32,
+    allowCredentials: Vec<AllowCredentials>,
+    userVerification: String,
+    // extensions
+}
+
+#[derive(Debug, Serialize)]
+pub struct RequestChallengeResponse {
+    publicKey: PublicKeyCredentialRequestOptions,
+}
+
+impl RequestChallengeResponse {
+    pub fn new(
+        challenge: String,
+        relaying_party: String,
+        timeout: u32,
+        allowCredentials: Vec<AllowCredentials>,
+        userVerification: String,
+    ) -> Self {
+        unimplemented!();
     }
 }
 
@@ -100,7 +135,7 @@ pub(crate) struct Extensions {}
 #[derive(Debug)]
 pub(crate) struct AttestedCredentialData {
     aaguid: Vec<u8>,
-    credential_id: Vec<u8>,
+    credential_id: CredentialID,
     credential_pk: Vec<u8>,
 }
 
