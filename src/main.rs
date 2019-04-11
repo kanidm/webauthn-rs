@@ -9,6 +9,7 @@ extern crate env_logger;
 
 #[macro_use]
 extern crate serde_derive;
+extern crate byteorder;
 
 use askama::Template;
 
@@ -47,6 +48,7 @@ impl<'a> AppState<'a> {
             db: BTreeMap::new(),
             wan: Arc::new(Mutex::new(Webauthn::new(
                 "http://127.0.0.1:8000/auth".to_string(),
+                vec![Algorithm::ALG_ECDSA_SHA256],
             ))),
         };
         s
@@ -75,11 +77,16 @@ fn challenge((username, state): (Path<String>, State<AppState>)) -> HttpResponse
 }
 
 fn register((reg, state): (Json<RegisterResponse>, State<AppState>)) -> HttpResponse {
-    println!("{:?}", reg);
+    state.wan.lock().expect("Failed to lock!")
+        .register_credential(reg.into_inner()).unwrap();
+
     HttpResponse::Ok().json(())
 }
 
 fn login((lgn, state): (Json<LoginRequest>, State<AppState>)) -> HttpResponse {
+    state.wan.lock().expect("Failed to lock!")
+        .verify_credential(lgn.into_inner()).unwrap();
+
     HttpResponse::Ok().json(())
 }
 
