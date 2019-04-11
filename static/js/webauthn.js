@@ -28,7 +28,13 @@ function register() {
       cc.response.clientDataJSON = toBase64(newCredential.response.clientDataJSON);
       cc.type = newCredential.type;
       console.log(cc);
-      return fetch(REGISTER_URL, {method: "POST", body: JSON.stringify(cc)})
+      return fetch(REGISTER_URL, {
+        method: "POST",
+        body: JSON.stringify(cc),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
     })
     .catch(err => console.log(err));
   });

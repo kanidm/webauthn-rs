@@ -5,19 +5,19 @@ extern crate actix_web;
 extern crate askama;
 extern crate base64;
 extern crate env_logger;
-extern crate futures;
+// extern crate futures;
 
 #[macro_use]
 extern crate serde_derive;
 
 use askama::Template;
 
-use actix::prelude::*;
+// use actix::prelude::*;
 use actix_web::{
-    fs, http, middleware, server, App, FutureResponse, HttpRequest, HttpResponse, Path, State,
+    fs, http, middleware, server, App, HttpRequest, HttpResponse, Path, State, Json,
 };
 
-use futures::future::Future;
+// use futures::future::Future;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -43,7 +43,7 @@ struct AppState<'a> {
 
 impl<'a> AppState<'a> {
     fn new() -> Self {
-        let mut s = AppState {
+        let s = AppState {
             db: BTreeMap::new(),
             wan: Arc::new(Mutex::new(Webauthn::new(
                 "http://127.0.0.1:8000/auth".to_string(),
@@ -74,11 +74,12 @@ fn challenge((username, state): (Path<String>, State<AppState>)) -> HttpResponse
     HttpResponse::Ok().json(chal)
 }
 
-fn register((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
+fn register((reg, state): (Json<RegisterResponse>, State<AppState>)) -> HttpResponse {
+    println!("{:?}", reg);
     HttpResponse::Ok().json(())
 }
 
-fn login((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
+fn login((lgn, state): (Json<LoginRequest>, State<AppState>)) -> HttpResponse {
     HttpResponse::Ok().json(())
 }
 
@@ -108,8 +109,16 @@ fn main() {
                 r.method(http::Method::POST).with(challenge)
             })
             // Need a registration
-            .resource("/register", |r| r.method(http::Method::POST).with(register))
-            .resource("/login", |r| r.method(http::Method::POST).with(login))
+            .resource("/register", |r| r.method(http::Method::POST)
+                .with_config(register, |((cfg), )| {
+                    cfg.0.limit(4096);
+                })
+            )
+            .resource("/login", |r| r.method(http::Method::POST)
+                .with_config(login, |((cfg), )| {
+                    cfg.0.limit(4096);
+                })
+            )
         // Need login
     })
     .bind("127.0.0.1:8080")
@@ -119,3 +128,4 @@ fn main() {
     println!("Started http server: http://127.0.0.1:8080/auth/");
     let _ = sys.run();
 }
+
