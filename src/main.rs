@@ -14,9 +14,7 @@ extern crate byteorder;
 use askama::Template;
 
 // use actix::prelude::*;
-use actix_web::{
-    fs, http, middleware, server, App, HttpRequest, HttpResponse, Path, State, Json,
-};
+use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Json, Path, State};
 
 // use futures::future::Future;
 
@@ -77,15 +75,23 @@ fn challenge((username, state): (Path<String>, State<AppState>)) -> HttpResponse
 }
 
 fn register((reg, state): (Json<RegisterResponse>, State<AppState>)) -> HttpResponse {
-    state.wan.lock().expect("Failed to lock!")
-        .register_credential(reg.into_inner()).unwrap();
+    state
+        .wan
+        .lock()
+        .expect("Failed to lock!")
+        .register_credential(reg.into_inner())
+        .unwrap();
 
     HttpResponse::Ok().json(())
 }
 
 fn login((lgn, state): (Json<LoginRequest>, State<AppState>)) -> HttpResponse {
-    state.wan.lock().expect("Failed to lock!")
-        .verify_credential(lgn.into_inner()).unwrap();
+    state
+        .wan
+        .lock()
+        .expect("Failed to lock!")
+        .verify_credential(lgn.into_inner())
+        .unwrap();
 
     HttpResponse::Ok().json(())
 }
@@ -116,16 +122,17 @@ fn main() {
                 r.method(http::Method::POST).with(challenge)
             })
             // Need a registration
-            .resource("/register", |r| r.method(http::Method::POST)
-                .with_config(register, |((cfg), )| {
+            .resource("/register", |r| {
+                r.method(http::Method::POST)
+                    .with_config(register, |((cfg),)| {
+                        cfg.0.limit(4096);
+                    })
+            })
+            .resource("/login", |r| {
+                r.method(http::Method::POST).with_config(login, |((cfg),)| {
                     cfg.0.limit(4096);
                 })
-            )
-            .resource("/login", |r| r.method(http::Method::POST)
-                .with_config(login, |((cfg), )| {
-                    cfg.0.limit(4096);
-                })
-            )
+            })
         // Need login
     })
     .bind("127.0.0.1:8080")
@@ -135,4 +142,3 @@ fn main() {
     println!("Started http server: http://127.0.0.1:8080/auth/");
     let _ = sys.run();
 }
-

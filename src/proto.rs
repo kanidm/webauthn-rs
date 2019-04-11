@@ -88,18 +88,14 @@ pub(crate) struct CollectedClientData {
 // Should this be tryfrom
 impl From<&String> for CollectedClientData {
     fn from(data: &String) -> CollectedClientData {
-        let client_data_vec: Vec<u8> = 
-            base64::decode(data)
-            .unwrap();
+        let client_data_vec: Vec<u8> = base64::decode(data).unwrap();
 
-        serde_json::from_slice(&client_data_vec)
-            .unwrap()
+        serde_json::from_slice(&client_data_vec).unwrap()
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct Extensions {
-}
+pub(crate) struct Extensions {}
 
 #[derive(Debug)]
 pub(crate) struct AttestedCredentialData {
@@ -135,11 +131,8 @@ pub(crate) struct AttestationObject {
 
 impl From<&String> for AttestationObject {
     fn from(data: &String) -> AttestationObject {
-        let attest_data_vec: Vec<u8> =
-            base64::decode(&data)
-            .unwrap();
-        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec)
-            .unwrap();
+        let attest_data_vec: Vec<u8> = base64::decode(&data).unwrap();
+        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec).unwrap();
 
         // TODO: Actually length check everything !!!
         // Like holy shit, check it!!!
@@ -190,18 +183,17 @@ impl From<&String> for AttestationObject {
                 user_present: user_present,
                 user_verified: user_verified,
                 extensions: extensions,
-                acd: acd
-            }
+                acd: acd,
+            },
         }
     }
 }
-
 
 // https://w3c.github.io/webauthn/#authenticatorattestationresponse
 #[derive(Debug, Deserialize)]
 pub struct AuthenticatorAttestationResponse {
     pub attestationObject: String,
-    pub clientDataJSON: String
+    pub clientDataJSON: String,
 }
 
 // See standard PublicKeyCredential and Credential
@@ -233,7 +225,7 @@ pub struct LoginRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{RegisterResponse, AttestationObject};
+    use super::{AttestationObject, RegisterResponse};
     use serde_json;
 
     #[test]
@@ -248,10 +240,8 @@ mod tests {
     fn deserialise_AttestationObject() {
         let raw_ao = "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg==".to_string();
 
-
         let ao = AttestationObject::from(&raw_ao);
         println!("{:?}", ao);
-
     }
 
 }

@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 // Can this ever change?
 const CHALLENGE_SIZE_BYTES: usize = 32;
 
-
 pub enum Algorithm {
     ALG_ECDSA_SHA256,
 }
@@ -36,7 +35,6 @@ impl std::fmt::Display for Challenge {
     }
 }
 
-
 // We have to remember the challenges we issued, so keep a reference ...
 
 pub struct Webauthn {
@@ -54,19 +52,17 @@ impl Webauthn {
             chals: BTreeMap::new(),
             creds: BTreeMap::new(),
             rp: rp,
-            pkcp: alg.iter().map(|a| {
-                PubKeyCredParams {
+            pkcp: alg
+                .iter()
+                .map(|a| PubKeyCredParams {
                     type_: "public-key".to_string(),
                     alg: a.into(),
-                }
-            }).collect(),
+                })
+                .collect(),
         }
     }
 
-    pub fn generate_challenge(
-        &mut self,
-        username: UserId,
-    ) -> ChallengeResponse {
+    pub fn generate_challenge(&mut self, username: UserId) -> ChallengeResponse {
         let chal = Challenge(
             (0..CHALLENGE_SIZE_BYTES)
                 .map(|_| self.rng.gen())
@@ -77,18 +73,14 @@ impl Webauthn {
 
         let uc = self.creds.get(username.as_str());
         let ac = match uc {
-            Some(creds) => {
-                creds.iter()
-                .map(|cred_id| {
-                    AllowCredentials {
-                        type_: "public-key".to_string(),
-                        id: cred_id.clone(),
-                    }
-                }).collect()
-            }
-            None => {
-                Vec::new()
-            }
+            Some(creds) => creds
+                .iter()
+                .map(|cred_id| AllowCredentials {
+                    type_: "public-key".to_string(),
+                    id: cred_id.clone(),
+                })
+                .collect(),
+            None => Vec::new(),
         };
 
         println!("Challenge for {} -> {:?}", username, chal);
@@ -125,7 +117,6 @@ impl Webauthn {
 
         // get the attetstation object
         // cbor decode
-
 
         let attest_data = AttestationObject::from(&reg.response.attestationObject);
         println!("{:?}", attest_data);
