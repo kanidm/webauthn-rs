@@ -17,8 +17,8 @@ use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Js
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use webauthn_rs::*;
 use webauthn_rs::proto::*;
+use webauthn_rs::*;
 
 #[derive(Template)]
 #[template(path = "index.html")]
