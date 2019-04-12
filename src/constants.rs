@@ -23,7 +23,7 @@ impl Algorithm {
     pub fn new(i: i64) -> Option<Algorithm> {
         match i {
             -7 => Some(Algorithm::ALG_ECDSA_SHA256),
-            _ => None
+            _ => None,
         }
     }
 }

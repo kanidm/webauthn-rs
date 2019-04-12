@@ -13,8 +13,6 @@ pub type CredentialID = Vec<u8>;
 pub(crate) type CBORExtensions = serde_cbor::Value;
 pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
-
-
 #[derive(Debug, Serialize)]
 struct RelayingParty {
     name: String,
@@ -209,7 +207,8 @@ impl From<&String> for AttestationObject {
             let cred_id: Vec<u8> = acd_extension_bytes[18..cred_id_end].into();
 
             // let cred_pk: Vec<u8> = acd_extension_bytes[cred_id_end..].into();
-            let cred_pk: serde_cbor::Value = serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..]).unwrap();
+            let cred_pk: serde_cbor::Value =
+                serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..]).unwrap();
 
             // Now re-encode it to find the length ... yuk.
             let encoded = serde_cbor::to_vec(&cred_pk).unwrap();
@@ -221,11 +220,14 @@ impl From<&String> for AttestationObject {
             //    0 -> 15   16, 17   18 + id_len   cred_id_end    cred_len + cred_id_end
             let exten_offset = cred_len + cred_id_end;
 
-            (exten_offset, Some(AttestedCredentialData {
-                aaguid: aaguid,
-                credential_id: cred_id,
-                credential_pk: cred_pk,
-            }))
+            (
+                exten_offset,
+                Some(AttestedCredentialData {
+                    aaguid: aaguid,
+                    credential_id: cred_id,
+                    credential_pk: cred_pk,
+                }),
+            )
         } else {
             (0, None)
         };
