@@ -35,7 +35,10 @@ struct AppState<'a> {
 
 impl<'a> AppState<'a> {
     fn new() -> Self {
-        let wan_c = WebauthnEphemeralConfig::new("http://127.0.0.1:8000/auth");
+        let wan_c = WebauthnEphemeralConfig::new(
+            "http://127.0.0.1:8080/auth",
+            "http://127.0.0.1:8080"
+        );
         let s = AppState {
             db: BTreeMap::new(),
             wan: Arc::new(Mutex::new(Webauthn::new(wan_c))),

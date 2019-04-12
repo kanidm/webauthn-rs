@@ -118,7 +118,7 @@ pub(crate) struct CollectedClientData {
     pub type_: String,
     pub challenge: String,
     pub origin: String,
-    // tokenBinding,
+    pub tokenBinding: Option<String>,
 }
 
 // Should this be tryfrom
