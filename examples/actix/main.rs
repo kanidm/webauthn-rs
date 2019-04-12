@@ -38,7 +38,7 @@ impl<'a> AppState<'a> {
         let wan_c = WebauthnEphemeralConfig::new(
             "http://127.0.0.1:8080/auth",
             "http://127.0.0.1:8080",
-            "127.0.0.1"
+            "127.0.0.1",
         );
         let s = AppState {
             db: BTreeMap::new(),
