@@ -3,13 +3,9 @@ extern crate actix_web;
 
 #[macro_use]
 extern crate askama;
-extern crate base64;
 extern crate env_logger;
-// extern crate futures;
 
-#[macro_use]
-extern crate serde_derive;
-extern crate byteorder;
+extern crate webauthn_rs;
 
 use askama::Template;
 
@@ -21,11 +17,8 @@ use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Js
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-mod proto;
-mod webauthn;
-
-use proto::*;
-use webauthn::*;
+use webauthn_rs::*;
+use webauthn_rs::proto::*;
 
 #[derive(Template)]
 #[template(path = "index.html")]

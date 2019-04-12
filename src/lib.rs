@@ -1,26 +1,17 @@
-use super::proto::*;
+extern crate base64;
+#[macro_use]
+extern crate serde_derive;
+extern crate byteorder;
+
+pub mod proto;
+pub mod error;
+pub mod constants;
+
+use proto::*;
+use constants::*;
 use rand::prelude::*;
 use std::collections::BTreeMap;
 
-// Can this ever change?
-const CHALLENGE_SIZE_BYTES: usize = 32;
-const AUTHENTICATOR_TIMEOUT: u32 = 6000;
-
-pub enum Algorithm {
-    ALG_ECDSA_SHA256,
-    ALG_RSASSA_PKCS15_SHA256,
-    ALG_RSASSA_PSS_SHA256,
-}
-
-impl From<&Algorithm> for i16 {
-    fn from(a: &Algorithm) -> i16 {
-        match a {
-            ALG_ECDSA_SHA256 => -7,
-            ALG_RSASSA_PKCS15_SHA256 => -257,
-            ALG_RSASSA_PSS_SHA256 => -37,
-        }
-    }
-}
 
 type UserId = String;
 
@@ -270,10 +261,22 @@ impl WebauthnEphemeralConfig {
 
 #[cfg(test)]
 mod tests {
-
-
     #[test]
     fn test_ephemeral() {
+        
+    }
+
+    // Test the crypto operations of the webauthn impl
+
+    #[test]
+    fn test_registration() {
+        // Make a "fake" challenge, where we know what the values should be ....
+
+        // Now check that we actually register correctly.
+    }
+
+    #[test]
+    fn test_authentication() {
         
     }
 }

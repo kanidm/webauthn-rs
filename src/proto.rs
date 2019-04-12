@@ -278,5 +278,5 @@ mod tests {
         let ao = AttestationObject::from(&raw_ao);
         println!("{:?}", ao);
     }
-
+    // Add tests for when the objects are too short.
 }
