@@ -45,9 +45,9 @@ struct PublicKeyCredentialCreationOptions {
     challenge: String,
     pubKeyCredParams: Vec<PubKeyCredParams>,
     timeout: u32,
+    attestation: String,
     // excludeCredentials
     // authenticatorSelection
-    // attestation
     // extensions
 }
 
@@ -79,6 +79,7 @@ impl CreationChallengeResponse {
                 challenge: challenge,
                 pubKeyCredParams: pkcp,
                 timeout: timeout,
+                attestation: "direct".to_string(),
             },
         }
     }
@@ -142,13 +143,13 @@ pub(crate) struct AttestedCredentialData {
 // https://w3c.github.io/webauthn/#sctn-attestation
 #[derive(Debug)]
 pub(crate) struct AuthenticatorData {
-    rp_id_hash: Vec<u8>,
-    flags: u8,
-    counter: u32,
-    user_present: bool,
-    user_verified: bool,
-    extensions: Option<Extensions>,
-    acd: Option<AttestedCredentialData>,
+    pub rp_id_hash: Vec<u8>,
+    pub flags: u8,
+    pub counter: u32,
+    pub user_present: bool,
+    pub user_verified: bool,
+    pub extensions: Option<Extensions>,
+    pub acd: Option<AttestedCredentialData>,
 }
 
 #[derive(Debug, Deserialize)]

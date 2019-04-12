@@ -28,6 +28,7 @@ Resources
 
 * Specification: https://w3c.github.io/webauthn/
 * JSON details: https://fidoalliance.org/specs/fido-v2.0-rd-20180702/fido-server-v2.0-rd-20180702.html
+* Write up on interactions: https://medium.com/@herrjemand/introduction-to-webauthn-api-5fd1fb46c285
 
 
 
