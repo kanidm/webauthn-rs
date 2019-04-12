@@ -248,9 +248,50 @@ impl<T> Webauthn<T> {
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given as the extensions option in the create() call. In particular, any extension identifier values in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
 
-        // Determine the attestation statement format by performing a USASCII case-sensitive match on fmt against the set of supported WebAuthn Attestation Statement Format Identifier values. An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values is maintained in the IANA registry of the same name [WebAuthn-Registries].
+        // TODO: Today we send NO EXTENSIONS, so we'll never have a case where the extensions
+        // are present! But because extensions are possible from the config we WILL need to manage
+        // this situation eventually!!!
+        match attest_data.authData.extensions {
+            Some(ex) => {
+                // We don't know how to handle client extensions yet!!!
+                unimplemented!();
+            }
+            None => {}
+        }
+
+        // Determine the attestation statement format by performing a USASCII case-sensitive match on fmt against the set of supported WebAuthn Attestation Statement Format Identifier values. An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values is maintained in the IANA registry of the same name [WebAuthn-Registries]. ( https://tools.ietf.org/html/draft-hodges-webauthn-registries-02 )
+        //
+        // So the rfc here actually doesn't help, and I can't see the values obviously. It looks like
+        // there is probably a string list of types of attestation statements, and my token is giving
+        // me "fido-u2f" but I'm sure there are more, and a better way to get these from a registry
+        // that seems to be undeclared ...
+        match attest_data.fmt.as_str() {
+            "fido-u2f" => {},
+            e => {
+                println!("unknown fmt type {:?}", e);
+                return Err(())
+            }
+        };
 
         // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature, by using the attestation statement format fmt’s verification procedure given attStmt, authData and the hash of the serialized client data computed in step 7.
+        let acd = match &attest_data.authData.acd {
+            Some(acd) => acd,
+            None => {
+                println!("No ACD present!");
+                return Err(());
+            }
+        };
+        let att_type = match self.verify_attStmt(
+            &attest_data.attStmt,
+            acd,
+            &attest_data.authDataBytes,
+            &client_data_json_hash
+        ) {
+            Ok(t) => t,
+            Err(e) => {
+                return Err(e)
+            }
+        };
 
         // If validation is successful, obtain a list of acceptable trust anchors (attestation root certificates or ECDAA-Issuer public keys) for that attestation type and attestation statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 
@@ -261,6 +302,147 @@ impl<T> Webauthn<T> {
 
         //  If the attestation statement attStmt verified successfully and is found to be trustworthy, then register the new credential with the account that was denoted in the options.user passed to create(), by associating it with the credentialId and credentialPublicKey in the attestedCredentialData in authData, as appropriate for the Relying Party's system.
 
+        unimplemented!();
+    }
+
+    fn verify_attStmt(
+        &self,
+        attStmt: &serde_cbor::Value,
+        acd: &AttestedCredentialData,
+        authDataBytes: &Vec<u8>,
+        client_data_hash: &Vec<u8>,
+    ) -> Result<AttStmtType, ()> {
+        // Okay, the process is:
+        //  https://w3c.github.io/webauthn/#generating-an-attestation-object
+        // https://w3c.github.io/webauthn/#packed-attestation
+
+        // Given the verification procedure inputs attStmt, authenticatorData and clientDataHash, the verification procedure is as follows:
+
+        // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
+        // ^-- This is already DONE as a factor of serde_cbor not erroring up to this point,
+        // and those errors will be handled better than just "unwrap" :)
+        // we'll also find out quickly when we attempt to access the data as a map ...
+
+        println!("attStmt: {:?}", attStmt);
+
+        let attStmtMap = match attStmt.as_object() {
+            Some(m) => m,
+            None => {
+                println!("Can't get attStmt map");
+                return Err(());
+            }
+        };
+
+        // If x5c is present, this indicates that the attestation type is not ECDAA. In this case:
+        let x5c = attStmtMap.get(&serde_cbor::ObjectKey::String("x5c".to_string()));
+        if x5c.is_some() {
+            // This is safe since we already did the is_some.
+            let x5ci = x5c.unwrap();
+            println!("x5ci: {:?}", x5ci);
+
+            // Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the attestation public key in attestnCert with the algorithm specified in alg.
+            // sig is from m
+            let sig = match attStmtMap.get(&serde_cbor::ObjectKey::String("sig".to_string())) {
+                Some(s) => s,
+                None => {
+                    println!("Can't get attStmt sig");
+                    return Err(())
+                }
+            };
+            println!("sig: {:?}", sig);
+            let concat: Vec<u8> = authDataBytes.iter().chain(client_data_hash.iter())
+                .map(|b| *b)
+                .collect();
+
+            // Now, they say to get the alg, which we do from the alg
+            // which is in the authData.acd.credential_pk;
+            // The credential_pk is in "COSE_Key format" apparently
+            // which is documented here
+            // https://www.rfc-editor.org/rfc/rfc8152.txt
+            // which means that alg is in optional field keyd 3 in the map.
+
+            // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
+            // 
+            let cred_pk = match acd.credential_pk.as_object() {
+                Some(cred_pk) => cred_pk,
+                None => {
+                    println!("ACD cbor not usable as map");
+                    return Err(());
+                }
+            };
+
+            let alg_id = match cred_pk.get(&serde_cbor::ObjectKey::Integer(3)) {
+                Some(id) => {
+                    match id.as_i64() {
+                        Some(i) => i,
+                        None => {
+                            println!("ALG ID Was not an integer!?");
+                            return Err(());
+                        }
+                    }
+                }
+                None => {
+                    println!("No ALG ID present");
+                    return Err(());
+                }
+            };
+
+            let alg_enum = match Algorithm::new(alg_id) {
+                Some(a) => a,
+                None => {
+                    println!("Alg ID not understood by our code ...");
+                    return Err(());
+                }
+            };
+
+            println!("Selected alg id {:?}", alg_enum);
+
+            // Verify stuff meow.
+            // https://medium.com/@herrjemand/verifying-fido2-packed-attestation-a067a9b2facd
+            let valid = match alg_enum {
+                ALG_ECDSA_SHA256 => {
+                    //     Extract leaf cert from “x5c” as attCert
+                }
+                ALG_RSASSA_PKCS15_SHA256 => {
+                    unimplemented!()
+                }
+                ALG_RSASSA_PSS_SHA256 => {
+                    unimplemented!()
+                }
+            };
+
+            // Verify that attestnCert meets the requirements in §8.2.1 Packed Attestation Statement Certificate Requirements.
+                    // Check that attCert is of version 3(ASN1 INT 2)
+                    // Check that attCert subject country (C) is set to a valid two character ISO 3166 code
+                    // Check that attCert subject organisation (O) is not empty
+                    // Check that attCert subject organisation unit (OU) is set to literal string “Authenticator Attestation”
+                    // Check that attCert subject common name(CN) is not empty.
+                    // Check that attCert basic constraints for CA is set to FALSE
+                    // If certificate contains id-fido-gen-ce-aaguid(1.3.6.1.4.1.45724.1.1.4) extension, then check that its value set to the AAGUID returned by the authenticator in authData.
+                    // Verify signature “sig” over the signatureBase with the public key extracted from leaf attCert in “x5c”, using the algorithm “alg”
+
+
+            // If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that the value of this extension matches the aaguid in authenticatorData.
+
+            // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
+
+            // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
+            return Ok(AttStmtType::X5C)
+        }
+
+        // If ecdaaKeyId is present, then the attestation type is ECDAA. In this case:
+
+            // Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using ECDAA-Verify with ECDAA-Issuer public key identified by ecdaaKeyId (see [FIDOEcdaaAlgorithm]).
+
+            // If successful, return implementation-specific values representing attestation type ECDAA and attestation trust path ecdaaKeyId.
+
+        // If neither x5c nor ecdaaKeyId is present, self attestation is in use.
+
+            // Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
+
+            // Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
+
+            // If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
         unimplemented!();
     }
 
@@ -305,6 +487,14 @@ pub trait WebauthnConfig {
 
     // This probably shouldn't be the default impl, so move it?
     fn get_origin(&self) -> &String;
+
+    // By default do we need any?
+    // TODO: Is this the right type? The standard is a bit confusing
+    // in this section:
+    // https://w3c.github.io/webauthn/#extensions
+    fn get_extensions(&self) -> Option<JSONExtensions> {
+        None
+    }
 
     /*
     fn get_rng(&self) -> dyn rand::Rng {

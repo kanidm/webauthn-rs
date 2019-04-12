@@ -4,11 +4,16 @@
 // applications.
 
 use byteorder::{BigEndian, ByteOrder};
+use std::collections::BTreeMap;
 
 // These are the three primary communication structures you will
 // need to handle.
 
 pub type CredentialID = Vec<u8>;
+pub(crate) type CBORExtensions = serde_cbor::Value;
+pub(crate) type JSONExtensions = BTreeMap<String, String>;
+
+
 
 #[derive(Debug, Serialize)]
 struct RelayingParty {
@@ -48,7 +53,9 @@ struct PublicKeyCredentialCreationOptions {
     attestation: String,
     // excludeCredentials
     // authenticatorSelection
-    // extensions
+    // See get_extensions for typing details here.
+    // I suspect it's actually a map in json.
+    extensions: Option<JSONExtensions>,
 }
 
 #[derive(Debug, Serialize)]
@@ -80,6 +87,7 @@ impl CreationChallengeResponse {
                 pubKeyCredParams: pkcp,
                 timeout: timeout,
                 attestation: "direct".to_string(),
+                extensions: None,
             },
         }
     }
@@ -131,13 +139,10 @@ impl From<&String> for CollectedClientData {
 }
 
 #[derive(Debug)]
-pub(crate) struct Extensions {}
-
-#[derive(Debug)]
 pub(crate) struct AttestedCredentialData {
-    aaguid: Vec<u8>,
-    credential_id: CredentialID,
-    credential_pk: Vec<u8>,
+    pub aaguid: Vec<u8>,
+    pub credential_id: CredentialID,
+    pub credential_pk: serde_cbor::Value,
 }
 
 // https://w3c.github.io/webauthn/#sctn-attestation
@@ -148,27 +153,33 @@ pub(crate) struct AuthenticatorData {
     pub counter: u32,
     pub user_present: bool,
     pub user_verified: bool,
-    pub extensions: Option<Extensions>,
+    pub extensions: Option<CBORExtensions>,
     pub acd: Option<AttestedCredentialData>,
 }
 
 #[derive(Debug, Deserialize)]
 // pub(crate) struct AttestationObject<'a> {
 pub struct AttestationObjectInner<'a> {
-    pub fmt: String,
     pub authData: &'a [u8],
+    pub fmt: String,
+    pub attStmt: serde_cbor::Value,
 }
 
 #[derive(Debug)]
 pub(crate) struct AttestationObject {
-    pub fmt: String,
     pub authData: AuthenticatorData,
+    pub authDataBytes: Vec<u8>,
+    pub fmt: String,
+    // https://w3c.github.io/webauthn/#generating-an-attestation-object
+    pub attStmt: serde_cbor::Value,
 }
 
 impl From<&String> for AttestationObject {
     fn from(data: &String) -> AttestationObject {
         let attest_data_vec: Vec<u8> = base64::decode(&data).unwrap();
         let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec).unwrap();
+
+        let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();
 
         // TODO: Actually length check everything !!!
         // Like holy shit, check it!!!
@@ -185,29 +196,45 @@ impl From<&String> for AttestationObject {
         let extensions_present = (flags & (1 << 7)) != 0;
         let counter: u32 = BigEndian::read_u32(&aoi.authData[33..37]);
 
-        // Get all remaining bytes.
+        // Get all remaining bytes. This is both the acd and extensions.
+        //
         let acd_extension_bytes: Vec<u8> = aoi.authData[37..].into();
 
-        let acd = if acd_present {
+        let (exten_offset, acd) = if acd_present {
             let aaguid: Vec<u8> = acd_extension_bytes[0..16].into();
             let cred_id_len: usize = BigEndian::read_u16(&acd_extension_bytes[16..18]) as usize;
             // Now this tells us how much to read from for the credential ID.
 
             let cred_id_end = 18 + cred_id_len;
             let cred_id: Vec<u8> = acd_extension_bytes[18..cred_id_end].into();
-            let cred_pk: Vec<u8> = acd_extension_bytes[cred_id_end..].into();
 
-            Some(AttestedCredentialData {
+            // let cred_pk: Vec<u8> = acd_extension_bytes[cred_id_end..].into();
+            let cred_pk: serde_cbor::Value = serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..]).unwrap();
+
+            // Now re-encode it to find the length ... yuk.
+            let encoded = serde_cbor::to_vec(&cred_pk).unwrap();
+            // Finally we know the cred len
+            let cred_len = encoded.len();
+
+            // Now to get the extension offset we have:
+            // [ aaguid   | id len | cred_id     | cred_pk     ][ extensions             ]
+            //    0 -> 15   16, 17   18 + id_len   cred_id_end    cred_len + cred_id_end
+            let exten_offset = cred_len + cred_id_end;
+
+            (exten_offset, Some(AttestedCredentialData {
                 aaguid: aaguid,
                 credential_id: cred_id,
                 credential_pk: cred_pk,
-            })
+            }))
+        } else {
+            (0, None)
+        };
+
+        let extensions: Option<serde_cbor::Value> = if acd_present && extensions_present {
+            serde_cbor::from_slice(&acd_extension_bytes[exten_offset..]).ok()
         } else {
             None
         };
-
-        // For now there seems to be no clear way to determine the extsions (if) they exist.
-        let extensions = None;
 
         // Yay! Now we can assemble a reasonably sane structure.
         AttestationObject {
@@ -221,6 +248,8 @@ impl From<&String> for AttestationObject {
                 extensions: extensions,
                 acd: acd,
             },
+            authDataBytes: authDataBytes,
+            attStmt: aoi.attStmt.clone(),
         }
     }
 }
