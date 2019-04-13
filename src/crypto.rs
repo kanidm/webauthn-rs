@@ -1,4 +1,5 @@
 use openssl::{bn, ec, nid};
+use std::convert::TryFrom;
 
 use super::constants::*;
 use super::proto::*;
@@ -14,7 +15,38 @@ use super::proto::*;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
-pub(crate) fn verify_attestation_sig(acd: &AttestedCredentialData, data: &Vec<u8>) -> Result<(), ()> {
+#[derive(Debug)]
+pub enum Algorithm {
+    ALG_ECDSA_SHA256,
+    ALG_RSASSA_PKCS15_SHA256,
+    ALG_RSASSA_PSS_SHA256,
+}
+
+impl From<&Algorithm> for i16 {
+    fn from(a: &Algorithm) -> i16 {
+        match a {
+            ALG_ECDSA_SHA256 => -7,
+            ALG_RSASSA_PKCS15_SHA256 => -257,
+            ALG_RSASSA_PSS_SHA256 => -37,
+        }
+    }
+}
+
+// Could make this a cbor option key type to save some boiler plate?
+impl TryFrom<i64> for Algorithm {
+    type Error = ();
+    fn try_from(i: i64) -> Result<Algorithm, Self::Error> {
+        match i {
+            -7 => Ok(Algorithm::ALG_ECDSA_SHA256),
+            _ => Err(()),
+        }
+    }
+}
+
+pub(crate) fn verify_attestation_sig(
+    acd: &AttestedCredentialData,
+    data: &Vec<u8>,
+) -> Result<(), ()> {
     // Now, they say to get the alg, which we do from the alg
     // which is in the authData.acd.credential_pk;
     // The credential_pk is in "COSE_Key format" apparently
@@ -44,11 +76,11 @@ pub(crate) fn verify_attestation_sig(acd: &AttestedCredentialData, data: &Vec<u8
         }
     };
 
-    let alg_enum = match Algorithm::new(alg_id) {
-        Some(a) => a,
-        None => {
-            println!("Alg ID not understood by our code ...");
-            return Err(());
+    let alg_enum = match Algorithm::try_from(alg_id) {
+        Ok(a) => a,
+        Err(e) => {
+            println!("Alg ID not understood by our code ... {:?}", e);
+            return Err(e);
         }
     };
 
@@ -56,6 +88,8 @@ pub(crate) fn verify_attestation_sig(acd: &AttestedCredentialData, data: &Vec<u8
 
     // Verify stuff meow.
     // https://medium.com/@herrjemand/verifying-fido2-packed-attestation-a067a9b2facd
+
+    // Based on the attest_fmt, that changes the data we need to attest
 
     match alg_enum {
         ALG_ECDSA_SHA256 => {
@@ -90,20 +124,15 @@ fn verify_ecdsa_sha256(
     // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
     // +---------+-------+----------+------------------------------------+
     // In the case I have here, my key is 2, so secp384r1
-    //
-    //     Extract leaf cert from “x5c” as attCert
 
     let xbn = bn::BigNum::from_slice(x).unwrap();
     let ybn = bn::BigNum::from_slice(y).unwrap();
 
     let group = ec::EcGroup::from_curve_name(nid::Nid::SECP384R1).unwrap();
 
-    let ec_key = ec::EcKey::from_public_key_affine_coordinates(
-        &group,
-        &xbn,
-        &ybn
-    ).unwrap();
+    let ec_key = ec::EcKey::from_public_key_affine_coordinates(&group, &xbn, &ybn).unwrap();
     assert!(ec_key.check_key().is_ok());
+    // Check the x/y points are actually on the curve. Does check_key do this?
 
     Err(())
 }
