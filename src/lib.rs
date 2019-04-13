@@ -16,7 +16,7 @@ use std::convert::TryFrom;
 
 use attestation::*;
 use constants::*;
-use crypto::{compute_sha256, Algorithm};
+use crypto::{compute_sha256, COSEContentType};
 use error::*;
 use proto::*;
 use rand::prelude::*;
@@ -60,7 +60,7 @@ impl<T> Webauthn<T> {
                 alg: a.into(),
             })
             .collect();
-        println!("rp_id: {:?}", config.get_relying_party_id());
+        // println!("rp_id: {:?}", config.get_relying_party_id());
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
             // rng: config.get_rng(),
@@ -91,7 +91,7 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        println!("Challenge for {} -> {:?}", username, chal);
+        // println!("Challenge for {} -> {:?}", username, chal);
         CreationChallengeResponse::new(
             self.config.get_relying_party_name(),
             username.clone(),
@@ -166,14 +166,14 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        println!("{:?}", reg);
+        // println!("{:?}", reg);
 
         // Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
         //  ^-- this is done in the actix extractors.
 
         // Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext.
         let client_data = CollectedClientData::try_from(&reg.response.clientDataJSON)?;
-        println!("{:?}", client_data);
+        // println!("{:?}", client_data);
 
         // Verify that the value of C.type is webauthn.create.
         if client_data.type_ != "webauthn.create" {
@@ -207,7 +207,7 @@ impl<T> Webauthn<T> {
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
         let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
-        println!("{:?}", attest_data);
+        // println!("{:?}", attest_data);
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
         //
@@ -321,8 +321,8 @@ pub trait WebauthnConfig {
 
     fn retrieve_credentials(&self, userid: &str) -> Option<Vec<()>>;
 
-    fn get_credential_algorithms(&self) -> Vec<Algorithm> {
-        vec![Algorithm::ALG_ECDSA_SHA256]
+    fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
+        vec![COSEContentType::ECDSA_SHA256]
     }
 
     fn get_authenticator_timeout(&self) -> u32 {

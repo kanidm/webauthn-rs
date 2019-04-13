@@ -6,8 +6,8 @@ use crate::sha2::Digest;
 use sha2;
 
 use super::constants::*;
-use super::proto::*;
 use super::error::*;
+use super::proto::*;
 
 // Why OpenSSL over another rust crate?
 // - Well, the openssl crate allows us to reconstruct a public key from the
@@ -20,34 +20,6 @@ use super::error::*;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
-#[derive(Debug)]
-pub enum Algorithm {
-    ALG_ECDSA_SHA256,
-    ALG_RSASSA_PKCS15_SHA256,
-    ALG_RSASSA_PSS_SHA256,
-}
-
-impl From<&Algorithm> for i16 {
-    fn from(a: &Algorithm) -> i16 {
-        match a {
-            ALG_ECDSA_SHA256 => -7,
-            ALG_RSASSA_PKCS15_SHA256 => -257,
-            ALG_RSASSA_PSS_SHA256 => -37,
-        }
-    }
-}
-
-// Could make this a cbor option key type to save some boiler plate?
-impl TryFrom<i64> for Algorithm {
-    type Error = ();
-    fn try_from(i: i64) -> Result<Algorithm, Self::Error> {
-        match i {
-            -7 => Ok(Algorithm::ALG_ECDSA_SHA256),
-            _ => Err(()),
-        }
-    }
-}
-
 pub(crate) struct X509PublicKey {
     pubk: x509::X509,
 }
@@ -55,22 +27,220 @@ pub(crate) struct X509PublicKey {
 impl X509PublicKey {
     pub(crate) fn is_secp256r1(&self) -> Result<bool, WebauthnError> {
         // Can we get the public key?
-        let pk = self.pubk.public_key()
+        let pk = self
+            .pubk
+            .public_key()
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
-        let ec_key = pk.ec_key()
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
+        let ec_key = pk.ec_key().map_err(|e| WebauthnError::OpenSSLError(e))?;
 
-        ec_key.check_key()
+        ec_key
+            .check_key()
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
         let ec_grpref = ec_key.group();
 
-        let ec_curve = ec_grpref.curve_name()
+        let ec_curve = ec_grpref
+            .curve_name()
             .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
 
         println!("{:?}", ec_curve);
         Ok(ec_curve == nid::Nid::X9_62_PRIME256V1)
+    }
+}
+
+#[derive(Debug)]
+pub enum ECDSACurve {
+    SECP256R1 = 1,
+    SECP384R1 = 2,
+    SECP521R1 = 3,
+}
+
+impl TryFrom<u64> for ECDSACurve {
+    type Error = WebauthnError;
+    fn try_from(u: u64) -> Result<Self, Self::Error> {
+        match u {
+            1 => Ok(ECDSACurve::SECP256R1),
+            2 => Ok(ECDSACurve::SECP384R1),
+            3 => Ok(ECDSACurve::SECP521R1),
+            _ => Err(WebauthnError::COSEKeyECDSAInvalidCurve),
+        }
+    }
+}
+
+//    +-----------+-------+-----------------------------------------------+
+//    | Name      | Value | Description                                   |
+//    +-----------+-------+-----------------------------------------------+
+//    | OKP       | 1     | Octet Key Pair                                |
+//    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
+//    |           |       | pair                                          |
+//    | Symmetric | 4     | Symmetric Keys                                |
+//    | Reserved  | 0     | This value is reserved                        |
+//    +-----------+-------+-----------------------------------------------+
+
+#[derive(Debug)]
+pub enum COSEContentType {
+    ECDSA_SHA256 = -7,  // recommends curve SECP256R1
+    ECDSA_SHA384 = -35, // recommends curve SECP384R1
+    ECDSA_SHA512 = -36, // recommends curve SECP521R1
+}
+
+impl TryFrom<i64> for COSEContentType {
+    type Error = WebauthnError;
+    fn try_from(i: i64) -> Result<Self, Self::Error> {
+        match i {
+            -7 => Ok(COSEContentType::ECDSA_SHA256),
+            -35 => Ok(COSEContentType::ECDSA_SHA384),
+            -36 => Ok(COSEContentType::ECDSA_SHA512),
+            _ => Err(WebauthnError::COSEKeyECDSAContentType),
+        }
+    }
+}
+
+impl From<&COSEContentType> for i64 {
+    fn from(c: &COSEContentType) -> Self {
+        match c {
+            COSEContentType::ECDSA_SHA256 => -7,
+            COSEContentType::ECDSA_SHA384 => -35,
+            COSEContentType::ECDSA_SHA512 => -6,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct COSEEC2Key {
+    curve: ECDSACurve,
+    x: [u8; 32],
+    y: [u8; 32],
+}
+
+#[derive(Debug)]
+// Is this the right name?
+pub enum COSEKeyType {
+    EC_EC2(COSEEC2Key),
+    // EC_OKP,
+    // EC_Symmetric,
+    // EC_Reserved, // should always be invalid.
+}
+
+#[derive(Debug)]
+pub struct COSEKey {
+    type_: COSEContentType,
+    key: COSEKeyType,
+}
+
+impl TryFrom<&serde_cbor::Value> for COSEKey {
+    type Error = WebauthnError;
+    fn try_from(d: &serde_cbor::Value) -> Result<COSEKey, Self::Error> {
+        println!("{:?}", d);
+
+        let m = d
+            .as_object()
+            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+        // See also https://tools.ietf.org/html/rfc8152#section-3.1
+        // These values look like:
+        // Object({
+        //     // negative (-) values are per-algo specific
+        //     Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]),
+        //     Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]),
+        //     Integer(-1): U64(1),
+        //     Integer(1): U64(2), // algorithm identifier
+        //     Integer(3): I64(-7) // content type see https://tools.ietf.org/html/rfc8152#section-8.1 -7 being ES256 + SHA256
+        // })
+        // Now each of these integers has a specific meaning, and you need to parse them in order.
+        // First, value 1 for the key type.
+
+        let key_type_value = m
+            .get(&serde_cbor::ObjectKey::Integer(1))
+            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+        let key_type = key_type_value
+            .as_u64()
+            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+        let content_type_value = m
+            .get(&serde_cbor::ObjectKey::Integer(3))
+            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+        let content_type = content_type_value
+            .as_i64()
+            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+        match key_type {
+            2 => {
+                // This indicates this is an EC2 key consisting of crv, x, y, which are stored in
+                // crv (-1), x (-2) and y (-3)
+                // Get these values now ....
+
+                let curve_type_value = m
+                    .get(&serde_cbor::ObjectKey::Integer(-1))
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let curve_type = curve_type_value
+                    .as_u64()
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+                // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
+
+                // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
+
+                let x_value = m
+                    .get(&serde_cbor::ObjectKey::Integer(-2))
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let x = x_value
+                    .as_bytes()
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+                let y_value = m
+                    .get(&serde_cbor::ObjectKey::Integer(-3))
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let y = y_value
+                    .as_bytes()
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+                if x.len() != 32 || y.len() != 32 {
+                    return Err(WebauthnError::COSEKeyECDSAXYInvalid);
+                }
+
+                // Set the x and y, we know they are proper sizes.
+                let mut x_temp = [0; 32];
+                x_temp.copy_from_slice(x.as_slice());
+                let mut y_temp = [0; 32];
+                y_temp.copy_from_slice(y.as_slice());
+
+                // Right, now build the struct.
+                let cose_key = COSEKey {
+                    type_: COSEContentType::try_from(content_type)?,
+                    key: COSEKeyType::EC_EC2(COSEEC2Key {
+                        curve: ECDSACurve::try_from(curve_type)?,
+                        x: x_temp,
+                        y: y_temp,
+                    }),
+                };
+
+                println!("{:?}", cose_key);
+
+                // The rfc additionally states:
+                //   "   Applications MUST check that the curve and the key type are
+                //     consistent and reject a key if they are not."
+                // this means feeding the values to openssl to validate them for us!
+
+                cose_key.validate()?;
+                // return it
+                Ok(cose_key)
+            }
+            _ => Err(WebauthnError::COSEKeyInvalidType),
+        }
+    }
+}
+
+impl COSEKey {
+    pub fn get_ALG_KEY_ECC_X962_RAW(&self) -> Result<Vec<u8>, WebauthnError> {
+        // Let publicKeyU2F be the concatenation 0x04 || x || y.
+        // Note: This signifies uncompressed ECC key format.
+        unimplemented!();
+    }
+
+    pub fn validate(&self) -> Result<bool, WebauthnError> {
+        unimplemented!();
     }
 }
 
@@ -80,66 +250,7 @@ pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
     hasher.result().iter().map(|b| *b).collect()
 }
 
-pub(crate) fn verify_attestation_sig(
-    acd: &AttestedCredentialData,
-    data: &Vec<u8>,
-) -> Result<(), ()> {
-    // Now, they say to get the alg, which we do from the alg
-    // which is in the authData.acd.credential_pk;
-    // The credential_pk is in "COSE_Key format" apparently
-    // which is documented here
-    // https://www.rfc-editor.org/rfc/rfc8152.txt
-    // which means that alg is in optional field keyd 3 in the map.
-
-    let cred_pk = match acd.credential_pk.as_object() {
-        Some(cred_pk) => cred_pk,
-        None => {
-            println!("ACD cbor not usable as map");
-            return Err(());
-        }
-    };
-
-    let alg_id = match cred_pk.get(&serde_cbor::ObjectKey::Integer(3)) {
-        Some(id) => match id.as_i64() {
-            Some(i) => i,
-            None => {
-                println!("ALG ID Was not an integer!?");
-                return Err(());
-            }
-        },
-        None => {
-            println!("No ALG ID present");
-            return Err(());
-        }
-    };
-
-    let alg_enum = match Algorithm::try_from(alg_id) {
-        Ok(a) => a,
-        Err(e) => {
-            println!("Alg ID not understood by our code ... {:?}", e);
-            return Err(e);
-        }
-    };
-
-    println!("Selected alg id {:?}", alg_enum);
-
-    // Verify stuff meow.
-    // https://medium.com/@herrjemand/verifying-fido2-packed-attestation-a067a9b2facd
-
-    // Based on the attest_fmt, that changes the data we need to attest
-
-    match alg_enum {
-        ALG_ECDSA_SHA256 => {
-            // Right, we need to get various bits out now for this next function to work.
-            //
-            // verify_ecdsa_sha256()
-            unimplemented!()
-        }
-        ALG_RSASSA_PKCS15_SHA256 => unimplemented!(),
-        ALG_RSASSA_PSS_SHA256 => unimplemented!(),
-    }
-}
-
+/*
 fn verify_ecdsa_sha256(
     kty: u64,      // This is the key type
     x: &[u8],      // The X point
@@ -147,7 +258,6 @@ fn verify_ecdsa_sha256(
     groupref: u64, // The curve to use
     data: &Vec<u8>,
 ) -> Result<(), ()> {
-
     // you need the key type. Check value 1 (kty) frmo cred_pk, and compare to:
     //
     // +---------+-------+----------+------------------------------------+
@@ -174,14 +284,10 @@ fn verify_ecdsa_sha256(
 
     Err(())
 }
+*/
 
 pub(crate) fn bytes_to_x509_public_key(c_pk: &Vec<u8>) -> Result<X509PublicKey, WebauthnError> {
-    // Make a new secure work area
+    let pubk = x509::X509::from_der(c_pk).map_err(|e| WebauthnError::OpenSSLError(e))?;
 
-    let pubk = x509::X509::from_der(c_pk)
-        .map_err(|e| WebauthnError::OpenSSLError(e))?;
-
-    Ok(X509PublicKey {
-        pubk: pubk
-    })
+    Ok(X509PublicKey { pubk: pubk })
 }

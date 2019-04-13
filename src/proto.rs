@@ -32,7 +32,8 @@ struct User {
 pub struct PubKeyCredParams {
     #[serde(rename = "type")]
     pub(crate) type_: String,
-    pub(crate) alg: i16,
+    // Should this be a diff size?
+    pub(crate) alg: i64,
 }
 
 #[derive(Debug, Serialize, Clone)]

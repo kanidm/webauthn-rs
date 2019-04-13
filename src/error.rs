@@ -1,7 +1,7 @@
 use base64::DecodeError as b64DecodeError;
+use openssl::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
-use openssl::error::ErrorStack as OpenSSLErrorStack;
 
 #[derive(Debug)]
 pub enum WebauthnError {
@@ -31,4 +31,10 @@ pub enum WebauthnError {
     ParseInsufficentBytesAvailable,
     OpenSSLError(OpenSSLErrorStack),
     OpenSSLErrorNoCurveName,
+
+    COSEKeyInvalidCBORValue,
+    COSEKeyInvalidType,
+    COSEKeyECDSAXYInvalid,
+    COSEKeyECDSAInvalidCurve,
+    COSEKeyECDSAContentType,
 }

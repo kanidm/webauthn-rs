@@ -82,17 +82,12 @@ pub(crate) fn verify_fidou2f_attestation(
         .as_bytes()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
-    println!("attCert/pk");
-    println!("{:?}", certPublicKey);
-
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
     //
     // Now, the standard is not super clear here about this, and what format these bytes are in.
     // I am assuming for now it's x509 DER.
 
-    let ec_cpk = crypto::bytes_to_x509_public_key(
-        &certPublicKey
-    )?;
+    let ec_cpk = crypto::bytes_to_x509_public_key(&certPublicKey)?;
 
     // Check the types to make sure it's ec p256.
 
@@ -108,13 +103,9 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to Raw ANSI X9.62 public key format (see ALG_KEY_ECC_X962_RAW in Section 3.6.2 Public Key Representation Formats of [FIDO-Registry]).
 
-    // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
+    let credential_pk_cose = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
-    // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
-
-    // Let publicKeyU2F be the concatenation 0x04 || x || y.
-
-    // Note: This signifies uncompressed ECC key format.
+    let credential_pk_u2f = credential_pk_cose.get_ALG_KEY_ECC_X962_RAW()?;
 
     // Let verificationData be the concatenation of (0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of [FIDO-U2F-Message-Formats]).
 
