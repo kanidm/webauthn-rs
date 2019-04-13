@@ -134,19 +134,10 @@ pub(crate) struct CollectedClientData {
 impl TryFrom<&String> for CollectedClientData {
     type Error = WebauthnError;
     fn try_from(data: &String) -> Result<CollectedClientData, WebauthnError> {
-        let client_data_vec: Vec<u8> = match base64::decode(data) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(WebauthnError::ParseBase64Failure(e));
-            }
-        };
+        let client_data_vec: Vec<u8> =
+            base64::decode(data).map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
-        match serde_json::from_slice(&client_data_vec) {
-            Ok(s) => Ok(s),
-            Err(e) => {
-                return Err(WebauthnError::ParseJSONFailure(e));
-            }
-        }
+        serde_json::from_slice(&client_data_vec).map_err(|e| WebauthnError::ParseJSONFailure(e))
     }
 }
 
@@ -190,19 +181,10 @@ impl TryFrom<&String> for AttestationObject {
     type Error = WebauthnError;
 
     fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
-        let attest_data_vec: Vec<u8> = match base64::decode(&data) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(WebauthnError::ParseBase64Failure(e));
-            }
-        };
-        let aoi: AttestationObjectInner = match serde_cbor::from_slice(&attest_data_vec) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(WebauthnError::ParseCBORFailure(e));
-            }
-        };
-
+        let attest_data_vec: Vec<u8> =
+            base64::decode(&data).map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec)
+            .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
         let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();
 
         // TODO: Is this the right amount to check?
@@ -227,6 +209,7 @@ impl TryFrom<&String> for AttestationObject {
         let acd_extension_bytes: Vec<u8> = aoi.authData[37..].into();
 
         let (exten_offset, acd) = if acd_present {
+            // TODO: Harden this to be sure we have enough bytes!!!
             let aaguid: Vec<u8> = acd_extension_bytes[0..16].into();
             let cred_id_len: usize = BigEndian::read_u16(&acd_extension_bytes[16..18]) as usize;
             // Now this tells us how much to read from for the credential ID.
@@ -236,20 +219,12 @@ impl TryFrom<&String> for AttestationObject {
 
             // let cred_pk: Vec<u8> = acd_extension_bytes[cred_id_end..].into();
             let cred_pk: serde_cbor::Value =
-                match serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..]) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        return Err(WebauthnError::ParseCBORFailure(e));
-                    }
-                };
+                serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..])
+                    .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
 
             // Now re-encode it to find the length ... yuk.
-            let encoded = match serde_cbor::to_vec(&cred_pk) {
-                Ok(v) => v,
-                Err(e) => {
-                    return Err(WebauthnError::ParseCBORFailure(e));
-                }
-            };
+            let encoded =
+                serde_cbor::to_vec(&cred_pk).map_err(|e| WebauthnError::ParseCBORFailure(e))?;
             // Finally we know the cred len
             let cred_len = encoded.len();
 
@@ -270,13 +245,12 @@ impl TryFrom<&String> for AttestationObject {
             (0, None)
         };
 
+        // TODO: Harden this to be sure we have enough bytes!!!
         let extensions: Option<serde_cbor::Value> = if acd_present && extensions_present {
-            match serde_cbor::from_slice(&acd_extension_bytes[exten_offset..]) {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    return Err(WebauthnError::ParseCBORFailure(e));
-                }
-            }
+            Some(
+                serde_cbor::from_slice(&acd_extension_bytes[exten_offset..])
+                    .map_err(|e| WebauthnError::ParseCBORFailure(e))?,
+            )
         } else {
             None
         };

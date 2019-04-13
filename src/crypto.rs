@@ -1,6 +1,10 @@
 use openssl::{bn, ec, nid};
 use std::convert::TryFrom;
 
+use crate::sha2::digest::generic_array::functional::FunctionalSequence;
+use crate::sha2::Digest;
+use sha2;
+
 use super::constants::*;
 use super::proto::*;
 
@@ -41,6 +45,12 @@ impl TryFrom<i64> for Algorithm {
             _ => Err(()),
         }
     }
+}
+
+pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
+    let mut hasher = sha2::Sha256::new();
+    hasher.input(data);
+    hasher.result().iter().map(|b| *b).collect()
 }
 
 pub(crate) fn verify_attestation_sig(

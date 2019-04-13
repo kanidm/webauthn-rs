@@ -11,15 +11,12 @@ mod crypto;
 pub mod error;
 pub mod proto;
 
-// use digest::digest::Digest;
-use crate::sha2::digest::generic_array::functional::FunctionalSequence;
-use crate::sha2::Digest;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 use attestation::*;
 use constants::*;
-use crypto::Algorithm;
+use crypto::{compute_sha256, Algorithm};
 use error::*;
 use proto::*;
 use rand::prelude::*;
@@ -64,11 +61,7 @@ impl<T> Webauthn<T> {
             })
             .collect();
         println!("rp_id: {:?}", config.get_relying_party_id());
-        let rp_id_hash = {
-            let mut hasher = sha2::Sha256::new();
-            hasher.input(config.get_relying_party_id().as_bytes());
-            hasher.result().iter().map(|b| *b).collect()
-        };
+        let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
             // rng: config.get_rng(),
             // We use stdrng because unlike thread_rng, it's a csprng, which given
@@ -189,12 +182,8 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
         // First, we have to decode the challenge to vec?
-        let decoded_challenge = match base64::decode(&client_data.challenge) {
-            Ok(d) => d,
-            Err(e) => {
-                return Err(WebauthnError::ParseBase64Failure(e));
-            }
-        };
+        let decoded_challenge = base64::decode(&client_data.challenge)
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
         if decoded_challenge != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
@@ -214,19 +203,10 @@ impl<T> Webauthn<T> {
 
         // 7. Compute the hash of response.clientDataJSON using SHA-256.
         //    This will be used in step 14.
-        let client_data_json_hash: Vec<u8> = {
-            let mut hasher = sha2::Sha256::new();
-            hasher.input(reg.response.clientDataJSON.as_bytes());
-            hasher.result().iter().map(|b| *b).collect()
-        };
+        let client_data_json_hash = compute_sha256(reg.response.clientDataJSON.as_bytes());
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-        let attest_data = match AttestationObject::try_from(&reg.response.attestationObject) {
-            Ok(a) => a,
-            Err(e) => {
-                return Err(e);
-            }
-        };
+        let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
         println!("{:?}", attest_data);
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
@@ -276,21 +256,14 @@ impl<T> Webauthn<T> {
         //  https://w3c.github.io/webauthn/#android-safetynet-attestation
         //  https://w3c.github.io/webauthn/#fido-u2f-attestation
         //  https://w3c.github.io/webauthn/#none-attestation
-        let attest_format = match AttestationFormat::try_from(attest_data.fmt.as_str()) {
-            Ok(f) => f,
-            Err(e) => {
-                return Err(e);
-            }
-        };
+        let attest_format = AttestationFormat::try_from(attest_data.fmt.as_str())?;
 
         // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature, by using the attestation statement format fmt’s verification procedure given attStmt, authData and the hash of the serialized client data computed in step 7.
 
-        let acd = match &attest_data.authData.acd {
-            Some(acd) => acd,
-            None => {
-                return Err(WebauthnError::MissingAttestationCredentialData);
-            }
-        };
+        let acd = &attest_data
+            .authData
+            .acd
+            .ok_or(WebauthnError::MissingAttestationCredentialData)?;
 
         // Now, match based on the attest_format
         // This returns an AttestationType, containing all the metadata needed for

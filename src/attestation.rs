@@ -45,12 +45,77 @@ pub enum AttStmtType {
     X5C,
 }
 
+// https://w3c.github.io/webauthn/#fido-u2f-attestation
 pub(crate) fn verify_fidou2f_attestation(
     attStmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
     authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
 ) -> Result<AttestationType, WebauthnError> {
+    // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
+    //
+    // ^-- This is already DONE as a factor of serde_cbor not erroring up to this point,
+    // and those errors will be handled better than just "unwrap" :)
+    // we'll also find out quickly when we attempt to access the data as a map ...
+
+    // Check that x5c has exactly one element and let attCert be that element.
+    let attStmtMap = attStmt
+        .as_object()
+        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+    let x5c = attStmtMap
+        .get(&serde_cbor::ObjectKey::String("x5c".to_string()))
+        .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
+
+    let attCertArray = x5c
+        .as_array()
+        // Option<Vec<Value>>
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?
+        // Now it's a vec<Value>, get the first.
+        .first()
+        // Now it's an Option<Value>
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+
+    // This is the certificate public key.
+    // Let certificate public key be the public key conveyed by attCert.
+    let certPublicKey = attCertArray
+        .as_bytes()
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+
+    println!("attCert/pk");
+    println!("{:?}", certPublicKey);
+
+    // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
+    //
+    // Now, the standard is not super clear here about this, and what format these bytes are in.
+    // So the best option for now, is to ask the crypto.rs to attempt to get this as a publicKey.
+
+    // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
+    //
+    // Already extracted, and provided as args to this function.
+
+    // Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to Raw ANSI X9.62 public key format (see ALG_KEY_ECC_X962_RAW in Section 3.6.2 Public Key Representation Formats of [FIDO-Registry]).
+
+    // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
+
+    // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
+
+    // Let publicKeyU2F be the concatenation 0x04 || x || y.
+
+    // Note: This signifies uncompressed ECC key format.
+
+    // Let verificationData be the concatenation of (0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of [FIDO-U2F-Message-Formats]).
+
+    // Verify the sig using verificationData and certificate public key per [SEC1].
+
+    // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
+
+    // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
+    unimplemented!();
+}
+
+/*
+
+fn blah {
     // Given the verification procedure inputs attStmt, authenticatorData and clientDataHash, the verification procedure is as follows:
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
@@ -135,3 +200,5 @@ pub(crate) fn verify_fidou2f_attestation(
     // If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
     unimplemented!();
 }
+
+*/

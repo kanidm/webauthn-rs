@@ -19,6 +19,8 @@ pub enum WebauthnError {
     AttestationStatementMapInvalid,
     AttestationStatementSigMissing,
     AttestationStatementSigInvalid,
+    AttestationStatementX5CMissing,
+    AttestationStatementX5CInvalid,
 
     ParseBase64Failure(b64DecodeError),
     ParseCBORFailure(CBORError),
