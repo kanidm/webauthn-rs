@@ -37,4 +37,5 @@ pub enum WebauthnError {
     COSEKeyECDSAXYInvalid,
     COSEKeyECDSAInvalidCurve,
     COSEKeyECDSAContentType,
+    COSEKeyInvalid,
 }

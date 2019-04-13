@@ -68,6 +68,16 @@ impl TryFrom<u64> for ECDSACurve {
     }
 }
 
+impl ECDSACurve {
+    fn to_openssl_nid(&self) -> nid::Nid {
+        match self {
+            ECDSACurve::SECP256R1 => nid::Nid::X9_62_PRIME256V1,
+            ECDSACurve::SECP384R1 => nid::Nid::SECP384R1,
+            ECDSACurve::SECP521R1 => nid::Nid::SECP521R1,
+        }
+    }
+}
+
 //    +-----------+-------+-----------------------------------------------+
 //    | Name      | Value | Description                                   |
 //    +-----------+-------+-----------------------------------------------+
@@ -224,6 +234,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 // this means feeding the values to openssl to validate them for us!
 
                 cose_key.validate()?;
+                println!("Credential Key is valid");
                 // return it
                 Ok(cose_key)
             }
@@ -239,8 +250,28 @@ impl COSEKey {
         unimplemented!();
     }
 
-    pub fn validate(&self) -> Result<bool, WebauthnError> {
-        unimplemented!();
+    pub fn validate(&self) -> Result<(), WebauthnError> {
+        match &self.key {
+            COSEKeyType::EC_EC2(ec2k) => {
+                // Get the curve type
+                let curve = ec2k.curve.to_openssl_nid();
+                let ec_group = ec::EcGroup::from_curve_name(curve)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let xbn =
+                    bn::BigNum::from_slice(&ec2k.x).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ybn =
+                    bn::BigNum::from_slice(&ec2k.y).map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                ec_key
+                    .check_key()
+                    .map_err(|e| WebauthnError::OpenSSLError(e))
+            }
+            _ => Err(WebauthnError::COSEKeyInvalid),
+        }
     }
 }
 
