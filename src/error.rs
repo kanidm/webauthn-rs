@@ -1,6 +1,7 @@
 use base64::DecodeError as b64DecodeError;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
+use openssl::error::ErrorStack as OpenSSLErrorStack;
 
 #[derive(Debug)]
 pub enum WebauthnError {
@@ -22,8 +23,12 @@ pub enum WebauthnError {
     AttestationStatementX5CMissing,
     AttestationStatementX5CInvalid,
 
+    CertificatePublicKeyInvalid,
+
     ParseBase64Failure(b64DecodeError),
     ParseCBORFailure(CBORError),
     ParseJSONFailure(JSONError),
     ParseInsufficentBytesAvailable,
+    OpenSSLError(OpenSSLErrorStack),
+    OpenSSLErrorNoCurveName,
 }

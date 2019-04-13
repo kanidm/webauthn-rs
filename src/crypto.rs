@@ -1,4 +1,4 @@
-use openssl::{bn, ec, nid};
+use openssl::{bn, ec, nid, pkey, x509};
 use std::convert::TryFrom;
 
 use crate::sha2::digest::generic_array::functional::FunctionalSequence;
@@ -7,6 +7,7 @@ use sha2;
 
 use super::constants::*;
 use super::proto::*;
+use super::error::*;
 
 // Why OpenSSL over another rust crate?
 // - Well, the openssl crate allows us to reconstruct a public key from the
@@ -44,6 +45,32 @@ impl TryFrom<i64> for Algorithm {
             -7 => Ok(Algorithm::ALG_ECDSA_SHA256),
             _ => Err(()),
         }
+    }
+}
+
+pub(crate) struct X509PublicKey {
+    pubk: x509::X509,
+}
+
+impl X509PublicKey {
+    pub(crate) fn is_secp256r1(&self) -> Result<bool, WebauthnError> {
+        // Can we get the public key?
+        let pk = self.pubk.public_key()
+            .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+        let ec_key = pk.ec_key()
+            .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+        ec_key.check_key()
+            .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+        let ec_grpref = ec_key.group();
+
+        let ec_curve = ec_grpref.curve_name()
+            .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
+
+        println!("{:?}", ec_curve);
+        Ok(ec_curve == nid::Nid::X9_62_PRIME256V1)
     }
 }
 
@@ -120,6 +147,7 @@ fn verify_ecdsa_sha256(
     groupref: u64, // The curve to use
     data: &Vec<u8>,
 ) -> Result<(), ()> {
+
     // you need the key type. Check value 1 (kty) frmo cred_pk, and compare to:
     //
     // +---------+-------+----------+------------------------------------+
@@ -145,4 +173,15 @@ fn verify_ecdsa_sha256(
     // Check the x/y points are actually on the curve. Does check_key do this?
 
     Err(())
+}
+
+pub(crate) fn bytes_to_x509_public_key(c_pk: &Vec<u8>) -> Result<X509PublicKey, WebauthnError> {
+    // Make a new secure work area
+
+    let pubk = x509::X509::from_der(c_pk)
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+    Ok(X509PublicKey {
+        pubk: pubk
+    })
 }

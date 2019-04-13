@@ -279,7 +279,7 @@ impl<T> Webauthn<T> {
                 // No other types are currently implemented
                 Err(WebauthnError::AttestationNotSupported)
             }
-        };
+        }?;
 
         // Now based on result ...
 

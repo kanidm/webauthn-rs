@@ -46,6 +46,7 @@ pub enum AttStmtType {
 }
 
 // https://w3c.github.io/webauthn/#fido-u2f-attestation
+// https://medium.com/@herrjemand/verifying-fido-u2f-attestations-in-fido2-f83fab80c355
 pub(crate) fn verify_fidou2f_attestation(
     attStmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
@@ -87,7 +88,19 @@ pub(crate) fn verify_fidou2f_attestation(
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
     //
     // Now, the standard is not super clear here about this, and what format these bytes are in.
-    // So the best option for now, is to ask the crypto.rs to attempt to get this as a publicKey.
+    // I am assuming for now it's x509 DER.
+
+    let ec_cpk = crypto::bytes_to_x509_public_key(
+        &certPublicKey
+    )?;
+
+    // Check the types to make sure it's ec p256.
+
+    if !(ec_cpk.is_secp256r1()?) {
+        return Err(WebauthnError::CertificatePublicKeyInvalid);
+    }
+
+    println!("Validated public key as secp256r1");
 
     // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
     //
