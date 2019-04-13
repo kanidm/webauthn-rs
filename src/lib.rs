@@ -20,6 +20,7 @@ use std::convert::TryFrom;
 use attestation::*;
 use constants::*;
 use crypto::Algorithm;
+use error::*;
 use proto::*;
 use rand::prelude::*;
 
@@ -153,7 +154,7 @@ impl<T> Webauthn<T> {
     }
 
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
-    pub fn register_credential(&mut self, reg: RegisterResponse) -> Result<(), ()>
+    pub fn register_credential(&mut self, reg: RegisterResponse) -> Result<(), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -161,14 +162,14 @@ impl<T> Webauthn<T> {
         // send to register_credential_internal
         // match res, if good, save cred.
 
-        Err(())
+        unimplemented!();
     }
 
     pub(crate) fn register_credential_internal(
         &mut self,
         reg: RegisterResponse,
         chal: Challenge,
-    ) -> Result<(), ()>
+    ) -> Result<(), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -178,31 +179,30 @@ impl<T> Webauthn<T> {
         //  ^-- this is done in the actix extractors.
 
         // Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext.
-        let client_data = CollectedClientData::from(&reg.response.clientDataJSON);
+        let client_data = CollectedClientData::try_from(&reg.response.clientDataJSON)?;
         println!("{:?}", client_data);
 
         // Verify that the value of C.type is webauthn.create.
         if client_data.type_ != "webauthn.create" {
-            println!("Invalid client_data type");
-            return Err(());
+            return Err(WebauthnError::InvalidClientDataType);
         }
 
         // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
         // First, we have to decode the challenge to vec?
-        let decoded_challenge = base64::decode(&client_data.challenge).unwrap();
+        let decoded_challenge = match base64::decode(&client_data.challenge) {
+            Ok(d) => d,
+            Err(e) => {
+                return Err(WebauthnError::ParseBase64Failure(e));
+            }
+        };
+
         if decoded_challenge != chal.0 {
-            println!(
-                "ClientCollectedData challenge does not match the challenge we have associated!"
-            );
-            return Err(());
+            return Err(WebauthnError::MismatchedChallenge);
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
         if &client_data.origin != self.config.get_origin() {
-            println!(
-                "ClientCollectedData origin {} does not match our configured origin",
-                client_data.origin
-            );
+            return Err(WebauthnError::InvalidRPOrigin);
         }
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the assertion was obtained. If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
@@ -221,7 +221,12 @@ impl<T> Webauthn<T> {
         };
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-        let attest_data = AttestationObject::from(&reg.response.attestationObject);
+        let attest_data = match AttestationObject::try_from(&reg.response.attestationObject) {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(e);
+            }
+        };
         println!("{:?}", attest_data);
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
@@ -233,13 +238,12 @@ impl<T> Webauthn<T> {
             let a: String = base64::encode(&attest_data.authData.rp_id_hash);
             let b: String = base64::encode(&self.rp_id_hash);
             println!("{:?} != {:?}", a, b);
-            return Err(());
+            return Err(WebauthnError::InvalidRPIDHash);
         }
 
         // Verify that the User Present bit of the flags in authData is set.
         if !attest_data.authData.user_present {
-            println!("User not present!");
-            return Err(());
+            return Err(WebauthnError::UserNotPresent);
         }
 
         // Check that signCount has not gone backwards (NOT AN RFC REQUIREMENT, THIS IS AN ADDITIONAL STEP FOR THIS IMPLEMENTATION)
@@ -248,8 +252,7 @@ impl<T> Webauthn<T> {
 
         // If user verification is required for this registration, verify that the User Verified bit of the flags in authData is set.
         if self.config.get_user_verification_required() && !attest_data.authData.user_verified {
-            println!("User not verified when required!");
-            return Err(());
+            return Err(WebauthnError::UserNotVerified);
         }
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given as the extensions option in the create() call. In particular, any extension identifier values in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
@@ -260,7 +263,7 @@ impl<T> Webauthn<T> {
         match attest_data.authData.extensions {
             Some(ex) => {
                 // We don't know how to handle client extensions yet!!!
-                unimplemented!();
+                return Err(WebauthnError::InvalidExtensions);
             }
             None => {}
         }
@@ -276,8 +279,7 @@ impl<T> Webauthn<T> {
         let attest_format = match AttestationFormat::try_from(attest_data.fmt.as_str()) {
             Ok(f) => f,
             Err(e) => {
-                println!("unknown fmt type {:?}", e);
-                return Err(());
+                return Err(e);
             }
         };
 
@@ -286,8 +288,7 @@ impl<T> Webauthn<T> {
         let acd = match &attest_data.authData.acd {
             Some(acd) => acd,
             None => {
-                println!("No ACD present!");
-                return Err(());
+                return Err(WebauthnError::MissingAttestationCredentialData);
             }
         };
 
@@ -303,9 +304,11 @@ impl<T> Webauthn<T> {
             ),
             _ => {
                 // No other types are currently implemented
-                Err(())
+                Err(WebauthnError::AttestationNotSupported)
             }
         };
+
+        // Now based on result ...
 
         // 15. If validation is successful, obtain a list of acceptable trust anchors (attestation root certificates or ECDAA-Issuer public keys) for that attestation type and attestation statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 
@@ -319,7 +322,7 @@ impl<T> Webauthn<T> {
         unimplemented!();
     }
 
-    pub fn verify_credential(&self, lgn: LoginRequest) -> Result<(), ()> {
+    pub fn verify_credential(&self, lgn: LoginRequest) -> Result<(), WebauthnError> {
         // https://w3c.github.io/webauthn/#verifying-assertion
         println!("{:?}", lgn);
 

@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 use super::crypto;
+use super::error::*;
 use super::proto::*;
 
 #[derive(Debug)]
@@ -14,7 +15,7 @@ pub enum AttestationFormat {
 }
 
 impl TryFrom<&str> for AttestationFormat {
-    type Error = ();
+    type Error = WebauthnError;
 
     fn try_from(a: &str) -> Result<AttestationFormat, Self::Error> {
         match a {
@@ -24,7 +25,7 @@ impl TryFrom<&str> for AttestationFormat {
             "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
             "none" => Ok(AttestationFormat::None),
-            _ => Err(()),
+            _ => Err(WebauthnError::InvalidAttestationFormat),
         }
     }
 }
@@ -36,6 +37,7 @@ pub enum AttestationType {
     AttCa,
     ECDAA,
     None,
+    Uncertain,
 }
 
 // Needs to take a struct
@@ -48,7 +50,7 @@ pub(crate) fn verify_fidou2f_attestation(
     acd: &AttestedCredentialData,
     authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
-) -> Result<AttestationType, ()> {
+) -> Result<AttestationType, WebauthnError> {
     // Given the verification procedure inputs attStmt, authenticatorData and clientDataHash, the verification procedure is as follows:
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
@@ -62,8 +64,7 @@ pub(crate) fn verify_fidou2f_attestation(
     let attStmtMap = match attStmt.as_object() {
         Some(m) => m,
         None => {
-            println!("Can't get attStmt map");
-            return Err(());
+            return Err(WebauthnError::AttestationStatementMapInvalid);
         }
     };
 
@@ -79,8 +80,7 @@ pub(crate) fn verify_fidou2f_attestation(
         let sig = match attStmtMap.get(&serde_cbor::ObjectKey::String("sig".to_string())) {
             Some(s) => s,
             None => {
-                println!("Can't get attStmt sig");
-                return Err(());
+                return Err(WebauthnError::AttestationStatementSigMissing);
             }
         };
         println!("sig: {:?}", sig);
@@ -93,8 +93,7 @@ pub(crate) fn verify_fidou2f_attestation(
         match crypto::verify_attestation_sig(acd, &concat) {
             Ok(_) => {}
             Err(e) => {
-                println!("Signature verification failed");
-                return Err(e);
+                return Err(WebauthnError::AttestationStatementSigInvalid);
             }
         };
 

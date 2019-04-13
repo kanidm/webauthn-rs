@@ -5,6 +5,9 @@
 
 use byteorder::{BigEndian, ByteOrder};
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
+
+use super::error::*;
 
 // These are the three primary communication structures you will
 // need to handle.
@@ -128,11 +131,22 @@ pub(crate) struct CollectedClientData {
 }
 
 // Should this be tryfrom
-impl From<&String> for CollectedClientData {
-    fn from(data: &String) -> CollectedClientData {
-        let client_data_vec: Vec<u8> = base64::decode(data).unwrap();
+impl TryFrom<&String> for CollectedClientData {
+    type Error = WebauthnError;
+    fn try_from(data: &String) -> Result<CollectedClientData, WebauthnError> {
+        let client_data_vec: Vec<u8> = match base64::decode(data) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(WebauthnError::ParseBase64Failure(e));
+            }
+        };
 
-        serde_json::from_slice(&client_data_vec).unwrap()
+        match serde_json::from_slice(&client_data_vec) {
+            Ok(s) => Ok(s),
+            Err(e) => {
+                return Err(WebauthnError::ParseJSONFailure(e));
+            }
+        }
     }
 }
 
@@ -172,15 +186,29 @@ pub(crate) struct AttestationObject {
     pub attStmt: serde_cbor::Value,
 }
 
-impl From<&String> for AttestationObject {
-    fn from(data: &String) -> AttestationObject {
-        let attest_data_vec: Vec<u8> = base64::decode(&data).unwrap();
-        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec).unwrap();
+impl TryFrom<&String> for AttestationObject {
+    type Error = WebauthnError;
+
+    fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
+        let attest_data_vec: Vec<u8> = match base64::decode(&data) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(WebauthnError::ParseBase64Failure(e));
+            }
+        };
+        let aoi: AttestationObjectInner = match serde_cbor::from_slice(&attest_data_vec) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(WebauthnError::ParseCBORFailure(e));
+            }
+        };
 
         let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();
 
-        // TODO: Actually length check everything !!!
-        // Like holy shit, check it!!!
+        // TODO: Is this the right amount to check?
+        if authDataBytes.len() < 38 {
+            return Err(WebauthnError::ParseInsufficentBytesAvailable);
+        }
 
         // Now from the aoi, create the other structs.
         let rp_id_hash: Vec<u8> = aoi.authData[0..32].into();
@@ -208,10 +236,20 @@ impl From<&String> for AttestationObject {
 
             // let cred_pk: Vec<u8> = acd_extension_bytes[cred_id_end..].into();
             let cred_pk: serde_cbor::Value =
-                serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..]).unwrap();
+                match serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..]) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Err(WebauthnError::ParseCBORFailure(e));
+                    }
+                };
 
             // Now re-encode it to find the length ... yuk.
-            let encoded = serde_cbor::to_vec(&cred_pk).unwrap();
+            let encoded = match serde_cbor::to_vec(&cred_pk) {
+                Ok(v) => v,
+                Err(e) => {
+                    return Err(WebauthnError::ParseCBORFailure(e));
+                }
+            };
             // Finally we know the cred len
             let cred_len = encoded.len();
 
@@ -233,13 +271,18 @@ impl From<&String> for AttestationObject {
         };
 
         let extensions: Option<serde_cbor::Value> = if acd_present && extensions_present {
-            serde_cbor::from_slice(&acd_extension_bytes[exten_offset..]).ok()
+            match serde_cbor::from_slice(&acd_extension_bytes[exten_offset..]) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    return Err(WebauthnError::ParseCBORFailure(e));
+                }
+            }
         } else {
             None
         };
 
         // Yay! Now we can assemble a reasonably sane structure.
-        AttestationObject {
+        Ok(AttestationObject {
             fmt: aoi.fmt.clone(),
             authData: AuthenticatorData {
                 rp_id_hash: rp_id_hash,
@@ -252,7 +295,7 @@ impl From<&String> for AttestationObject {
             },
             authDataBytes: authDataBytes,
             attStmt: aoi.attStmt.clone(),
-        }
+        })
     }
 }
 
@@ -294,6 +337,7 @@ pub struct LoginRequest {
 mod tests {
     use super::{AttestationObject, RegisterResponse};
     use serde_json;
+    use std::convert::TryFrom;
 
     #[test]
     fn deserialise_register_response() {
@@ -307,7 +351,7 @@ mod tests {
     fn deserialise_AttestationObject() {
         let raw_ao = "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg==".to_string();
 
-        let ao = AttestationObject::from(&raw_ao);
+        let ao = AttestationObject::try_from(&raw_ao).unwrap();
         println!("{:?}", ao);
     }
     // Add tests for when the objects are too short.
