@@ -292,9 +292,7 @@ impl<T> Webauthn<T> {
 
         let trust_result = match attest_result {
             // We probably should have policy to deal with this ...
-            AttestationType::Uncertain => {
-                Ok(true)
-            },
+            AttestationType::Uncertain => Ok(true),
             _ => {
                 // We don't know how to assert trust in this yet.
                 Ok(false)
@@ -303,7 +301,9 @@ impl<T> Webauthn<T> {
 
         // Check that the credentialId is not yet registered to any other user. If registration is requested for a credential that is already registered to a different user, the Relying Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration, e.g. while deleting the older registration.
 
-        let cred_exist_result = self.config.does_exist_credential(&acd.credential_id)
+        let cred_exist_result = self
+            .config
+            .does_exist_credential(&acd.credential_id)
             .map_err(|_| WebauthnError::CredentialExistCheckError)?;
 
         if cred_exist_result {
