@@ -273,6 +273,7 @@ impl<T> Webauthn<T> {
                 acd,
                 &attest_data.authDataBytes,
                 &client_data_json_hash,
+                &attest_data.authData.rp_id_hash,
             ),
             _ => {
                 // No other types are currently implemented

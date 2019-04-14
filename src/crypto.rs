@@ -1,4 +1,4 @@
-use openssl::{sha, bn, ec, nid, pkey, x509};
+use openssl::{sha, bn, ec, nid, pkey, x509, sign, hash};
 use std::convert::TryFrom;
 
 use super::constants::*;
@@ -40,11 +40,21 @@ impl X509PublicKey {
             .curve_name()
             .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
 
-        println!("{:?}", ec_curve);
         Ok(ec_curve == nid::Nid::X9_62_PRIME256V1)
     }
 }
 
+// +---------+-------+----------+------------------------------------+
+// | Name    | Value | Key Type | Description                        |
+// +---------+-------+----------+------------------------------------+
+// | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
+// | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
+// | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
+// | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
+// | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
+// | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
+// | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
+// +---------+-------+----------+------------------------------------+
 #[derive(Debug)]
 pub enum ECDSACurve {
     SECP256R1 = 1,
@@ -121,7 +131,6 @@ pub struct COSEEC2Key {
 }
 
 #[derive(Debug)]
-// Is this the right name?
 pub enum COSEKeyType {
     EC_EC2(COSEEC2Key),
     // EC_OKP,
@@ -138,8 +147,6 @@ pub struct COSEKey {
 impl TryFrom<&serde_cbor::Value> for COSEKey {
     type Error = WebauthnError;
     fn try_from(d: &serde_cbor::Value) -> Result<COSEKey, Self::Error> {
-        println!("{:?}", d);
-
         let m = d
             .as_object()
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
@@ -222,15 +229,12 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                     }),
                 };
 
-                println!("{:?}", cose_key);
-
                 // The rfc additionally states:
                 //   "   Applications MUST check that the curve and the key type are
                 //     consistent and reject a key if they are not."
                 // this means feeding the values to openssl to validate them for us!
 
                 cose_key.validate()?;
-                println!("Credential Key is valid");
                 // return it
                 Ok(cose_key)
             }
@@ -243,7 +247,19 @@ impl COSEKey {
     pub fn get_ALG_KEY_ECC_X962_RAW(&self) -> Result<Vec<u8>, WebauthnError> {
         // Let publicKeyU2F be the concatenation 0x04 || x || y.
         // Note: This signifies uncompressed ECC key format.
-        unimplemented!();
+        match &self.key {
+            COSEKeyType::EC_EC2(ecpk) => {
+                    let r: [u8; 1] = [0x04];
+                    Ok(r.iter()
+                        .chain(ecpk.x.iter())
+                        .chain(ecpk.y.iter())
+                        .map(|b| *b)
+                        .collect())
+            }
+            _ => {
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
+        }
     }
 
     pub fn validate(&self) -> Result<(), WebauthnError> {
@@ -277,41 +293,22 @@ pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
     hasher.finish().iter().map(|b| *b).collect()
 }
 
-/*
-fn verify_ecdsa_sha256(
-    kty: u64,      // This is the key type
-    x: &[u8],      // The X point
-    y: &[u8],      // The Y point
-    groupref: u64, // The curve to use
-    data: &Vec<u8>,
-) -> Result<(), ()> {
-    // you need the key type. Check value 1 (kty) frmo cred_pk, and compare to:
-    //
-    // +---------+-------+----------+------------------------------------+
-    // | Name    | Value | Key Type | Description                        |
-    // +---------+-------+----------+------------------------------------+
-    // | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
-    // | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
-    // | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
-    // | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
-    // | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
-    // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
-    // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
-    // +---------+-------+----------+------------------------------------+
-    // In the case I have here, my key is 2, so secp384r1
+pub(crate) fn x509_verify_signature(ec_cpk: &X509PublicKey, signature: &Vec<u8>, verificationData: &Vec<u8>)
+    -> Result<bool, WebauthnError>
+{
 
-    let xbn = bn::BigNum::from_slice(x).unwrap();
-    let ybn = bn::BigNum::from_slice(y).unwrap();
+    let pkey = ec_cpk.pubk.public_key()
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
-    let group = ec::EcGroup::from_curve_name(nid::Nid::SECP384R1).unwrap();
+    // TODO: Should this determine the hash type from the x509 cert? Or other?
+    let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier.update(verificationData.as_slice())
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier.verify(signature.as_slice())
+                    .map_err(|e| WebauthnError::OpenSSLError(e))
 
-    let ec_key = ec::EcKey::from_public_key_affine_coordinates(&group, &xbn, &ybn).unwrap();
-    assert!(ec_key.check_key().is_ok());
-    // Check the x/y points are actually on the curve. Does check_key do this?
-
-    Err(())
 }
-*/
 
 pub(crate) fn bytes_to_x509_public_key(c_pk: &Vec<u8>) -> Result<X509PublicKey, WebauthnError> {
     let pubk = x509::X509::from_der(c_pk).map_err(|e| WebauthnError::OpenSSLError(e))?;
