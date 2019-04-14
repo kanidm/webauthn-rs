@@ -60,6 +60,10 @@ pub(crate) fn verify_fidou2f_attestation(
     // and those errors will be handled better than just "unwrap" :)
     // we'll also find out quickly when we attempt to access the data as a map ...
 
+
+    // TODO: https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L22
+    // Apparently, aaguid must be 0x00
+
     // Check that x5c has exactly one element and let attCert be that element.
     let attStmtMap = attStmt
         .as_object()
@@ -76,18 +80,22 @@ pub(crate) fn verify_fidou2f_attestation(
         .as_bytes()
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
-    let attCertArray = x5c
-        .as_array()
+    // https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L61
+    let attCertArray = x5c.as_array()
         // Option<Vec<Value>>
-        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
         // Now it's a vec<Value>, get the first.
-        .first()
+    if attCertArray.len() != 1 {
+        return Err(WebauthnError::AttestationStatementX5CInvalid)
+    }
+
+    let attCert = attCertArray.first()
         // Now it's an Option<Value>
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // This is the certificate public key.
     // Let certificate public key be the public key conveyed by attCert.
-    let certPublicKey = attCertArray
+    let certPublicKey = attCert
         .as_bytes()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 

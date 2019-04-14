@@ -36,9 +36,9 @@ struct AppState<'a> {
 impl<'a> AppState<'a> {
     fn new() -> Self {
         let wan_c = WebauthnEphemeralConfig::new(
-            "http://127.0.0.1:8080/auth",
-            "http://127.0.0.1:8080",
-            "127.0.0.1",
+            "http://localhost:8080/auth",
+            "http://localhost:8080",
+            "localhost",
         );
         let s = AppState {
             db: BTreeMap::new(),
@@ -81,12 +81,12 @@ fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpRe
     HttpResponse::Ok().json(chal)
 }
 
-fn register((reg, state): (Json<RegisterResponse>, State<AppState>)) -> HttpResponse {
+fn register((reg, username, state): (Json<RegisterResponse>, Path<String>, State<AppState>)) -> HttpResponse {
     state
         .wan
         .lock()
         .expect("Failed to lock!")
-        .register_credential(reg.into_inner())
+        .register_credential(reg.into_inner(), username.into_inner())
         .unwrap();
 
     HttpResponse::Ok().json(())
@@ -132,7 +132,7 @@ fn main() {
                 r.method(http::Method::POST).with(challenge_login)
             })
             // Need a registration
-            .resource("/register", |r| {
+            .resource("/register/{username}", |r| {
                 r.method(http::Method::POST)
                     .with_config(register, |((cfg),)| {
                         cfg.0.limit(4096);
@@ -149,6 +149,6 @@ fn main() {
     .unwrap()
     .start();
 
-    println!("Started http server: http://127.0.0.1:8080/auth/");
+    println!("Started http server: http://localhost:8080/auth/");
     let _ = sys.run();
 }

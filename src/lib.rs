@@ -126,7 +126,7 @@ impl<T> Webauthn<T> {
 
         // Get the user's existing creds if any.
 
-        let uc = self.config.retrieve_credentials(username.as_str());
+        let uc = self.config.retrieve_credentials(&username);
 
         /*
         let ac = match uc {
@@ -146,17 +146,18 @@ impl<T> Webauthn<T> {
     }
 
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
-    pub fn register_credential(&mut self, reg: RegisterResponse) -> Result<(), WebauthnError>
+    pub fn register_credential(&mut self, reg: RegisterResponse, username: UserId) -> Result<(), WebauthnError>
     where
         T: WebauthnConfig,
     {
         // get the challenge (it's username associated)
+        let chal = self.config.retrieve_challenge(&username)
+            .ok_or(WebauthnError::ChallengeNotFound)?;
         // send to register_credential_internal
+        let r = self.register_credential_internal(reg, chal)?;
         // match res, if good, save cred.
-
-        unimplemented!();
-
-        // self.config.persist_credential()
+        // self.config.persist_credential(username)
+        Ok(())
     }
 
     pub(crate) fn register_credential_internal(
@@ -269,6 +270,9 @@ impl<T> Webauthn<T> {
         // Now, match based on the attest_format
         // This returns an AttestationType, containing all the metadata needed for
         // step 15.
+
+        // let rp_hash = compute_sha256(self.config.get_relying_party_name().as_bytes());
+
         let attest_result = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
                 &attest_data.attStmt,
@@ -276,6 +280,8 @@ impl<T> Webauthn<T> {
                 &attest_data.authDataBytes,
                 &client_data_json_hash,
                 &attest_data.authData.rp_id_hash,
+                // &rp_hash,
+
             ),
             _ => {
                 // No other types are currently implemented
@@ -342,13 +348,13 @@ pub trait WebauthnConfig {
 
     fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()>;
 
-    fn retrieve_challenge(&self, userid: &str) -> Option<Challenge>;
+    fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge>;
 
     fn does_exist_credential(&self, cred_id: &CredentialID) -> Result<bool, ()>;
 
     fn persist_credential(&mut self, userid: UserId) -> Result<(), ()>;
 
-    fn retrieve_credentials(&self, userid: &str) -> Option<Vec<()>>;
+    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<()>>;
 
     fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
         vec![COSEContentType::ECDSA_SHA256]
@@ -403,9 +409,8 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
         Ok(())
     }
 
-    fn retrieve_challenge(&self, userid: &str) -> Option<Challenge> {
-        unimplemented!();
-        None
+    fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge> {
+        self.chals.remove(userid)
     }
 
     fn does_exist_credential(&self, cred_id: &CredentialID) -> Result<bool, ()> {
@@ -413,10 +418,11 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     fn persist_credential(&mut self, userid: UserId) -> Result<(), ()> {
+        // self.creds.insert(userid, );
         unimplemented!();
     }
 
-    fn retrieve_credentials(&self, userid: &str) -> Option<Vec<()>> {
+    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<()>> {
         unimplemented!();
         None
     }
@@ -476,9 +482,6 @@ mod tests {
         println!("{:?}", result);
         assert!(result.is_ok());
     }
-
-    // This is an attestation-none response (zero chal)
-    // {"id":"3X-5CTlxwwSS_yNnTkZusvOC3xk_l0zVi3xtXWwdB9CiBBWgeOZ0pRHKcl7sku4kJPd3sW_2TNHW8qoAW8Rqlg","rawId":"3X+5CTlxwwSS/yNnTkZusvOC3xk/l0zVi3xtXWwdB9CiBBWgeOZ0pRHKcl7sku4kJPd3sW/2TNHW8qoAW8Rqlg==","response":{"attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQN1/uQk5ccMEkv8jZ05GbrLzgt8ZP5dM1Yt8bV1sHQfQogQVoHjmdKURynJe7JLuJCT3d7Fv9kzR1vKqAFvEapalAQIDJiABIVggDUwKZ63+ymZqPzF/2O/ZH2ZPE/Qi7xB4isH51A6ydIkiWCDbffU2JnR1EltRQZwP5q+FkE8+yj/vSY+FWgyeYaNT/A==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"},"type":"public-key"}
 
     #[test]
     fn test_authentication() {}

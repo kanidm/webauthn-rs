@@ -5,8 +5,8 @@ const cose_alg_ECDSA_w_SHA512 = -36;
 // Need to manage the username better here?
 const REG_CHALLENGE_URL = "/auth/challenge/register/xxx";
 const LGN_CHALLENGE_URL = "/auth/challenge/login/xxx";
-const REGISTER_URL = "/auth/register";
-const LOGIN_URL = "/auth/login";
+const REGISTER_URL = "/auth/register/xxx";
+const LOGIN_URL = "/auth/login/xxx";
 
 function register() {
   fetch(REG_CHALLENGE_URL, {method: "POST"})
