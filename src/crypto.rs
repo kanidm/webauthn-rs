@@ -1,4 +1,4 @@
-use openssl::{sha, bn, ec, nid, pkey, x509, sign, hash};
+use openssl::{bn, ec, hash, nid, pkey, sha, sign, x509};
 use std::convert::TryFrom;
 
 use super::constants::*;
@@ -249,16 +249,14 @@ impl COSEKey {
         // Note: This signifies uncompressed ECC key format.
         match &self.key {
             COSEKeyType::EC_EC2(ecpk) => {
-                    let r: [u8; 1] = [0x04];
-                    Ok(r.iter()
-                        .chain(ecpk.x.iter())
-                        .chain(ecpk.y.iter())
-                        .map(|b| *b)
-                        .collect())
+                let r: [u8; 1] = [0x04];
+                Ok(r.iter()
+                    .chain(ecpk.x.iter())
+                    .chain(ecpk.y.iter())
+                    .map(|b| *b)
+                    .collect())
             }
-            _ => {
-                Err(WebauthnError::COSEKeyInvalidType)
-            }
+            _ => Err(WebauthnError::COSEKeyInvalidType),
         }
     }
 
@@ -285,6 +283,30 @@ impl COSEKey {
             _ => Err(WebauthnError::COSEKeyInvalid),
         }
     }
+
+    fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
+        match &self.key {
+            COSEKeyType::EC_EC2(ec2k) => {
+                // Get the curve type
+                let curve = ec2k.curve.to_openssl_nid();
+                let ec_group = ec::EcGroup::from_curve_name(curve)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let xbn =
+                    bn::BigNum::from_slice(&ec2k.x).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ybn =
+                    bn::BigNum::from_slice(&ec2k.y).map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let p =
+                    pkey::PKey::from_ec_key(ec_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                Ok(p)
+            }
+            _ => Err(WebauthnError::COSEKeyInvalid),
+        }
+    }
 }
 
 pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
@@ -293,21 +315,43 @@ pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
     hasher.finish().iter().map(|b| *b).collect()
 }
 
-pub(crate) fn x509_verify_signature(ec_cpk: &X509PublicKey, signature: &Vec<u8>, verificationData: &Vec<u8>)
-    -> Result<bool, WebauthnError>
-{
-
-    let pkey = ec_cpk.pubk.public_key()
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+pub(crate) fn x509_verify_signature(
+    ec_cpk: &X509PublicKey,
+    signature: &Vec<u8>,
+    verificationData: &Vec<u8>,
+) -> Result<bool, WebauthnError> {
+    let pkey = ec_cpk
+        .pubk
+        .public_key()
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
     // TODO: Should this determine the hash type from the x509 cert? Or other?
     let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
-    verifier.update(verificationData.as_slice())
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
-    verifier.verify(signature.as_slice())
-                    .map_err(|e| WebauthnError::OpenSSLError(e))
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier
+        .update(verificationData.as_slice())
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier
+        .verify(signature.as_slice())
+        .map_err(|e| WebauthnError::OpenSSLError(e))
+}
 
+pub(crate) fn COSE_verify_signature(
+    cpk: &COSEKey,
+    signature: &Vec<u8>,
+    verificationData: &Vec<u8>,
+) -> Result<bool, WebauthnError> {
+    let pkey = cpk.get_openssl_pkey()?;
+
+    // TODO: Should this determine the hash type from the x509 cert? Or other?
+    let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier
+        .update(verificationData.as_slice())
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier
+        .verify(signature.as_slice())
+        .map_err(|e| WebauthnError::OpenSSLError(e))
 }
 
 pub(crate) fn bytes_to_x509_public_key(c_pk: &Vec<u8>) -> Result<X509PublicKey, WebauthnError> {

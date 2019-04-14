@@ -72,7 +72,8 @@ pub(crate) fn verify_fidou2f_attestation(
         .get(&serde_cbor::ObjectKey::String("sig".to_string()))
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
-    let sig = sig_value.as_bytes()
+    let sig = sig_value
+        .as_bytes()
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
     let attCertArray = x5c
@@ -115,7 +116,8 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // Let verificationData be the concatenation of (0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of [FIDO-U2F-Message-Formats]).
     let r: [u8; 1] = [0x00];
-    let verificationData: Vec<u8> = r.iter()
+    let verificationData: Vec<u8> = r
+        .iter()
         .chain(rp_id_hash.iter())
         .chain(client_data_hash.iter())
         .chain(acd.credential_id.iter())
@@ -123,16 +125,21 @@ pub(crate) fn verify_fidou2f_attestation(
         .map(|b| *b)
         .collect();
 
+    println!("{:?}", verificationData);
+
     // Verify the sig using verificationData and certificate public key per [SEC1].
+    //
+    // Is the spec wrong here and they mean use the credential_pk?
     let verified = crypto::x509_verify_signature(&ec_cpk, &sig, &verificationData)?;
+    // let verified = crypto::COSE_verify_signature(&credential_pk_cose, &sig, &verificationData)?;
 
     if !verified {
+        println!("signature verification failed!");
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
-    unimplemented!();
+    Ok(AttestationType::Uncertain)
 }
-
