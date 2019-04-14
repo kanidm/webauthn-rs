@@ -3,7 +3,6 @@ extern crate base64;
 extern crate serde_derive;
 extern crate byteorder;
 extern crate openssl;
-extern crate sha2;
 
 mod attestation;
 pub mod constants;

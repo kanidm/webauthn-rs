@@ -1,9 +1,5 @@
-use openssl::{bn, ec, nid, pkey, x509};
+use openssl::{sha, bn, ec, nid, pkey, x509};
 use std::convert::TryFrom;
-
-use crate::sha2::digest::generic_array::functional::FunctionalSequence;
-use crate::sha2::Digest;
-use sha2;
 
 use super::constants::*;
 use super::error::*;
@@ -276,9 +272,9 @@ impl COSEKey {
 }
 
 pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
-    let mut hasher = sha2::Sha256::new();
-    hasher.input(data);
-    hasher.result().iter().map(|b| *b).collect()
+    let mut hasher = sha::Sha256::new();
+    hasher.update(data);
+    hasher.finish().iter().map(|b| *b).collect()
 }
 
 /*
