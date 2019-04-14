@@ -128,10 +128,7 @@ pub(crate) fn verify_fidou2f_attestation(
     println!("{:?}", verificationData);
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    //
-    // Is the spec wrong here and they mean use the credential_pk?
     let verified = crypto::x509_verify_signature(&ec_cpk, &sig, &verificationData)?;
-    // let verified = crypto::COSE_verify_signature(&credential_pk_cose, &sig, &verificationData)?;
 
     if !verified {
         println!("signature verification failed!");
