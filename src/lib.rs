@@ -150,11 +150,13 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        // get the challenge
+        // get the challenge (it's username associated)
         // send to register_credential_internal
         // match res, if good, save cred.
 
         unimplemented!();
+
+        // self.config.persist_credential()
     }
 
     pub(crate) fn register_credential_internal(
@@ -288,11 +290,36 @@ impl<T> Webauthn<T> {
         // 16: Assess the attestation trustworthiness using the outputs of the verification procedure in step 14, as follows: (SEE RFC)
         // If the attestation statement attStmt successfully verified but is not trustworthy per step 16 above, the Relying Party SHOULD fail the registration ceremony.
 
+        let trust_result = match attest_result {
+            // We probably should have policy to deal with this ...
+            AttestationType::Uncertain => {
+                Ok(true)
+            },
+            _ => {
+                // We don't know how to assert trust in this yet.
+                Ok(false)
+            }
+        }?;
+
         // Check that the credentialId is not yet registered to any other user. If registration is requested for a credential that is already registered to a different user, the Relying Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration, e.g. while deleting the older registration.
+
+        let cred_exist_result = self.config.does_exist_credential(&acd.credential_id)
+            .map_err(|_| WebauthnError::CredentialExistCheckError)?;
+
+        if cred_exist_result {
+            return Err(WebauthnError::CredentialAlreadyExists);
+        }
 
         //  If the attestation statement attStmt verified successfully and is found to be trustworthy, then register the new credential with the account that was denoted in the options.user passed to create(), by associating it with the credentialId and credentialPublicKey in the attestedCredentialData in authData, as appropriate for the Relying Party's system.
 
-        unimplemented!();
+        if !trust_result {
+            return Err(WebauthnError::TrustFailure);
+        }
+
+        // So we return the credential here, and the caller persists it.
+        // We turn this into  a"helper" and serialisable credential structure that
+        // people can use a bit nicer.
+        Ok(())
     }
 
     pub fn verify_credential(&self, lgn: LoginRequest) -> Result<(), WebauthnError> {
@@ -316,6 +343,8 @@ pub trait WebauthnConfig {
     fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()>;
 
     fn retrieve_challenge(&self, userid: &str) -> Option<Challenge>;
+
+    fn does_exist_credential(&self, cred_id: &CredentialID) -> Result<bool, ()>;
 
     fn persist_credential(&mut self, userid: UserId) -> Result<(), ()>;
 
@@ -377,6 +406,10 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     fn retrieve_challenge(&self, userid: &str) -> Option<Challenge> {
         unimplemented!();
         None
+    }
+
+    fn does_exist_credential(&self, cred_id: &CredentialID) -> Result<bool, ()> {
+        unimplemented!();
     }
 
     fn persist_credential(&mut self, userid: UserId) -> Result<(), ()> {

@@ -38,4 +38,9 @@ pub enum WebauthnError {
     COSEKeyECDSAInvalidCurve,
     COSEKeyECDSAContentType,
     COSEKeyInvalid,
+
+    CredentialExistCheckError,
+    CredentialAlreadyExists,
+
+    TrustFailure,
 }
