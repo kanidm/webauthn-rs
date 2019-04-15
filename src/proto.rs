@@ -135,8 +135,7 @@ pub(crate) struct CollectedClientData {
 impl TryFrom<&String> for CollectedClientData {
     type Error = WebauthnError;
     fn try_from(data: &String) -> Result<CollectedClientData, WebauthnError> {
-        let client_data_vec: Vec<u8> =
-            base64::decode_mode(data, base64::Base64Mode::Standard)
+        let client_data_vec: Vec<u8> = base64::decode_mode(data, base64::Base64Mode::Standard)
             .or(base64::decode_mode(data, base64::Base64Mode::UrlSafe))
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
@@ -185,8 +184,7 @@ impl TryFrom<&String> for AttestationObject {
 
     fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
         // println!("data: {:?}", data);
-        let attest_data_vec: Vec<u8> =
-            base64::decode_mode(&data, base64::Base64Mode::Standard)
+        let attest_data_vec: Vec<u8> = base64::decode_mode(&data, base64::Base64Mode::Standard)
             .or(base64::decode_mode(&data, base64::Base64Mode::UrlSafe))
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 

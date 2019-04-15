@@ -81,7 +81,9 @@ fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpRe
     HttpResponse::Ok().json(chal)
 }
 
-fn register((reg, username, state): (Json<RegisterResponse>, Path<String>, State<AppState>)) -> HttpResponse {
+fn register(
+    (reg, username, state): (Json<RegisterResponse>, Path<String>, State<AppState>),
+) -> HttpResponse {
     state
         .wan
         .lock()

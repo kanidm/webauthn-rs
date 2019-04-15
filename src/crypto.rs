@@ -280,8 +280,6 @@ impl COSEKey {
         // Note: This signifies uncompressed ECC key format.
         match &self.key {
             COSEKeyType::EC_EC2(ecpk) => {
-                println!("x: {:?}", ecpk.x);
-                println!("y: {:?}", ecpk.y);
                 let r: [u8; 1] = [0x04];
                 Ok(r.iter()
                     .chain(ecpk.x.iter())
@@ -365,4 +363,3 @@ pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
     hasher.update(data);
     hasher.finish().iter().map(|b| *b).collect()
 }
-

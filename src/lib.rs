@@ -27,13 +27,21 @@ pub struct Challenge(Vec<u8>);
 
 impl std::fmt::Debug for Challenge {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", base64::encode_mode(&self.0, base64::Base64Mode::Standard))
+        write!(
+            f,
+            "{}",
+            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
+        )
     }
 }
 
 impl std::fmt::Display for Challenge {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", base64::encode_mode(&self.0, base64::Base64Mode::Standard))
+        write!(
+            f,
+            "{}",
+            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
+        )
     }
 }
 
@@ -146,12 +154,18 @@ impl<T> Webauthn<T> {
     }
 
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
-    pub fn register_credential(&mut self, reg: RegisterResponse, username: UserId) -> Result<(), WebauthnError>
+    pub fn register_credential(
+        &mut self,
+        reg: RegisterResponse,
+        username: UserId,
+    ) -> Result<(), WebauthnError>
     where
         T: WebauthnConfig,
     {
         // get the challenge (it's username associated)
-        let chal = self.config.retrieve_challenge(&username)
+        let chal = self
+            .config
+            .retrieve_challenge(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
         // send to register_credential_internal
         let r = self.register_credential_internal(reg, chal)?;
@@ -168,14 +182,14 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        println!("reg: {:?}", reg);
+        // println!("reg: {:?}", reg);
 
         // Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
         //  ^-- this is done in the actix extractors.
 
         // Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext.
         let client_data = CollectedClientData::try_from(&reg.response.clientDataJSON)?;
-        println!("client_data: {:?}", client_data);
+        // println!("client_data: {:?}", client_data);
 
         // Verify that the value of C.type is webauthn.create.
         if client_data.type_ != "webauthn.create" {
@@ -184,9 +198,13 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
         // First, we have to decode the challenge to vec?
-        let decoded_challenge = base64::decode_mode(&client_data.challenge, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(&client_data.challenge, base64::Base64Mode::UrlSafe))
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+        let decoded_challenge =
+            base64::decode_mode(&client_data.challenge, base64::Base64Mode::Standard)
+                .or(base64::decode_mode(
+                    &client_data.challenge,
+                    base64::Base64Mode::UrlSafe,
+                ))
+                .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
         // println!("decoded_challenge {:?}", decoded_challenge);
 
@@ -208,9 +226,17 @@ impl<T> Webauthn<T> {
 
         // 7. Compute the hash of response.clientDataJSON using SHA-256.
         //    This will be used in step 14.
-        let client_data_json_hash = compute_sha256(reg.response.clientDataJSON.as_bytes());
+        // First you have to decode this from base64!!! The spec is UNCLEAR about this fact
+        let client_data_raw =
+            base64::decode_mode(&reg.response.clientDataJSON, base64::Base64Mode::Standard)
+                .or(base64::decode_mode(
+                    &reg.response.clientDataJSON,
+                    base64::Base64Mode::UrlSafe,
+                ))
+                .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+        let client_data_json_hash = compute_sha256(client_data_raw.as_slice());
 
-        println!("client_data_json_hash: {:?}", base64::encode(client_data_json_hash.as_slice()));
+        // println!("client_data_json_hash: {:?}", base64::encode(client_data_json_hash.as_slice()));
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
         let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
@@ -286,7 +312,6 @@ impl<T> Webauthn<T> {
                 &client_data_json_hash,
                 &attest_data.authData.rp_id_hash,
                 // &rp_hash,
-
             ),
             _ => {
                 // No other types are currently implemented
@@ -492,13 +517,19 @@ mod tests {
     #[test]
     fn test_registration_duo_go() {
         let wan_c = WebauthnEphemeralConfig::new(
-            "webauthn.io", // name, whatever you want
+            "webauthn.io",         // name, whatever you want
             "https://webauthn.io", //must be url origin
-            "webauthn.io", // must be url minus proto + port
+            "webauthn.io",         // must be url minus proto + port
         );
         let mut wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(base64::decode_mode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc", base64::Base64Mode::Standard).unwrap());
+        let chal = Challenge(
+            base64::decode_mode(
+                "+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc",
+                base64::Base64Mode::Standard,
+            )
+            .unwrap(),
+        );
 
         let rsp = r#"
         {
@@ -515,15 +546,8 @@ mod tests {
         let result = wan.register_credential_internal(rsp_d, chal);
         println!("{:?}", result);
         assert!(result.is_ok());
-
     }
 
     #[test]
     fn test_authentication() {}
 }
-
-
-
-
-
-

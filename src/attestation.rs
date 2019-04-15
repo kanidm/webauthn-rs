@@ -60,10 +60,8 @@ pub(crate) fn verify_fidou2f_attestation(
     // and those errors will be handled better than just "unwrap" :)
     // we'll also find out quickly when we attempt to access the data as a map ...
 
-
     // TODO: https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L22
     // Apparently, aaguid must be 0x00
-
 
     // Check that x5c has exactly one element and let attCert be that element.
     let attStmtMap = attStmt
@@ -82,15 +80,17 @@ pub(crate) fn verify_fidou2f_attestation(
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
     // https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L61
-    let attCertArray = x5c.as_array()
+    let attCertArray = x5c
+        .as_array()
         // Option<Vec<Value>>
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
-        // Now it's a vec<Value>, get the first.
+    // Now it's a vec<Value>, get the first.
     if attCertArray.len() != 1 {
-        return Err(WebauthnError::AttestationStatementX5CInvalid)
+        return Err(WebauthnError::AttestationStatementX5CInvalid);
     }
 
-    let attCertBytes = attCertArray.first()
+    let attCertBytes = attCertArray
+        .first()
         // Now it's an Option<Value>
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
@@ -119,17 +119,13 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to Raw ANSI X9.62 public key format (see ALG_KEY_ECC_X962_RAW in Section 3.6.2 Public Key Representation Formats of [FIDO-Registry]).
 
-    println!("rp_id_hash: {:?}", rp_id_hash);
-    println!("client_data_hash: {:?}", client_data_hash);
-    println!("acd.credential_id: {:?}", acd.credential_id);
-
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
     let public_key_u2f = credential_public_key.get_ALG_KEY_ECC_X962_RAW()?;
 
     // Let verificationData be the concatenation of (0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of [FIDO-U2F-Message-Formats]).
     let r: [u8; 1] = [0x00];
-    let verificationData: Vec<u8> = r
+    let verificationData: Vec<u8> = (&r)
         .iter()
         .chain(rp_id_hash.iter())
         .chain(client_data_hash.iter())
@@ -138,8 +134,6 @@ pub(crate) fn verify_fidou2f_attestation(
         .map(|b| *b)
         .collect();
 
-    println!("verificationData: {:?}", verificationData);
-
     // Verify the sig using verificationData and certificate public key per [SEC1].
     let verified = cerificate_public_key.verify_signature(&sig, &verificationData)?;
 
@@ -147,6 +141,8 @@ pub(crate) fn verify_fidou2f_attestation(
         println!("signature verification failed!");
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
+
+    println!("Verified!");
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
