@@ -1,4 +1,4 @@
-use openssl::{bn, ec, hash, nid, pkey, sha, sign, x509};
+use openssl::{bn, ec, ecdsa, hash, nid, pkey, sha, sign, x509};
 use std::convert::TryFrom;
 
 use super::constants::*;
