@@ -136,7 +136,9 @@ impl TryFrom<&String> for CollectedClientData {
     type Error = WebauthnError;
     fn try_from(data: &String) -> Result<CollectedClientData, WebauthnError> {
         let client_data_vec: Vec<u8> =
-            base64::decode(data).map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+            base64::decode_mode(data, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(data, base64::Base64Mode::UrlSafe))
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
         serde_json::from_slice(&client_data_vec).map_err(|e| WebauthnError::ParseJSONFailure(e))
     }
@@ -182,8 +184,13 @@ impl TryFrom<&String> for AttestationObject {
     type Error = WebauthnError;
 
     fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
+        // println!("data: {:?}", data);
         let attest_data_vec: Vec<u8> =
-            base64::decode(&data).map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+            base64::decode_mode(&data, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(&data, base64::Base64Mode::UrlSafe))
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+
+        // println!("attest_data_vec: {:?}", attest_data_vec);
         let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec)
             .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
         let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();

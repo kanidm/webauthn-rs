@@ -50,7 +50,7 @@ pub enum AttStmtType {
 pub(crate) fn verify_fidou2f_attestation(
     attStmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
-    authDataBytes: &Vec<u8>,
+    // authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
     rp_id_hash: &Vec<u8>,
 ) -> Result<AttestationType, WebauthnError> {
@@ -63,6 +63,7 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // TODO: https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L22
     // Apparently, aaguid must be 0x00
+
 
     // Check that x5c has exactly one element and let attCert be that element.
     let attStmtMap = attStmt
@@ -89,13 +90,13 @@ pub(crate) fn verify_fidou2f_attestation(
         return Err(WebauthnError::AttestationStatementX5CInvalid)
     }
 
-    let attCert = attCertArray.first()
+    let attCertBytes = attCertArray.first()
         // Now it's an Option<Value>
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // This is the certificate public key.
     // Let certificate public key be the public key conveyed by attCert.
-    let certPublicKey = attCert
+    let attCert = attCertBytes
         .as_bytes()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
@@ -104,11 +105,11 @@ pub(crate) fn verify_fidou2f_attestation(
     // Now, the standard is not super clear here about this, and what format these bytes are in.
     // I am assuming for now it's x509 DER.
 
-    let ec_cpk = crypto::bytes_to_x509_public_key(&certPublicKey)?;
+    let cerificate_public_key = crypto::X509PublicKey::try_from(attCert.as_slice())?;
 
     // Check the types to make sure it's ec p256.
 
-    if !(ec_cpk.is_secp256r1()?) {
+    if !(cerificate_public_key.is_secp256r1()?) {
         return Err(WebauthnError::CertificatePublicKeyInvalid);
     }
 
@@ -118,9 +119,13 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to Raw ANSI X9.62 public key format (see ALG_KEY_ECC_X962_RAW in Section 3.6.2 Public Key Representation Formats of [FIDO-Registry]).
 
-    let credential_pk_cose = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    println!("rp_id_hash: {:?}", rp_id_hash);
+    println!("client_data_hash: {:?}", client_data_hash);
+    println!("acd.credential_id: {:?}", acd.credential_id);
 
-    let credential_pk_u2f = credential_pk_cose.get_ALG_KEY_ECC_X962_RAW()?;
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+
+    let public_key_u2f = credential_public_key.get_ALG_KEY_ECC_X962_RAW()?;
 
     // Let verificationData be the concatenation of (0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of [FIDO-U2F-Message-Formats]).
     let r: [u8; 1] = [0x00];
@@ -129,14 +134,14 @@ pub(crate) fn verify_fidou2f_attestation(
         .chain(rp_id_hash.iter())
         .chain(client_data_hash.iter())
         .chain(acd.credential_id.iter())
-        .chain(credential_pk_u2f.iter())
+        .chain(public_key_u2f.iter())
         .map(|b| *b)
         .collect();
 
-    println!("{:?}", verificationData);
+    println!("verificationData: {:?}", verificationData);
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    let verified = crypto::x509_verify_signature(&ec_cpk, &sig, &verificationData)?;
+    let verified = cerificate_public_key.verify_signature(&sig, &verificationData)?;
 
     if !verified {
         println!("signature verification failed!");

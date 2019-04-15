@@ -27,13 +27,13 @@ pub struct Challenge(Vec<u8>);
 
 impl std::fmt::Debug for Challenge {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", base64::encode(&self.0))
+        write!(f, "{}", base64::encode_mode(&self.0, base64::Base64Mode::Standard))
     }
 }
 
 impl std::fmt::Display for Challenge {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", base64::encode(&self.0))
+        write!(f, "{}", base64::encode_mode(&self.0, base64::Base64Mode::Standard))
     }
 }
 
@@ -168,14 +168,14 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        // println!("{:?}", reg);
+        println!("reg: {:?}", reg);
 
         // Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
         //  ^-- this is done in the actix extractors.
 
         // Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext.
         let client_data = CollectedClientData::try_from(&reg.response.clientDataJSON)?;
-        // println!("{:?}", client_data);
+        println!("client_data: {:?}", client_data);
 
         // Verify that the value of C.type is webauthn.create.
         if client_data.type_ != "webauthn.create" {
@@ -184,8 +184,11 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
         // First, we have to decode the challenge to vec?
-        let decoded_challenge = base64::decode(&client_data.challenge)
+        let decoded_challenge = base64::decode_mode(&client_data.challenge, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(&client_data.challenge, base64::Base64Mode::UrlSafe))
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+
+        // println!("decoded_challenge {:?}", decoded_challenge);
 
         if decoded_challenge != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
@@ -206,6 +209,8 @@ impl<T> Webauthn<T> {
         // 7. Compute the hash of response.clientDataJSON using SHA-256.
         //    This will be used in step 14.
         let client_data_json_hash = compute_sha256(reg.response.clientDataJSON.as_bytes());
+
+        println!("client_data_json_hash: {:?}", base64::encode(client_data_json_hash.as_slice()));
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
         let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
@@ -277,7 +282,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
                 &attest_data.attStmt,
                 acd,
-                &attest_data.authDataBytes,
+                // &attest_data.authDataBytes,
                 &client_data_json_hash,
                 &attest_data.authData.rp_id_hash,
                 // &rp_hash,
@@ -390,14 +395,14 @@ pub trait WebauthnConfig {
 pub struct WebauthnEphemeralConfig {
     chals: BTreeMap<UserId, Challenge>,
     creds: BTreeMap<UserId, Vec<CredentialID>>,
-    rp: String,
+    rp_name: String,
     rp_id: String,
-    origin: String,
+    rp_origin: String,
 }
 
 impl WebauthnConfig for WebauthnEphemeralConfig {
     fn get_relying_party_name(&self) -> String {
-        self.rp.clone()
+        self.rp_name.clone()
     }
 
     fn get_relying_party_id(&self) -> String {
@@ -428,18 +433,18 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     fn get_origin(&self) -> &String {
-        &self.origin
+        &self.rp_origin
     }
 }
 
 impl WebauthnEphemeralConfig {
-    pub fn new(rp: &str, origin: &str, rp_id: &str) -> Self {
+    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
         WebauthnEphemeralConfig {
             chals: BTreeMap::new(),
             creds: BTreeMap::new(),
-            rp: rp.to_string(),
+            rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
-            origin: origin.to_string(),
+            rp_origin: rp_origin.to_string(),
         }
     }
 }
@@ -483,6 +488,42 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    // These are vectors from https://github.com/duo-labs/webauthn
+    #[test]
+    fn test_registration_duo_go() {
+        let wan_c = WebauthnEphemeralConfig::new(
+            "webauthn.io", // name, whatever you want
+            "https://webauthn.io", //must be url origin
+            "webauthn.io", // must be url minus proto + port
+        );
+        let mut wan = Webauthn::new(wan_c);
+
+        let chal = Challenge(base64::decode_mode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc", base64::Base64Mode::Standard).unwrap());
+
+        let rsp = r#"
+        {
+		"id": "FOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmg",
+		"rawId": "FOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmg",
+		"response": {
+			"attestationObject": "o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEYwRAIgfyIhwZj-fkEVyT1GOK8chDHJR2chXBLSRg6bTCjODmwCIHH6GXI_BQrcR-GHg5JfazKVQdezp6_QWIFfT4ltTCO2Y3g1Y4FZAlMwggJPMIIBN6ADAgECAgQSNtF_MA0GCSqGSIb3DQEBCwUAMC4xLDAqBgNVBAMTI1l1YmljbyBVMkYgUm9vdCBDQSBTZXJpYWwgNDU3MjAwNjMxMCAXDTE0MDgwMTAwMDAwMFoYDzIwNTAwOTA0MDAwMDAwWjAxMS8wLQYDVQQDDCZZdWJpY28gVTJGIEVFIFNlcmlhbCAyMzkyNTczNDEwMzI0MTA4NzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNNlqR5emeDVtDnA2a-7h_QFjkfdErFE7bFNKzP401wVE-QNefD5maviNnGVk4HJ3CsHhYuCrGNHYgTM9zTWriGjOzA5MCIGCSsGAQQBgsQKAgQVMS4zLjYuMS40LjEuNDE0ODIuMS41MBMGCysGAQQBguUcAgEBBAQDAgUgMA0GCSqGSIb3DQEBCwUAA4IBAQAiG5uzsnIk8T6-oyLwNR6vRklmo29yaYV8jiP55QW1UnXdTkEiPn8mEQkUac-Sn6UmPmzHdoGySG2q9B-xz6voVQjxP2dQ9sgbKd5gG15yCLv6ZHblZKkdfWSrUkrQTrtaziGLFSbxcfh83vUjmOhDLFC5vxV4GXq2674yq9F2kzg4nCS4yXrO4_G8YWR2yvQvE2ffKSjQJlXGO5080Ktptplv5XN4i5lS-AKrT5QRVbEJ3B4g7G0lQhdYV-6r4ZtHil8mF4YNMZ0-RaYPxAaYNWkFYdzOZCaIdQbXRZefgGfbMUiAC2gwWN7fiPHV9eu82NYypGU32OijG9BjhGt_aGF1dGhEYXRhWMR0puqSE8mcL3SyJJKzIM9AJiqUwalQoDl_KSULYIQe8EEAAAAAAAAAAAAAAAAAAAAAAAAAAABAFOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmqUBAgMmIAEhWCD_ap3Q9zU8OsGe967t48vyRxqn8NfFTk307mC1WsH2ISJYIIcqAuW3MxhU0uDtaSX8-Ftf_zeNJLdCOEjZJGHsrLxH",
+			"clientDataJSON": "eyJjaGFsbGVuZ2UiOiItUmk1TlpUeko4YjZtdlczVFZTY0xvdEVvQUxmZ0JhMkJuNFlTYUlPYkhjIiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5pbyIsInR5cGUiOiJ3ZWJhdXRobi5jcmVhdGUifQ"
+		},
+		"type": "public-key"
+	}
+        "#;
+        let rsp_d: RegisterResponse = serde_json::from_str(rsp).unwrap();
+        let result = wan.register_credential_internal(rsp_d, chal);
+        println!("{:?}", result);
+        assert!(result.is_ok());
+
+    }
+
     #[test]
     fn test_authentication() {}
 }
+
+
+
+
+
+
