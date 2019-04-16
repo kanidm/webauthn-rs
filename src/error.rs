@@ -23,6 +23,7 @@ pub enum WebauthnError {
     AttestationStatementSigInvalid,
     AttestationStatementX5CMissing,
     AttestationStatementX5CInvalid,
+    AttestationTrustFailure,
 
     CertificatePublicKeyInvalid,
 
@@ -42,6 +43,7 @@ pub enum WebauthnError {
 
     CredentialExistCheckError,
     CredentialAlreadyExists,
+    CredentialPersistenceError,
 
     TrustFailure,
 }

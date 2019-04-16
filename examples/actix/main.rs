@@ -91,6 +91,8 @@ fn register(
         .register_credential(reg.into_inner(), username.into_inner())
         .unwrap();
 
+    println!("wan: {:?}", state.wan);
+
     HttpResponse::Ok().json(())
 }
 

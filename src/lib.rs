@@ -45,8 +45,31 @@ impl std::fmt::Display for Challenge {
     }
 }
 
-// We have to remember the challenges we issued, so keep a reference ...
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Credential {
+    // What do we actually need to store here?
+    // I think we need the credId, the COSEKey
+    pub cred_id: CredentialID,
+    pub cred: crypto::COSEKey,
+}
 
+impl Credential {
+    fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey) -> Self {
+        Credential {
+            cred_id: acd.credential_id.clone(),
+            cred: ck,
+        }
+    }
+}
+
+impl PartialEq<Credential> for Credential {
+    fn eq(&self, c: &Credential) -> bool {
+        self.cred_id == c.cred_id
+    }
+}
+
+// We have to remember the challenges we issued, so keep a reference ...
+#[derive(Debug)]
 pub struct Webauthn<T> {
     rng: StdRng,
     config: T,
@@ -136,20 +159,21 @@ impl<T> Webauthn<T> {
 
         let uc = self.config.retrieve_credentials(&username);
 
-        /*
+        println!("{:?}", uc);
+
         let ac = match uc {
             Some(creds) => creds
                 .iter()
-                .map(|cred_id| AllowCredentials {
+                .map(|cred| AllowCredentials {
                     type_: "public-key".to_string(),
-                    id: cred_id.clone(),
+                    id: cred.cred_id.clone(),
                 })
                 .collect(),
             None => Vec::new(),
         };
         println!("Creds for {} -> {:?}", username, ac);
-        */
 
+        // Now put that into the correct challenge format
         unimplemented!();
     }
 
@@ -168,17 +192,29 @@ impl<T> Webauthn<T> {
             .retrieve_challenge(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
         // send to register_credential_internal
-        let r = self.register_credential_internal(reg, chal)?;
+        let credential = self.register_credential_internal(reg, chal)?;
+
+        // Check that the credentialId is not yet registered to any other user. If registration is requested for a credential that is already registered to a different user, the Relying Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration, e.g. while deleting the older registration.
+
+        let cred_exist_result = self
+            .config
+            .does_exist_credential(&username, &credential)
+            .map_err(|_| WebauthnError::CredentialExistCheckError)?;
+
+        if cred_exist_result {
+            return Err(WebauthnError::CredentialAlreadyExists);
+        }
+
         // match res, if good, save cred.
-        // self.config.persist_credential(username)
-        Ok(())
+        self.config.persist_credential(username, credential)
+            .map_err(|_| WebauthnError::CredentialPersistenceError)
     }
 
     pub(crate) fn register_credential_internal(
         &mut self,
         reg: RegisterResponse,
         chal: Challenge,
-    ) -> Result<(), WebauthnError>
+    ) -> Result<Credential, WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -326,41 +362,94 @@ impl<T> Webauthn<T> {
         // 16: Assess the attestation trustworthiness using the outputs of the verification procedure in step 14, as follows: (SEE RFC)
         // If the attestation statement attStmt successfully verified but is not trustworthy per step 16 above, the Relying Party SHOULD fail the registration ceremony.
 
-        let trust_result = match attest_result {
+        let credential = match attest_result {
             // We probably should have policy to deal with this ...
-            AttestationType::Uncertain => Ok(true),
+            AttestationType::Uncertain(credential) => Ok(credential),
             _ => {
                 // We don't know how to assert trust in this yet.
-                Ok(false)
+                Err(WebauthnError::AttestationTrustFailure)
             }
         }?;
 
-        // Check that the credentialId is not yet registered to any other user. If registration is requested for a credential that is already registered to a different user, the Relying Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration, e.g. while deleting the older registration.
-
-        let cred_exist_result = self
-            .config
-            .does_exist_credential(&acd.credential_id)
-            .map_err(|_| WebauthnError::CredentialExistCheckError)?;
-
-        if cred_exist_result {
-            return Err(WebauthnError::CredentialAlreadyExists);
-        }
-
         //  If the attestation statement attStmt verified successfully and is found to be trustworthy, then register the new credential with the account that was denoted in the options.user passed to create(), by associating it with the credentialId and credentialPublicKey in the attestedCredentialData in authData, as appropriate for the Relying Party's system.
 
-        if !trust_result {
-            return Err(WebauthnError::TrustFailure);
-        }
+        // Already returned above if trust failed.
 
         // So we return the credential here, and the caller persists it.
         // We turn this into  a"helper" and serialisable credential structure that
         // people can use a bit nicer.
-        Ok(())
+        Ok(credential)
+    }
+
+    // https://w3c.github.io/webauthn/#verifying-assertion
+    pub fn verify_credential_internal(&self) -> Result<(), WebauthnError> {
+        //   When verifying a given PublicKeyCredential structure (credential) and an AuthenticationExtensionsClientOutputs structure clientExtensionResults, as part of an authentication ceremony, the Relying Party MUST proceed as follows:
+
+        // If the allowCredentials option was given when this authentication ceremony was initiated, verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
+
+        // Identify the user being authenticated and verify that this user is the owner of the public key credential source credentialSource identified by credential.id:
+
+        // If the user was identified before the authentication ceremony was initiated, e.g., via a username or cookie,
+
+        // verify that the identified user is the owner of credentialSource. If credential.response.userHandle is present, let userHandle be its value. Verify that userHandle also maps to the same user.
+            // If the user was not identified before the authentication ceremony was initiated,
+
+            // verify that credential.response.userHandle is present, and that the user identified by this value is the owner of credentialSource.
+
+        // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is inappropriate for your use case), look up the corresponding credential public key.
+
+        // Let cData, authData and sig denote the value of credential’s response's clientDataJSON, authenticatorData, and signature respectively.
+
+        // Let JSONtext be the result of running UTF-8 decode on the value of cData.
+
+        // Note: Using any implementation of UTF-8 decode is acceptable as long as it yields the same result as that yielded by the UTF-8 decode algorithm. In particular, any leading byte order mark (BOM) MUST be stripped.
+
+        // Let C, the client data claimed as used for the signature, be the result of running an implementation-specific JSON parser on JSONtext.
+
+        // Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
+
+        // Verify that the value of C.type is the string webauthn.get.
+
+        // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
+
+        // Verify that the value of C.origin matches the Relying Party's origin.
+
+        // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the attestation was obtained. If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
+
+        // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
+
+        // Verify that the User Present bit of the flags in authData is set.
+
+        // If user verification is required for this assertion, verify that the User Verified bit of the flags in authData is set.
+
+        // Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given as the extensions option in the get() call. In particular, any extension identifier values in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
+
+        // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the Relying Party MUST be prepared to handle cases where none or not all of the requested extensions were acted upon.
+
+        // Let hash be the result of computing a hash over the cData using SHA-256.
+
+        // Using the credential public key looked up in step 3, verify that sig is a valid signature over the binary concatenation of authData and hash.
+
+        // Note: This verification step is compatible with signatures generated by FIDO U2F authenticators. See §6.1.2 FIDO U2F Signature Format Compatibility.
+
+        // If the signature counter value authData.signCount is nonzero or the value stored in conjunction with credential’s id attribute is nonzero, then run the following sub-step:
+
+        // If the signature counter value authData.signCount is
+
+            // greater than the signature counter value stored in conjunction with credential’s id attribute.
+                //Update the stored signature counter value, associated with credential’s id attribute, to be the value of authData.signCount.
+            // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
+                // This is a signal that the authenticator may be cloned, i.e. at least two copies of the credential private key may exist and are being used in parallel. Relying Parties should incorporate this information into their risk scoring. Whether the Relying Party updates the stored signature counter value in this case, or not, or fails the authentication ceremony or not, is Relying Party-specific.
+
+        // If all the above steps are successful, continue with the authentication ceremony as appropriate. Otherwise, fail the authentication ceremony.
+        unimplemented!();
     }
 
     pub fn verify_credential(&self, lgn: LoginRequest) -> Result<(), WebauthnError> {
         // https://w3c.github.io/webauthn/#verifying-assertion
         println!("{:?}", lgn);
+
+        // self.verify_credential_internal(cred)
 
         unimplemented!();
     }
@@ -380,11 +469,11 @@ pub trait WebauthnConfig {
 
     fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge>;
 
-    fn does_exist_credential(&self, cred_id: &CredentialID) -> Result<bool, ()>;
+    fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()>;
 
-    fn persist_credential(&mut self, userid: UserId) -> Result<(), ()>;
+    fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()>;
 
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<()>>;
+    fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>>;
 
     fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
         vec![COSEContentType::ECDSA_SHA256]
@@ -417,9 +506,10 @@ pub trait WebauthnConfig {
     */
 }
 
+#[derive(Debug)]
 pub struct WebauthnEphemeralConfig {
     chals: BTreeMap<UserId, Challenge>,
-    creds: BTreeMap<UserId, Vec<CredentialID>>,
+    creds: BTreeMap<UserId, Vec<Credential>>,
     rp_name: String,
     rp_id: String,
     rp_origin: String,
@@ -443,18 +533,32 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
         self.chals.remove(userid)
     }
 
-    fn does_exist_credential(&self, cred_id: &CredentialID) -> Result<bool, ()> {
-        unimplemented!();
+    fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()> {
+        match self.creds.get(userid) {
+            Some(creds) => {
+                Ok(creds.contains(cred))
+            }
+            None => {
+                Ok(false)
+            }
+        }
     }
 
-    fn persist_credential(&mut self, userid: UserId) -> Result<(), ()> {
-        // self.creds.insert(userid, );
-        unimplemented!();
+    fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()> {
+        match self.creds.get_mut(&userid) {
+            Some(v) => {
+                v.push(credential);
+            }
+            None => {
+                self.creds.insert(userid, vec![credential]);
+            }
+        };
+
+        Ok(())
     }
 
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<()>> {
-        unimplemented!();
-        None
+    fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>> {
+        self.creds.get(userid)
     }
 
     fn get_origin(&self) -> &String {

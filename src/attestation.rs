@@ -3,6 +3,7 @@ use std::convert::TryFrom;
 use super::crypto;
 use super::error::*;
 use super::proto::*;
+use super::Credential;
 
 #[derive(Debug)]
 pub enum AttestationFormat {
@@ -32,12 +33,12 @@ impl TryFrom<&str> for AttestationFormat {
 
 #[derive(Debug)]
 pub enum AttestationType {
-    Basic,
+    Basic(Credential, crypto::X509PublicKey),
     Self_,
     AttCa,
     ECDAA,
-    None,
-    Uncertain,
+    None(Credential),
+    Uncertain(Credential),
 }
 
 // Needs to take a struct
@@ -142,10 +143,12 @@ pub(crate) fn verify_fidou2f_attestation(
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
-    println!("Verified!");
+    let credential = Credential::new(acd, credential_public_key);
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
-    Ok(AttestationType::Uncertain)
+
+
+    Ok(AttestationType::Uncertain(credential))
 }

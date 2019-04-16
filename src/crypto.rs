@@ -16,8 +16,14 @@ use super::proto::*;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
-pub(crate) struct X509PublicKey {
+pub struct X509PublicKey {
     pubk: x509::X509,
+}
+
+impl std::fmt::Debug for X509PublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "X509PublicKey")
+    }
 }
 
 impl TryFrom<&[u8]> for X509PublicKey {
@@ -86,7 +92,7 @@ impl X509PublicKey {
 // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
 // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
 // +---------+-------+----------+------------------------------------+
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ECDSACurve {
     SECP256R1 = 1,
     SECP384R1 = 2,
@@ -125,7 +131,7 @@ impl ECDSACurve {
 //    | Reserved  | 0     | This value is reserved                        |
 //    +-----------+-------+-----------------------------------------------+
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum COSEContentType {
     ECDSA_SHA256 = -7,  // recommends curve SECP256R1
     ECDSA_SHA384 = -35, // recommends curve SECP384R1
@@ -154,14 +160,14 @@ impl From<&COSEContentType> for i64 {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct COSEEC2Key {
     curve: ECDSACurve,
     x: [u8; 32],
     y: [u8; 32],
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum COSEKeyType {
     EC_EC2(COSEEC2Key),
     // EC_OKP,
@@ -169,7 +175,7 @@ pub enum COSEKeyType {
     // EC_Reserved, // should always be invalid.
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct COSEKey {
     type_: COSEContentType,
     key: COSEKeyType,
@@ -291,7 +297,7 @@ impl COSEKey {
         }
     }
 
-    pub fn validate(&self) -> Result<(), WebauthnError> {
+    pub(crate) fn validate(&self) -> Result<(), WebauthnError> {
         match &self.key {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type
