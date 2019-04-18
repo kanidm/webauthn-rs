@@ -32,12 +32,8 @@ struct AppState {
 }
 
 impl AppState {
-    fn new(
-        wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>
-    ) -> Self {
-        AppState {
-            wan
-        }
+    fn new(wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>) -> Self {
+        AppState { wan }
     }
 }
 

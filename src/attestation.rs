@@ -149,6 +149,5 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-
     Ok(AttestationType::Uncertain(credential))
 }

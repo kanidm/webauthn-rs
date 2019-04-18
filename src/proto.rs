@@ -129,7 +129,7 @@ impl RequestChallengeResponse {
                     None => "preferred".to_string(),
                 },
                 extensions: None,
-            }
+            },
         }
     }
 }
