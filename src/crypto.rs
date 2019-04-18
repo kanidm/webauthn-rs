@@ -162,9 +162,9 @@ impl From<&COSEContentType> for i64 {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct COSEEC2Key {
-    curve: ECDSACurve,
-    x: [u8; 32],
-    y: [u8; 32],
+    pub curve: ECDSACurve,
+    pub x: [u8; 32],
+    pub y: [u8; 32],
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -177,8 +177,8 @@ pub enum COSEKeyType {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct COSEKey {
-    type_: COSEContentType,
-    key: COSEKeyType,
+    pub type_: COSEContentType,
+    pub key: COSEKeyType,
 }
 
 impl TryFrom<&serde_cbor::Value> for COSEKey {

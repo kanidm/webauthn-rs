@@ -48,20 +48,13 @@ function login() {
     .then(challenge => {
       console.log("challenge");
       console.log(challenge);
-      const allowCredentials = challenge.publicKey.allowCredentials.map(c => {
+      challenge.publicKey.challenge = fromBase64(challenge.publicKey.challenge);
+      challenge.publicKey.allowCredentials = challenge.publicKey.allowCredentials.map(c => {
           c.id = fromBase64(c.id)
           return c
       });
-      const req = {
-        publicKey: {
-            challenge: fromBase64(challenge.publicKey.challenge),
-            timeout: 6000,
-            allowCredentials: allowCredentials,
-        }
-      };
-      console.log("req");
-      console.log(req);
-      return navigator.credentials.get(req)
+      console.log(challenge);
+      return navigator.credentials.get(challenge)
         .then(credentials => {
           console.log("PublicKeyCredential Get");
           console.log(credentials);

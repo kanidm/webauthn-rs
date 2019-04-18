@@ -40,7 +40,7 @@ pub struct PubKeyCredParams {
 pub struct AllowCredentials {
     #[serde(rename = "type")]
     pub(crate) type_: String,
-    pub(crate) id: CredentialID,
+    pub(crate) id: String,
 }
 
 // https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
@@ -98,11 +98,11 @@ impl CreationChallengeResponse {
 #[derive(Debug, Serialize)]
 pub struct PublicKeyCredentialRequestOptions {
     challenge: String,
-    rpId: String,
     timeout: u32,
+    rpId: String,
     allowCredentials: Vec<AllowCredentials>,
     userVerification: String,
-    // extensions
+    extensions: Option<JSONExtensions>,
 }
 
 #[derive(Debug, Serialize)]
@@ -113,12 +113,24 @@ pub struct RequestChallengeResponse {
 impl RequestChallengeResponse {
     pub fn new(
         challenge: String,
-        relaying_party: String,
         timeout: u32,
+        relaying_party: String,
         allowCredentials: Vec<AllowCredentials>,
-        userVerification: String,
+        userVerification: Option<String>,
     ) -> Self {
-        unimplemented!();
+        RequestChallengeResponse {
+            publicKey: PublicKeyCredentialRequestOptions {
+                challenge: challenge,
+                timeout: timeout,
+                rpId: relaying_party,
+                allowCredentials: allowCredentials,
+                userVerification: match userVerification {
+                    Some(s) => s,
+                    None => "preferred".to_string(),
+                },
+                extensions: None,
+            }
+        }
     }
 }
 

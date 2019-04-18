@@ -27,24 +27,17 @@ struct IndexTemplate {
     // list: Vec<&'a str>,
 }
 
-struct AppState<'a> {
-    // Maintain a map of all the lists and their items.
-    db: BTreeMap<&'a str, Vec<&'a str>>,
+struct AppState {
     wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>,
 }
 
-impl<'a> AppState<'a> {
-    fn new() -> Self {
-        let wan_c = WebauthnEphemeralConfig::new(
-            "http://localhost:8080/auth",
-            "http://localhost:8080",
-            "localhost",
-        );
-        let s = AppState {
-            db: BTreeMap::new(),
-            wan: Arc::new(Mutex::new(Webauthn::new(wan_c))),
-        };
-        s
+impl AppState {
+    fn new(
+        wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>
+    ) -> Self {
+        AppState {
+            wan
+        }
     }
 }
 
@@ -112,10 +105,16 @@ fn main() {
     env_logger::init();
 
     let sys = actix::System::new("checklists");
+    let wan_c = WebauthnEphemeralConfig::new(
+        "http://localhost:8080/auth",
+        "http://localhost:8080",
+        "localhost",
+    );
+    let wan = Arc::new(Mutex::new(Webauthn::new(wan_c)));
 
     // Start http server
     server::new(move || {
-        App::with_state(AppState::new())
+        App::with_state(AppState::new(wan.clone()))
             // For production
             .prefix("/auth")
             // enable logger

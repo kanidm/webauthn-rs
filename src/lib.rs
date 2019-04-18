@@ -106,10 +106,8 @@ impl<T> Webauthn<T> {
     fn generate_challenge(&mut self) -> Challenge {
         Challenge(
             (0..CHALLENGE_SIZE_BYTES)
-                // TODO: UNDO THIS ITS ONLY FOR TESTING AND HOLY SHIT ITS INSECURE
-                // .map(|_| self.rng.gen())
-                .map(|_| 0)
-                .collect::<Vec<u8>>(),
+                .map(|_| self.rng.gen())
+                .collect()
         )
     }
 
@@ -166,7 +164,7 @@ impl<T> Webauthn<T> {
                 .iter()
                 .map(|cred| AllowCredentials {
                     type_: "public-key".to_string(),
-                    id: cred.cred_id.clone(),
+                    id: base64::encode(cred.cred_id.as_slice()),
                 })
                 .collect(),
             None => Vec::new(),
@@ -174,7 +172,13 @@ impl<T> Webauthn<T> {
         println!("Creds for {} -> {:?}", username, ac);
 
         // Now put that into the correct challenge format
-        unimplemented!();
+        RequestChallengeResponse::new(
+            chal.to_string(),
+            self.config.get_authenticator_timeout(),
+            self.config.get_relying_party_id(),
+            ac,
+            None,
+        )
     }
 
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
@@ -382,10 +386,13 @@ impl<T> Webauthn<T> {
     }
 
     // https://w3c.github.io/webauthn/#verifying-assertion
-    pub fn verify_credential_internal(&self) -> Result<(), WebauthnError> {
+    pub fn verify_credential_internal(&self, rsp: LoginRequest, chal: Challenge, creds: &Vec<Credential>) -> Result<(), WebauthnError> {
         //   When verifying a given PublicKeyCredential structure (credential) and an AuthenticationExtensionsClientOutputs structure clientExtensionResults, as part of an authentication ceremony, the Relying Party MUST proceed as follows:
 
         // If the allowCredentials option was given when this authentication ceremony was initiated, verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
+        //
+        // We always supply allowCredentials in this library, so we expect creds as a vec of credentials
+        // that would be equivalent to what was allowed.
 
         // Identify the user being authenticated and verify that this user is the owner of the public key credential source credentialSource identified by credential.id:
 
@@ -534,6 +541,7 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()> {
+        println!("does_exist_credential: {:?}", self.creds);
         match self.creds.get(userid) {
             Some(creds) => {
                 Ok(creds.contains(cred))
@@ -545,6 +553,7 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()> {
+        println!("persist_credential: {:?}", self.creds);
         match self.creds.get_mut(&userid) {
             Some(v) => {
                 v.push(credential);
@@ -553,11 +562,13 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
                 self.creds.insert(userid, vec![credential]);
             }
         };
+        println!("persist_credential: {:?}", self.creds);
 
         Ok(())
     }
 
     fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>> {
+        println!("{:?}", self.creds);
         self.creds.get(userid)
     }
 
@@ -580,7 +591,8 @@ impl WebauthnEphemeralConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::*;
+    use crate::crypto::{COSEKey, COSEContentType, COSEKeyType, ECDSACurve, COSEEC2Key};
 
     #[test]
     fn test_ephemeral() {}
@@ -637,14 +649,14 @@ mod tests {
 
         let rsp = r#"
         {
-		"id": "FOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmg",
-		"rawId": "FOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmg",
-		"response": {
-			"attestationObject": "o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEYwRAIgfyIhwZj-fkEVyT1GOK8chDHJR2chXBLSRg6bTCjODmwCIHH6GXI_BQrcR-GHg5JfazKVQdezp6_QWIFfT4ltTCO2Y3g1Y4FZAlMwggJPMIIBN6ADAgECAgQSNtF_MA0GCSqGSIb3DQEBCwUAMC4xLDAqBgNVBAMTI1l1YmljbyBVMkYgUm9vdCBDQSBTZXJpYWwgNDU3MjAwNjMxMCAXDTE0MDgwMTAwMDAwMFoYDzIwNTAwOTA0MDAwMDAwWjAxMS8wLQYDVQQDDCZZdWJpY28gVTJGIEVFIFNlcmlhbCAyMzkyNTczNDEwMzI0MTA4NzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNNlqR5emeDVtDnA2a-7h_QFjkfdErFE7bFNKzP401wVE-QNefD5maviNnGVk4HJ3CsHhYuCrGNHYgTM9zTWriGjOzA5MCIGCSsGAQQBgsQKAgQVMS4zLjYuMS40LjEuNDE0ODIuMS41MBMGCysGAQQBguUcAgEBBAQDAgUgMA0GCSqGSIb3DQEBCwUAA4IBAQAiG5uzsnIk8T6-oyLwNR6vRklmo29yaYV8jiP55QW1UnXdTkEiPn8mEQkUac-Sn6UmPmzHdoGySG2q9B-xz6voVQjxP2dQ9sgbKd5gG15yCLv6ZHblZKkdfWSrUkrQTrtaziGLFSbxcfh83vUjmOhDLFC5vxV4GXq2674yq9F2kzg4nCS4yXrO4_G8YWR2yvQvE2ffKSjQJlXGO5080Ktptplv5XN4i5lS-AKrT5QRVbEJ3B4g7G0lQhdYV-6r4ZtHil8mF4YNMZ0-RaYPxAaYNWkFYdzOZCaIdQbXRZefgGfbMUiAC2gwWN7fiPHV9eu82NYypGU32OijG9BjhGt_aGF1dGhEYXRhWMR0puqSE8mcL3SyJJKzIM9AJiqUwalQoDl_KSULYIQe8EEAAAAAAAAAAAAAAAAAAAAAAAAAAABAFOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmqUBAgMmIAEhWCD_ap3Q9zU8OsGe967t48vyRxqn8NfFTk307mC1WsH2ISJYIIcqAuW3MxhU0uDtaSX8-Ftf_zeNJLdCOEjZJGHsrLxH",
-			"clientDataJSON": "eyJjaGFsbGVuZ2UiOiItUmk1TlpUeko4YjZtdlczVFZTY0xvdEVvQUxmZ0JhMkJuNFlTYUlPYkhjIiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5pbyIsInR5cGUiOiJ3ZWJhdXRobi5jcmVhdGUifQ"
-		},
-		"type": "public-key"
-	}
+                "id": "FOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmg",
+                "rawId": "FOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmg",
+                "response": {
+                        "attestationObject": "o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEYwRAIgfyIhwZj-fkEVyT1GOK8chDHJR2chXBLSRg6bTCjODmwCIHH6GXI_BQrcR-GHg5JfazKVQdezp6_QWIFfT4ltTCO2Y3g1Y4FZAlMwggJPMIIBN6ADAgECAgQSNtF_MA0GCSqGSIb3DQEBCwUAMC4xLDAqBgNVBAMTI1l1YmljbyBVMkYgUm9vdCBDQSBTZXJpYWwgNDU3MjAwNjMxMCAXDTE0MDgwMTAwMDAwMFoYDzIwNTAwOTA0MDAwMDAwWjAxMS8wLQYDVQQDDCZZdWJpY28gVTJGIEVFIFNlcmlhbCAyMzkyNTczNDEwMzI0MTA4NzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNNlqR5emeDVtDnA2a-7h_QFjkfdErFE7bFNKzP401wVE-QNefD5maviNnGVk4HJ3CsHhYuCrGNHYgTM9zTWriGjOzA5MCIGCSsGAQQBgsQKAgQVMS4zLjYuMS40LjEuNDE0ODIuMS41MBMGCysGAQQBguUcAgEBBAQDAgUgMA0GCSqGSIb3DQEBCwUAA4IBAQAiG5uzsnIk8T6-oyLwNR6vRklmo29yaYV8jiP55QW1UnXdTkEiPn8mEQkUac-Sn6UmPmzHdoGySG2q9B-xz6voVQjxP2dQ9sgbKd5gG15yCLv6ZHblZKkdfWSrUkrQTrtaziGLFSbxcfh83vUjmOhDLFC5vxV4GXq2674yq9F2kzg4nCS4yXrO4_G8YWR2yvQvE2ffKSjQJlXGO5080Ktptplv5XN4i5lS-AKrT5QRVbEJ3B4g7G0lQhdYV-6r4ZtHil8mF4YNMZ0-RaYPxAaYNWkFYdzOZCaIdQbXRZefgGfbMUiAC2gwWN7fiPHV9eu82NYypGU32OijG9BjhGt_aGF1dGhEYXRhWMR0puqSE8mcL3SyJJKzIM9AJiqUwalQoDl_KSULYIQe8EEAAAAAAAAAAAAAAAAAAAAAAAAAAABAFOxcmsqPLNCHtyILvbNkrtHMdKAeqSJXYZDbeFd0kc5Enm8Kl6a0Jp0szgLilDw1S4CjZhe9Z2611EUGbjyEmqUBAgMmIAEhWCD_ap3Q9zU8OsGe967t48vyRxqn8NfFTk307mC1WsH2ISJYIIcqAuW3MxhU0uDtaSX8-Ftf_zeNJLdCOEjZJGHsrLxH",
+                        "clientDataJSON": "eyJjaGFsbGVuZ2UiOiItUmk1TlpUeko4YjZtdlczVFZTY0xvdEVvQUxmZ0JhMkJuNFlTYUlPYkhjIiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5pbyIsInR5cGUiOiJ3ZWJhdXRobi5jcmVhdGUifQ"
+                },
+                "type": "public-key"
+        }
         "#;
         let rsp_d: RegisterResponse = serde_json::from_str(rsp).unwrap();
         let result = wan.register_credential_internal(rsp_d, chal);
@@ -653,5 +665,46 @@ mod tests {
     }
 
     #[test]
-    fn test_authentication() {}
+    fn test_authentication() {
+
+        let wan_c = WebauthnEphemeralConfig::new(
+            "http://localhost:8080/auth",
+            "http://localhost:8080",
+            "localhost",
+        );
+
+        // Generated by a yubico 5
+        // Make a "fake" challenge, where we know what the values should be ....
+
+        let zero_chal = Challenge((0..CHALLENGE_SIZE_BYTES).map(|_| 0).collect::<Vec<u8>>());
+
+        // Create the fake credential that we know is associated
+
+        let cred = Credential {
+            cred_id: vec![106, 213, 181, 34, 195, 3, 240, 62, 19, 21, 234, 138, 46, 185, 37, 253, 43, 137, 80, 157, 133, 123, 157, 241, 141, 234, 23, 243, 211, 179, 243, 39, 218, 85, 116, 185, 104, 174, 59, 67, 128, 129, 78, 17, 140, 228, 200, 252, 177, 191, 41, 155, 18, 168, 143, 206, 178, 125, 162, 46, 88, 11, 101, 24],
+            cred: COSEKey {
+                type_: COSEContentType::ECDSA_SHA256,
+                key: COSEKeyType::EC_EC2(COSEEC2Key {
+                    curve: ECDSACurve::SECP256R1,
+                    x: [218, 247, 91, 160, 203, 198, 216, 61, 166, 190, 137, 5, 138, 109, 188, 9, 98, 152, 207, 194, 116, 110, 244, 22, 121, 173, 166, 5, 156, 47, 217, 173],
+                    y: [38, 28, 59, 146, 209, 194, 229, 86, 73, 81, 12, 142, 157, 120, 109, 178, 218, 146, 146, 207, 78, 166, 27, 132, 64, 9, 116, 74, 13, 14, 50, 206],
+                }),
+            }
+        };
+
+        // Persist it to our fake db.
+        // wan_c.persist_credential("xxx".to_string(), cred);
+
+        let mut wan = Webauthn::new(wan_c);
+
+        // Captured authentication attempt
+
+        let rsp = r#"
+        {"response":{"authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2MBAAAAAg==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9","signature":"MEUCIGFkaBxzJh07B7uv78QQ7zEIBihZOG9AM38ytVGIuAciAiEAklS2JvWE4if88gaCo4qT1dYk10G+oyQ6y79rzuQIuRk="}}
+        "#;
+        let rsp_d: LoginRequest = serde_json::from_str(rsp).unwrap();
+
+        // Now verify it!
+        wan.verify_credential_internal(rsp_d, zero_chal, &vec![cred]);
+    }
 }
