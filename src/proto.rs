@@ -134,8 +134,16 @@ impl RequestChallengeResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub(crate) struct CollectedClientData {
+    pub type_: String,
+    pub challenge: Vec<u8>,
+    pub origin: String,
+    pub tokenBinding: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CollectedClientDataRaw {
     #[serde(rename = "type")]
     pub type_: String,
     pub challenge: String,
@@ -144,14 +152,25 @@ pub(crate) struct CollectedClientData {
 }
 
 // Should this be tryfrom
-impl TryFrom<&String> for CollectedClientData {
+impl TryFrom<&Vec<u8>> for CollectedClientData {
     type Error = WebauthnError;
-    fn try_from(data: &String) -> Result<CollectedClientData, WebauthnError> {
-        let client_data_vec: Vec<u8> = base64::decode_mode(data, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(data, base64::Base64Mode::UrlSafe))
+    fn try_from(data: &Vec<u8>) -> Result<CollectedClientData, WebauthnError> {
+        let ccdr: CollectedClientDataRaw =
+            serde_json::from_slice(&data).map_err(|e| WebauthnError::ParseJSONFailure(e))?;
+
+        let chal_vec: Vec<u8> = base64::decode_mode(&ccdr.challenge, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(
+                &ccdr.challenge,
+                base64::Base64Mode::UrlSafe,
+            ))
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
-        serde_json::from_slice(&client_data_vec).map_err(|e| WebauthnError::ParseJSONFailure(e))
+        Ok(CollectedClientData {
+            type_: ccdr.type_.clone(),
+            challenge: chal_vec,
+            origin: ccdr.origin.clone(),
+            tokenBinding: ccdr.tokenBinding.clone(),
+        })
     }
 }
 
@@ -174,45 +193,17 @@ pub(crate) struct AuthenticatorData {
     pub acd: Option<AttestedCredentialData>,
 }
 
-#[derive(Debug, Deserialize)]
-// pub(crate) struct AttestationObject<'a> {
-pub struct AttestationObjectInner<'a> {
-    pub authData: &'a [u8],
-    pub fmt: String,
-    pub attStmt: serde_cbor::Value,
-}
-
-#[derive(Debug)]
-pub(crate) struct AttestationObject {
-    pub authData: AuthenticatorData,
-    pub authDataBytes: Vec<u8>,
-    pub fmt: String,
-    // https://w3c.github.io/webauthn/#generating-an-attestation-object
-    pub attStmt: serde_cbor::Value,
-}
-
-impl TryFrom<&String> for AttestationObject {
+impl TryFrom<&Vec<u8>> for AuthenticatorData {
     type Error = WebauthnError;
-
-    fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
-        // println!("data: {:?}", data);
-        let attest_data_vec: Vec<u8> = base64::decode_mode(&data, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(&data, base64::Base64Mode::UrlSafe))
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-
-        // println!("attest_data_vec: {:?}", attest_data_vec);
-        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec)
-            .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
-        let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();
-
-        // TODO: Is this the right amount to check?
-        if authDataBytes.len() < 38 {
+    fn try_from(authDataBytes: &Vec<u8>) -> Result<Self, Self::Error> {
+        println!("data: {:?}", authDataBytes);
+        if authDataBytes.len() < 37 {
             return Err(WebauthnError::ParseInsufficentBytesAvailable);
         }
 
         // Now from the aoi, create the other structs.
-        let rp_id_hash: Vec<u8> = aoi.authData[0..32].into();
-        let flags: u8 = aoi.authData[32];
+        let rp_id_hash: Vec<u8> = authDataBytes[0..32].into();
+        let flags: u8 = authDataBytes[32];
         // From RFC:
         // flags:   [ Exten | Auth | 0 | 0 | 0 | UVer | 0 | UPres ]
         //        7                                                 0
@@ -220,11 +211,11 @@ impl TryFrom<&String> for AttestationObject {
         let user_verified = (flags & (1 << 2)) != 0;
         let acd_present = (flags & (1 << 6)) != 0;
         let extensions_present = (flags & (1 << 7)) != 0;
-        let counter: u32 = BigEndian::read_u32(&aoi.authData[33..37]);
+        let counter: u32 = BigEndian::read_u32(&authDataBytes[33..37]);
 
         // Get all remaining bytes. This is both the acd and extensions.
         //
-        let acd_extension_bytes: Vec<u8> = aoi.authData[37..].into();
+        let acd_extension_bytes: Vec<u8> = authDataBytes[37..].into();
 
         let (exten_offset, acd) = if acd_present {
             // TODO: Harden this to be sure we have enough bytes!!!
@@ -273,18 +264,55 @@ impl TryFrom<&String> for AttestationObject {
             None
         };
 
+        Ok(AuthenticatorData {
+            rp_id_hash: rp_id_hash,
+            flags: flags,
+            counter: counter,
+            user_present: user_present,
+            user_verified: user_verified,
+            extensions: extensions,
+            acd: acd,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+// pub(crate) struct AttestationObject<'a> {
+pub struct AttestationObjectInner<'a> {
+    pub authData: &'a [u8],
+    pub fmt: String,
+    pub attStmt: serde_cbor::Value,
+}
+
+#[derive(Debug)]
+pub(crate) struct AttestationObject {
+    pub authData: AuthenticatorData,
+    pub authDataBytes: Vec<u8>,
+    pub fmt: String,
+    // https://w3c.github.io/webauthn/#generating-an-attestation-object
+    pub attStmt: serde_cbor::Value,
+}
+
+impl TryFrom<&String> for AttestationObject {
+    type Error = WebauthnError;
+
+    fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
+        // println!("data: {:?}", data);
+        let attest_data_vec: Vec<u8> = base64::decode_mode(&data, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(&data, base64::Base64Mode::UrlSafe))
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+
+        // println!("attest_data_vec: {:?}", attest_data_vec);
+        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec)
+            .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
+        let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();
+
+        let authData = AuthenticatorData::try_from(&authDataBytes)?;
+
         // Yay! Now we can assemble a reasonably sane structure.
         Ok(AttestationObject {
             fmt: aoi.fmt.clone(),
-            authData: AuthenticatorData {
-                rp_id_hash: rp_id_hash,
-                flags: flags,
-                counter: counter,
-                user_present: user_present,
-                user_verified: user_verified,
-                extensions: extensions,
-                acd: acd,
-            },
+            authData: authData,
             authDataBytes: authDataBytes,
             attStmt: aoi.attStmt.clone(),
         })
@@ -293,9 +321,32 @@ impl TryFrom<&String> for AttestationObject {
 
 // https://w3c.github.io/webauthn/#authenticatorattestationresponse
 #[derive(Debug, Deserialize)]
-pub struct AuthenticatorAttestationResponse {
+pub struct AuthenticatorAttestationResponseRaw {
     pub attestationObject: String,
     pub clientDataJSON: String,
+}
+
+pub(crate) struct AuthenticatorAttestationResponse {
+    pub attestation_object: AttestationObject,
+    pub client_data_json: CollectedClientData,
+    pub client_data_json_bytes: Vec<u8>,
+}
+
+impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse {
+    type Error = WebauthnError;
+    fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
+        let ccdjr = base64::decode(aarr.clientDataJSON.as_str())
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+
+        let ccdj = CollectedClientData::try_from(&ccdjr)?;
+        let ao = AttestationObject::try_from(&aarr.attestationObject)?;
+
+        Ok(AuthenticatorAttestationResponse {
+            attestation_object: ao,
+            client_data_json: ccdj,
+            client_data_json_bytes: ccdjr,
+        })
+    }
 }
 
 // See standard PublicKeyCredential and Credential
@@ -305,7 +356,7 @@ pub struct AuthenticatorAttestationResponse {
 pub struct RegisterResponse {
     id: String,
     rawId: String,
-    pub response: AuthenticatorAttestationResponse,
+    pub response: AuthenticatorAttestationResponseRaw,
     #[serde(rename = "type")]
     type_: String,
     // discovery
@@ -313,16 +364,53 @@ pub struct RegisterResponse {
     // clientExtensionsResults
 }
 
+#[derive(Debug)]
+pub struct AuthenticatorAssertionResponse {
+    authenticatorData: AuthenticatorData,
+    // I think we need this for sig?
+    authenticatorDataBytes: Vec<u8>,
+    clientDataJSON: CollectedClientData,
+    clientDataJSONBytes: Vec<u8>,
+    signature: Vec<u8>,
+    userHandle: Option<String>,
+}
+
+impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
+    type Error = WebauthnError;
+    fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
+        let ccdjr = base64::decode(aarr.clientDataJSON.as_str())
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+        let adr = base64::decode(aarr.authenticatorData.as_str())
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+        let sigr = base64::decode(aarr.signature.as_str())
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+
+        // Do we need to deconstruct this first?
+
+        Ok(AuthenticatorAssertionResponse {
+            authenticatorData: AuthenticatorData::try_from(&adr)?,
+            authenticatorDataBytes: adr,
+            clientDataJSON: CollectedClientData::try_from(&ccdjr)?,
+            clientDataJSONBytes: ccdjr,
+            // is this actually base64?
+            signature: sigr,
+            userHandle: aarr.userHandle.clone(),
+        })
+    }
+}
+
+// https://w3c.github.io/webauthn/#authenticatorassertionresponse
 #[derive(Debug, Deserialize)]
-pub struct AuthenticatorResponse {
+pub struct AuthenticatorAssertionResponseRaw {
     authenticatorData: String,
     clientDataJSON: String,
     signature: String,
+    userHandle: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
-    response: AuthenticatorResponse,
+    pub response: AuthenticatorAssertionResponseRaw,
 }
 
 #[cfg(test)]

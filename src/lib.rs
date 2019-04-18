@@ -143,40 +143,6 @@ impl<T> Webauthn<T> {
         c
     }
 
-    pub fn generate_challenge_login(&mut self, username: UserId) -> RequestChallengeResponse
-    where
-        T: WebauthnConfig,
-    {
-        let chal = self.generate_challenge();
-
-        // Get the user's existing creds if any.
-
-        let uc = self.config.retrieve_credentials(&username);
-
-        println!("{:?}", uc);
-
-        let ac = match uc {
-            Some(creds) => creds
-                .iter()
-                .map(|cred| AllowCredentials {
-                    type_: "public-key".to_string(),
-                    id: base64::encode(cred.cred_id.as_slice()),
-                })
-                .collect(),
-            None => Vec::new(),
-        };
-        println!("Creds for {} -> {:?}", username, ac);
-
-        // Now put that into the correct challenge format
-        RequestChallengeResponse::new(
-            chal.to_string(),
-            self.config.get_authenticator_timeout(),
-            self.config.get_relying_party_id(),
-            ac,
-            None,
-        )
-    }
-
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
     pub fn register_credential(
         &mut self,
@@ -225,16 +191,22 @@ impl<T> Webauthn<T> {
         //  ^-- this is done in the actix extractors.
 
         // Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext.
-        let client_data = CollectedClientData::try_from(&reg.response.clientDataJSON)?;
-        // println!("client_data: {:?}", client_data);
+        //
+        // Now, we actually do a much larger conversion in one shot
+        // here, where we get the AuthenticatorAttestationResponse
+
+        let data = AuthenticatorAttestationResponse::try_from(&reg.response)?;
+
+        // println!("data: {:?}", data);
 
         // Verify that the value of C.type is webauthn.create.
-        if client_data.type_ != "webauthn.create" {
+        if data.client_data_json.type_ != "webauthn.create" {
             return Err(WebauthnError::InvalidClientDataType);
         }
 
         // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
         // First, we have to decode the challenge to vec?
+        /*
         let decoded_challenge =
             base64::decode_mode(&client_data.challenge, base64::Base64Mode::Standard)
                 .or(base64::decode_mode(
@@ -242,15 +214,16 @@ impl<T> Webauthn<T> {
                     base64::Base64Mode::UrlSafe,
                 ))
                 .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+        */
 
         // println!("decoded_challenge {:?}", decoded_challenge);
 
-        if decoded_challenge != chal.0 {
+        if data.client_data_json.challenge != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if &client_data.origin != self.config.get_origin() {
+        if &data.client_data_json.origin != self.config.get_origin() {
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
@@ -264,6 +237,7 @@ impl<T> Webauthn<T> {
         // 7. Compute the hash of response.clientDataJSON using SHA-256.
         //    This will be used in step 14.
         // First you have to decode this from base64!!! The spec is UNCLEAR about this fact
+        /*
         let client_data_raw =
             base64::decode_mode(&reg.response.clientDataJSON, base64::Base64Mode::Standard)
                 .or(base64::decode_mode(
@@ -271,28 +245,29 @@ impl<T> Webauthn<T> {
                     base64::Base64Mode::UrlSafe,
                 ))
                 .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-        let client_data_json_hash = compute_sha256(client_data_raw.as_slice());
+        */
+        let client_data_json_hash = compute_sha256(data.client_data_json_bytes.as_slice());
 
         // println!("client_data_json_hash: {:?}", base64::encode(client_data_json_hash.as_slice()));
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-        let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
-        // println!("{:?}", attest_data);
+        // let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
+        println!("{:?}", data.attestation_object);
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
         //
         //  NOW: Remember that RP ID https://w3c.github.io/webauthn/#rp-id is NOT THE SAME as the RP name
         // it's actually derived from the RP origin.
-        if attest_data.authData.rp_id_hash != self.rp_id_hash {
+        if data.attestation_object.authData.rp_id_hash != self.rp_id_hash {
             println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
-            let a: String = base64::encode(&attest_data.authData.rp_id_hash);
+            let a: String = base64::encode(&data.attestation_object.authData.rp_id_hash);
             let b: String = base64::encode(&self.rp_id_hash);
             println!("{:?} != {:?}", a, b);
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
         // Verify that the User Present bit of the flags in authData is set.
-        if !attest_data.authData.user_present {
+        if !data.attestation_object.authData.user_present {
             return Err(WebauthnError::UserNotPresent);
         }
 
@@ -301,7 +276,9 @@ impl<T> Webauthn<T> {
         //  We probably need a config.get_user_token_counter((user, tokenid)) -> counter funciton hook.
 
         // If user verification is required for this registration, verify that the User Verified bit of the flags in authData is set.
-        if self.config.get_user_verification_required() && !attest_data.authData.user_verified {
+        if self.config.get_user_verification_required()
+            && !data.attestation_object.authData.user_verified
+        {
             return Err(WebauthnError::UserNotVerified);
         }
 
@@ -310,7 +287,7 @@ impl<T> Webauthn<T> {
         // TODO: Today we send NO EXTENSIONS, so we'll never have a case where the extensions
         // are present! But because extensions are possible from the config we WILL need to manage
         // this situation eventually!!!
-        match attest_data.authData.extensions {
+        match &data.attestation_object.authData.extensions {
             Some(ex) => {
                 // We don't know how to handle client extensions yet!!!
                 return Err(WebauthnError::InvalidExtensions);
@@ -326,11 +303,12 @@ impl<T> Webauthn<T> {
         //  https://w3c.github.io/webauthn/#android-safetynet-attestation
         //  https://w3c.github.io/webauthn/#fido-u2f-attestation
         //  https://w3c.github.io/webauthn/#none-attestation
-        let attest_format = AttestationFormat::try_from(attest_data.fmt.as_str())?;
+        let attest_format = AttestationFormat::try_from(data.attestation_object.fmt.as_str())?;
 
         // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature, by using the attestation statement format fmt’s verification procedure given attStmt, authData and the hash of the serialized client data computed in step 7.
 
-        let acd = &attest_data
+        let acd = &data
+            .attestation_object
             .authData
             .acd
             .ok_or(WebauthnError::MissingAttestationCredentialData)?;
@@ -343,11 +321,11 @@ impl<T> Webauthn<T> {
 
         let attest_result = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
-                &attest_data.attStmt,
+                &data.attestation_object.attStmt,
                 acd,
                 // &attest_data.authDataBytes,
                 &client_data_json_hash,
-                &attest_data.authData.rp_id_hash,
+                &data.attestation_object.authData.rp_id_hash,
                 // &rp_hash,
             ),
             _ => {
@@ -389,14 +367,19 @@ impl<T> Webauthn<T> {
         chal: Challenge,
         creds: &Vec<Credential>,
     ) -> Result<(), WebauthnError> {
-        //   When verifying a given PublicKeyCredential structure (credential) and an AuthenticationExtensionsClientOutputs structure clientExtensionResults, as part of an authentication ceremony, the Relying Party MUST proceed as follows:
-
         // If the allowCredentials option was given when this authentication ceremony was initiated, verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
         //
         // We always supply allowCredentials in this library, so we expect creds as a vec of credentials
         // that would be equivalent to what was allowed.
 
+        let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
+
         // Identify the user being authenticated and verify that this user is the owner of the public key credential source credentialSource identified by credential.id:
+        //
+        // This this requirement is ... fun. It means we have to parse *everything* above first,
+        // so that we can actually get at cred.id.
+
+        println!("data: {:?}", data);
 
         // If the user was identified before the authentication ceremony was initiated, e.g., via a username or cookie,
 
@@ -461,6 +444,43 @@ impl<T> Webauthn<T> {
         // self.verify_credential_internal(cred)
 
         unimplemented!();
+    }
+
+    pub fn generate_challenge_login(&mut self, username: UserId) -> RequestChallengeResponse
+    where
+        T: WebauthnConfig,
+    {
+        let chal = self.generate_challenge();
+
+        // Get the user's existing creds if any.
+
+        let uc = self.config.retrieve_credentials(&username);
+
+        println!("{:?}", uc);
+
+        let ac = match uc {
+            Some(creds) => creds
+                .iter()
+                .map(|cred| AllowCredentials {
+                    type_: "public-key".to_string(),
+                    id: base64::encode(cred.cred_id.as_slice()),
+                })
+                .collect(),
+            None => Vec::new(),
+        };
+        println!("Creds for {} -> {:?}", username, ac);
+
+        // Store the chal associated to the user.
+        unimplemented!();
+
+        // Now put that into the correct challenge format
+        RequestChallengeResponse::new(
+            chal.to_string(),
+            self.config.get_authenticator_timeout(),
+            self.config.get_relying_party_id(),
+            ac,
+            None,
+        )
     }
 }
 
@@ -708,11 +728,18 @@ mod tests {
         // Captured authentication attempt
 
         let rsp = r#"
-        {"response":{"authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2MBAAAAAg==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9","signature":"MEUCIGFkaBxzJh07B7uv78QQ7zEIBihZOG9AM38ytVGIuAciAiEAklS2JvWE4if88gaCo4qT1dYk10G+oyQ6y79rzuQIuRk="}}
+        {"response":
+            {"authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2MBAAAAAg==",
+             "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9",
+             "signature":"MEUCIGFkaBxzJh07B7uv78QQ7zEIBihZOG9AM38ytVGIuAciAiEAklS2JvWE4if88gaCo4qT1dYk10G+oyQ6y79rzuQIuRk="
+            }
+        }
         "#;
         let rsp_d: LoginRequest = serde_json::from_str(rsp).unwrap();
 
         // Now verify it!
-        wan.verify_credential_internal(rsp_d, zero_chal, &vec![cred]);
+        assert!(wan
+            .verify_credential_internal(rsp_d, zero_chal, &vec![cred])
+            .is_ok());
     }
 }
