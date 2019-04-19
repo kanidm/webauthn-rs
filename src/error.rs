@@ -18,6 +18,8 @@ pub enum WebauthnError {
     AttestationFailure,
     AttestationNotSupported,
 
+    ChallengePersistenceError,
+
     AttestationStatementMapInvalid,
     AttestationStatementSigMissing,
     AttestationStatementSigInvalid,
@@ -44,7 +46,12 @@ pub enum WebauthnError {
     CredentialExistCheckError,
     CredentialAlreadyExists,
     CredentialPersistenceError,
+    CredentialRetrievalError,
     CredentialNotFound,
+    CredentialPossibleCompromise,
+    CredentialCounterUpdateFailure,
 
     TrustFailure,
+
+    AuthenticationFailure,
 }

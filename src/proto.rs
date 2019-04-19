@@ -196,7 +196,7 @@ pub(crate) struct AuthenticatorData {
 impl TryFrom<&Vec<u8>> for AuthenticatorData {
     type Error = WebauthnError;
     fn try_from(authDataBytes: &Vec<u8>) -> Result<Self, Self::Error> {
-        println!("data: {:?}", authDataBytes);
+        // println!("data: {:?}", authDataBytes);
         if authDataBytes.len() < 37 {
             return Err(WebauthnError::ParseInsufficentBytesAvailable);
         }
@@ -447,7 +447,7 @@ mod tests {
         let raw_ao = "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg==".to_string();
 
         let ao = AttestationObject::try_from(&raw_ao).unwrap();
-        println!("{:?}", ao);
+        // println!("{:?}", ao);
     }
     // Add tests for when the objects are too short.
 }

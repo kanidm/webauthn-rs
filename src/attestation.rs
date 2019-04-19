@@ -49,11 +49,12 @@ pub enum AttStmtType {
 // https://w3c.github.io/webauthn/#fido-u2f-attestation
 // https://medium.com/@herrjemand/verifying-fido-u2f-attestations-in-fido2-f83fab80c355
 pub(crate) fn verify_fidou2f_attestation(
-    attStmt: &serde_cbor::Value,
+    att_stmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
     // authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
     rp_id_hash: &Vec<u8>,
+    counter: u32,
 ) -> Result<AttestationType, WebauthnError> {
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     //
@@ -64,15 +65,15 @@ pub(crate) fn verify_fidou2f_attestation(
     // TODO: https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L22
     // Apparently, aaguid must be 0x00
 
-    // Check that x5c has exactly one element and let attCert be that element.
-    let attStmtMap = attStmt
+    // Check that x5c has exactly one element and let att_cert be that element.
+    let att_stmt_map = att_stmt
         .as_object()
         .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
-    let x5c = attStmtMap
+    let x5c = att_stmt_map
         .get(&serde_cbor::ObjectKey::String("x5c".to_string()))
         .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
 
-    let sig_value = attStmtMap
+    let sig_value = att_stmt_map
         .get(&serde_cbor::ObjectKey::String("sig".to_string()))
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
@@ -81,23 +82,23 @@ pub(crate) fn verify_fidou2f_attestation(
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
     // https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L61
-    let attCertArray = x5c
+    let att_cert_array = x5c
         .as_array()
         // Option<Vec<Value>>
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
     // Now it's a vec<Value>, get the first.
-    if attCertArray.len() != 1 {
+    if att_cert_array.len() != 1 {
         return Err(WebauthnError::AttestationStatementX5CInvalid);
     }
 
-    let attCertBytes = attCertArray
+    let att_cert_bytes = att_cert_array
         .first()
         // Now it's an Option<Value>
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // This is the certificate public key.
-    // Let certificate public key be the public key conveyed by attCert.
-    let attCert = attCertBytes
+    // Let certificate public key be the public key conveyed by att_cert.
+    let att_cert = att_cert_bytes
         .as_bytes()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
@@ -106,7 +107,7 @@ pub(crate) fn verify_fidou2f_attestation(
     // Now, the standard is not super clear here about this, and what format these bytes are in.
     // I am assuming for now it's x509 DER.
 
-    let cerificate_public_key = crypto::X509PublicKey::try_from(attCert.as_slice())?;
+    let cerificate_public_key = crypto::X509PublicKey::try_from(att_cert.as_slice())?;
 
     // Check the types to make sure it's ec p256.
 
@@ -122,11 +123,11 @@ pub(crate) fn verify_fidou2f_attestation(
 
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
-    let public_key_u2f = credential_public_key.get_ALG_KEY_ECC_X962_RAW()?;
+    let public_key_u2f = credential_public_key.get_alg_key_ecc_x962_raw()?;
 
     // Let verificationData be the concatenation of (0x00 || rpIdHash || clientDataHash || credentialId || publicKeyU2F) (see Section 4.3 of [FIDO-U2F-Message-Formats]).
     let r: [u8; 1] = [0x00];
-    let verificationData: Vec<u8> = (&r)
+    let verification_data: Vec<u8> = (&r)
         .iter()
         .chain(rp_id_hash.iter())
         .chain(client_data_hash.iter())
@@ -136,14 +137,14 @@ pub(crate) fn verify_fidou2f_attestation(
         .collect();
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    let verified = cerificate_public_key.verify_signature(&sig, &verificationData)?;
+    let verified = cerificate_public_key.verify_signature(&sig, &verification_data)?;
 
     if !verified {
         println!("signature verification failed!");
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
-    let credential = Credential::new(acd, credential_public_key);
+    let credential = Credential::new(acd, credential_public_key, counter);
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 

@@ -1,7 +1,7 @@
 extern crate actix;
 extern crate actix_web;
 
-#[macro_use]
+// #[macro_use]
 extern crate askama;
 extern crate env_logger;
 
@@ -14,7 +14,6 @@ use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Js
 
 // use futures::future::Future;
 
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use webauthn_rs::proto::*;
@@ -37,7 +36,7 @@ impl AppState {
     }
 }
 
-fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
+fn index_view(_req: &HttpRequest<AppState>) -> HttpResponse {
     let s = IndexTemplate {
             // list: l,
         }
@@ -47,27 +46,29 @@ fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
 }
 
 fn challenge_register((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
-    let chal = {
-        state
-            .wan
-            .lock()
-            .expect("Failed to lock!")
-            .generate_challenge_register(username.into_inner())
-    };
-    println!("{:?}", chal);
-    HttpResponse::Ok().json(chal)
+    state
+        .wan
+        .lock()
+        .expect("Failed to lock!")
+        .generate_challenge_register(username.into_inner())
+        .map(|chal| HttpResponse::Ok().json(chal))
+        .unwrap_or_else(|e| {
+            println!("{:?}", e);
+            HttpResponse::InternalServerError().json(())
+        })
 }
 
 fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
-    let chal = {
-        state
-            .wan
-            .lock()
-            .expect("Failed to lock!")
-            .generate_challenge_login(username.into_inner())
-    };
-    println!("{:?}", chal);
-    HttpResponse::Ok().json(chal)
+    state
+        .wan
+        .lock()
+        .expect("Failed to lock!")
+        .generate_challenge_login(username.into_inner())
+        .map(|chal| HttpResponse::Ok().json(chal))
+        .unwrap_or_else(|e| {
+            println!("{:?}", e);
+            HttpResponse::InternalServerError().json(())
+        })
 }
 
 fn register(
@@ -78,11 +79,11 @@ fn register(
         .lock()
         .expect("Failed to lock!")
         .register_credential(reg.into_inner(), username.into_inner())
-        .unwrap();
-
-    println!("wan: {:?}", state.wan);
-
-    HttpResponse::Ok().json(())
+        .map(|_| HttpResponse::Ok().json(()))
+        .unwrap_or_else(|e| {
+            println!("{:?}", e);
+            HttpResponse::InternalServerError().json(())
+        })
 }
 
 fn login(
@@ -93,9 +94,11 @@ fn login(
         .lock()
         .expect("Failed to lock!")
         .verify_credential(lgn.into_inner(), username.into_inner())
-        .unwrap();
-
-    HttpResponse::Ok().json(())
+        .map(|_| HttpResponse::Ok().json(()))
+        .unwrap_or_else(|e| {
+            println!("{:?}", e);
+            HttpResponse::InternalServerError().json(())
+        })
 }
 
 fn main() {

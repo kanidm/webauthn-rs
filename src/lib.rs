@@ -1,3 +1,5 @@
+#![feature(vec_remove_item)]
+
 extern crate base64;
 #[macro_use]
 extern crate serde_derive;
@@ -45,19 +47,21 @@ impl std::fmt::Display for Challenge {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Credential {
     // What do we actually need to store here?
     // I think we need the credId, the COSEKey
     pub cred_id: CredentialID,
     pub cred: crypto::COSEKey,
+    pub counter: u32,
 }
 
 impl Credential {
-    fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey) -> Self {
+    fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey, counter: u32) -> Self {
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
+            counter: counter,
         }
     }
 }
@@ -132,15 +136,20 @@ impl<T> Webauthn<T> {
         // don't need a config at all?
     }
 
-    pub fn generate_challenge_register(&mut self, username: UserId) -> CreationChallengeResponse
+    pub fn generate_challenge_register(
+        &mut self,
+        username: UserId,
+    ) -> Result<CreationChallengeResponse, WebauthnError>
     where
         T: WebauthnConfig,
     {
         let chal = self.generate_challenge();
         let c = self.generate_challenge_response(&username, &chal);
 
-        self.config.persist_challenge(username, chal);
-        c
+        self.config
+            .persist_challenge(username, chal)
+            .map_err(|_| WebauthnError::ChallengePersistenceError)?;
+        Ok(c)
     }
 
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
@@ -160,7 +169,10 @@ impl<T> Webauthn<T> {
         // send to register_credential_internal
         let credential = self.register_credential_internal(reg, chal)?;
 
-        // Check that the credentialId is not yet registered to any other user. If registration is requested for a credential that is already registered to a different user, the Relying Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration, e.g. while deleting the older registration.
+        // Check that the credentialId is not yet registered to any other user. If registration is
+        // requested for a credential that is already registered to a different user, the Relying
+        // Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration,
+        // e.g. while deleting the older registration.
 
         let cred_exist_result = self
             .config
@@ -190,7 +202,8 @@ impl<T> Webauthn<T> {
         // Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
         //  ^-- this is done in the actix extractors.
 
-        // Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext.
+        // Let C, the client data claimed as collected during the credential creation, be the result
+        // of running an implementation-specific JSON parser on JSONtext.
         //
         // Now, we actually do a much larger conversion in one shot
         // here, where we get the AuthenticatorAttestationResponse
@@ -204,20 +217,8 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::InvalidClientDataType);
         }
 
-        // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
-        // First, we have to decode the challenge to vec?
-        /*
-        let decoded_challenge =
-            base64::decode_mode(&client_data.challenge, base64::Base64Mode::Standard)
-                .or(base64::decode_mode(
-                    &client_data.challenge,
-                    base64::Base64Mode::UrlSafe,
-                ))
-                .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-        */
-
-        // println!("decoded_challenge {:?}", decoded_challenge);
-
+        // Verify that the value of C.challenge matches the challenge that was sent to the
+        // authenticator in the create() call.
         if data.client_data_json.challenge != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
         }
@@ -227,7 +228,10 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
-        // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the assertion was obtained. If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
+        // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
+        // TLS connection over which the assertion was obtained. If Token Binding was used on that
+        // TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the
+        // Token Binding ID for the connection.
         //
         //  This could be reasonably complex to do, given that we could be behind a load balancer
         // or we may not directly know the status of TLS inside this api. I'm open to creative
@@ -250,19 +254,24 @@ impl<T> Webauthn<T> {
 
         // println!("client_data_json_hash: {:?}", base64::encode(client_data_json_hash.as_slice()));
 
-        // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
+        // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse
+        // structure to obtain the attestation statement format fmt, the authenticator data authData,
+        // and the attestation statement attStmt.
         // let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
-        println!("{:?}", data.attestation_object);
+        // println!("{:?}", data.attestation_object);
 
-        // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
+        // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the
+        // Relying Party.
         //
         //  NOW: Remember that RP ID https://w3c.github.io/webauthn/#rp-id is NOT THE SAME as the RP name
         // it's actually derived from the RP origin.
         if data.attestation_object.authData.rp_id_hash != self.rp_id_hash {
+            /*
             println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
             let a: String = base64::encode(&data.attestation_object.authData.rp_id_hash);
             let b: String = base64::encode(&self.rp_id_hash);
             println!("{:?} != {:?}", a, b);
+            */
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
@@ -271,31 +280,39 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::UserNotPresent);
         }
 
-        // Check that signCount has not gone backwards (NOT AN RFC REQUIREMENT, THIS IS AN ADDITIONAL STEP FOR THIS IMPLEMENTATION)
-        //
-        //  We probably need a config.get_user_token_counter((user, tokenid)) -> counter funciton hook.
-
-        // If user verification is required for this registration, verify that the User Verified bit of the flags in authData is set.
+        // If user verification is required for this registration, verify that the User Verified bit
+        // of the flags in authData is set.
         if self.config.get_user_verification_required()
             && !data.attestation_object.authData.user_verified
         {
             return Err(WebauthnError::UserNotVerified);
         }
 
-        // Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given as the extensions option in the create() call. In particular, any extension identifier values in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
+        // Verify that the values of the client extension outputs in clientExtensionResults and the
+        // authenticator extension outputs in the extensions in authData are as expected,
+        // considering the client extension input values that were given as the extensions option in
+        // the create() call. In particular, any extension identifier values in the
+        // clientExtensionResults and the extensions in authData MUST be also be present as
+        // extension identifier values in the extensions member of options, i.e., no extensions are
+        // present that were not requested. In the general case, the meaning of "are as expected" is
+        // specific to the Relying Party and which extensions are in use.
 
         // TODO: Today we send NO EXTENSIONS, so we'll never have a case where the extensions
         // are present! But because extensions are possible from the config we WILL need to manage
         // this situation eventually!!!
         match &data.attestation_object.authData.extensions {
-            Some(ex) => {
+            Some(_ex) => {
                 // We don't know how to handle client extensions yet!!!
                 return Err(WebauthnError::InvalidExtensions);
             }
             None => {}
         }
 
-        // Determine the attestation statement format by performing a USASCII case-sensitive match on fmt against the set of supported WebAuthn Attestation Statement Format Identifier values. An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values is maintained in the IANA registry of the same name [WebAuthn-Registries]. ( https://tools.ietf.org/html/draft-hodges-webauthn-registries-02 )
+        // Determine the attestation statement format by performing a USASCII case-sensitive match on
+        // fmt against the set of supported WebAuthn Attestation Statement Format Identifier values.
+        // An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values
+        // is maintained in the IANA registry of the same name [WebAuthn-Registries].
+        // ( https://tools.ietf.org/html/draft-hodges-webauthn-registries-02 )
         //
         //  https://w3c.github.io/webauthn/#packed-attestation
         //  https://w3c.github.io/webauthn/#tpm-attestation
@@ -305,7 +322,9 @@ impl<T> Webauthn<T> {
         //  https://w3c.github.io/webauthn/#none-attestation
         let attest_format = AttestationFormat::try_from(data.attestation_object.fmt.as_str())?;
 
-        // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature, by using the attestation statement format fmt’s verification procedure given attStmt, authData and the hash of the serialized client data computed in step 7.
+        // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation
+        // signature, by using the attestation statement format fmt’s verification procedure given
+        // attStmt, authData and the hash of the serialized client data computed in step 7.
 
         let acd = &data
             .attestation_object
@@ -327,6 +346,7 @@ impl<T> Webauthn<T> {
                 &client_data_json_hash,
                 &data.attestation_object.authData.rp_id_hash,
                 // &rp_hash,
+                data.attestation_object.authData.counter,
             ),
             _ => {
                 // No other types are currently implemented
@@ -336,10 +356,16 @@ impl<T> Webauthn<T> {
 
         // Now based on result ...
 
-        // 15. If validation is successful, obtain a list of acceptable trust anchors (attestation root certificates or ECDAA-Issuer public keys) for that attestation type and attestation statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
+        // 15. If validation is successful, obtain a list of acceptable trust anchors (attestation
+        // root certificates or ECDAA-Issuer public keys) for that attestation type and attestation
+        // statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata
+        // Service [FIDOMetadataService] provides one way to obtain such information, using the
+        // aaguid in the attestedCredentialData in authData.
 
-        // 16: Assess the attestation trustworthiness using the outputs of the verification procedure in step 14, as follows: (SEE RFC)
-        // If the attestation statement attStmt successfully verified but is not trustworthy per step 16 above, the Relying Party SHOULD fail the registration ceremony.
+        // 16: Assess the attestation trustworthiness using the outputs of the verification procedure
+        // in step 14, as follows: (SEE RFC)
+        // If the attestation statement attStmt successfully verified but is not trustworthy per step
+        // 16 above, the Relying Party SHOULD fail the registration ceremony.
 
         let credential = match attest_result {
             // We probably should have policy to deal with this ...
@@ -350,7 +376,10 @@ impl<T> Webauthn<T> {
             }
         }?;
 
-        //  If the attestation statement attStmt verified successfully and is found to be trustworthy, then register the new credential with the account that was denoted in the options.user passed to create(), by associating it with the credentialId and credentialPublicKey in the attestedCredentialData in authData, as appropriate for the Relying Party's system.
+        //  If the attestation statement attStmt verified successfully and is found to be trustworthy,
+        // then register the new credential with the account that was denoted in the options.user
+        // passed to create(), by associating it with the credentialId and credentialPublicKey in
+        // the attestedCredentialData in authData, as appropriate for the Relying Party's system.
 
         // Already returned above if trust failed.
 
@@ -365,66 +394,31 @@ impl<T> Webauthn<T> {
         &self,
         rsp: PublicKeyCredential,
         chal: Challenge,
-        creds: &Vec<Credential>,
-    ) -> Result<(), WebauthnError>
+        cred: &Credential,
+    ) -> Result<u32, WebauthnError>
     where
         T: WebauthnConfig,
     {
-        // If the allowCredentials option was given when this authentication ceremony was initiated, verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
-        //
-        // We always supply allowCredentials in this library, so we expect creds as a vec of credentials
-        // that would be equivalent to what was allowed.
-        println!("rsp: {:?}", rsp);
-
-        let rawId = base64::decode_mode(&rsp.rawId, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(&rsp.rawId, base64::Base64Mode::UrlSafe))
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-
-        // Identify the user being authenticated and verify that this user is the owner of the public
-        // key credential source credentialSource identified by credential.id:
-        //
-        // This this requirement is ... fun. It means we have to parse *everything* above first,
-        // so that we can actually get at cred.id.
-        //  If the user was identified before the authentication ceremony was initiated, e.g., via a
-        //  username or cookie,
-        //      verify that the identified user is the owner of credentialSource. If
-        //      credential.response.userHandle is present, let userHandle be its value. Verify that
-        //      userHandle also maps to the same user.
-        //  If the user was not identified before the authentication ceremony was initiated,
-        //      verify that credential.response.userHandle is present, and that the user identified
-        //      by this value is the owner of credentialSource.
-        //
-        // TODO: Not implemented correctly yet!
-
-        // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
-        // inappropriate for your use case), look up the corresponding credential public key.
-
-        let cred_opt = creds.iter().fold(None, |acc, c| {
-            if acc.is_none() && c.cred_id == rawId {
-                Some(c.clone())
-            } else {
-                acc
-            }
-        });
-
-        let cred = cred_opt.ok_or(WebauthnError::CredentialNotFound)?;
-
-        // Let cData, authData and sig denote the value of credential’s response's clientDataJSON, authenticatorData, and signature respectively.
+        // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
+        // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
         let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
-        println!("data: {:?}", data);
+        // println!("data: {:?}", data);
 
         let c = &data.clientDataJSON;
 
-        // Let C, the client data claimed as used for the signature, be the result of running an implementation-specific JSON parser on JSONtext.
-        //     Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
+        // Let C, the client data claimed as used for the signature, be the result of running an
+        // implementation-specific JSON parser on JSONtext.
+        //     Note: C may be any implementation-specific data structure representation, as long as
+        //     C’s components are referenceable, as required by this algorithm.
 
         // Verify that the value of C.type is the string webauthn.get.
         if c.type_ != "webauthn.get" {
             return Err(WebauthnError::InvalidClientDataType);
         }
 
-        // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
+        // Verify that the value of C.challenge matches the challenge that was sent to the
+        // authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
         if c.challenge != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
         }
@@ -434,14 +428,19 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
-        // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the attestation was obtained. If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
+        // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
+        // TLS connection over which the attestation was obtained. If Token Binding was used on that
+        // TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the
+        // Token Binding ID for the connection.
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
         if data.authenticatorData.rp_id_hash != self.rp_id_hash {
+            /*
             println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
             let a: String = base64::encode(&data.authenticatorData.rp_id_hash);
             let b: String = base64::encode(&self.rp_id_hash);
             println!("{:?} != {:?}", a, b);
+            */
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
@@ -450,16 +449,26 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::UserNotPresent);
         }
 
-        // If user verification is required for this assertion, verify that the User Verified bit of the flags in authData is set.
+        // If user verification is required for this assertion, verify that the User Verified bit of
+        // the flags in authData is set.
         if self.config.get_user_verification_required() && !data.authenticatorData.user_verified {
             return Err(WebauthnError::UserNotVerified);
         }
 
-        // Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given as the extensions option in the get() call. In particular, any extension identifier values in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
-
-        // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the Relying Party MUST be prepared to handle cases where none or not all of the requested extensions were acted upon.
+        // Verify that the values of the client extension outputs in clientExtensionResults and the
+        // authenticator extension outputs in the extensions in authData are as expected, considering
+        // the client extension input values that were given as the extensions option in the get()
+        // call. In particular, any extension identifier values in the clientExtensionResults and
+        // the extensions in authData MUST be also be present as extension identifier values in the
+        // extensions member of options, i.e., no extensions are present that were not requested. In
+        // the general case, the meaning of "are as expected" is specific to the Relying Party and
+        // which extensions are in use.
+        //
+        // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the
+        // Relying Party MUST be prepared to handle cases where none or not all of the requested
+        // extensions were acted upon.
         match &data.authenticatorData.extensions {
-            Some(ex) => {
+            Some(_ex) => {
                 // pass
             }
             None => {}
@@ -468,8 +477,10 @@ impl<T> Webauthn<T> {
         // Let hash be the result of computing a hash over the cData using SHA-256.
         let client_data_json_hash = compute_sha256(data.clientDataJSONBytes.as_slice());
 
-        // Using the credential public key looked up in step 3, verify that sig is a valid signature over the binary concatenation of authData and hash.
-        // Note: This verification step is compatible with signatures generated by FIDO U2F authenticators. See §6.1.2 FIDO U2F Signature Format Compatibility.
+        // Using the credential public key looked up in step 3, verify that sig is a valid signature
+        // over the binary concatenation of authData and hash.
+        // Note: This verification step is compatible with signatures generated by FIDO U2F
+        // authenticators. See §6.1.2 FIDO U2F Signature Format Compatibility.
 
         let verification_data: Vec<u8> = data
             .authenticatorDataBytes
@@ -482,38 +493,110 @@ impl<T> Webauthn<T> {
             .cred
             .verify_signature(&data.signature, &verification_data)?;
 
-        println!("verified: {:?}", verified);
+        if !verified {
+            return Err(WebauthnError::AuthenticationFailure);
+        }
 
-        // If the signature counter value authData.signCount is nonzero or the value stored in conjunction with credential’s id attribute is nonzero, then run the following sub-step:
-
-        // If the signature counter value authData.signCount is
-
-        // greater than the signature counter value stored in conjunction with credential’s id attribute.
-        //Update the stored signature counter value, associated with credential’s id attribute, to be the value of authData.signCount.
-        // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
-        // This is a signal that the authenticator may be cloned, i.e. at least two copies of the credential private key may exist and are being used in parallel. Relying Parties should incorporate this information into their risk scoring. Whether the Relying Party updates the stored signature counter value in this case, or not, or fails the authentication ceremony or not, is Relying Party-specific.
-
-        // If all the above steps are successful, continue with the authentication ceremony as appropriate. Otherwise, fail the authentication ceremony.
-        unimplemented!();
+        Ok(data.authenticatorData.counter)
     }
 
     pub fn verify_credential(
-        &self,
-        lgn: PublicKeyCredential,
+        &mut self,
+        rsp: PublicKeyCredential,
         username: String,
     ) -> Result<(), WebauthnError>
     where
         T: WebauthnConfig,
     {
         // https://w3c.github.io/webauthn/#verifying-assertion
-        println!("{:?}", lgn);
+        // Lookup challenge
+        let chal = self
+            .config
+            .retrieve_challenge(&username)
+            .ok_or(WebauthnError::ChallengeNotFound)?;
 
-        // self.verify_credential_internal(cred)
+        // If the allowCredentials option was given when this authentication ceremony was initiated,
+        // verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
+        //
+        // We always supply allowCredentials in this library, so we expect creds as a vec of credentials
+        // that would be equivalent to what was allowed.
+        // println!("rsp: {:?}", rsp);
 
-        unimplemented!();
+        let raw_id = base64::decode_mode(&rsp.rawId, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(&rsp.rawId, base64::Base64Mode::UrlSafe))
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
+
+        let cred = {
+            // Identify the user being authenticated and verify that this user is the owner of the public
+            // key credential source credentialSource identified by credential.id:
+            //
+            //  If the user was identified before the authentication ceremony was initiated, e.g., via a
+            //  username or cookie,
+            //      verify that the identified user is the owner of credentialSource. If
+            //      credential.response.userHandle is present, let userHandle be its value. Verify that
+            //      userHandle also maps to the same user.
+            let creds = self
+                .config
+                .retrieve_credentials(&username)
+                .ok_or(WebauthnError::CredentialRetrievalError)?;
+            //  If the user was not identified before the authentication ceremony was initiated,
+            //      verify that credential.response.userHandle is present, and that the user identified
+            //      by this value is the owner of credentialSource.
+            //
+            // TODO: Not done yet
+
+            // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
+            // inappropriate for your use case), look up the corresponding credential public key.
+
+            let cred_opt: Option<Credential> = creds.iter().fold(None, |acc, c| {
+                if acc.is_none() && c.cred_id == raw_id {
+                    Some(c.clone())
+                } else {
+                    acc
+                }
+            });
+
+            cred_opt.ok_or(WebauthnError::CredentialNotFound)?
+        };
+
+        let counter = self.verify_credential_internal(rsp, chal, &cred)?;
+
+        // If the signature counter value authData.signCount is nonzero or the value stored in
+        // conjunction with credential’s id attribute is nonzero, then run the following sub-step:
+        if counter > 0 {
+            // If the signature counter value authData.signCount is
+            if counter > cred.counter {
+                // greater than the signature counter value stored in conjunction with credential’s id attribute.
+                //       Update the stored signature counter value, associated with credential’s id attribute,
+                //       to be the value of authData.signCount.
+                self.config
+                    .credential_update_counter(&username, &cred, counter)
+                    .map_err(|_| WebauthnError::CredentialCounterUpdateFailure)
+            // If all the above steps are successful, continue with the authentication ceremony as
+            // appropriate. Otherwise, fail the authentication ceremony.
+            } else {
+                // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
+                //      This is a signal that the authenticator may be cloned, i.e. at least two copies
+                //      of the credential private key may exist and are being used in parallel. Relying
+                //      Parties should incorporate this information into their risk scoring. Whether the
+                //      Relying Party updates the stored signature counter value in this case, or not,
+                //      or fails the authentication ceremony or not, is Relying Party-specific.
+                self.config
+                    .credential_report_invalid_counter(&username, &cred, counter)
+                    .map_err(|_| WebauthnError::CredentialCounterUpdateFailure)?;
+                Err(WebauthnError::CredentialPossibleCompromise)
+            }
+        } else {
+            // If all the above steps are successful, continue with the authentication ceremony as
+            // appropriate. Otherwise, fail the authentication ceremony.
+            Ok(())
+        }
     }
 
-    pub fn generate_challenge_login(&mut self, username: UserId) -> RequestChallengeResponse
+    pub fn generate_challenge_login(
+        &mut self,
+        username: UserId,
+    ) -> Result<RequestChallengeResponse, WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -523,7 +606,7 @@ impl<T> Webauthn<T> {
 
         let uc = self.config.retrieve_credentials(&username);
 
-        println!("login_challenge: {:?}", uc);
+        // println!("login_challenge: {:?}", uc);
 
         let ac = match uc {
             Some(creds) => creds
@@ -545,8 +628,10 @@ impl<T> Webauthn<T> {
             ac,
             None,
         );
-        self.config.persist_challenge(username, chal);
-        r
+        self.config
+            .persist_challenge(username, chal)
+            .map_err(|_| WebauthnError::ChallengePersistenceError)?;
+        Ok(r)
     }
 }
 
@@ -569,6 +654,20 @@ pub trait WebauthnConfig {
     fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()>;
 
     fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>>;
+
+    fn credential_update_counter(
+        &mut self,
+        userid: &UserId,
+        cred: &Credential,
+        counter: u32,
+    ) -> Result<(), ()>;
+
+    fn credential_report_invalid_counter(
+        &mut self,
+        userid: &UserId,
+        cred: &Credential,
+        counter: u32,
+    ) -> Result<(), ()>;
 
     fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
         vec![COSEContentType::ECDSA_SHA256]
@@ -644,13 +743,49 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
                 self.creds.insert(userid, vec![credential]);
             }
         };
-        println!("persist_credential: {:?}", self.creds);
-
         Ok(())
     }
 
+    fn credential_update_counter(
+        &mut self,
+        userid: &UserId,
+        cred: &Credential,
+        counter: u32,
+    ) -> Result<(), ()> {
+        match self.creds.get_mut(userid) {
+            Some(v) => {
+                v.remove_item(cred);
+                let mut c = cred.clone();
+                c.counter = counter;
+                v.push(c);
+                Ok(())
+            }
+            None => {
+                // Invalid state but not end of world ...
+                Err(())
+            }
+        }
+    }
+
+    fn credential_report_invalid_counter(
+        &mut self,
+        userid: &UserId,
+        cred: &Credential,
+        _counter: u32,
+    ) -> Result<(), ()> {
+        match self.creds.get_mut(userid) {
+            Some(v) => {
+                v.remove_item(cred);
+                Ok(())
+            }
+            None => {
+                // Invalid state but not end of world ...
+                Err(())
+            }
+        }
+    }
+
     fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>> {
-        println!("{:?}", self.creds);
         self.creds.get(userid)
     }
 
@@ -764,6 +899,7 @@ mod tests {
 
         // Create the fake credential that we know is associated
         let cred = Credential {
+            counter: 1,
             cred_id: vec![
                 106, 223, 133, 124, 161, 172, 56, 141, 181, 18, 27, 66, 187, 181, 113, 251, 187,
                 123, 20, 169, 41, 80, 236, 138, 92, 137, 4, 4, 16, 255, 188, 47, 158, 202, 111,
@@ -789,7 +925,7 @@ mod tests {
         // Persist it to our fake db.
         // wan_c.persist_credential("xxx".to_string(), cred);
 
-        let mut wan = Webauthn::new(wan_c);
+        let wan = Webauthn::new(wan_c);
 
         // Captured authentication attempt
 
@@ -799,7 +935,7 @@ mod tests {
         let rsp_d: PublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
         // Now verify it!
-        let r = wan.verify_credential_internal(rsp_d, zero_chal, &vec![cred]);
+        let r = wan.verify_credential_internal(rsp_d, zero_chal, &cred);
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }

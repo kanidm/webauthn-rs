@@ -1,9 +1,9 @@
-use openssl::{bn, ec, ecdsa, hash, nid, pkey, sha, sign, x509};
+use openssl::{bn, ec, hash, nid, pkey, sha, sign, x509};
 use std::convert::TryFrom;
 
-use super::constants::*;
+// use super::constants::*;
 use super::error::*;
-use super::proto::*;
+// use super::proto::*;
 
 // Why OpenSSL over another rust crate?
 // - Well, the openssl crate allows us to reconstruct a public key from the
@@ -62,7 +62,7 @@ impl X509PublicKey {
     pub(crate) fn verify_signature(
         &self,
         signature: &Vec<u8>,
-        verificationData: &Vec<u8>,
+        verification_data: &Vec<u8>,
     ) -> Result<bool, WebauthnError> {
         let pkey = self
             .pubk
@@ -73,7 +73,7 @@ impl X509PublicKey {
         let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
         verifier
-            .update(verificationData.as_slice())
+            .update(verification_data.as_slice())
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
         verifier
             .verify(signature.as_slice())
@@ -92,7 +92,7 @@ impl X509PublicKey {
 // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
 // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
 // +---------+-------+----------+------------------------------------+
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ECDSACurve {
     SECP256R1 = 1,
     SECP384R1 = 2,
@@ -131,7 +131,7 @@ impl ECDSACurve {
 //    | Reserved  | 0     | This value is reserved                        |
 //    +-----------+-------+-----------------------------------------------+
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum COSEContentType {
     ECDSA_SHA256 = -7,  // recommends curve SECP256R1
     ECDSA_SHA384 = -35, // recommends curve SECP384R1
@@ -160,14 +160,14 @@ impl From<&COSEContentType> for i64 {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct COSEEC2Key {
     pub curve: ECDSACurve,
     pub x: [u8; 32],
     pub y: [u8; 32],
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum COSEKeyType {
     EC_EC2(COSEEC2Key),
     // EC_OKP,
@@ -175,7 +175,7 @@ pub enum COSEKeyType {
     // EC_Reserved, // should always be invalid.
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct COSEKey {
     pub type_: COSEContentType,
     pub key: COSEKeyType,
@@ -281,7 +281,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 }
 
 impl COSEKey {
-    pub fn get_ALG_KEY_ECC_X962_RAW(&self) -> Result<Vec<u8>, WebauthnError> {
+    pub fn get_alg_key_ecc_x962_raw(&self) -> Result<Vec<u8>, WebauthnError> {
         // Let publicKeyU2F be the concatenation 0x04 || x || y.
         // Note: This signifies uncompressed ECC key format.
         match &self.key {
@@ -293,7 +293,7 @@ impl COSEKey {
                     .map(|b| *b)
                     .collect())
             }
-            _ => Err(WebauthnError::COSEKeyInvalidType),
+            // _ => Err(WebauthnError::COSEKeyInvalidType),
         }
     }
 
@@ -317,7 +317,7 @@ impl COSEKey {
                     .check_key()
                     .map_err(|e| WebauthnError::OpenSSLError(e))
             }
-            _ => Err(WebauthnError::COSEKeyInvalid),
+            // _ => Err(WebauthnError::COSEKeyInvalid),
         }
     }
 
@@ -341,14 +341,14 @@ impl COSEKey {
                     pkey::PKey::from_ec_key(ec_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
                 Ok(p)
             }
-            _ => Err(WebauthnError::COSEKeyInvalid),
+            // _ => Err(WebauthnError::COSEKeyInvalid),
         }
     }
 
     pub(crate) fn verify_signature(
         &self,
         signature: &Vec<u8>,
-        verificationData: &Vec<u8>,
+        verification_data: &Vec<u8>,
     ) -> Result<bool, WebauthnError> {
         let pkey = self.get_openssl_pkey()?;
 
@@ -356,7 +356,7 @@ impl COSEKey {
         let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
         verifier
-            .update(verificationData.as_slice())
+            .update(verification_data.as_slice())
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
         verifier
             .verify(signature.as_slice())
