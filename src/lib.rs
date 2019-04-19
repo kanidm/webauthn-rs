@@ -94,7 +94,6 @@ impl<T> Webauthn<T> {
                 alg: a.into(),
             })
             .collect();
-        // println!("rp_id: {:?}", config.get_relying_party_id());
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
             // rng: config.get_rng(),
@@ -240,25 +239,15 @@ impl<T> Webauthn<T> {
 
         // 7. Compute the hash of response.clientDataJSON using SHA-256.
         //    This will be used in step 14.
-        // First you have to decode this from base64!!! The spec is UNCLEAR about this fact
-        /*
-        let client_data_raw =
-            base64::decode_mode(&reg.response.clientDataJSON, base64::Base64Mode::Standard)
-                .or(base64::decode_mode(
-                    &reg.response.clientDataJSON,
-                    base64::Base64Mode::UrlSafe,
-                ))
-                .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-        */
+        // First you have to decode this from base64!!! This really could just be implementation
+        // specific though ...
         let client_data_json_hash = compute_sha256(data.client_data_json_bytes.as_slice());
-
-        // println!("client_data_json_hash: {:?}", base64::encode(client_data_json_hash.as_slice()));
 
         // Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse
         // structure to obtain the attestation statement format fmt, the authenticator data authData,
         // and the attestation statement attStmt.
-        // let attest_data = AttestationObject::try_from(&reg.response.attestationObject)?;
-        // println!("{:?}", data.attestation_object);
+        //
+        // Done as part of try_from
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the
         // Relying Party.
@@ -266,12 +255,6 @@ impl<T> Webauthn<T> {
         //  NOW: Remember that RP ID https://w3c.github.io/webauthn/#rp-id is NOT THE SAME as the RP name
         // it's actually derived from the RP origin.
         if data.attestation_object.authData.rp_id_hash != self.rp_id_hash {
-            /*
-            println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
-            let a: String = base64::encode(&data.attestation_object.authData.rp_id_hash);
-            let b: String = base64::encode(&self.rp_id_hash);
-            println!("{:?} != {:?}", a, b);
-            */
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
@@ -677,7 +660,7 @@ pub trait WebauthnConfig {
         AUTHENTICATOR_TIMEOUT
     }
 
-    // Currently false, because I can't work out what is needed to get the UV bit to set ...
+    // Currently default false, because I can't work out what is needed to get the UV bit to set ...
     fn get_user_verification_required(&self) -> bool {
         false
     }
@@ -692,12 +675,6 @@ pub trait WebauthnConfig {
     fn get_extensions(&self) -> Option<JSONExtensions> {
         None
     }
-
-    /*
-    fn get_rng(&self) -> dyn rand::Rng {
-        StdRng::from_entropy()
-    }
-    */
 }
 
 #[derive(Debug)]
