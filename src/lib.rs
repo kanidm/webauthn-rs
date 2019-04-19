@@ -1,4 +1,16 @@
+//! Webauthn-rs - Webauthn for Rust Server Applications
+//!
+//! Webauthn is a standard allowing communication between servers, browsers and authenticators
+//! to allow strong, passwordless, cryptographic authentication to be performed. Webauthn
+//! is able to operate with many authenticator types, such as U2F.
+//!
+//! This library aims to provide a secure black-box Webauthn implementation that you can
+//! plug into your application, so that you can provide Webauthn to your users.
+//!
+//! For examples, see our examples folder.
+
 #![feature(vec_remove_item)]
+#![warn(missing_docs)]
 
 extern crate base64;
 #[macro_use]
@@ -7,72 +19,44 @@ extern crate byteorder;
 extern crate openssl;
 
 mod attestation;
-pub mod constants;
-mod crypto;
+mod constants;
+pub mod crypto;
+pub mod ephemeral;
 pub mod error;
 pub mod proto;
 
-use std::collections::BTreeMap;
+use rand::prelude::*;
 use std::convert::TryFrom;
 
-use attestation::*;
-use constants::*;
-use crypto::{compute_sha256, COSEContentType};
-use error::*;
-use proto::*;
-use rand::prelude::*;
+use crate::attestation::{verify_fidou2f_attestation, AttestationFormat, AttestationType};
+use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
+use crate::crypto::{compute_sha256, COSEContentType};
+use crate::error::WebauthnError;
+use crate::proto::{
+    AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge,
+    CreationChallengeResponse, Credential, JSONExtensions, PubKeyCredParams, PublicKeyCredential,
+    RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
+};
 
-type UserId = String;
-
-#[derive(Clone)]
-pub struct Challenge(Vec<u8>);
-
-impl std::fmt::Debug for Challenge {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
-        )
-    }
-}
-
-impl std::fmt::Display for Challenge {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
-        )
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Credential {
-    // What do we actually need to store here?
-    // I think we need the credId, the COSEKey
-    pub cred_id: CredentialID,
-    pub cred: crypto::COSEKey,
-    pub counter: u32,
-}
-
-impl Credential {
-    fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey, counter: u32) -> Self {
-        Credential {
-            cred_id: acd.credential_id.clone(),
-            cred: ck,
-            counter: counter,
-        }
-    }
-}
-
-impl PartialEq<Credential> for Credential {
-    fn eq(&self, c: &Credential) -> bool {
-        self.cred_id == c.cred_id
-    }
-}
-
-// We have to remember the challenges we issued, so keep a reference ...
+/// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
+/// use the most:
+/// * generate_challenge_response
+/// * register_credential
+/// * generate_challenge_authenticate
+/// * authenticate_credential
+///
+/// Each of these is described in turn, but they will all map to routes in your application.
+/// The generate functions return Json challenges that are intended to be processed by the client
+/// browser, and the register and authenticate will recieve Json that is processed and verified.
+///
+/// During this processing, callbacks are initiated, which you can provide by implementing
+/// WebauthnConfig for a type. The ephemeral module contains an example, in memory only
+/// implementation of these callbacks as an example, or for testing.
+///
+/// As a result of this design, you will either need to provide thread safety around the
+/// Webauthn type (due to the &mut requirements in some callbacks), or you can use many
+/// Webauthn types, where each WebauthnConfig you have is able to use interior mutability
+/// to protect and synchronise values.
 #[derive(Debug)]
 pub struct Webauthn<T> {
     rng: StdRng,
@@ -82,6 +66,9 @@ pub struct Webauthn<T> {
 }
 
 impl<T> Webauthn<T> {
+    /// Create a new Webauthn instance with the supplied configuration. The config type
+    /// will recieve and interact with various callbacks to allow the lifecycle and
+    /// application handling of Credentials to be customised for your application.
     pub fn new(config: T) -> Self
     where
         T: WebauthnConfig,
@@ -154,7 +141,7 @@ impl<T> Webauthn<T> {
     // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
     pub fn register_credential(
         &mut self,
-        reg: RegisterResponse,
+        reg: RegisterPublicKeyCredential,
         username: UserId,
     ) -> Result<(), WebauthnError>
     where
@@ -190,7 +177,7 @@ impl<T> Webauthn<T> {
 
     pub(crate) fn register_credential_internal(
         &mut self,
-        reg: RegisterResponse,
+        reg: RegisterPublicKeyCredential,
         chal: Challenge,
     ) -> Result<Credential, WebauthnError>
     where
@@ -483,7 +470,7 @@ impl<T> Webauthn<T> {
         Ok(data.authenticatorData.counter)
     }
 
-    pub fn verify_credential(
+    pub fn authenticate_credential(
         &mut self,
         rsp: PublicKeyCredential,
         username: String,
@@ -576,7 +563,7 @@ impl<T> Webauthn<T> {
         }
     }
 
-    pub fn generate_challenge_login(
+    pub fn generate_challenge_authenticate(
         &mut self,
         username: UserId,
     ) -> Result<RequestChallengeResponse, WebauthnError>
@@ -677,116 +664,13 @@ pub trait WebauthnConfig {
     }
 }
 
-#[derive(Debug)]
-pub struct WebauthnEphemeralConfig {
-    chals: BTreeMap<UserId, Challenge>,
-    creds: BTreeMap<UserId, Vec<Credential>>,
-    rp_name: String,
-    rp_id: String,
-    rp_origin: String,
-}
-
-impl WebauthnConfig for WebauthnEphemeralConfig {
-    fn get_relying_party_name(&self) -> String {
-        self.rp_name.clone()
-    }
-
-    fn get_relying_party_id(&self) -> String {
-        self.rp_id.clone()
-    }
-
-    fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()> {
-        self.chals.insert(userid, challenge);
-        Ok(())
-    }
-
-    fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge> {
-        self.chals.remove(userid)
-    }
-
-    fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()> {
-        match self.creds.get(userid) {
-            Some(creds) => Ok(creds.contains(cred)),
-            None => Ok(false),
-        }
-    }
-
-    fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()> {
-        match self.creds.get_mut(&userid) {
-            Some(v) => {
-                v.push(credential);
-            }
-            None => {
-                self.creds.insert(userid, vec![credential]);
-            }
-        };
-        Ok(())
-    }
-
-    fn credential_update_counter(
-        &mut self,
-        userid: &UserId,
-        cred: &Credential,
-        counter: u32,
-    ) -> Result<(), ()> {
-        match self.creds.get_mut(userid) {
-            Some(v) => {
-                v.remove_item(cred);
-                let mut c = cred.clone();
-                c.counter = counter;
-                v.push(c);
-                Ok(())
-            }
-            None => {
-                // Invalid state but not end of world ...
-                Err(())
-            }
-        }
-    }
-
-    fn credential_report_invalid_counter(
-        &mut self,
-        userid: &UserId,
-        cred: &Credential,
-        _counter: u32,
-    ) -> Result<(), ()> {
-        match self.creds.get_mut(userid) {
-            Some(v) => {
-                v.remove_item(cred);
-                Ok(())
-            }
-            None => {
-                // Invalid state but not end of world ...
-                Err(())
-            }
-        }
-    }
-
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>> {
-        self.creds.get(userid)
-    }
-
-    fn get_origin(&self) -> &String {
-        &self.rp_origin
-    }
-}
-
-impl WebauthnEphemeralConfig {
-    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
-        WebauthnEphemeralConfig {
-            chals: BTreeMap::new(),
-            creds: BTreeMap::new(),
-            rp_name: rp_name.to_string(),
-            rp_id: rp_id.to_string(),
-            rp_origin: rp_origin.to_string(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::crypto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
-    use crate::*;
+    use crate::ephemeral::WebauthnEphemeralConfig;
+    use crate::proto::{Challenge, Credential, PublicKeyCredential, RegisterPublicKeyCredential};
+    use crate::Webauthn;
 
     #[test]
     fn test_ephemeral() {}
@@ -815,7 +699,7 @@ mod tests {
         {"id":"0xYE4bQ_HZM51-XYwp7WHJu8RfeA2Oz3_9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1_aQpTtKLeGu6Ig","rawId":"0xYE4bQ/HZM51+XYwp7WHJu8RfeA2Oz3/9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1/aQpTtKLeGu6Ig==","response":{"attestationObject":"o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEcwRQIhALjRb43YFcbJ3V9WiYPpIrZkhgzAM6KTR8KIjwCXejBCAiAO5Lvp1VW4dYBhBDv7HZIrxZb1SwKKYOLfFRXykRxMqGN4NWOBWQLBMIICvTCCAaWgAwIBAgIEGKxGwDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNDEzOTQzNDg4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEeeo7LHxJcBBiIwzSP+tg5SkxcdSD8QC+hZ1rD4OXAwG1Rs3Ubs/K4+PzD4Hp7WK9Jo1MHr03s7y+kqjCrutOOqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBSAwIQYLKwYBBAGC5RwBAQQEEgQQy2lIHo/3QDmT7AonKaFUqDAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCXnQOX2GD4LuFdMRx5brr7Ivqn4ITZurTGG7tX8+a0wYpIN7hcPE7b5IND9Nal2bHO2orh/tSRKSFzBY5e4cvda9rAdVfGoOjTaCW6FZ5/ta2M2vgEhoz5Do8fiuoXwBa1XCp61JfIlPtx11PXm5pIS2w3bXI7mY0uHUMGvxAzta74zKXLslaLaSQibSKjWKt9h+SsXy4JGqcVefOlaQlJfXL1Tga6wcO0QTu6Xq+Uw7ZPNPnrpBrLauKDd202RlN4SP7ohL3d9bG6V5hUz/3OusNEBZUn5W3VmPj1ZnFavkMB3RkRMOa58MZAORJT4imAPzrvJ0vtv94/y71C6tZ5aGF1dGhEYXRhWMQSyhe0mvIolDbzA+AWYDCiHlJdJm4gkmdDOAGo/UBxoEEAAAAAAAAAAAAAAAAAAAAAAAAAAABA0xYE4bQ/HZM51+XYwp7WHJu8RfeA2Oz3/9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1/aQpTtKLeGu6IqUBAgMmIAEhWCCe1KvqpcVWN416/QZc8vJynt3uo3/WeJ2R4uj6kJbaiiJYIDC5ssxxummKviGgLoP9ZLFb836A9XfRO7op18QY3i5m","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"},"type":"public-key"}
         "#;
         // turn it into our "deserialised struct"
-        let rsp_d: RegisterResponse = serde_json::from_str(rsp).unwrap();
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
         // Now register, providing our fake challenge.
         let result = wan.register_credential_internal(rsp_d, zero_chal);
@@ -852,7 +736,7 @@ mod tests {
                 "type": "public-key"
         }
         "#;
-        let rsp_d: RegisterResponse = serde_json::from_str(rsp).unwrap();
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
         let result = wan.register_credential_internal(rsp_d, chal);
         println!("{:?}", result);
         assert!(result.is_ok());

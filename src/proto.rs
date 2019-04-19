@@ -7,7 +7,58 @@ use byteorder::{BigEndian, ByteOrder};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-use super::error::*;
+use crate::crypto;
+use crate::error::*;
+
+pub type UserId = String;
+
+#[derive(Clone)]
+pub struct Challenge(pub Vec<u8>);
+
+impl std::fmt::Debug for Challenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
+        )
+    }
+}
+
+impl std::fmt::Display for Challenge {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
+        )
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Credential {
+    // What do we actually need to store here?
+    // I think we need the credId, the COSEKey
+    pub cred_id: CredentialID,
+    pub cred: crypto::COSEKey,
+    pub counter: u32,
+}
+
+impl Credential {
+    pub fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey, counter: u32) -> Self {
+        Credential {
+            cred_id: acd.credential_id.clone(),
+            cred: ck,
+            counter: counter,
+        }
+    }
+}
+
+impl PartialEq<Credential> for Credential {
+    fn eq(&self, c: &Credential) -> bool {
+        self.cred_id == c.cred_id
+    }
+}
 
 // These are the three primary communication structures you will
 // need to handle.
@@ -175,7 +226,7 @@ impl TryFrom<&Vec<u8>> for CollectedClientData {
 }
 
 #[derive(Debug)]
-pub(crate) struct AttestedCredentialData {
+pub struct AttestedCredentialData {
     pub aaguid: Vec<u8>,
     pub credential_id: CredentialID,
     pub credential_pk: serde_cbor::Value,
@@ -351,9 +402,8 @@ impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationR
 
 // See standard PublicKeyCredential and Credential
 // https://w3c.github.io/webauthn/#iface-pkcredential
-
 #[derive(Debug, Deserialize)]
-pub struct RegisterResponse {
+pub struct RegisterPublicKeyCredential {
     id: String,
     rawId: String,
     pub response: AuthenticatorAttestationResponseRaw,
@@ -430,7 +480,7 @@ pub struct LoginRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::{AttestationObject, RegisterResponse};
+    use super::{AttestationObject, RegisterPublicKeyCredential};
     use serde_json;
     use std::convert::TryFrom;
 
@@ -439,7 +489,7 @@ mod tests {
         let x = r#"
         {"id":"4oiUggKcrpRIlB-cFzFbfkx_BNeM7UAnz3wO7ZpT4I2GL_n-g8TICyJTHg11l0wyc-VkQUVnJ0yM08-1D5oXnw","rawId":"4oiUggKcrpRIlB+cFzFbfkx/BNeM7UAnz3wO7ZpT4I2GL/n+g8TICyJTHg11l0wyc+VkQUVnJ0yM08+1D5oXnw==","response":{"attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQOKIlIICnK6USJQfnBcxW35MfwTXjO1AJ898Du2aU+CNhi/5/oPEyAsiUx4NdZdMMnPlZEFFZydMjNPPtQ+aF5+lAQIDJiABIVggFo08FM4Je1yfCSuPsxP6h0zvlJSjfocUk75EvXw2oSMiWCArRwLD8doar0bACWS1PgVJKzp/wStyvOkTd4NlWHW8rQ==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJwZENXRDJWamRMSVkzN2VSYTVfazdhS3BqdkF2VmNOY04ycVozMjk0blpVIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"},"type":"public-key"}
         "#;
-        let y: RegisterResponse = serde_json::from_str(x).unwrap();
+        let y: RegisterPublicKeyCredential = serde_json::from_str(x).unwrap();
     }
 
     #[test]

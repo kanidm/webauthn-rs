@@ -16,8 +16,9 @@ use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Js
 
 use std::sync::{Arc, Mutex};
 
-use webauthn_rs::proto::*;
-use webauthn_rs::*;
+use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
+use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
+use webauthn_rs::Webauthn;
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -63,7 +64,7 @@ fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpRe
         .wan
         .lock()
         .expect("Failed to lock!")
-        .generate_challenge_login(username.into_inner())
+        .generate_challenge_authenticate(username.into_inner())
         .map(|chal| HttpResponse::Ok().json(chal))
         .unwrap_or_else(|e| {
             println!("{:?}", e);
@@ -72,7 +73,11 @@ fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpRe
 }
 
 fn register(
-    (reg, username, state): (Json<RegisterResponse>, Path<String>, State<AppState>),
+    (reg, username, state): (
+        Json<RegisterPublicKeyCredential>,
+        Path<String>,
+        State<AppState>,
+    ),
 ) -> HttpResponse {
     state
         .wan
@@ -93,7 +98,7 @@ fn login(
         .wan
         .lock()
         .expect("Failed to lock!")
-        .verify_credential(lgn.into_inner(), username.into_inner())
+        .authenticate_credential(lgn.into_inner(), username.into_inner())
         .map(|_| HttpResponse::Ok().json(()))
         .unwrap_or_else(|e| {
             println!("{:?}", e);

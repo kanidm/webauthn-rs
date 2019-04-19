@@ -1,9 +1,8 @@
 use std::convert::TryFrom;
 
-use super::crypto;
-use super::error::*;
-use super::proto::*;
-use super::Credential;
+use crate::crypto;
+use crate::error::WebauthnError;
+use crate::proto::{AttestedCredentialData, Credential};
 
 #[derive(Debug)]
 pub enum AttestationFormat {

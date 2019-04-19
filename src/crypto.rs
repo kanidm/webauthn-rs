@@ -281,7 +281,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 }
 
 impl COSEKey {
-    pub fn get_alg_key_ecc_x962_raw(&self) -> Result<Vec<u8>, WebauthnError> {
+    pub(crate) fn get_alg_key_ecc_x962_raw(&self) -> Result<Vec<u8>, WebauthnError> {
         // Let publicKeyU2F be the concatenation 0x04 || x || y.
         // Note: This signifies uncompressed ECC key format.
         match &self.key {
@@ -335,6 +335,11 @@ impl COSEKey {
                     bn::BigNum::from_slice(&ec2k.y).map_err(|e| WebauthnError::OpenSSLError(e))?;
 
                 let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                // Validate the key is sound. IIRC this actually checks the values
+                // are correctly on the curve as specified
+                ec_key.check_key()
                     .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
                 let p =
