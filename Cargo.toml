@@ -5,6 +5,16 @@ authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2018"
 build = "build.rs"
 
+description = "Webauthn Framework for Rust Web Servers"
+# documentation = "..."
+# homepage = "..."
+repository = "https://github.com/Firstyear/webauthn-rs"
+readme = "README.md"
+keywords = ["webauthn", "authentication"]
+categories = ["authentication", "web-programming"]
+license = "MPL-2.0"
+license-file = "LICENSE.md"
+
 [dependencies]
 byteorder = "1.2"
 serde = "1.0"
