@@ -365,14 +365,14 @@ pub struct RegisterResponse {
 }
 
 #[derive(Debug)]
-pub struct AuthenticatorAssertionResponse {
-    authenticatorData: AuthenticatorData,
+pub(crate) struct AuthenticatorAssertionResponse {
+    pub authenticatorData: AuthenticatorData,
     // I think we need this for sig?
-    authenticatorDataBytes: Vec<u8>,
-    clientDataJSON: CollectedClientData,
-    clientDataJSONBytes: Vec<u8>,
-    signature: Vec<u8>,
-    userHandle: Option<String>,
+    pub authenticatorDataBytes: Vec<u8>,
+    pub clientDataJSON: CollectedClientData,
+    pub clientDataJSONBytes: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub userHandle: Option<String>,
 }
 
 impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
@@ -392,7 +392,6 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
             authenticatorDataBytes: adr,
             clientDataJSON: CollectedClientData::try_from(&ccdjr)?,
             clientDataJSONBytes: ccdjr,
-            // is this actually base64?
             signature: sigr,
             userHandle: aarr.userHandle.clone(),
         })
@@ -409,9 +408,25 @@ pub struct AuthenticatorAssertionResponseRaw {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct LoginRequest {
+pub struct PublicKeyCredential {
+    pub id: String,
+    // Why can't we parse this?
+    //
+    // pub rawId: &'a [u8],
+    pub rawId: String,
     pub response: AuthenticatorAssertionResponseRaw,
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub discovery: Option<String>,
+    pub identifier: Option<String>,
 }
+
+/*
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub publicKey: PublicKeyCredential,
+}
+*/
 
 #[cfg(test)]
 mod tests {

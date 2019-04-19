@@ -44,6 +44,7 @@ pub enum WebauthnError {
     CredentialExistCheckError,
     CredentialAlreadyExists,
     CredentialPersistenceError,
+    CredentialNotFound,
 
     TrustFailure,
 }

@@ -56,18 +56,26 @@ function login() {
       console.log(challenge);
       return navigator.credentials.get(challenge)
         .then(credentials => {
+          /*
           console.log("PublicKeyCredential Get");
           console.log(credentials);
-          const req = {};
-          req.response = {};
-          req.response.authenticatorData = toBase64(credentials.response.authenticatorData);
-          req.response.clientDataJSON = toBase64(credentials.response.clientDataJSON);
-          req.response.signature = toBase64(credentials.response.signature);
-          console.log("Sending LoginRequest");
-          console.log(req);
+          credentials.response.authenticatorData = toBase64(credentials.response.authenticatorData);
+          credentials.response.clientDataJSON = toBase64(credentials.response.clientDataJSON);
+          credentials.response.signature = toBase64(credentials.response.signature);
+          */
+          const pk = {};
+          pk.id = credentials.id;
+          pk.rawId = toBase64(credentials.rawId);
+          pk.response = {};
+          pk.response.authenticatorData = toBase64(credentials.response.authenticatorData);
+          pk.response.clientDataJSON = toBase64(credentials.response.clientDataJSON);
+          pk.response.signature = toBase64(credentials.response.signature);
+          pk.response.userHandle = credentials.response.userHandle;
+          pk.type = credentials.type;
+
           return fetch(LOGIN_URL, {
             method: "POST",
-            body: JSON.stringify(req),
+            body: JSON.stringify(pk),
             headers: {
               "Content-Type": "application/json",
             },

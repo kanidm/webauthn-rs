@@ -85,12 +85,14 @@ fn register(
     HttpResponse::Ok().json(())
 }
 
-fn login((lgn, state): (Json<LoginRequest>, State<AppState>)) -> HttpResponse {
+fn login(
+    (lgn, username, state): (Json<PublicKeyCredential>, Path<String>, State<AppState>),
+) -> HttpResponse {
     state
         .wan
         .lock()
         .expect("Failed to lock!")
-        .verify_credential(lgn.into_inner())
+        .verify_credential(lgn.into_inner(), username.into_inner())
         .unwrap();
 
     HttpResponse::Ok().json(())
@@ -137,7 +139,7 @@ fn main() {
                         cfg.0.limit(4096);
                     })
             })
-            .resource("/login", |r| {
+            .resource("/login/{username}", |r| {
                 r.method(http::Method::POST).with_config(login, |((cfg),)| {
                     cfg.0.limit(4096);
                 })

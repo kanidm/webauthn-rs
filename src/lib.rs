@@ -363,66 +363,126 @@ impl<T> Webauthn<T> {
     // https://w3c.github.io/webauthn/#verifying-assertion
     pub fn verify_credential_internal(
         &self,
-        rsp: LoginRequest,
+        rsp: PublicKeyCredential,
         chal: Challenge,
         creds: &Vec<Credential>,
-    ) -> Result<(), WebauthnError> {
+    ) -> Result<(), WebauthnError>
+    where
+        T: WebauthnConfig,
+    {
         // If the allowCredentials option was given when this authentication ceremony was initiated, verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
         //
         // We always supply allowCredentials in this library, so we expect creds as a vec of credentials
         // that would be equivalent to what was allowed.
+        println!("rsp: {:?}", rsp);
 
-        let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
+        let rawId = base64::decode_mode(&rsp.rawId, base64::Base64Mode::Standard)
+            .or(base64::decode_mode(&rsp.rawId, base64::Base64Mode::UrlSafe))
+            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
-        // Identify the user being authenticated and verify that this user is the owner of the public key credential source credentialSource identified by credential.id:
+        // Identify the user being authenticated and verify that this user is the owner of the public
+        // key credential source credentialSource identified by credential.id:
         //
         // This this requirement is ... fun. It means we have to parse *everything* above first,
         // so that we can actually get at cred.id.
+        //  If the user was identified before the authentication ceremony was initiated, e.g., via a
+        //  username or cookie,
+        //      verify that the identified user is the owner of credentialSource. If
+        //      credential.response.userHandle is present, let userHandle be its value. Verify that
+        //      userHandle also maps to the same user.
+        //  If the user was not identified before the authentication ceremony was initiated,
+        //      verify that credential.response.userHandle is present, and that the user identified
+        //      by this value is the owner of credentialSource.
+        //
+        // TODO: Not implemented correctly yet!
 
-        println!("data: {:?}", data);
+        // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
+        // inappropriate for your use case), look up the corresponding credential public key.
 
-        // If the user was identified before the authentication ceremony was initiated, e.g., via a username or cookie,
+        let cred_opt = creds.iter().fold(None, |acc, c| {
+            if acc.is_none() && c.cred_id == rawId {
+                Some(c.clone())
+            } else {
+                acc
+            }
+        });
 
-        // verify that the identified user is the owner of credentialSource. If credential.response.userHandle is present, let userHandle be its value. Verify that userHandle also maps to the same user.
-        // If the user was not identified before the authentication ceremony was initiated,
-
-        // verify that credential.response.userHandle is present, and that the user identified by this value is the owner of credentialSource.
-
-        // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is inappropriate for your use case), look up the corresponding credential public key.
+        let cred = cred_opt.ok_or(WebauthnError::CredentialNotFound)?;
 
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON, authenticatorData, and signature respectively.
-
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
+        let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
+        println!("data: {:?}", data);
 
-        // Note: Using any implementation of UTF-8 decode is acceptable as long as it yields the same result as that yielded by the UTF-8 decode algorithm. In particular, any leading byte order mark (BOM) MUST be stripped.
+        let c = &data.clientDataJSON;
 
         // Let C, the client data claimed as used for the signature, be the result of running an implementation-specific JSON parser on JSONtext.
-
-        // Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
+        //     Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
 
         // Verify that the value of C.type is the string webauthn.get.
+        if c.type_ != "webauthn.get" {
+            return Err(WebauthnError::InvalidClientDataType);
+        }
 
         // Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
+        if c.challenge != chal.0 {
+            return Err(WebauthnError::MismatchedChallenge);
+        }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
+        if &c.origin != self.config.get_origin() {
+            return Err(WebauthnError::InvalidRPOrigin);
+        }
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the attestation was obtained. If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
+        if data.authenticatorData.rp_id_hash != self.rp_id_hash {
+            println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
+            let a: String = base64::encode(&data.authenticatorData.rp_id_hash);
+            let b: String = base64::encode(&self.rp_id_hash);
+            println!("{:?} != {:?}", a, b);
+            return Err(WebauthnError::InvalidRPIDHash);
+        }
 
         // Verify that the User Present bit of the flags in authData is set.
+        if !data.authenticatorData.user_present {
+            return Err(WebauthnError::UserNotPresent);
+        }
 
         // If user verification is required for this assertion, verify that the User Verified bit of the flags in authData is set.
+        if self.config.get_user_verification_required() && !data.authenticatorData.user_verified {
+            return Err(WebauthnError::UserNotVerified);
+        }
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given as the extensions option in the get() call. In particular, any extension identifier values in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
 
         // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the Relying Party MUST be prepared to handle cases where none or not all of the requested extensions were acted upon.
+        match &data.authenticatorData.extensions {
+            Some(ex) => {
+                // pass
+            }
+            None => {}
+        }
 
         // Let hash be the result of computing a hash over the cData using SHA-256.
+        let client_data_json_hash = compute_sha256(data.clientDataJSONBytes.as_slice());
 
         // Using the credential public key looked up in step 3, verify that sig is a valid signature over the binary concatenation of authData and hash.
-
         // Note: This verification step is compatible with signatures generated by FIDO U2F authenticators. See §6.1.2 FIDO U2F Signature Format Compatibility.
+
+        let verification_data: Vec<u8> = data
+            .authenticatorDataBytes
+            .iter()
+            .chain(client_data_json_hash.iter())
+            .map(|b| *b)
+            .collect();
+
+        let verified = cred
+            .cred
+            .verify_signature(&data.signature, &verification_data)?;
+
+        println!("verified: {:?}", verified);
 
         // If the signature counter value authData.signCount is nonzero or the value stored in conjunction with credential’s id attribute is nonzero, then run the following sub-step:
 
@@ -437,7 +497,14 @@ impl<T> Webauthn<T> {
         unimplemented!();
     }
 
-    pub fn verify_credential(&self, lgn: LoginRequest) -> Result<(), WebauthnError> {
+    pub fn verify_credential(
+        &self,
+        lgn: PublicKeyCredential,
+        username: String,
+    ) -> Result<(), WebauthnError>
+    where
+        T: WebauthnConfig,
+    {
         // https://w3c.github.io/webauthn/#verifying-assertion
         println!("{:?}", lgn);
 
@@ -456,7 +523,7 @@ impl<T> Webauthn<T> {
 
         let uc = self.config.retrieve_credentials(&username);
 
-        println!("{:?}", uc);
+        println!("login_challenge: {:?}", uc);
 
         let ac = match uc {
             Some(creds) => creds
@@ -468,19 +535,18 @@ impl<T> Webauthn<T> {
                 .collect(),
             None => Vec::new(),
         };
-        println!("Creds for {} -> {:?}", username, ac);
 
         // Store the chal associated to the user.
-        unimplemented!();
-
         // Now put that into the correct challenge format
-        RequestChallengeResponse::new(
+        let r = RequestChallengeResponse::new(
             chal.to_string(),
             self.config.get_authenticator_timeout(),
             self.config.get_relying_party_id(),
             ac,
             None,
-        )
+        );
+        self.config.persist_challenge(username, chal);
+        r
     }
 }
 
@@ -563,7 +629,6 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()> {
-        println!("does_exist_credential: {:?}", self.creds);
         match self.creds.get(userid) {
             Some(creds) => Ok(creds.contains(cred)),
             None => Ok(false),
@@ -571,7 +636,6 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()> {
-        println!("persist_credential: {:?}", self.creds);
         match self.creds.get_mut(&userid) {
             Some(v) => {
                 v.push(credential);
@@ -693,28 +757,30 @@ mod tests {
         // Generated by a yubico 5
         // Make a "fake" challenge, where we know what the values should be ....
 
-        let zero_chal = Challenge((0..CHALLENGE_SIZE_BYTES).map(|_| 0).collect::<Vec<u8>>());
+        let zero_chal = Challenge(vec![
+            90, 5, 243, 254, 68, 239, 221, 101, 20, 214, 76, 60, 134, 111, 142, 26, 129, 146, 225,
+            144, 135, 95, 253, 219, 18, 161, 199, 216, 251, 213, 167, 195,
+        ]);
 
         // Create the fake credential that we know is associated
-
         let cred = Credential {
             cred_id: vec![
-                106, 213, 181, 34, 195, 3, 240, 62, 19, 21, 234, 138, 46, 185, 37, 253, 43, 137,
-                80, 157, 133, 123, 157, 241, 141, 234, 23, 243, 211, 179, 243, 39, 218, 85, 116,
-                185, 104, 174, 59, 67, 128, 129, 78, 17, 140, 228, 200, 252, 177, 191, 41, 155, 18,
-                168, 143, 206, 178, 125, 162, 46, 88, 11, 101, 24,
+                106, 223, 133, 124, 161, 172, 56, 141, 181, 18, 27, 66, 187, 181, 113, 251, 187,
+                123, 20, 169, 41, 80, 236, 138, 92, 137, 4, 4, 16, 255, 188, 47, 158, 202, 111,
+                192, 117, 110, 152, 245, 95, 22, 200, 172, 71, 154, 40, 181, 212, 64, 80, 17, 238,
+                238, 21, 13, 27, 145, 140, 27, 208, 101, 166, 81,
             ],
             cred: COSEKey {
                 type_: COSEContentType::ECDSA_SHA256,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
                     curve: ECDSACurve::SECP256R1,
                     x: [
-                        218, 247, 91, 160, 203, 198, 216, 61, 166, 190, 137, 5, 138, 109, 188, 9,
-                        98, 152, 207, 194, 116, 110, 244, 22, 121, 173, 166, 5, 156, 47, 217, 173,
+                        46, 121, 76, 233, 118, 208, 250, 74, 227, 182, 8, 145, 45, 46, 5, 9, 199,
+                        186, 84, 83, 7, 237, 130, 73, 16, 90, 17, 54, 33, 255, 54, 56,
                     ],
                     y: [
-                        38, 28, 59, 146, 209, 194, 229, 86, 73, 81, 12, 142, 157, 120, 109, 178,
-                        218, 146, 146, 207, 78, 166, 27, 132, 64, 9, 116, 74, 13, 14, 50, 206,
+                        117, 105, 1, 23, 253, 223, 67, 135, 253, 219, 253, 223, 17, 247, 91, 197,
+                        205, 225, 143, 59, 47, 138, 70, 120, 74, 155, 177, 177, 166, 233, 48, 71,
                     ],
                 }),
             },
@@ -728,18 +794,13 @@ mod tests {
         // Captured authentication attempt
 
         let rsp = r#"
-        {"response":
-            {"authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2MBAAAAAg==",
-             "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9",
-             "signature":"MEUCIGFkaBxzJh07B7uv78QQ7zEIBihZOG9AM38ytVGIuAciAiEAklS2JvWE4if88gaCo4qT1dYk10G+oyQ6y79rzuQIuRk="
-            }
-        }
+        {"id":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ","rawId":"at+FfKGsOI21EhtCu7Vx+7t7FKkpUOyKXIkEBBD/vC+eym/AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ==","response":{"authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2MBAAAAFA==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJXZ1h6X2tUdjNXVVUxa3c4aG0tT0dvR1M0WkNIWF8zYkVxSEgyUHZWcDhNIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9","signature":"MEYCIQDmLVOqv85cdRup4Fr8Pf9zC4AWO+XKBJqa8xPwYFCCMAIhAOiExLoyes0xipmUmq0BVlqJaCKLn/MFKG9GIDsCGq/+","userHandle":null},"type":"public-key"}
         "#;
-        let rsp_d: LoginRequest = serde_json::from_str(rsp).unwrap();
+        let rsp_d: PublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
         // Now verify it!
-        assert!(wan
-            .verify_credential_internal(rsp_d, zero_chal, &vec![cred])
-            .is_ok());
+        let r = wan.verify_credential_internal(rsp_d, zero_chal, &vec![cred]);
+        println!("RESULT: {:?}", r);
+        assert!(r.is_ok());
     }
 }
