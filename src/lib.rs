@@ -8,6 +8,7 @@
 //! plug into your application, so that you can provide Webauthn to your users.
 //!
 //! For examples, see our examples folder.
+//!
 
 #![feature(vec_remove_item)]
 #![warn(missing_docs)]
@@ -18,7 +19,7 @@ extern crate serde_derive;
 extern crate byteorder;
 extern crate openssl;
 
-mod attestation;
+pub mod attestation;
 mod constants;
 pub mod crypto;
 pub mod ephemeral;
@@ -69,6 +70,9 @@ impl<T> Webauthn<T> {
     /// Create a new Webauthn instance with the supplied configuration. The config type
     /// will recieve and interact with various callbacks to allow the lifecycle and
     /// application handling of Credentials to be customised for your application.
+    ///
+    /// You should see the Documentation for WebauthnConfig, which is the main part of
+    /// the code you will interact with for site-specific customisation.
     pub fn new(config: T) -> Self
     where
         T: WebauthnConfig,
@@ -122,6 +126,12 @@ impl<T> Webauthn<T> {
         // don't need a config at all?
     }
 
+    /// Generate a new challenge suitable for Serde JSON serialisation which can be
+    /// sent to the client. The client (generally a webbrowser) will pass this JSON
+    /// structure to the `navigator.credentials.create()` javascript function.
+    ///
+    /// At this time we deviate from the standard and base64 some fields, but we are
+    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_register(
         &mut self,
         username: UserId,
@@ -138,7 +148,13 @@ impl<T> Webauthn<T> {
         Ok(c)
     }
 
-    // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
+    /// Process a credential registration response. This is the output of
+    /// `navigator.credentials.create()` which is sent to the webserver. If the registration
+    /// is valid, the credential will be sent to the appropriate callbacks, or an error
+    /// will be returned to help identify why the registration failed.
+    ///
+    /// At this time we deviate from the standard and base64 some fields, but we are
+    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn register_credential(
         &mut self,
         reg: RegisterPublicKeyCredential,
@@ -147,6 +163,7 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
+        // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
         // get the challenge (it's username associated)
         let chal = self
             .config
@@ -337,14 +354,8 @@ impl<T> Webauthn<T> {
         // If the attestation statement attStmt successfully verified but is not trustworthy per step
         // 16 above, the Relying Party SHOULD fail the registration ceremony.
 
-        let credential = match attest_result {
-            // We probably should have policy to deal with this ...
-            AttestationType::Uncertain(credential) => Ok(credential),
-            _ => {
-                // We don't know how to assert trust in this yet.
-                Err(WebauthnError::AttestationTrustFailure)
-            }
-        }?;
+        let credential = self.config.policy_verify_trust(attest_result)
+            .map_err(|_e| WebauthnError::AttestationTrustFailure)?;
 
         //  If the attestation statement attStmt verified successfully and is found to be trustworthy,
         // then register the new credential with the account that was denoted in the options.user
@@ -360,7 +371,7 @@ impl<T> Webauthn<T> {
     }
 
     // https://w3c.github.io/webauthn/#verifying-assertion
-    pub fn verify_credential_internal(
+    pub(crate) fn verify_credential_internal(
         &self,
         rsp: PublicKeyCredential,
         chal: Challenge,
@@ -470,6 +481,13 @@ impl<T> Webauthn<T> {
         Ok(data.authenticatorData.counter)
     }
 
+    /// Process an authenticate response from the authenticator and browser. This
+    /// is the output of `navigator.credentials.get()`, which is processed by this
+    /// function. If the authentication fails, appropriate errors will be returned.
+    /// On success, an Ok(()) is returned.
+    ///
+    /// At this time we deviate from the standard and base64 some fields, but we are
+    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn authenticate_credential(
         &mut self,
         rsp: PublicKeyCredential,
@@ -563,6 +581,12 @@ impl<T> Webauthn<T> {
         }
     }
 
+    /// Generate a challenge for an authenticate request for a user. Given the userId, their
+    /// AllowedCredential Ids will be added to the challenge. This challenge is supplied to
+    /// to the javascript function `navigator.credentials.get()`.
+    ///
+    /// At this time we deviate from the standard and base64 some fields, but we are
+    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_authenticate(
         &mut self,
         username: UserId,
@@ -605,26 +629,70 @@ impl<T> Webauthn<T> {
     }
 }
 
+/// The WebauthnConfig type allows site-specific customisation of the Webauthn library.
+/// This provides a set of callbacks which are used to supply data to various structures
+/// and calls, as well as callbacks to manage data persistence and retrieval.
 pub trait WebauthnConfig {
+    /// Returns a copy of your relying parties name. This is generally any text identifier
+    /// you wish, but should rarely if ever change. Changes to the relying party name may
+    /// confuse authenticators and causes their credentials to be lost.
+    ///
+    /// Examples of names could be "My Awesome Site", "https://my-awesome-site.com.au"
     fn get_relying_party_name(&self) -> String;
+
+    /// Returns a reference to your sites origin. The origin is the URL to your site with
+    /// protocol and port. This should rarely, if ever change. In production usage this
+    /// value must always be https://, however http://localhost is acceptable for testing
+    /// only. We may add warnings or errors for non-https:// urls in the future.
+    ///
+    /// Examples of this value could be. "https://my-site.com.au", "https://my-site.com.au:8443"
+    fn get_origin(&self) -> &String;
+
 
     // TODO: This should be a generic impl that produceds the following from origin
     //    https://name:port/path
     //            name  <<-- this is the rp_id
     // It should check it is https also.
     // For now, we expect people to over-ride it though ...
+
+    /// Returs the relying party id. This should rarely if ever change, and is used as an id
+    /// in cryptographic operations and credential scoping. This is defined as the domain name
+    /// of the service, minuse all protocol, port and location data. For example:
+    ///   `https://name:port/path -> name`
+    ///
+    /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
     fn get_relying_party_id(&self) -> String;
 
+    /// Given a UserId and Challenge, persist these to a temporary storage system. It is implementation
+    /// specific if this challenge is distributed to other servires via a system like memcached
+    /// or if these are persisted-per server. In the per-server case, you should use sticky
+    /// sessions on your load balancer to ensure clients contact the server that issued the challenge
+    ///
+    /// The UserId and Challenge are both serialisable with serde for storage in a database or
+    /// structure of some kind.
     fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()>;
 
+    /// Given a UserId, return the challenge if one is present. If not challenge is found return
+    /// None (which will cause the client operation to fail with correct error messages). It's important
+    /// to note here the use of `Option<Challenge>` - you should remove the Challenge from the
+    /// datastore as part of this request to prevent challenge re-use or bruteforce attacks from
+    /// occuring.
     fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge>;
 
+    /// Given a userId and a Credential, determine if this credential already exists and is
+    /// registered to the user. It may be of benefit to determine if the credential belongs to
+    /// *any* other user in your system to prevent credential re-use.
     fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()>;
 
+    /// On a sucessful registration, persist this Credential associated to UserId.
     fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()>;
 
+    /// Given a userId, retrieve the set of all Credentials that the UserId has associated.
     fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>>;
 
+    /// Given a userId and Credential, update it's authentication counter to "counter". This
+    /// helps to minimise threats from replay or reuse attacks by ensuring the counter is always
+    /// advancing.
     fn credential_update_counter(
         &mut self,
         userid: &UserId,
@@ -632,6 +700,11 @@ pub trait WebauthnConfig {
         counter: u32,
     ) -> Result<(), ()>;
 
+    /// Given a userId and Credential, if the counter value has gone backwards or is replayed
+    /// this callback is called to allow reporting of a possible compromise of the Credential.
+    /// You should take site appropriate action, ranging from audit-logging of the possible
+    /// compromise, disabling of the Credential, disabling the account, or other appropriate
+    /// actions.
     fn credential_report_invalid_counter(
         &mut self,
         userid: &UserId,
@@ -639,28 +712,64 @@ pub trait WebauthnConfig {
         counter: u32,
     ) -> Result<(), ()>;
 
+    /// Get the list of valid credential algorthims that this servie will accept. Unless you have
+    /// speific requirements around this, we advise you leave this function to the default
+    /// implementation.
     fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
         vec![COSEContentType::ECDSA_SHA256]
     }
 
+    /// Return a timeout on how long the authenticator has to respond to a challenge. This value
+    /// defaults to 6000 milliseconds. You likely won't need to implemented this function, and should
+    /// rely on the defaults.
     fn get_authenticator_timeout(&self) -> u32 {
         AUTHENTICATOR_TIMEOUT
     }
 
-    // Currently default false, because I can't work out what is needed to get the UV bit to set ...
+    /// Returns a site policy on if user verification of the authenticator is required. This currently
+    /// defaults to "false" due to implementation limitations, as per:
+    /// https://github.com/Firstyear/webauthn-rs/issues/7
     fn get_user_verification_required(&self) -> bool {
         false
     }
 
-    // This probably shouldn't be the default impl, so move it?
-    fn get_origin(&self) -> &String;
 
-    // By default do we need any?
-    // TODO: Is this the right type? The standard is a bit confusing
-    // in this section:
-    // https://w3c.github.io/webauthn/#extensions
+    /// Return a list of site-requested extensions to be sent to Authenticators during
+    /// registration and authentication. Currently this is not implemented. Please see:
+    /// https://github.com/Firstyear/webauthn-rs/issues/8
+    /// https://w3c.github.io/webauthn/#extensions
     fn get_extensions(&self) -> Option<JSONExtensions> {
         None
+    }
+
+    /// A callback to allow trust decisions to be made over the attestation of the
+    /// credential. It's important for your implementation of this callback to follow
+    /// the advice of the w3c standard, notably:
+    ///
+    /// 15. If validation is successful, obtain a list of acceptable trust anchors (attestation
+    /// root certificates or ECDAA-Issuer public keys) for that attestation type and attestation
+    /// statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata
+    /// Service [FIDOMetadataService] provides one way to obtain such information, using the
+    /// aaguid in the attestedCredentialData in authData.
+    ///
+    /// 16: Assess the attestation trustworthiness using the outputs of the verification procedure
+    /// in step 14, as follows: (SEE RFC)
+    /// If the attestation statement attStmt successfully verified but is not trustworthy per step
+    /// 16 above, the Relying Party SHOULD fail the registration ceremony.
+    ///
+    /// The default implementation of this method rejects None and Uncertain attestation, and
+    /// will "blindly trust" the other types as valid. If you have strict security requirements
+    /// we strongly recommend you implement this function, and we may in the future provide a
+    /// stronger default trust system.
+    fn policy_verify_trust(&self, at: AttestationType) -> Result<Credential, ()> {
+        match at {
+            AttestationType::Basic(credential, _ca) => Ok(credential),
+            _ => {
+                // We don't know how to assert trust in this yet, or we just
+                // don't trust it at all (Uncertain, None).
+                Err(())
+            }
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
-// Implementations of the Webauthn protocol structures
-// that can be json encoded and used by other
-// applications.
+
+//! JSON Protocol Structs and representations for communication with authenticators
+//! and clients.
 
 use byteorder::{BigEndian, ByteOrder};
 use std::collections::BTreeMap;
@@ -10,9 +10,13 @@ use std::convert::TryFrom;
 use crate::crypto;
 use crate::error::*;
 
+/// Representation of a UserId. This is currently a type alias to "String".
 pub type UserId = String;
 
-#[derive(Clone)]
+/// A challenge issued by the server. This contains a set of random bytes
+/// which should always be kept private. This type can be serialised or
+/// deserialised by serde as required for your storage needs.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Challenge(pub Vec<u8>);
 
 impl std::fmt::Debug for Challenge {
@@ -35,17 +39,26 @@ impl std::fmt::Display for Challenge {
     }
 }
 
+/// A credential ID type. At the moment this is a vector of bytes, but
+/// it could also be a future change for this to be base64 string instead.
+///
+/// If changed, this would likely be a major library version change.
+pub type CredentialID = Vec<u8>;
+
+/// A user's authenticator credential. It contains an id, the public key
+/// and a counter of how many times the authenticator has been used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Credential {
-    // What do we actually need to store here?
-    // I think we need the credId, the COSEKey
+    /// The ID of this credential.
     pub cred_id: CredentialID,
+    /// The public key of this credential
     pub cred: crypto::COSEKey,
+    /// The counter for this credential
     pub counter: u32,
 }
 
 impl Credential {
-    pub fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey, counter: u32) -> Self {
+    pub(crate) fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey, counter: u32) -> Self {
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
@@ -63,7 +76,6 @@ impl PartialEq<Credential> for Credential {
 // These are the three primary communication structures you will
 // need to handle.
 
-pub type CredentialID = Vec<u8>;
 pub(crate) type CBORExtensions = serde_cbor::Value;
 pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
@@ -80,7 +92,7 @@ struct User {
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub struct PubKeyCredParams {
+pub(crate) struct PubKeyCredParams {
     #[serde(rename = "type")]
     pub(crate) type_: String,
     // Should this be a diff size?
@@ -88,15 +100,15 @@ pub struct PubKeyCredParams {
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub struct AllowCredentials {
+pub(crate) struct AllowCredentials {
     #[serde(rename = "type")]
     pub(crate) type_: String,
     pub(crate) id: String,
 }
 
-// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize)]
 struct PublicKeyCredentialCreationOptions {
+    // https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
     rp: RelayingParty,
     user: User,
     // Should this just be bytes?
@@ -111,13 +123,17 @@ struct PublicKeyCredentialCreationOptions {
     extensions: Option<JSONExtensions>,
 }
 
+/// A JSON serialisable challenge which is issued to the user's webbrowser
+/// for handling. This is meant to be opaque, that is, you should not need
+/// to inspect or alter the content of the struct - you should serialise it
+/// and transmit it to the client only.
 #[derive(Debug, Serialize)]
 pub struct CreationChallengeResponse {
     publicKey: PublicKeyCredentialCreationOptions,
 }
 
 impl CreationChallengeResponse {
-    pub fn new(
+    pub(crate) fn new(
         relaying_party: String,
         user_id: String,
         user_name: String,
@@ -147,7 +163,7 @@ impl CreationChallengeResponse {
 }
 
 #[derive(Debug, Serialize)]
-pub struct PublicKeyCredentialRequestOptions {
+pub(crate) struct PublicKeyCredentialRequestOptions {
     challenge: String,
     timeout: u32,
     rpId: String,
@@ -156,13 +172,17 @@ pub struct PublicKeyCredentialRequestOptions {
     extensions: Option<JSONExtensions>,
 }
 
+/// A JSON serialisable challenge which is issued to the user's webbrowser
+/// for handling. This is meant to be opaque, that is, you should not need
+/// to inspect or alter the content of the struct - you should serialise it
+/// and transmit it to the client only.
 #[derive(Debug, Serialize)]
 pub struct RequestChallengeResponse {
     publicKey: PublicKeyCredentialRequestOptions,
 }
 
 impl RequestChallengeResponse {
-    pub fn new(
+    pub(crate) fn new(
         challenge: String,
         timeout: u32,
         relaying_party: String,
@@ -187,14 +207,14 @@ impl RequestChallengeResponse {
 
 #[derive(Debug)]
 pub(crate) struct CollectedClientData {
-    pub type_: String,
-    pub challenge: Vec<u8>,
-    pub origin: String,
-    pub tokenBinding: Option<String>,
+    pub(crate) type_: String,
+    pub(crate) challenge: Vec<u8>,
+    pub(crate) origin: String,
+    pub(crate) tokenBinding: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct CollectedClientDataRaw {
+pub(crate) struct CollectedClientDataRaw {
     #[serde(rename = "type")]
     pub type_: String,
     pub challenge: String,
@@ -226,22 +246,22 @@ impl TryFrom<&Vec<u8>> for CollectedClientData {
 }
 
 #[derive(Debug)]
-pub struct AttestedCredentialData {
-    pub aaguid: Vec<u8>,
-    pub credential_id: CredentialID,
-    pub credential_pk: serde_cbor::Value,
+pub(crate) struct AttestedCredentialData {
+    pub(crate) aaguid: Vec<u8>,
+    pub(crate) credential_id: CredentialID,
+    pub(crate) credential_pk: serde_cbor::Value,
 }
 
 // https://w3c.github.io/webauthn/#sctn-attestation
 #[derive(Debug)]
 pub(crate) struct AuthenticatorData {
-    pub rp_id_hash: Vec<u8>,
-    pub flags: u8,
-    pub counter: u32,
-    pub user_present: bool,
-    pub user_verified: bool,
-    pub extensions: Option<CBORExtensions>,
-    pub acd: Option<AttestedCredentialData>,
+    pub(crate) rp_id_hash: Vec<u8>,
+    pub(crate) flags: u8,
+    pub(crate) counter: u32,
+    pub(crate) user_present: bool,
+    pub(crate) user_verified: bool,
+    pub(crate) extensions: Option<CBORExtensions>,
+    pub(crate) acd: Option<AttestedCredentialData>,
 }
 
 impl TryFrom<&Vec<u8>> for AuthenticatorData {
@@ -328,20 +348,19 @@ impl TryFrom<&Vec<u8>> for AuthenticatorData {
 }
 
 #[derive(Debug, Deserialize)]
-// pub(crate) struct AttestationObject<'a> {
-pub struct AttestationObjectInner<'a> {
-    pub authData: &'a [u8],
-    pub fmt: String,
-    pub attStmt: serde_cbor::Value,
+pub(crate) struct AttestationObjectInner<'a> {
+    pub(crate) authData: &'a [u8],
+    pub(crate) fmt: String,
+    pub(crate) attStmt: serde_cbor::Value,
 }
 
 #[derive(Debug)]
 pub(crate) struct AttestationObject {
-    pub authData: AuthenticatorData,
-    pub authDataBytes: Vec<u8>,
-    pub fmt: String,
+    pub(crate) authData: AuthenticatorData,
+    pub(crate) authDataBytes: Vec<u8>,
+    pub(crate) fmt: String,
     // https://w3c.github.io/webauthn/#generating-an-attestation-object
-    pub attStmt: serde_cbor::Value,
+    pub(crate) attStmt: serde_cbor::Value,
 }
 
 impl TryFrom<&String> for AttestationObject {
@@ -372,15 +391,15 @@ impl TryFrom<&String> for AttestationObject {
 
 // https://w3c.github.io/webauthn/#authenticatorattestationresponse
 #[derive(Debug, Deserialize)]
-pub struct AuthenticatorAttestationResponseRaw {
-    pub attestationObject: String,
-    pub clientDataJSON: String,
+pub(crate) struct AuthenticatorAttestationResponseRaw {
+    pub(crate) attestationObject: String,
+    pub(crate) clientDataJSON: String,
 }
 
 pub(crate) struct AuthenticatorAttestationResponse {
-    pub attestation_object: AttestationObject,
-    pub client_data_json: CollectedClientData,
-    pub client_data_json_bytes: Vec<u8>,
+    pub(crate) attestation_object: AttestationObject,
+    pub(crate) client_data_json: CollectedClientData,
+    pub(crate) client_data_json_bytes: Vec<u8>,
 }
 
 impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse {
@@ -400,13 +419,19 @@ impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationR
     }
 }
 
-// See standard PublicKeyCredential and Credential
-// https://w3c.github.io/webauthn/#iface-pkcredential
+/// A client response to a registration challenge. This contains all required
+/// information to asses and assert trust in a credentials legitimacy, followed
+/// by registration to a user.
+///
+/// You should not need to handle the inner content of this structure - you should
+/// provide this to the correctly handling function of Webauthn only.
 #[derive(Debug, Deserialize)]
 pub struct RegisterPublicKeyCredential {
+    // See standard PublicKeyCredential and Credential
+    // https://w3c.github.io/webauthn/#iface-pkcredential
     id: String,
     rawId: String,
-    pub response: AuthenticatorAttestationResponseRaw,
+    pub(crate) response: AuthenticatorAttestationResponseRaw,
     #[serde(rename = "type")]
     type_: String,
     // discovery
@@ -416,13 +441,13 @@ pub struct RegisterPublicKeyCredential {
 
 #[derive(Debug)]
 pub(crate) struct AuthenticatorAssertionResponse {
-    pub authenticatorData: AuthenticatorData,
+    pub(crate) authenticatorData: AuthenticatorData,
     // I think we need this for sig?
-    pub authenticatorDataBytes: Vec<u8>,
-    pub clientDataJSON: CollectedClientData,
-    pub clientDataJSONBytes: Vec<u8>,
-    pub signature: Vec<u8>,
-    pub userHandle: Option<String>,
+    pub(crate) authenticatorDataBytes: Vec<u8>,
+    pub(crate) clientDataJSON: CollectedClientData,
+    pub(crate) clientDataJSONBytes: Vec<u8>,
+    pub(crate) signature: Vec<u8>,
+    pub(crate) userHandle: Option<String>,
 }
 
 impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
@@ -450,33 +475,32 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
 
 // https://w3c.github.io/webauthn/#authenticatorassertionresponse
 #[derive(Debug, Deserialize)]
-pub struct AuthenticatorAssertionResponseRaw {
+pub(crate) struct AuthenticatorAssertionResponseRaw {
     authenticatorData: String,
     clientDataJSON: String,
     signature: String,
     userHandle: Option<String>,
 }
 
+/// A client response to an authentication challenge. This contains all required
+/// information to asses and assert trust in a credentials legitimacy, followed
+/// by authentication to a user.
+///
+/// You should not need to handle the inner content of this structure - you should
+/// provide this to the correctly handling function of Webauthn only.
 #[derive(Debug, Deserialize)]
 pub struct PublicKeyCredential {
-    pub id: String,
+    pub(crate) id: String,
     // Why can't we parse this?
     //
     // pub rawId: &'a [u8],
-    pub rawId: String,
-    pub response: AuthenticatorAssertionResponseRaw,
+    pub(crate) rawId: String,
+    pub(crate) response: AuthenticatorAssertionResponseRaw,
     #[serde(rename = "type")]
-    pub type_: String,
-    pub discovery: Option<String>,
-    pub identifier: Option<String>,
+    pub(crate) type_: String,
+    pub(crate) discovery: Option<String>,
+    pub(crate) identifier: Option<String>,
 }
-
-/*
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    pub publicKey: PublicKeyCredential,
-}
-*/
 
 #[cfg(test)]
 mod tests {
@@ -489,14 +513,14 @@ mod tests {
         let x = r#"
         {"id":"4oiUggKcrpRIlB-cFzFbfkx_BNeM7UAnz3wO7ZpT4I2GL_n-g8TICyJTHg11l0wyc-VkQUVnJ0yM08-1D5oXnw","rawId":"4oiUggKcrpRIlB+cFzFbfkx/BNeM7UAnz3wO7ZpT4I2GL/n+g8TICyJTHg11l0wyc+VkQUVnJ0yM08+1D5oXnw==","response":{"attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQOKIlIICnK6USJQfnBcxW35MfwTXjO1AJ898Du2aU+CNhi/5/oPEyAsiUx4NdZdMMnPlZEFFZydMjNPPtQ+aF5+lAQIDJiABIVggFo08FM4Je1yfCSuPsxP6h0zvlJSjfocUk75EvXw2oSMiWCArRwLD8doar0bACWS1PgVJKzp/wStyvOkTd4NlWHW8rQ==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJwZENXRDJWamRMSVkzN2VSYTVfazdhS3BqdkF2VmNOY04ycVozMjk0blpVIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"},"type":"public-key"}
         "#;
-        let y: RegisterPublicKeyCredential = serde_json::from_str(x).unwrap();
+        let _y: RegisterPublicKeyCredential = serde_json::from_str(x).unwrap();
     }
 
     #[test]
     fn deserialise_AttestationObject() {
         let raw_ao = "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg==".to_string();
 
-        let ao = AttestationObject::try_from(&raw_ao).unwrap();
+        let _ao = AttestationObject::try_from(&raw_ao).unwrap();
         // println!("{:?}", ao);
     }
     // Add tests for when the objects are too short.

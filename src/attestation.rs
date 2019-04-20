@@ -1,3 +1,8 @@
+//! Attestation information and verifications procedures.
+//! This contains a transparent type allowing callbacks to
+//! make attestation decisions. See the WebauthnConfig trait
+//! for more details.
+
 use std::convert::TryFrom;
 
 use crate::crypto;
@@ -5,7 +10,7 @@ use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
 
 #[derive(Debug)]
-pub enum AttestationFormat {
+pub(crate) enum AttestationFormat {
     Packed,
     TPM,
     AndroidKey,
@@ -25,24 +30,29 @@ impl TryFrom<&str> for AttestationFormat {
             "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
             "none" => Ok(AttestationFormat::None),
-            _ => Err(WebauthnError::InvalidAttestationFormat),
+            _ => Err(WebauthnError::AttestationNotSupported),
         }
     }
 }
 
+/// The type of Attestation that the Authenticator is providing.
 #[derive(Debug)]
 pub enum AttestationType {
+    /// The credential is authenticated by a signing X509 Certificate
+    /// from a vendor or provider.
     Basic(Credential, crypto::X509PublicKey),
+    /// Unimplemented
     Self_,
+    /// Unimplemented
     AttCa,
+    /// Unimplemented
     ECDAA,
+    /// No Attestation type was provided with this Credential. If in doubt
+    /// reject this Credential.
     None(Credential),
+    /// Uncertain Attestation was provided with this Credential, which may not
+    /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain(Credential),
-}
-
-// Needs to take a struct
-pub enum AttStmtType {
-    X5C,
 }
 
 // https://w3c.github.io/webauthn/#fido-u2f-attestation
@@ -149,5 +159,5 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-    Ok(AttestationType::Uncertain(credential))
+    Ok(AttestationType::Basic(credential, cerificate_public_key))
 }

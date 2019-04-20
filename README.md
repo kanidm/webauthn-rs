@@ -2,8 +2,6 @@
 Webauthn-rs
 ==========
 
-NOTE: This library is NOT production ready yet, and is under heavy changes!
-
 NOTE: This library has NOT received a proper security review of operations yet!!!
 
 Webauthn is a modern approach to hardware based authentication, consisting of
@@ -19,9 +17,29 @@ This library aims to provide useful functions and frameworks allowing you to
 integrate webauthn into rust web servers. We also will provide template and
 example javascript to demonstrate the browser interactions required.
 
-This library was inspired by work on https://github.com/tiziano88/webauthn-rs,
-and may end up being combined with their work.
+Examples
+--------
 
+As this library aims to be usable in a variety of contexts, we have provided
+examples in the examples folder. These examples should demonstrate secure and
+valid use, so please report any issues found, and we'd love to see more examples
+contributed!
+
+Why OpenSSL?
+------------
+
+A question I expect is why OpenSSL rather than some other pure-Rust cryptographic
+providers. There are two major justfications.
+
+The first is that if this library will be used in corporate or major deployments,
+then cryptographic audits may have to be performed. It is much easier to point
+toward OpenSSL which has already undergone much more review and auditing than
+using a series of Rust crates which (while still great!) have not seen the same
+level of scrutiny.
+
+The second is that OpenSSL is the only library I have found that allows us to
+reconstruct an EC public key from it's X/Y points for signature verification.
+Without this, we are not able to perform authentication of credentials.
 
 Resources
 ---------

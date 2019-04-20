@@ -1,3 +1,10 @@
+//! Cryptographic operation wrapper for Webauthn. This module exists to
+//! allow ease of auditing, safe operation wrappers for the webauthn library,
+//! and cryptographic provider abstraction. This module currently uses OpenSSL
+//! as the cryptographic primitive provider.
+
+#![allow(non_camel_case_types)]
+
 use openssl::{bn, ec, hash, nid, pkey, sha, sign, x509};
 use std::convert::TryFrom;
 
@@ -16,6 +23,9 @@ use super::error::*;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
+/// An X509PublicKey. This is what is otherwise known as a public certificate
+/// which comprises a public key and other signed metadata related to the issuer
+/// of the key.
 pub struct X509PublicKey {
     pubk: x509::X509,
 }
@@ -81,21 +91,27 @@ impl X509PublicKey {
     }
 }
 
-// +---------+-------+----------+------------------------------------+
-// | Name    | Value | Key Type | Description                        |
-// +---------+-------+----------+------------------------------------+
-// | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
-// | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
-// | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
-// | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
-// | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
-// | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
-// | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
-// +---------+-------+----------+------------------------------------+
+
+/// An ECDSACurve identifier. You probabably will never need to alter
+/// or use this value, as it is set inside the Credential for you.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ECDSACurve {
+    // +---------+-------+----------+------------------------------------+
+    // | Name    | Value | Key Type | Description                        |
+    // +---------+-------+----------+------------------------------------+
+    // | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
+    // | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
+    // | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
+    // | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
+    // | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
+    // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
+    // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
+    // +---------+-------+----------+------------------------------------+
+    /// Identifies this curve as SECP256R1 (X9_62_PRIME256V1 in OpenSSL)
     SECP256R1 = 1,
+    /// Identifies this curve as SECP384R1
     SECP384R1 = 2,
+    /// Identifies this curve as SECP521R1
     SECP521R1 = 3,
 }
 
@@ -121,20 +137,25 @@ impl ECDSACurve {
     }
 }
 
-//    +-----------+-------+-----------------------------------------------+
-//    | Name      | Value | Description                                   |
-//    +-----------+-------+-----------------------------------------------+
-//    | OKP       | 1     | Octet Key Pair                                |
-//    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
-//    |           |       | pair                                          |
-//    | Symmetric | 4     | Symmetric Keys                                |
-//    | Reserved  | 0     | This value is reserved                        |
-//    +-----------+-------+-----------------------------------------------+
-
+/// A COSE Key Content type, indicating the type of key and hash type
+/// that should be used with this key. You shouldn't need to alter or
+/// use this value.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum COSEContentType {
+    //    +-----------+-------+-----------------------------------------------+
+    //    | Name      | Value | Description                                   |
+    //    +-----------+-------+-----------------------------------------------+
+    //    | OKP       | 1     | Octet Key Pair                                |
+    //    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
+    //    |           |       | pair                                          |
+    //    | Symmetric | 4     | Symmetric Keys                                |
+    //    | Reserved  | 0     | This value is reserved                        |
+    //    +-----------+-------+-----------------------------------------------+
+    /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
     ECDSA_SHA256 = -7,  // recommends curve SECP256R1
+    /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
     ECDSA_SHA384 = -35, // recommends curve SECP384R1
+    /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
     ECDSA_SHA512 = -36, // recommends curve SECP521R1
 }
 
@@ -160,24 +181,38 @@ impl From<&COSEContentType> for i64 {
     }
 }
 
+/// A COSE Eliptic Curve Public Key. This is generally the provided credential
+/// that an authenticator registers, and is used to authenticate the user.
+/// You will likely never need to interact with this value, as it is part of the Credential
+/// API.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct COSEEC2Key {
+    /// The curve that this key references.
     pub curve: ECDSACurve,
+    /// The key's public X coordinate.
     pub x: [u8; 32],
+    /// The key's public Y coordinate.
     pub y: [u8; 32],
 }
 
+/// The type of Key contained within a COSE value. You should never need
+/// to alter or change this type.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum COSEKeyType {
+    /// Identifies this as an Eliptic Curve EC2 key
     EC_EC2(COSEEC2Key),
     // EC_OKP,
     // EC_Symmetric,
     // EC_Reserved, // should always be invalid.
 }
 
+/// A COSE Key as provided by the Authenticator. You should never need
+/// to alter or change these values.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct COSEKey {
+    /// The type of key that this contains
     pub type_: COSEContentType,
+    /// The public key
     pub key: COSEKeyType,
 }
 
