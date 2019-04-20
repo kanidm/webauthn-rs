@@ -91,7 +91,6 @@ impl X509PublicKey {
     }
 }
 
-
 /// An ECDSACurve identifier. You probabably will never need to alter
 /// or use this value, as it is set inside the Credential for you.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -152,7 +151,7 @@ pub enum COSEContentType {
     //    | Reserved  | 0     | This value is reserved                        |
     //    +-----------+-------+-----------------------------------------------+
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
-    ECDSA_SHA256 = -7,  // recommends curve SECP256R1
+    ECDSA_SHA256 = -7, // recommends curve SECP256R1
     /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
     ECDSA_SHA384 = -35, // recommends curve SECP384R1
     /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing

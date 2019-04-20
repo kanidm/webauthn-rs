@@ -9,10 +9,7 @@ extern crate webauthn_rs;
 
 use askama::Template;
 
-// use actix::prelude::*;
 use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Json, Path, State};
-
-// use futures::future::Future;
 
 use std::sync::{Arc, Mutex};
 
@@ -22,10 +19,7 @@ use webauthn_rs::Webauthn;
 
 #[derive(Template)]
 #[template(path = "index.html")]
-// struct IndexTemplate<'a> {
-struct IndexTemplate {
-    // list: Vec<&'a str>,
-}
+struct IndexTemplate;
 
 struct AppState {
     wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>,

@@ -87,7 +87,6 @@ impl<T> Webauthn<T> {
             .collect();
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
-            // rng: config.get_rng(),
             // We use stdrng because unlike thread_rng, it's a csprng, which given
             // this is a cryptographic operation, we kind of want!
             rng: StdRng::from_entropy(),
@@ -354,7 +353,9 @@ impl<T> Webauthn<T> {
         // If the attestation statement attStmt successfully verified but is not trustworthy per step
         // 16 above, the Relying Party SHOULD fail the registration ceremony.
 
-        let credential = self.config.policy_verify_trust(attest_result)
+        let credential = self
+            .config
+            .policy_verify_trust(attest_result)
             .map_err(|_e| WebauthnError::AttestationTrustFailure)?;
 
         //  If the attestation statement attStmt verified successfully and is found to be trustworthy,
@@ -648,13 +649,6 @@ pub trait WebauthnConfig {
     /// Examples of this value could be. "https://my-site.com.au", "https://my-site.com.au:8443"
     fn get_origin(&self) -> &String;
 
-
-    // TODO: This should be a generic impl that produceds the following from origin
-    //    https://name:port/path
-    //            name  <<-- this is the rp_id
-    // It should check it is https also.
-    // For now, we expect people to over-ride it though ...
-
     /// Returs the relying party id. This should rarely if ever change, and is used as an id
     /// in cryptographic operations and credential scoping. This is defined as the domain name
     /// of the service, minuse all protocol, port and location data. For example:
@@ -732,7 +726,6 @@ pub trait WebauthnConfig {
     fn get_user_verification_required(&self) -> bool {
         false
     }
-
 
     /// Return a list of site-requested extensions to be sent to Authenticators during
     /// registration and authentication. Currently this is not implemented. Please see:

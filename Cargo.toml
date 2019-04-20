@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2018"
 build = "build.rs"
@@ -13,7 +13,6 @@ readme = "README.md"
 keywords = ["webauthn", "authentication"]
 categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
-# license-file = "LICENSE.md"
 
 [dependencies]
 byteorder = "1.2"
