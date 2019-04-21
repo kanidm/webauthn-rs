@@ -72,8 +72,44 @@ impl PartialEq<Credential> for Credential {
     }
 }
 
-// These are the three primary communication structures you will
-// need to handle.
+/// Defines the User Authenticator Verification policy. This is documented
+/// https://w3c.github.io/webauthn/#enumdef-userverificationrequirement, and each
+/// variant lists it's effects.
+///
+/// To be clear, Verification means that the Authenticator perform extra or supplementary
+/// interfaction with the user to verify who they are. An example of this is Apple Touch Id
+/// required a fingerprint to be verified, or a yubico device requiring a pin in addition to
+/// a touch event.
+///
+/// An example of a non-verified interaction is a yubico device with no pin where touch is
+/// the only interaction - we only verify a user is present, but we don't have extra details
+/// to the legitimacy of that user.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum UserVerificationPolicy {
+    /// Require User Verification bit to be set, and fail the registration or authentication
+    /// if false. If the authenticator is not able to perform verification, it may not be
+    /// usable with this policy.
+    Required,
+    /// Prefer User Verification bit to be set, and yolo the registration or authentication
+    /// if false. This means if the authenticator can perform verification, do it, but don't
+    /// mind if not.
+    Preferred,
+    /// Request that no verification is performed, and fail if it is. This is intended to
+    /// minimise user interaction in workflows, but is potentially a security risk to use.
+    Discouraged,
+}
+
+impl ToString for UserVerificationPolicy {
+    fn to_string(&self) -> String {
+        match self {
+            UserVerificationPolicy::Required => "required".to_string(),
+            UserVerificationPolicy::Preferred => "preferred".to_string(),
+            UserVerificationPolicy::Discouraged => "discouraged".to_string(),
+        }
+    }
+}
+
+// These are the primary communication structures you will need to handle.
 
 pub(crate) type CBORExtensions = serde_cbor::Value;
 pub(crate) type JSONExtensions = BTreeMap<String, String>;
@@ -120,6 +156,7 @@ struct PublicKeyCredentialCreationOptions {
     // See get_extensions for typing details here.
     // I suspect it's actually a map in json.
     extensions: Option<JSONExtensions>,
+    userVerification: String,
 }
 
 /// A JSON serialisable challenge which is issued to the user's webbrowser
@@ -140,6 +177,7 @@ impl CreationChallengeResponse {
         challenge: String,
         pkcp: Vec<PubKeyCredParams>,
         timeout: u32,
+        userVerificationPolicy: UserVerificationPolicy,
     ) -> CreationChallengeResponse {
         CreationChallengeResponse {
             publicKey: PublicKeyCredentialCreationOptions {
@@ -156,6 +194,7 @@ impl CreationChallengeResponse {
                 timeout: timeout,
                 attestation: "direct".to_string(),
                 extensions: None,
+                userVerification: userVerificationPolicy.to_string(),
             },
         }
     }
@@ -186,7 +225,7 @@ impl RequestChallengeResponse {
         timeout: u32,
         relaying_party: String,
         allowCredentials: Vec<AllowCredentials>,
-        userVerification: Option<String>,
+        userVerificationPolicy: UserVerificationPolicy,
     ) -> Self {
         RequestChallengeResponse {
             publicKey: PublicKeyCredentialRequestOptions {
@@ -194,10 +233,7 @@ impl RequestChallengeResponse {
                 timeout: timeout,
                 rpId: relaying_party,
                 allowCredentials: allowCredentials,
-                userVerification: match userVerification {
-                    Some(s) => s,
-                    None => "preferred".to_string(),
-                },
+                userVerification: userVerificationPolicy.to_string(),
                 extensions: None,
             },
         }

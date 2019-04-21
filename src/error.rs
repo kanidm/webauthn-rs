@@ -25,6 +25,8 @@ pub enum WebauthnError {
     UserNotPresent,
     /// The user verified bit is not set, and required by policy.
     UserNotVerified,
+    /// The user verified even through discouragement.
+    UserVerifiedWhenDiscouraged,
     /// The extensions are unknown to this server.
     InvalidExtensions,
     /// The required attestation data is not present in the response.

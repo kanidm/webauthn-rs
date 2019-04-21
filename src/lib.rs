@@ -38,7 +38,7 @@ use crate::error::WebauthnError;
 use crate::proto::{
     AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge,
     CreationChallengeResponse, Credential, JSONExtensions, PubKeyCredParams, PublicKeyCredential,
-    RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
+    RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy,
 };
 
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
@@ -102,31 +102,6 @@ impl<T> Webauthn<T> {
         Challenge((0..CHALLENGE_SIZE_BYTES).map(|_| self.rng.gen()).collect())
     }
 
-    fn generate_challenge_response(
-        &mut self,
-        username: &UserId,
-        chal: &Challenge,
-    ) -> CreationChallengeResponse
-    where
-        T: WebauthnConfig,
-    {
-        // println!("Challenge for {} -> {:?}", username, chal);
-        CreationChallengeResponse::new(
-            self.config.get_relying_party_name(),
-            username.clone(),
-            username.clone(),
-            username.clone(),
-            chal.to_string(),
-            self.pkcp.clone(),
-            self.config.get_authenticator_timeout(),
-        )
-        // Now, do we persist the challenge here for tests so we can
-        // byyass the RNG parts?
-        // Or do we do it in the challenge_register, and have the test
-        // just pass in the challenge to the verify so that tests
-        // don't need a config at all?
-    }
-
     /// Generate a new challenge suitable for Serde JSON serialisation which can be
     /// sent to the client. The client (generally a webbrowser) will pass this JSON
     /// structure to the `navigator.credentials.create()` javascript function.
@@ -140,8 +115,18 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
+        let policy = self.config.policy_user_verification(&username);
         let chal = self.generate_challenge();
-        let c = self.generate_challenge_response(&username, &chal);
+        let c = CreationChallengeResponse::new(
+            self.config.get_relying_party_name(),
+            username.clone(),
+            username.clone(),
+            username.clone(),
+            chal.to_string(),
+            self.pkcp.clone(),
+            self.config.get_authenticator_timeout(),
+            policy,
+        );
 
         self.config
             .persist_challenge(username, chal)
@@ -170,8 +155,11 @@ impl<T> Webauthn<T> {
             .config
             .retrieve_challenge(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
+
+        let policy = self.config.policy_user_verification(&username);
+
         // send to register_credential_internal
-        let credential = self.register_credential_internal(reg, chal)?;
+        let credential = self.register_credential_internal(reg, policy, chal)?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -196,6 +184,7 @@ impl<T> Webauthn<T> {
     pub(crate) fn register_credential_internal(
         &mut self,
         reg: RegisterPublicKeyCredential,
+        policy: UserVerificationPolicy,
         chal: Challenge,
     ) -> Result<Credential, WebauthnError>
     where
@@ -270,11 +259,19 @@ impl<T> Webauthn<T> {
 
         // If user verification is required for this registration, verify that the User Verified bit
         // of the flags in authData is set.
-        if self.config.get_user_verification_required()
-            && !data.attestation_object.authData.user_verified
-        {
-            return Err(WebauthnError::UserNotVerified);
-        }
+        match policy {
+            UserVerificationPolicy::Required => {
+                if !data.attestation_object.authData.user_verified {
+                    return Err(WebauthnError::UserNotVerified);
+                }
+            }
+            UserVerificationPolicy::Preferred => {}
+            UserVerificationPolicy::Discouraged => {
+                if data.attestation_object.authData.user_verified {
+                    return Err(WebauthnError::UserVerifiedWhenDiscouraged);
+                }
+            }
+        };
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
         // authenticator extension outputs in the extensions in authData are as expected,
@@ -377,6 +374,7 @@ impl<T> Webauthn<T> {
     pub(crate) fn verify_credential_internal(
         &self,
         rsp: PublicKeyCredential,
+        policy: UserVerificationPolicy,
         chal: Challenge,
         cred: &Credential,
     ) -> Result<u32, WebauthnError>
@@ -435,9 +433,19 @@ impl<T> Webauthn<T> {
 
         // If user verification is required for this assertion, verify that the User Verified bit of
         // the flags in authData is set.
-        if self.config.get_user_verification_required() && !data.authenticatorData.user_verified {
-            return Err(WebauthnError::UserNotVerified);
-        }
+        match policy {
+            UserVerificationPolicy::Required => {
+                if !data.authenticatorData.user_verified {
+                    return Err(WebauthnError::UserNotVerified);
+                }
+            }
+            UserVerificationPolicy::Preferred => {}
+            UserVerificationPolicy::Discouraged => {
+                if data.authenticatorData.user_verified {
+                    return Err(WebauthnError::UserVerifiedWhenDiscouraged);
+                }
+            }
+        };
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
         // authenticator extension outputs in the extensions in authData are as expected, considering
@@ -550,7 +558,9 @@ impl<T> Webauthn<T> {
             cred_opt.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let counter = self.verify_credential_internal(rsp, chal, &cred)?;
+        let policy = self.config.policy_user_verification(&username);
+
+        let counter = self.verify_credential_internal(rsp, policy, chal, &cred)?;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
         // conjunction with credential’s id attribute is nonzero, then run the following sub-step:
@@ -616,6 +626,8 @@ impl<T> Webauthn<T> {
             None => Vec::new(),
         };
 
+        let policy = self.config.policy_user_verification(&username);
+
         // Store the chal associated to the user.
         // Now put that into the correct challenge format
         let r = RequestChallengeResponse::new(
@@ -623,7 +635,7 @@ impl<T> Webauthn<T> {
             self.config.get_authenticator_timeout(),
             self.config.get_relying_party_id(),
             ac,
-            None,
+            policy,
         );
         self.config
             .persist_challenge(username, chal)
@@ -766,6 +778,22 @@ pub trait WebauthnConfig {
             }
         }
     }
+
+    /// A callback allowing you to specify a per-user credential verification
+    /// policy. Given the user and credential id, determine if the user verification
+    /// policy for this operation. This can be used to ensure that users with certain
+    /// security levels must have verified credentials, while others merely need any
+    /// credential. This also applies to registration. For more details, see UserVerificationPolicy
+    ///
+    /// Note this is not per credential, because as a policy it only makes sense per user.
+    /// Changing this value for a user may cause existing credentials to fail as they may
+    /// not support verification - arguably a good thing if their requirements have become
+    /// stricter.
+    ///
+    /// The default policy returns "preffered" for all credentials.
+    fn policy_user_verification(&self, _userid: &UserId) -> UserVerificationPolicy {
+        UserVerificationPolicy::Preferred
+    }
 }
 
 #[cfg(test)]
@@ -773,7 +801,10 @@ mod tests {
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::crypto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
     use crate::ephemeral::WebauthnEphemeralConfig;
-    use crate::proto::{Challenge, Credential, PublicKeyCredential, RegisterPublicKeyCredential};
+    use crate::proto::{
+        Challenge, Credential, PublicKeyCredential, RegisterPublicKeyCredential,
+        UserVerificationPolicy,
+    };
     use crate::Webauthn;
 
     #[test]
@@ -806,7 +837,8 @@ mod tests {
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
         // Now register, providing our fake challenge.
-        let result = wan.register_credential_internal(rsp_d, zero_chal);
+        let result =
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, zero_chal);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -841,7 +873,8 @@ mod tests {
         }
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
-        let result = wan.register_credential_internal(rsp_d, chal);
+        let result =
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -900,7 +933,12 @@ mod tests {
         let rsp_d: PublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
         // Now verify it!
-        let r = wan.verify_credential_internal(rsp_d, zero_chal, &cred);
+        let r = wan.verify_credential_internal(
+            rsp_d,
+            UserVerificationPolicy::Preferred,
+            zero_chal,
+            &cred,
+        );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
