@@ -3,7 +3,6 @@
 //! JSON Protocol Structs and representations for communication with authenticators
 //! and clients.
 
-use byteorder::{BigEndian, ByteOrder};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -256,94 +255,89 @@ pub(crate) struct AttestedCredentialData {
 #[derive(Debug)]
 pub(crate) struct AuthenticatorData {
     pub(crate) rp_id_hash: Vec<u8>,
-    pub(crate) flags: u8,
+    // pub(crate) flags: u8,
     pub(crate) counter: u32,
     pub(crate) user_present: bool,
     pub(crate) user_verified: bool,
-    pub(crate) extensions: Option<CBORExtensions>,
     pub(crate) acd: Option<AttestedCredentialData>,
+    // pub(crate) extensions: Option<CBORExtensions>,
+    pub(crate) extensions: Option<()>,
 }
+
+fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
+    let v: serde_cbor::Value = serde_cbor::from_slice(&i[0..])
+        .map_err(|_| nom::Err::Failure(nom::Context::Code(i, nom::ErrorKind::Custom(1))))?;
+
+    // Now re-encode it to find the length ... yuk.
+    let encoded = serde_cbor::to_vec(&v)
+        .map_err(|_| nom::Err::Failure(nom::Context::Code(i, nom::ErrorKind::Custom(2))))?;
+    // Finally we know the cred len
+    let cred_len = encoded.len();
+
+    Ok((&i[cred_len..], v))
+}
+
+named!( extensions_parser<&[u8], ()>,
+    // Just throw the bytes into cbor?
+    do_parse!(
+        (())
+    )
+);
+
+named!( acd_parser<&[u8], AttestedCredentialData>,
+    do_parse!(
+        aaguid: take!(16) >>
+        cred_id_len: u16!(nom::Endianness::Big) >>
+        cred_id: take!(cred_id_len) >>
+        cred_pk: cbor_parser >>
+        (AttestedCredentialData {
+            aaguid: aaguid.to_vec(),
+            credential_id: cred_id.to_vec(),
+            credential_pk: cred_pk,
+        })
+    )
+);
+
+named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
+    bits!(
+        do_parse!(
+            exten_pres: map!(take_bits!(u8, 1), |i| i != 0)  >>
+            acd_pres: map!(take_bits!(u8, 1), |i| i != 0) >>
+            take_bits!(u8, 1) >>
+            take_bits!(u8, 1) >>
+            take_bits!(u8, 1) >>
+            u_ver: map!(take_bits!(u8, 1), |i| i != 0) >>
+            take_bits!(u8, 1) >>
+            u_pres: map!(take_bits!(u8, 1), |i| i != 0) >>
+            ((exten_pres, acd_pres, u_ver, u_pres))
+        )
+    )
+);
+
+named!( authenticator_data_parser<&[u8], AuthenticatorData>,
+    do_parse!(
+        rp_id_hash: take!(32) >>
+        data_flags: authenticator_data_flags >>
+        counter: u32!(nom::Endianness::Big) >>
+        acd: cond!(data_flags.1, acd_parser) >>
+        extensions: cond!(data_flags.0, extensions_parser) >>
+        (AuthenticatorData {
+            rp_id_hash: rp_id_hash.to_vec(),
+            counter: counter,
+            user_verified: data_flags.2,
+            user_present: data_flags.3,
+            acd: acd,
+            extensions: extensions,
+        })
+    )
+);
 
 impl TryFrom<&Vec<u8>> for AuthenticatorData {
     type Error = WebauthnError;
     fn try_from(authDataBytes: &Vec<u8>) -> Result<Self, Self::Error> {
-        // println!("data: {:?}", authDataBytes);
-        if authDataBytes.len() < 37 {
-            return Err(WebauthnError::ParseInsufficentBytesAvailable);
-        }
-
-        // Now from the aoi, create the other structs.
-        let rp_id_hash: Vec<u8> = authDataBytes[0..32].into();
-        let flags: u8 = authDataBytes[32];
-        // From RFC:
-        // flags:   [ Exten | Auth | 0 | 0 | 0 | UVer | 0 | UPres ]
-        //        7                                                 0
-        let user_present = (flags & (1 << 0)) != 0;
-        let user_verified = (flags & (1 << 2)) != 0;
-        let acd_present = (flags & (1 << 6)) != 0;
-        let extensions_present = (flags & (1 << 7)) != 0;
-        let counter: u32 = BigEndian::read_u32(&authDataBytes[33..37]);
-
-        // Get all remaining bytes. This is both the acd and extensions.
-        //
-        let acd_extension_bytes: Vec<u8> = authDataBytes[37..].into();
-
-        let (exten_offset, acd) = if acd_present {
-            // TODO: Harden this to be sure we have enough bytes!!!
-            let aaguid: Vec<u8> = acd_extension_bytes[0..16].into();
-            let cred_id_len: usize = BigEndian::read_u16(&acd_extension_bytes[16..18]) as usize;
-            // Now this tells us how much to read from for the credential ID.
-
-            let cred_id_end = 18 + cred_id_len;
-            let cred_id: Vec<u8> = acd_extension_bytes[18..cred_id_end].into();
-
-            // let cred_pk: Vec<u8> = acd_extension_bytes[cred_id_end..].into();
-            let cred_pk: serde_cbor::Value =
-                serde_cbor::from_slice(&acd_extension_bytes[cred_id_end..])
-                    .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
-
-            // Now re-encode it to find the length ... yuk.
-            let encoded =
-                serde_cbor::to_vec(&cred_pk).map_err(|e| WebauthnError::ParseCBORFailure(e))?;
-            // Finally we know the cred len
-            let cred_len = encoded.len();
-
-            // Now to get the extension offset we have:
-            // [ aaguid   | id len | cred_id     | cred_pk     ][ extensions             ]
-            //    0 -> 15   16, 17   18 + id_len   cred_id_end    cred_len + cred_id_end
-            let exten_offset = cred_len + cred_id_end;
-
-            (
-                exten_offset,
-                Some(AttestedCredentialData {
-                    aaguid: aaguid,
-                    credential_id: cred_id,
-                    credential_pk: cred_pk,
-                }),
-            )
-        } else {
-            (0, None)
-        };
-
-        // TODO: Harden this to be sure we have enough bytes!!!
-        let extensions: Option<serde_cbor::Value> = if acd_present && extensions_present {
-            Some(
-                serde_cbor::from_slice(&acd_extension_bytes[exten_offset..])
-                    .map_err(|e| WebauthnError::ParseCBORFailure(e))?,
-            )
-        } else {
-            None
-        };
-
-        Ok(AuthenticatorData {
-            rp_id_hash: rp_id_hash,
-            flags: flags,
-            counter: counter,
-            user_present: user_present,
-            user_verified: user_verified,
-            extensions: extensions,
-            acd: acd,
-        })
+        authenticator_data_parser(authDataBytes.as_slice())
+            .map_err(|_| WebauthnError::ParseNOMFailure)
+            .map(|(_, ad)| ad)
     }
 }
 

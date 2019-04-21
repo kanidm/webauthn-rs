@@ -4,6 +4,7 @@ use base64::Base64Error as b64DecodeError;
 use openssl::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
+// use nom::Err as NOMError;
 
 /// Possible errors that may occur during Webauthn Operation proessing.
 #[derive(Debug)]
@@ -57,6 +58,8 @@ pub enum WebauthnError {
     ParseCBORFailure(CBORError),
     /// A JSON parser failure has occured
     ParseJSONFailure(JSONError),
+    /// A NOM parser failure has occured.
+    ParseNOMFailure,
     /// In parsing the attestation object, there was insufficent data
     ParseInsufficentBytesAvailable,
     /// An openSSL Error has occured

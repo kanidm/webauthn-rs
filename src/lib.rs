@@ -16,8 +16,10 @@
 extern crate base64;
 #[macro_use]
 extern crate serde_derive;
-extern crate byteorder;
+// extern crate byteorder;
 extern crate openssl;
+#[macro_use]
+extern crate nom;
 
 pub mod attestation;
 mod constants;
