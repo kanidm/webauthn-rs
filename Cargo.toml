@@ -16,6 +16,7 @@ license = "MPL-2.0"
 
 [dependencies]
 base64 = "0.2"
+lru = "0.1"
 # byteorder = "1.2"
 nom = "4.2"
 serde = "1.0"
@@ -30,9 +31,10 @@ rand = "0.6"
 [dev-dependencies]
 askama = "0.6"
 
+# This only supports up to 0.7. See examples/actix/main.rs for more.
 actix = "0.7"
 actix-web = "0.7"
 
-futures = "0.1"
 env_logger = "0.6"
+futures = "0.1"
 

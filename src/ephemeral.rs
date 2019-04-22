@@ -2,22 +2,31 @@
 //! This stores all challenges and credentials in memory - IE they are lost on
 //! service restart. It's only really useful for demo-sites, testing and as an
 //! example/reference implementation of the WebauthnConfig trait.
+use lru::LruCache;
 use std::collections::BTreeMap;
 
 use crate::proto::{Challenge, Credential, UserId};
 use crate::WebauthnConfig;
 
+const CHALLENGE_CACHE_SIZE: usize = 256;
+
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider
 /// This stores all challenges and credentials in memory - IE they are lost on
 /// service restart. It's only really useful for demo-sites, testing and as an
 /// example/reference implementation of the WebauthnConfig trait.
-#[derive(Debug)]
 pub struct WebauthnEphemeralConfig {
-    chals: BTreeMap<UserId, Challenge>,
+    chals: LruCache<UserId, Challenge>,
     creds: BTreeMap<UserId, Vec<Credential>>,
     rp_name: String,
     rp_id: String,
     rp_origin: String,
+}
+
+impl std::fmt::Debug for WebauthnEphemeralConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "WebauthnEphemeralConfig{{ chals -> {{???}}, creds: {:?}, rp_name: {:?}, rp_id: {:?}, rp_origin: {:?} }}",
+            self.creds, self.rp_name, self.rp_id, self.rp_origin)
+    }
 }
 
 impl WebauthnConfig for WebauthnEphemeralConfig {
@@ -33,13 +42,13 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
 
     /// Persist a challenge associated to a userId. See the trait documentation for more.
     fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()> {
-        self.chals.insert(userid, challenge);
+        self.chals.put(userid, challenge);
         Ok(())
     }
 
     /// Retrieve a challenge associated to a userId. See the trait documentation for more.
     fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge> {
-        self.chals.remove(userid)
+        self.chals.pop(userid)
     }
 
     /// Assert if a credential related to a userId exists. See the trait documentation for more.
@@ -121,7 +130,7 @@ impl WebauthnEphemeralConfig {
     /// name, origin and id.
     pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
         WebauthnEphemeralConfig {
-            chals: BTreeMap::new(),
+            chals: LruCache::new(CHALLENGE_CACHE_SIZE),
             creds: BTreeMap::new(),
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),

@@ -1,3 +1,12 @@
+// Why is this only actix 0.7?
+//
+// At this time (April 2019) actix 0.8 and actix_web 1.0(?) are in early releases, and are currently
+// undocumented on how to perform async operations between async_web to actors with json extraction.
+// I have previously created examples for handling this, but the authors of actix have removed those
+// examples and trivialised them. As a result, I'm unable to work out how to make this work. If
+// anyone wants to convince the actix people to put this example back, or upgrade this example
+// that would be lovely <3
+
 extern crate actix;
 extern crate actix_web;
 
@@ -9,24 +18,28 @@ extern crate webauthn_rs;
 
 use askama::Template;
 
-use actix_web::{fs, http, middleware, server, App, HttpRequest, HttpResponse, Json, Path, State};
-
-use std::sync::{Arc, Mutex};
+use actix::prelude::*;
+use actix_web::{
+    fs, http, middleware, server, App, Error, HttpRequest, HttpResponse, Json, Path, State,
+};
+use futures::future::Future;
 
 use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
-use webauthn_rs::Webauthn;
+
+mod actors;
+use crate::actors::*;
 
 #[derive(Template)]
 #[template(path = "index.html")]
 struct IndexTemplate;
 
 struct AppState {
-    wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>,
+    wan: Addr<WebauthnActor>,
 }
 
 impl AppState {
-    fn new(wan: Arc<Mutex<Webauthn<WebauthnEphemeralConfig>>>) -> Self {
+    fn new(wan: Addr<WebauthnActor>) -> Self {
         AppState { wan }
     }
 }
@@ -40,29 +53,43 @@ fn index_view(_req: &HttpRequest<AppState>) -> HttpResponse {
     HttpResponse::Ok().content_type("text/html").body(s)
 }
 
-fn challenge_register((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
+fn challenge_register(
+    (username, state): (Path<String>, State<AppState>),
+) -> impl Future<Item = HttpResponse, Error = Error> {
     state
         .wan
-        .lock()
-        .expect("Failed to lock!")
-        .generate_challenge_register(username.into_inner())
-        .map(|chal| HttpResponse::Ok().json(chal))
-        .unwrap_or_else(|e| {
-            println!("{:?}", e);
-            HttpResponse::InternalServerError().json(())
+        .send(ChallengeRegister {
+            username: username.into_inner(),
+        })
+        .from_err()
+        .and_then(|res| {
+            match res {
+                Ok(chal) => Ok(HttpResponse::Ok().json(chal)),
+                Err(_) => {
+                    // TODO: Log this error
+                    Ok(HttpResponse::InternalServerError().json(()))
+                }
+            }
         })
 }
 
-fn challenge_login((username, state): (Path<String>, State<AppState>)) -> HttpResponse {
+fn challenge_login(
+    (username, state): (Path<String>, State<AppState>),
+) -> impl Future<Item = HttpResponse, Error = Error> {
     state
         .wan
-        .lock()
-        .expect("Failed to lock!")
-        .generate_challenge_authenticate(username.into_inner())
-        .map(|chal| HttpResponse::Ok().json(chal))
-        .unwrap_or_else(|e| {
-            println!("{:?}", e);
-            HttpResponse::InternalServerError().json(())
+        .send(ChallengeAuthenticate {
+            username: username.into_inner(),
+        })
+        .from_err()
+        .and_then(|res| {
+            match res {
+                Ok(chal) => Ok(HttpResponse::Ok().json(chal)),
+                Err(_) => {
+                    // TODO: Log this error
+                    Ok(HttpResponse::InternalServerError().json(()))
+                }
+            }
         })
 }
 
@@ -72,31 +99,43 @@ fn register(
         Path<String>,
         State<AppState>,
     ),
-) -> HttpResponse {
+) -> impl Future<Item = HttpResponse, Error = Error> {
     state
         .wan
-        .lock()
-        .expect("Failed to lock!")
-        .register_credential(reg.into_inner(), username.into_inner())
-        .map(|_| HttpResponse::Ok().json(()))
-        .unwrap_or_else(|e| {
-            println!("{:?}", e);
-            HttpResponse::InternalServerError().json(())
+        .send(Register {
+            username: username.into_inner(),
+            reg: reg.into_inner(),
+        })
+        .from_err()
+        .and_then(|res| {
+            match res {
+                Ok(_) => Ok(HttpResponse::Ok().json(())),
+                Err(_) => {
+                    // TODO: Log this error
+                    Ok(HttpResponse::InternalServerError().json(()))
+                }
+            }
         })
 }
 
 fn login(
     (lgn, username, state): (Json<PublicKeyCredential>, Path<String>, State<AppState>),
-) -> HttpResponse {
+) -> impl Future<Item = HttpResponse, Error = Error> {
     state
         .wan
-        .lock()
-        .expect("Failed to lock!")
-        .authenticate_credential(lgn.into_inner(), username.into_inner())
-        .map(|_| HttpResponse::Ok().json(()))
-        .unwrap_or_else(|e| {
-            println!("{:?}", e);
-            HttpResponse::InternalServerError().json(())
+        .send(Authenticate {
+            username: username.into_inner(),
+            lgn: lgn.into_inner(),
+        })
+        .from_err()
+        .and_then(|res| {
+            match res {
+                Ok(_) => Ok(HttpResponse::Ok().json(())),
+                Err(_) => {
+                    // TODO: Log this error
+                    Ok(HttpResponse::InternalServerError().json(()))
+                }
+            }
         })
 }
 
@@ -110,11 +149,12 @@ fn main() {
         "http://localhost:8080",
         "localhost",
     );
-    let wan = Arc::new(Mutex::new(Webauthn::new(wan_c)));
+    let wan = WebauthnActor::new(wan_c);
+    let wan_addr = wan.start();
 
     // Start http server
     server::new(move || {
-        App::with_state(AppState::new(wan.clone()))
+        App::with_state(AppState::new(wan_addr.clone()))
             // For production
             .prefix("/auth")
             // enable logger
@@ -129,22 +169,23 @@ fn main() {
             .resource("/", |r| r.f(index_view))
             // Need a challenge generation
             .resource("/challenge/register/{username}", |r| {
-                r.method(http::Method::POST).with(challenge_register)
+                r.method(http::Method::POST).with_async(challenge_register)
             })
             .resource("/challenge/login/{username}", |r| {
-                r.method(http::Method::POST).with(challenge_login)
+                r.method(http::Method::POST).with_async(challenge_login)
             })
             // Need a registration
             .resource("/register/{username}", |r| {
                 r.method(http::Method::POST)
-                    .with_config(register, |((cfg),)| {
+                    .with_async_config(register, |((cfg),)| {
                         cfg.0.limit(4096);
                     })
             })
             .resource("/login/{username}", |r| {
-                r.method(http::Method::POST).with_config(login, |((cfg),)| {
-                    cfg.0.limit(4096);
-                })
+                r.method(http::Method::POST)
+                    .with_async_config(login, |((cfg),)| {
+                        cfg.0.limit(4096);
+                    })
             })
         // Need login
     })
