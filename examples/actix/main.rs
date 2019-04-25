@@ -2,10 +2,8 @@
 //
 // At this time (April 2019) actix 0.8 and actix_web 1.0(?) are in early releases, and are currently
 // undocumented on how to perform async operations between async_web to actors with json extraction.
-// I have previously created examples for handling this, but the authors of actix have removed those
-// examples and trivialised them. As a result, I'm unable to work out how to make this work. If
-// anyone wants to convince the actix people to put this example back, or upgrade this example
-// that would be lovely <3
+// As a result, I'm unable to work out how to make this work. If someone wants to help upgrade this
+// example that would be lovely <3
 
 extern crate actix;
 extern crate actix_web;

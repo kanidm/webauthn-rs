@@ -9,6 +9,9 @@
 //!
 //! For examples, see our examples folder.
 //!
+//! To use this library yourself, you will want to reference the `WebauthnConfig` trait to
+//! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
+//! interactions.
 
 #![feature(vec_remove_item)]
 #![warn(missing_docs)]
