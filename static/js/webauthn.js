@@ -3,13 +3,45 @@ const cose_alg_ECDSA_w_SHA256 = -7;
 const cose_alg_ECDSA_w_SHA512 = -36;
 
 // Need to manage the username better here?
-const REG_CHALLENGE_URL = "/auth/challenge/register/xxx";
-const LGN_CHALLENGE_URL = "/auth/challenge/login/xxx";
-const REGISTER_URL = "/auth/register/xxx";
-const LOGIN_URL = "/auth/login/xxx";
+const REG_CHALLENGE_URL = "/auth/challenge/register/";
+const LGN_CHALLENGE_URL = "/auth/challenge/login/";
+const REGISTER_URL = "/auth/register/";
+const LOGIN_URL = "/auth/login/";
+
+
+function toast_o_matic(message) {
+    var toast_arena = document.getElementById("toast_arena");
+
+    toast_arena.innerHTML = `
+<div id="error_toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="false"  >
+  <div class="toast-header">
+    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+      <span aria-hidden="true">&times;</span>
+    </button>
+  </div>
+  <div class="toast-body">
+    ${message}
+  </div>
+</div>`
+
+    $('#error_toast').toast('show')
+}
 
 function register() {
-  fetch(REG_CHALLENGE_URL, {method: "POST"})
+  var username = document.getElementById("username").value;
+  // if this returns an error, how to handle?
+  fetch(REG_CHALLENGE_URL + username, {method: "POST"})
+    .then(res => {
+        // Handle error?
+        if (res.status != 200) {
+            toast_o_matic("Oppsie Whoopsie");
+            // Update a element on page to say we broke.
+            throw new Error("Opps");
+            // How to exit properly?
+        } else {
+            return res;
+        }
+    })
     .then(res => res.json())
     .then(challenge => {
       console.log("challenge");
@@ -30,7 +62,7 @@ function register() {
           cc.type = newCredential.type;
           console.log("Sending RegisterResponse");
           console.log(cc);
-          return fetch(REGISTER_URL, {
+          return fetch(REGISTER_URL + username, {
             method: "POST",
             body: JSON.stringify(cc),
             headers: {
@@ -38,12 +70,38 @@ function register() {
             },
           })
         }) // then(newC
-        .catch(err => console.log(err))
-    }); // then(chal
+        // So act on the return fetch(REG_URL) now ...
+        .then(res => {
+            // Handle error?
+            if (res.status != 200) {
+                // Update a element on page to say we broke.
+                console.log(res);
+                toast_o_matic("Oppsie Whoopsie");
+                throw new Error("Opps");
+                // How to exit properly?
+            } else {
+                toast_o_matic("Registration Success");
+                return res;
+            }
+        })
+    }) // then(chal
+    .catch(err => console.log(err, err.stack))
 }
 
 function login() {
-  fetch(LGN_CHALLENGE_URL, {method: "POST"})
+  var username = document.getElementById("username").value;
+  fetch(LGN_CHALLENGE_URL + username, {method: "POST"})
+    .then(res => {
+        // Handle error?
+        if (res.status != 200) {
+            toast_o_matic("Oppsie Whoopsie Spaghettios");
+            // Update a element on page to say we broke.
+            throw new Error("Opps");
+            // How to exit properly?
+        } else {
+            return res;
+        }
+    })
     .then(res => res.json())
     .then(challenge => {
       console.log("challenge");
@@ -56,6 +114,7 @@ function login() {
       console.log(challenge);
       return navigator.credentials.get(challenge)
         .then(credentials => {
+        // https://developer.mozilla.org/en-US/docs/Web/API/CredentialsContainer/get
           /*
           console.log("PublicKeyCredential Get");
           console.log(credentials);
@@ -73,7 +132,7 @@ function login() {
           pk.response.userHandle = credentials.response.userHandle;
           pk.type = credentials.type;
 
-          return fetch(LOGIN_URL, {
+          return fetch(LOGIN_URL + username, {
             method: "POST",
             body: JSON.stringify(pk),
             headers: {
@@ -81,11 +140,25 @@ function login() {
             },
           })
         }) // then(creds
-        // https://developer.mozilla.org/en-US/docs/Web/API/CredentialsContainer/get
-        .catch(err => console.log(err)) // display errors in getting credentials
-  }); //then(chal
+        // So act on the return fetch(LGN_URL) now ...
+        .then(res => {
+            // Handle error?
+            if (res.status != 200) {
+                // Update a element on page to say we broke.
+                console.log(res);
+                toast_o_matic("Oppsie Whoopsie Spaghettios");
+                throw new Error("Opps");
+                // How to exit properly?
+            } else {
+                toast_o_matic("Login Success");
+                return res;
+            }
+        })
+    }) // then(chal
+    .catch(err => console.log(err, err.stack))
 }
 
+// HOLY WHAT THIS ONLY WORKS WITH A SINGLE CHARACTER WTF
 
 function toBase64(data) {
   return btoa(String.fromCharCode.apply(null, new Uint8Array(data)))
