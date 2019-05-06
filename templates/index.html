@@ -20,24 +20,35 @@
       </div>
     </div>
 
-    <div class="container" style="max-width: 400px">
-        <h2>Webauthn-RS Demo</h2>
-        <p>
-        Webauthn is a modern, passwordless method of securely authenticating to a website. You can
-        test your token here by registering, then logging in. Try also login with a different username
-        and no registration!
-        </p>
-        <p>
-        This site is backed by the rust webauthn library.
-        </p>
+<div class="container">
+  <div class="row d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+    <div class="col">
     </div>
-    <div class="container" style="max-width: 400px">
-        <div>
-            <input id="username" type="text" class="form-control">
-            <button type="button" class="btn btn-dark" onclick="register()">Register</button>
-            <button type="button" class="btn btn-dark" onclick="login()">Login</button>
+    <div class="col-sm-6">
+        <div class="container">
+            <h2>Webauthn-RS Demo</h2>
+            <p>
+            Webauthn is a modern, passwordless method of securely authenticating to a website. You can
+            test your token here by registering, then logging in. Try also login with a different username
+            and no registration!
+            </p>
+            <p>
+            This site is backed by the rust webauthn library.
+            </p>
+        </div>
+        <div class="container">
+            <div>
+                <input id="username" type="text" class="form-control">
+                <button type="button" class="btn btn-dark" onclick="register()">Register</button>
+                <button type="button" class="btn btn-dark" onclick="login()">Login</button>
+            </div>
         </div>
     </div>
+    <div class="col">
+    </div>
+  </div>
+</div>
+
 
   </body>
 </html>
