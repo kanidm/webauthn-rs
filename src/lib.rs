@@ -13,7 +13,9 @@
 //! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
 //! interactions.
 
-#![feature(vec_remove_item)]
+// :( 
+// #![feature(vec_remove_item)]
+
 #![warn(missing_docs)]
 
 extern crate base64;
@@ -553,7 +555,7 @@ impl<T> Webauthn<T> {
 
             let cred_opt: Option<Credential> = creds.iter().fold(None, |acc, c| {
                 if acc.is_none() && c.cred_id == raw_id {
-                    Some(c.clone())
+                    Some((*c).clone())
                 } else {
                     acc
                 }
@@ -700,7 +702,7 @@ pub trait WebauthnConfig {
     fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()>;
 
     /// Given a userId, retrieve the set of all Credentials that the UserId has associated.
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>>;
+    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<&Credential>>;
 
     /// Given a userId and Credential, update it's authentication counter to "counter". This
     /// helps to minimise threats from replay or reuse attacks by ensuring the counter is always

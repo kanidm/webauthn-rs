@@ -151,6 +151,7 @@ function login() {
                 // How to exit properly?
             } else {
                 toast_o_matic("Login Success");
+                console.log($.cookie("webauthnrs"));
                 return res;
             }
         })

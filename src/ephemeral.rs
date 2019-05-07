@@ -5,7 +5,7 @@
 use lru::LruCache;
 use std::collections::BTreeMap;
 
-use crate::proto::{Challenge, Credential, UserId};
+use crate::proto::{Challenge, Credential, CredentialID, UserId};
 use crate::WebauthnConfig;
 
 const CHALLENGE_CACHE_SIZE: usize = 256;
@@ -16,7 +16,7 @@ const CHALLENGE_CACHE_SIZE: usize = 256;
 /// example/reference implementation of the WebauthnConfig trait.
 pub struct WebauthnEphemeralConfig {
     chals: LruCache<UserId, Challenge>,
-    creds: BTreeMap<UserId, Vec<Credential>>,
+    creds: BTreeMap<UserId, BTreeMap<CredentialID, Credential>>,
     rp_name: String,
     rp_id: String,
     rp_origin: String,
@@ -54,19 +54,23 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     /// Assert if a credential related to a userId exists. See the trait documentation for more.
     fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()> {
         match self.creds.get(userid) {
-            Some(creds) => Ok(creds.contains(cred)),
+            Some(creds) => Ok(creds.contains_key(&cred.cred_id)),
             None => Ok(false),
         }
     }
 
     /// Persist a credential related to a userId. See the trait documentation for more.
-    fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()> {
+    fn persist_credential(&mut self, userid: UserId, cred: Credential) -> Result<(), ()> {
         match self.creds.get_mut(&userid) {
             Some(v) => {
-                v.push(credential);
+                let cred_id = cred.cred_id.clone();
+                v.insert(cred_id, cred);
             }
             None => {
-                self.creds.insert(userid, vec![credential]);
+                let mut t = BTreeMap::new();
+                let credential_id = cred.cred_id.clone();
+                t.insert(credential_id, cred);
+                self.creds.insert(userid, t);
             }
         };
         Ok(())
@@ -81,10 +85,11 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     ) -> Result<(), ()> {
         match self.creds.get_mut(userid) {
             Some(v) => {
-                v.remove_item(cred);
+                let cred_id = cred.cred_id.clone();
+                let _ = v.remove(&cred_id);
                 let mut c = cred.clone();
                 c.counter = counter;
-                v.push(c);
+                v.insert(cred_id, c);
                 Ok(())
             }
             None => {
@@ -103,7 +108,7 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     ) -> Result<(), ()> {
         match self.creds.get_mut(userid) {
             Some(v) => {
-                v.remove_item(cred);
+                v.remove(&cred.cred_id);
                 Ok(())
             }
             None => {
@@ -114,8 +119,15 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     /// Retrieve the credentials associated to a userId. See the trait documentation for more.
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<&Vec<Credential>> {
-        self.creds.get(userid)
+    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<&Credential>> {
+        match self.creds.get(userid) {
+            Some(creds) => {
+                Some(creds.iter()
+                    .map(|(_, v)| v)
+                    .collect())
+            }
+            None => None,
+        }
     }
 
     /// Retrieve the relying party origin. See the trait documentation for more.
