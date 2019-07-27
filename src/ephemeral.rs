@@ -121,11 +121,7 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     /// Retrieve the credentials associated to a userId. See the trait documentation for more.
     fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<&Credential>> {
         match self.creds.get(userid) {
-            Some(creds) => {
-                Some(creds.iter()
-                    .map(|(_, v)| v)
-                    .collect())
-            }
+            Some(creds) => Some(creds.iter().map(|(_, v)| v).collect()),
             None => None,
         }
     }

@@ -17,6 +17,7 @@ license = "MPL-2.0"
 [dependencies]
 base64 = "0.2"
 lru = "0.1"
+log = "0.4"
 nom = "4.2"
 serde = "1.0"
 serde_bytes = "0.10"
@@ -32,10 +33,14 @@ askama = "0.6"
 
 # This only supports up to 0.7. See examples/actix/main.rs for more.
 actix = "0.7"
-actix-web = "0.7"
+actix-web = { version = "0.7", features = ["ssl"] }
 
 cookie = "0.11"
+log = "0.4"
 env_logger = "0.6"
 futures = "0.1"
 time = "0.1"
+openssl = "0.10"
+
+structopt = { version = "0.2", default-features = false }
 

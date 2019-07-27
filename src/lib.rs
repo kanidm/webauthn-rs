@@ -13,13 +13,15 @@
 //! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
 //! interactions.
 
-// :( 
+// :(
 // #![feature(vec_remove_item)]
 
 #![warn(missing_docs)]
 
 extern crate base64;
 extern crate lru;
+#[macro_use]
+extern crate log;
 #[macro_use]
 extern crate serde_derive;
 // extern crate byteorder;

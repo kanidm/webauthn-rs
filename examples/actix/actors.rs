@@ -23,6 +23,7 @@ impl WebauthnActor {
     }
 }
 
+#[derive(Debug)]
 pub struct ChallengeRegister {
     pub username: String,
 }
@@ -35,10 +36,12 @@ impl Handler<ChallengeRegister> for WebauthnActor {
     type Result = Result<CreationChallengeResponse, WebauthnError>;
 
     fn handle(&mut self, msg: ChallengeRegister, _: &mut Self::Context) -> Self::Result {
+        debug!("handle ChallengeRegister -> {:?}", msg);
         self.wan.generate_challenge_register(msg.username)
     }
 }
 
+#[derive(Debug)]
 pub struct ChallengeAuthenticate {
     pub username: String,
 }
@@ -51,10 +54,12 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
     type Result = Result<RequestChallengeResponse, WebauthnError>;
 
     fn handle(&mut self, msg: ChallengeAuthenticate, _: &mut Self::Context) -> Self::Result {
+        debug!("handle ChallengeAuthenticate -> {:?}", msg);
         self.wan.generate_challenge_authenticate(msg.username)
     }
 }
 
+#[derive(Debug)]
 pub struct Register {
     pub username: String,
     pub reg: RegisterPublicKeyCredential,
@@ -68,10 +73,12 @@ impl Handler<Register> for WebauthnActor {
     type Result = Result<(), WebauthnError>;
 
     fn handle(&mut self, msg: Register, _: &mut Self::Context) -> Self::Result {
+        debug!("handle Register -> {:?}", msg);
         self.wan.register_credential(msg.reg, msg.username)
     }
 }
 
+#[derive(Debug)]
 pub struct Authenticate {
     pub username: String,
     pub lgn: PublicKeyCredential,
@@ -85,6 +92,7 @@ impl Handler<Authenticate> for WebauthnActor {
     type Result = Result<(), WebauthnError>;
 
     fn handle(&mut self, msg: Authenticate, _: &mut Self::Context) -> Self::Result {
+        debug!("handle Authenticate -> {:?}", msg);
         self.wan.authenticate_credential(msg.lgn, msg.username)
     }
 }

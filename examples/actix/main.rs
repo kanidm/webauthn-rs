@@ -13,7 +13,12 @@ extern crate time;
 // #[macro_use]
 extern crate askama;
 extern crate cookie;
+#[macro_use]
+extern crate log;
 extern crate env_logger;
+extern crate structopt;
+use structopt::StructOpt;
+extern crate openssl;
 
 extern crate webauthn_rs;
 
@@ -34,7 +39,10 @@ use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
 
 mod actors;
+mod crypto;
+
 use crate::actors::*;
+use crate::crypto::generate_dyn_ssl_params;
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -50,8 +58,27 @@ impl AppState {
     }
 }
 
-fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
+#[derive(Debug, StructOpt)]
+struct CmdOptions {
+    #[structopt(short = "d", long = "debug")]
+    debug: bool,
+    #[structopt(short = "p", long = "prefix", default_value = "/auth")]
+    prefix: String,
+    #[structopt(
+        short = "n",
+        long = "name",
+        default_value = "https://localhost:8443/auth"
+    )]
+    rp_name: String,
+    #[structopt(short = "o", long = "origin", default_value = "https://localhost:8443")]
+    rp_origin: String,
+    #[structopt(short = "i", long = "id", default_value = "localhost")]
+    rp_id: String,
+    #[structopt(short = "b", long = "bind", default_value = "127.0.0.1:8443")]
+    bind: String,
+}
 
+fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
     let some_userid = match req.session().get::<String>("userid") {
         Ok(v) => v,
         Err(e) => {
@@ -63,7 +90,7 @@ fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
 
     if some_userid.is_none() {
         match req.session().set("anonymous", true) {
-            Ok(_) => {},
+            Ok(_) => {}
             Err(e) => {
                 return HttpResponse::InternalServerError().body("Internal Server Error");
             }
@@ -144,9 +171,13 @@ fn register(
 }
 
 fn login(
-    (lgn, username, state, req): (Json<PublicKeyCredential>, Path<String>, State<AppState>, HttpRequest<AppState>),
+    (lgn, username, state, req): (
+        Json<PublicKeyCredential>,
+        Path<String>,
+        State<AppState>,
+        HttpRequest<AppState>,
+    ),
 ) -> impl Future<Item = HttpResponse, Error = Error> {
-
     let uname = username.into_inner().clone();
 
     state
@@ -159,13 +190,14 @@ fn login(
         .and_then(move |res| {
             match res {
                 Ok(_) => {
-
                     // Clear the anonymous flag
                     req.session().remove("anonymous");
                     // Set the userid
                     match req.session().set("userid", uname) {
                         Ok(_) => Ok(HttpResponse::Ok().json(())),
-                        Err(_) => Ok(HttpResponse::InternalServerError().body("Internal Server Error")),
+                        Err(_) => {
+                            Ok(HttpResponse::InternalServerError().body("Internal Server Error"))
+                        }
                     }
                 }
                 Err(_) => {
@@ -177,17 +209,27 @@ fn login(
 }
 
 fn main() {
-    std::env::set_var("RUST_LOG", "actix_web=info");
+    let opt = CmdOptions::from_args();
+
+    if opt.debug {
+        std::env::set_var("RUST_LOG", "actix_web=info,webauthn_rs=debug,actix=debug");
+    }
     env_logger::init();
+
+    debug!("Started logging ...");
 
     let sys = actix::System::new("webauthn-rs-demo");
 
-    let prefix = "/auth";
+    let prefix = opt.prefix.clone();
+    let domain = opt.rp_id.clone();
+
+    // Generate TLS certs as needed.
+    let ssl_params = generate_dyn_ssl_params(domain.as_str());
 
     let wan_c = WebauthnEphemeralConfig::new(
-        "http://localhost:8080/auth",
-        "http://localhost:8080",
-        "localhost",
+        opt.rp_name.as_str(),
+        opt.rp_origin.as_str(),
+        opt.rp_id.as_str(),
     );
 
     let wan = WebauthnActor::new(wan_c);
@@ -200,21 +242,20 @@ fn main() {
     server::new(move || {
         App::with_state(AppState::new(wan_addr.clone()))
             // For production
-            .prefix(prefix)
+            .prefix(prefix.as_str())
             // enable logger
             .middleware(middleware::Logger::default())
             .middleware(middleware::session::SessionStorage::new(
                 // Signed prevents tampering.
                 middleware::session::CookieSessionBackend::signed(&cookie_sig)
-                    // 
-                    .path(prefix)
-                    .domain("localhost")
+                    .path(prefix.as_str())
+                    // Should this be rp_id?
+                    .domain(domain.as_str())
                     .same_site(cookie::SameSite::Strict)
                     .name("webauthnrs")
                     // if true, only allow to https
-                    .secure(false)
-                    // Valid for 5 minutes
-                    // .max_age(Duration::minutes(5))
+                    .secure(false), // Valid for 5 minutes
+                                    // .max_age(Duration::minutes(5))
             ))
             .handler(
                 "/static",
@@ -246,10 +287,10 @@ fn main() {
             })
         // Need login
     })
-    .bind("127.0.0.1:8080")
+    .bind_ssl(opt.bind.as_str(), ssl_params)
     .unwrap()
     .start();
 
-    println!("Started http server: http://localhost:8080/auth/");
+    println!("Started http server: {}", opt.rp_name.as_str());
     let _ = sys.run();
 }
