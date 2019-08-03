@@ -2,7 +2,8 @@
 Webauthn-rs
 ==========
 
-NOTE: This library has NOT received a proper security review of operations yet!!!
+NOTE: This library has NOT received a proper security review of operations yet!!! Help
+out and review this crate!
 
 Webauthn is a modern approach to hardware based authentication, consisting of
 a user with an authenticator device, a browser or client that interacts with the
@@ -14,7 +15,8 @@ be associated to their accounts, and then are able to login using the token
 which performas a cryptographic authentication.
 
 This library aims to provide useful functions and frameworks allowing you to
-integrate webauthn into rust web servers. We also will provide template and
+integrate webauthn into rust web servers. This means the library implements the
+Relying Party component of the FIDO2 workflow. We provide template and
 example javascript to demonstrate the browser interactions required.
 
 Examples
@@ -24,6 +26,13 @@ As this library aims to be usable in a variety of contexts, we have provided
 examples in the examples folder. These examples should demonstrate secure and
 valid use, so please report any issues found, and we'd love to see more examples
 contributed!
+
+Feedback
+--------
+
+The current design of the traits and configuration is open to feedback on how it
+can be improved - please use this library and contact the project on what can be
+improved!
 
 Why OpenSSL?
 ------------
