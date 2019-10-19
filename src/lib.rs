@@ -782,9 +782,9 @@ pub trait WebauthnConfig {
     /// 16 above, the Relying Party SHOULD fail the registration ceremony.
     ///
     /// The default implementation of this method rejects None and Uncertain attestation, and
-    /// will "blindly trust" the other types as valid. If you have strict security requirements
-    /// we strongly recommend you implement this function, and we may in the future provide a
-    /// stronger default trust system.
+    /// will "blindly trust" self attestation and the other types as valid.
+    /// If you have strict security requirements we strongly recommend you implement this function,
+    /// and we may in the future provide a stronger default replying party policy.
     fn policy_verify_trust(&self, at: AttestationType) -> Result<Credential, ()> {
         match at {
             AttestationType::Basic(credential, _ca) => Ok(credential),
@@ -898,7 +898,7 @@ mod tests {
     }
 
     #[test]
-    fn test_registration_packed() {
+    fn test_registration_packed_attestation() {
         let wan_c = WebauthnEphemeralConfig::new(
             "localhost:8443/auth",
             "https://localhost:8443",
@@ -914,6 +914,7 @@ mod tests {
             .unwrap(),
         );
 
+        // Generated using Touch ID via Chrome
         let rsp = r#"{"id":"ATk_7QKbi_ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa","rawId":"ATk/7QKbi/ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa","response":{"attestationObject":"o2NmbXRmcGFja2VkZ2F0dFN0bXSiY2FsZyZjc2lnWEcwRQIgLXPjBtVEhBH3KdUDFFk3LAd9EtHogllIf48vjX4wgfECIQCXOymmfg12FPMXEdwpSjjtmrvki4K8y0uYxqWN5Bw6DGhhdXRoRGF0YViuSZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2NFXaqejq3OAAI1vMYKZIsLJfHwVQMAKgE5P+0Cm4v57Unadei13lOkQ3/WJ0SyA0wqhIyRc3OqygYW6qEmHHMTWqUBAgMmIAEhWCDNRS/Gw52ow5PNrC9OdFTFNudDmZO6Y3wmM9N8e0tJICJYIC09iIH5/RrT5tbS0PIw3srdAxYDMGao7yWgu0JFIEzT","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJsUDZtV05BdEctX1Z2MTVpTTdsYl9YUmtkV012VlEtbFR5S3dadU9nMVZvIiwiZXh0cmFfa2V5c19tYXlfYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Ojg0NDMiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0="},"type":"public-key"}
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();

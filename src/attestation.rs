@@ -57,8 +57,6 @@ pub enum AttestationType {
 }
 
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
-// https://medium.com/@herrjemand/verifying-fido2-packed-attestation-a067a9b2facd
-//https://gist.github.com/herrjemand/dbeb2c2b76362052e5268224660b6fbc#file-verify-packed-webauthn-js
 pub(crate) fn verify_packed_attestation(
     att_stmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
