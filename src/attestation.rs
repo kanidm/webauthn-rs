@@ -8,6 +8,9 @@ use std::convert::TryFrom;
 use crate::crypto;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
+use std::collections::BTreeMap;
+use serde_cbor::{ObjectKey, Value};
+
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -71,60 +74,50 @@ pub(crate) fn verify_packed_attestation(
         .as_object()
         .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
 
-    match att_stmt_map.get(&serde_cbor::ObjectKey::String("x5c".to_string())) {
-        None => {
-            match att_stmt_map.get(&serde_cbor::ObjectKey::String("ecdaaKeyId".to_string())) {
-                None => {
-                    //Surrogate
+    let x5c_key = &serde_cbor::ObjectKey::String("x5c".to_string());
+    let ecdaaKeyId_key = &serde_cbor::ObjectKey::String("ecdaaKeyId".to_string());
+    match (att_stmt_map.get(x5c_key), att_stmt_map.get(ecdaaKeyId_key)) {
+        (Some(x5c), _) => Err(WebauthnError::AttestationNotSupported),
+        (None, Some(ecdaaKeyId))=> Err(WebauthnError::AttestationNotSupported),
+        (None, None) => {
+            let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
-                    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
-
-                    //TODO: Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
-                    let alg = att_stmt_map
-                        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
-                        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
-                    if alg.as_i64() != None {
-                        //algorithm -7 ("ES256"),
-                        println!("{:?} != {:?}", alg, credential_public_key.key);
-                        //return Err(WebauthnError::AttestationStatementSigInvalid);
-                    }
-
-                    //Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
-                    let verification_data: Vec<u8> = auth_data_bytes
-                        .iter()
-                        .chain(client_data_hash.iter())
-                        .map(|b| *b)
-                        .collect();
-
-                    let sig_value = att_stmt_map
-                        .get(&serde_cbor::ObjectKey::String("sig".to_string()))
-                        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
-
-                    let sig = sig_value
-                        .as_bytes()
-                        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
-
-                    // Verify the sig using verificationData and certificate public key per [SEC1].
-                    let verified =
-                        credential_public_key.verify_signature(&sig, &verification_data)?;
-
-                    if !verified {
-                        return Err(WebauthnError::AttestationStatementSigInvalid);
-                    }
-
-                    let credential = Credential::new(acd, credential_public_key, counter);
-
-                    Ok(AttestationType::Self_(credential))
-                }
-                Some(_) => {
-                    //If ecdaaKeyId is present, then the attestation type is ECDAA
-                    Err(WebauthnError::AttestationStatementX5CInvalid)
-                }
+            //TODO: Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
+            let alg = att_stmt_map
+                .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+                .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+            if alg.as_i64() != None {
+                //algorithm -7 ("ES256"),
+                println!("{:?} != {:?}", alg, credential_public_key.key);
+                //return Err(WebauthnError::AttestationStatementSigInvalid);
             }
-        }
-        Some(_x5c) => {
-            //If x5c is present, this indicates that the attestation type is not ECDAA. In this case /FULL
-            Err(WebauthnError::AttestationNotSupported)
+
+            //Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
+            let verification_data: Vec<u8> = auth_data_bytes
+                .iter()
+                .chain(client_data_hash.iter())
+                .map(|b| *b)
+                .collect();
+
+            let sig_value = att_stmt_map
+                .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+                .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+
+            let sig = sig_value
+                .as_bytes()
+                .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+
+            // Verify the sig using verificationData and certificate public key per [SEC1].
+            let verified =
+                credential_public_key.verify_signature(&sig, &verification_data)?;
+
+            if !verified {
+                return Err(WebauthnError::AttestationStatementSigInvalid);
+            }
+
+            let credential = Credential::new(acd, credential_public_key, counter);
+
+            Ok(AttestationType::Self_(credential))
         }
     }
 }
