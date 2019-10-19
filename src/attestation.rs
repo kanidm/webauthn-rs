@@ -5,10 +5,10 @@
 
 use std::convert::TryFrom;
 
+use crate::attestation::AttestationType::Self_;
 use crate::crypto;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
-use crate::attestation::AttestationType::Self_;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -72,11 +72,9 @@ pub(crate) fn verify_packed_attestation(
         .as_object()
         .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
 
-    match att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("x5c".to_string())) {
+    match att_stmt_map.get(&serde_cbor::ObjectKey::String("x5c".to_string())) {
         None => {
-            match att_stmt_map
-                .get(&serde_cbor::ObjectKey::String("ecdaaKeyId".to_string())) {
+            match att_stmt_map.get(&serde_cbor::ObjectKey::String("ecdaaKeyId".to_string())) {
                 None => {
                     //Surrogate
 
@@ -89,7 +87,7 @@ pub(crate) fn verify_packed_attestation(
                     if alg.as_i64() != None {
                         //algorithm -7 ("ES256"),
                         println!("{:?} != {:?}", alg, credential_public_key.key);
-//                        return Err(WebauthnError::AttestationStatementSigInvalid);
+                        //return Err(WebauthnError::AttestationStatementSigInvalid);
                     }
 
                     //Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
@@ -108,7 +106,8 @@ pub(crate) fn verify_packed_attestation(
                         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
                     // Verify the sig using verificationData and certificate public key per [SEC1].
-                    let verified = credential_public_key.verify_signature(&sig, &verification_data)?;
+                    let verified =
+                        credential_public_key.verify_signature(&sig, &verification_data)?;
 
                     if !verified {
                         return Err(WebauthnError::AttestationStatementSigInvalid);
