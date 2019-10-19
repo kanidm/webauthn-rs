@@ -83,14 +83,12 @@ pub(crate) fn verify_packed_attestation(
         (None, None) => {
             let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
-            //TODO: Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
+            //Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData
             let alg = att_stmt_map
                 .get(&serde_cbor::ObjectKey::String("alg".to_string()))
-                .ok_or(WebauthnError::AttestationStatementSigMissing)?;
-            if alg.as_i64() != None {
-                //algorithm -7 ("ES256"),
-                println!("{:?} != {:?}", alg, credential_public_key.key);
-                //return Err(WebauthnError::AttestationStatementSigInvalid);
+                .ok_or(WebauthnError::AttestationStatementAlgMismatch)?;
+            if alg.as_i64() != Some(i64::from(&credential_public_key.type_)) {
+                return Err(WebauthnError::AttestationStatementAlgMismatch);
             }
 
             // Verify that sig is a valid signature over the concatenation
