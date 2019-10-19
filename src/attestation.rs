@@ -44,7 +44,8 @@ pub enum AttestationType {
     /// The credential is authenticated by a signing X509 Certificate
     /// from a vendor or provider.
     Basic(Credential, crypto::X509PublicKey),
-    /// Unimplemented
+    /// The credential is authenticated using surrogate basic attestation
+    /// it uses the credential private key to create the attestation signature
     Self_(Credential),
     /// Unimplemented
     AttCa,
