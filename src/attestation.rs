@@ -8,6 +8,7 @@ use std::convert::TryFrom;
 use crate::crypto;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
+use crate::attestation::AttestationType::Self_;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -42,7 +43,7 @@ pub enum AttestationType {
     /// from a vendor or provider.
     Basic(Credential, crypto::X509PublicKey),
     /// Unimplemented
-    Self_,
+    Self_(Credential),
     /// Unimplemented
     AttCa,
     /// Unimplemented
@@ -53,6 +54,81 @@ pub enum AttestationType {
     /// Uncertain Attestation was provided with this Credential, which may not
     /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain(Credential),
+}
+
+// https://w3c.github.io/webauthn/#sctn-packed-attestation
+// https://medium.com/@herrjemand/verifying-fido2-packed-attestation-a067a9b2facd
+//https://gist.github.com/herrjemand/dbeb2c2b76362052e5268224660b6fbc#file-verify-packed-webauthn-js
+pub(crate) fn verify_packed_attestation(
+    att_stmt: &serde_cbor::Value,
+    acd: &AttestedCredentialData,
+    auth_data_bytes: Vec<u8>,
+    // authDataBytes: &Vec<u8>,
+    client_data_hash: &Vec<u8>,
+    counter: u32,
+) -> Result<AttestationType, WebauthnError> {
+    //Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
+    let att_stmt_map = att_stmt
+        .as_object()
+        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+
+    match att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("x5c".to_string())) {
+        None => {
+            match att_stmt_map
+                .get(&serde_cbor::ObjectKey::String("ecdaaKeyId".to_string())) {
+                None => {
+                    //Surrogate
+
+                    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+
+                    //TODO: Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
+                    let alg = att_stmt_map
+                        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+                        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+                    if alg.as_i64() != None {
+                        //algorithm -7 ("ES256"),
+                        println!("{:?} != {:?}", alg, credential_public_key.key);
+//                        return Err(WebauthnError::AttestationStatementSigInvalid);
+                    }
+
+                    //Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
+                    let verification_data: Vec<u8> = auth_data_bytes
+                        .iter()
+                        .chain(client_data_hash.iter())
+                        .map(|b| *b)
+                        .collect();
+
+                    let sig_value = att_stmt_map
+                        .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+                        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+
+                    let sig = sig_value
+                        .as_bytes()
+                        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+
+                    // Verify the sig using verificationData and certificate public key per [SEC1].
+                    let verified = credential_public_key.verify_signature(&sig, &verification_data)?;
+
+                    if !verified {
+                        return Err(WebauthnError::AttestationStatementSigInvalid);
+                    }
+
+                    let credential = Credential::new(acd, credential_public_key, counter);
+
+                    Ok(Self_(credential))
+                }
+                Some(_) => {
+                    //If ecdaaKeyId is present, then the attestation type is ECDAA
+                    Err(WebauthnError::AttestationStatementX5CInvalid)
+                }
+            }
+        }
+        Some(_x5c) => {
+            //If x5c is present, this indicates that the attestation type is not ECDAA. In this case /FULL
+            Err(WebauthnError::AttestationNotSupported)
+        }
+    }
 }
 
 // https://w3c.github.io/webauthn/#fido-u2f-attestation

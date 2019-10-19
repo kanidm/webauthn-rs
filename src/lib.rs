@@ -39,7 +39,7 @@ pub mod proto;
 use rand::prelude::*;
 use std::convert::TryFrom;
 
-use crate::attestation::{verify_fidou2f_attestation, AttestationFormat, AttestationType};
+use crate::attestation::{verify_fidou2f_attestation, verify_packed_attestation, AttestationFormat, AttestationType};
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::{compute_sha256, COSEContentType};
 use crate::error::WebauthnError;
@@ -341,6 +341,17 @@ impl<T> Webauthn<T> {
                 // &rp_hash,
                 data.attestation_object.authData.counter,
             ),
+            AttestationFormat::Packed => {
+                verify_packed_attestation(
+                    &data.attestation_object.attStmt,
+                    acd,
+                    data
+                        .attestation_object
+                        .authDataBytes,
+                    &client_data_json_hash,
+                    data.attestation_object.authData.counter,
+                )
+            }
             _ => {
                 // No other types are currently implemented
                 Err(WebauthnError::AttestationNotSupported)
@@ -779,6 +790,7 @@ pub trait WebauthnConfig {
     fn policy_verify_trust(&self, at: AttestationType) -> Result<Credential, ()> {
         match at {
             AttestationType::Basic(credential, _ca) => Ok(credential),
+            AttestationType::Self_(credential) => Ok(credential),
             _ => {
                 // We don't know how to assert trust in this yet, or we just
                 // don't trust it at all (Uncertain, None).
@@ -884,6 +896,31 @@ mod tests {
         let result =
             wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
         println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_registration_packed() {
+        let wan_c = WebauthnEphemeralConfig::new(
+            "localhost:8443/auth",
+            "https://localhost:8443",
+            "localhost",
+        );
+        let mut wan = Webauthn::new(wan_c);
+
+        let chal = Challenge(
+            base64::decode_mode(
+                "lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=",
+                base64::Base64Mode::Standard,
+            )
+                .unwrap(),
+        );
+
+        let rsp = r#"{"id":"ATk_7QKbi_ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa","rawId":"ATk/7QKbi/ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa","response":{"attestationObject":"o2NmbXRmcGFja2VkZ2F0dFN0bXSiY2FsZyZjc2lnWEcwRQIgLXPjBtVEhBH3KdUDFFk3LAd9EtHogllIf48vjX4wgfECIQCXOymmfg12FPMXEdwpSjjtmrvki4K8y0uYxqWN5Bw6DGhhdXRoRGF0YViuSZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2NFXaqejq3OAAI1vMYKZIsLJfHwVQMAKgE5P+0Cm4v57Unadei13lOkQ3/WJ0SyA0wqhIyRc3OqygYW6qEmHHMTWqUBAgMmIAEhWCDNRS/Gw52ow5PNrC9OdFTFNudDmZO6Y3wmM9N8e0tJICJYIC09iIH5/RrT5tbS0PIw3srdAxYDMGao7yWgu0JFIEzT","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJsUDZtV05BdEctX1Z2MTVpTTdsYl9YUmtkV012VlEtbFR5S3dadU9nMVZvIiwiZXh0cmFfa2V5c19tYXlfYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Ojg0NDMiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0="},"type":"public-key"}
+        "#;
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
+        let result =
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
         assert!(result.is_ok());
     }
 
