@@ -5,7 +5,6 @@
 
 use std::convert::TryFrom;
 
-use crate::attestation::AttestationType::Self_;
 use crate::crypto;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
@@ -115,7 +114,7 @@ pub(crate) fn verify_packed_attestation(
 
                     let credential = Credential::new(acd, credential_public_key, counter);
 
-                    Ok(Self_(credential))
+                    Ok(AttestationType::Self_(credential))
                 }
                 Some(_) => {
                     //If ecdaaKeyId is present, then the attestation type is ECDAA
