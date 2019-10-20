@@ -6,8 +6,11 @@
 use std::convert::TryFrom;
 
 use crate::crypto;
+use crate::crypto::COSEContentType;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
+use serde_cbor::{ObjectKey, Value};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -56,16 +59,29 @@ pub enum AttestationType {
     Uncertain(Credential),
 }
 
+// first Verification procedure if self attestation is in use.
+// Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
+fn is_matching_agorithm(
+    att_stmt_map: &BTreeMap<ObjectKey, Value>,
+    alg_from_auhenticator_data: &COSEContentType,
+) -> bool {
+    att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+        .and_then(|alg| alg.as_i64())
+        .map(|alg| alg == i64::from(alg_from_auhenticator_data))
+        .unwrap_or(false)
+}
+
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
 pub(crate) fn verify_packed_attestation(
     att_stmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
     auth_data_bytes: Vec<u8>,
-    // authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
     counter: u32,
 ) -> Result<AttestationType, WebauthnError> {
-    //Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
+    //Verify that attStmt is valid CBOR conforming to the syntax defined above
+    // and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map = att_stmt
         .as_object()
         .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
@@ -79,13 +95,10 @@ pub(crate) fn verify_packed_attestation(
         (Some(_x5c), _) => Err(WebauthnError::AttestationNotSupported),
         (None, Some(_ecdaa_key_id)) => Err(WebauthnError::AttestationNotSupported),
         (None, None) => {
+            // If neither x5c nor ecdaaKeyId is present, self attestation is in use.
             let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
-            //Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData
-            let alg = att_stmt_map
-                .get(&serde_cbor::ObjectKey::String("alg".to_string()))
-                .ok_or(WebauthnError::AttestationStatementAlgMismatch)?;
-            if alg.as_i64() != Some(i64::from(&credential_public_key.type_)) {
+            if !is_matching_agorithm(att_stmt_map, &credential_public_key.type_) {
                 return Err(WebauthnError::AttestationStatementAlgMismatch);
             }
 
@@ -96,18 +109,20 @@ pub(crate) fn verify_packed_attestation(
                 .chain(client_data_hash.iter())
                 .map(|b| *b)
                 .collect();
-            let sig = att_stmt_map
+            let is_valid_signature = att_stmt_map
                 .get(&serde_cbor::ObjectKey::String("sig".to_string()))
-                .ok_or(WebauthnError::AttestationStatementSigMissing)?
-                .as_bytes()
-                .ok_or(WebauthnError::AttestationStatementSigMissing)?;
-            let verified = credential_public_key.verify_signature(&sig, &verification_data)?;
-            if !verified {
+                .and_then(|s| s.as_bytes())
+                .ok_or(WebauthnError::AttestationStatementSigMissing)
+                .and_then(|sig| credential_public_key.verify_signature(&sig, &verification_data))?;
+            if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
 
-            let credential = Credential::new(acd, credential_public_key, counter);
-            Ok(AttestationType::Self_(credential))
+            Ok(AttestationType::Self_(Credential::new(
+                acd,
+                credential_public_key,
+                counter,
+            )))
         }
     }
 }
