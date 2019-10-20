@@ -784,7 +784,7 @@ pub trait WebauthnConfig {
     /// The default implementation of this method rejects None and Uncertain attestation, and
     /// will "blindly trust" self attestation and the other types as valid.
     /// If you have strict security requirements we strongly recommend you implement this function,
-    /// and we may in the future provide a stronger default replying party policy.
+    /// and we may in the future provide a stronger default relying party policy.
     fn policy_verify_trust(&self, at: AttestationType) -> Result<Credential, ()> {
         match at {
             AttestationType::Basic(credential, _ca) => Ok(credential),

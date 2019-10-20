@@ -80,7 +80,7 @@ pub(crate) fn verify_packed_attestation(
     client_data_hash: &Vec<u8>,
     counter: u32,
 ) -> Result<AttestationType, WebauthnError> {
-    //Verify that attStmt is valid CBOR conforming to the syntax defined above
+    // Verify that attStmt is valid CBOR conforming to the syntax defined above
     // and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map = att_stmt
         .as_object()
