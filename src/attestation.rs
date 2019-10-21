@@ -6,8 +6,11 @@
 use std::convert::TryFrom;
 
 use crate::crypto;
+use crate::crypto::COSEContentType;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
+use serde_cbor::{ObjectKey, Value};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -41,8 +44,9 @@ pub enum AttestationType {
     /// The credential is authenticated by a signing X509 Certificate
     /// from a vendor or provider.
     Basic(Credential, crypto::X509PublicKey),
-    /// Unimplemented
-    Self_,
+    /// The credential is authenticated using surrogate basic attestation
+    /// it uses the credential private key to create the attestation signature
+    Self_(Credential),
     /// Unimplemented
     AttCa,
     /// Unimplemented
@@ -53,6 +57,82 @@ pub enum AttestationType {
     /// Uncertain Attestation was provided with this Credential, which may not
     /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain(Credential),
+}
+
+// Check that alg from att_stmt_map matches alg_from_auhenticator_data
+fn is_matching_agorithm(
+    att_stmt_map: &BTreeMap<ObjectKey, Value>,
+    alg_from_auhenticator_data: &COSEContentType,
+) -> bool {
+    att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+        .and_then(|alg| alg.as_i64())
+        .map(|alg| alg == i64::from(alg_from_auhenticator_data))
+        .unwrap_or(false)
+}
+
+// Perform the Verification procedure for 8.2. Packed Attestation Statement Format
+// https://w3c.github.io/webauthn/#sctn-packed-attestation
+pub(crate) fn verify_packed_attestation(
+    att_stmt: &serde_cbor::Value,
+    acd: &AttestedCredentialData,
+    auth_data_bytes: Vec<u8>,
+    client_data_hash: &Vec<u8>,
+    counter: u32,
+) -> Result<AttestationType, WebauthnError> {
+    // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
+    let att_stmt_map = att_stmt
+        .as_object()
+        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+
+    let x5c_key = &serde_cbor::ObjectKey::String("x5c".to_string());
+    let ecdaa_key_id_key = &serde_cbor::ObjectKey::String("ecdaaKeyId".to_string());
+    match (
+        att_stmt_map.get(x5c_key),
+        att_stmt_map.get(ecdaa_key_id_key),
+    ) {
+        (Some(_x5c), _) => {
+            // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
+            // TODO: Perform the appropriate verification procedure
+            Err(WebauthnError::AttestationNotSupported)
+        }
+        (None, Some(_ecdaa_key_id)) => {
+            // 3. If ecdaaKeyId is present, then the attestation type is ECDAA.
+            // TODO: Perform the the verification procedure for ECDAA
+            Err(WebauthnError::AttestationNotSupported)
+        }
+        (None, None) => {
+            // 4. If neither x5c nor ecdaaKeyId is present, self attestation is in use.
+            let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+
+            // 4.a. Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
+            if !is_matching_agorithm(att_stmt_map, &credential_public_key.type_) {
+                return Err(WebauthnError::AttestationStatementAlgMismatch);
+            }
+
+            // 4.b. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the credential public key with alg.
+            let verification_data: Vec<u8> = auth_data_bytes
+                .iter()
+                .chain(client_data_hash.iter())
+                .map(|b| *b)
+                .collect();
+            let is_valid_signature = att_stmt_map
+                .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+                .and_then(|s| s.as_bytes())
+                .ok_or(WebauthnError::AttestationStatementSigMissing)
+                .and_then(|sig| credential_public_key.verify_signature(&sig, &verification_data))?;
+            if !is_valid_signature {
+                return Err(WebauthnError::AttestationStatementSigInvalid);
+            }
+
+            // 4.c. If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
+            Ok(AttestationType::Self_(Credential::new(
+                acd,
+                credential_public_key,
+                counter,
+            )))
+        }
+    }
 }
 
 // https://w3c.github.io/webauthn/#fido-u2f-attestation

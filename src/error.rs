@@ -48,6 +48,9 @@ pub enum WebauthnError {
     AttestationStatementX5CMissing,
     /// The attestation statement x5c (trust root) is not valid.
     AttestationStatementX5CInvalid,
+    /// The attestation statement alg does not match algorithm of the
+    /// credentialPublicKey in authenticatorData
+    AttestationStatementAlgMismatch,
     /// The attestation trust could not be established.
     AttestationTrustFailure,
 
