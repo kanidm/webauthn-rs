@@ -245,7 +245,7 @@ pub(crate) struct CollectedClientData {
     pub(crate) type_: String,
     pub(crate) challenge: Vec<u8>,
     pub(crate) origin: String,
-    pub(crate) tokenBinding: Option<String>,
+    pub(crate) tokenBinding: Option<TokenBinding>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -254,7 +254,13 @@ pub(crate) struct CollectedClientDataRaw {
     pub type_: String,
     pub challenge: String,
     pub origin: String,
-    pub tokenBinding: Option<String>,
+    pub tokenBinding: Option<TokenBinding>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct TokenBinding {
+    pub status: String,
+    pub id:Option<String>
 }
 
 // Should this be tryfrom
