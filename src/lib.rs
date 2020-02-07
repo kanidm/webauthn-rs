@@ -101,7 +101,7 @@ impl<T> Webauthn<T> {
         Webauthn {
             // We use stdrng because unlike thread_rng, it's a csprng, which given
             // this is a cryptographic operation, we kind of want!
-            rng: rand::thread_rng();
+            rng: rand::thread_rng(),
             config: config,
             pkcp: pkcp,
             rp_id_hash: rp_id_hash,
