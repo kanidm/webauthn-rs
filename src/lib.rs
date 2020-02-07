@@ -72,7 +72,7 @@ use crate::proto::{
 /// to protect and synchronise values.
 #[derive(Debug)]
 pub struct Webauthn<T> {
-    rng: StdRng,
+    rng: ThreadRng,
     config: T,
     pkcp: Vec<PubKeyCredParams>,
     rp_id_hash: Vec<u8>,
@@ -101,7 +101,7 @@ impl<T> Webauthn<T> {
         Webauthn {
             // We use stdrng because unlike thread_rng, it's a csprng, which given
             // this is a cryptographic operation, we kind of want!
-            rng: StdRng::from_entropy(),
+            rng: rand::thread_rng();
             config: config,
             pkcp: pkcp,
             rp_id_hash: rp_id_hash,
