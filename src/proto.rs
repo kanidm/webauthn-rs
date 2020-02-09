@@ -12,6 +12,9 @@ use crate::error::*;
 /// Representation of a UserId. This is currently a type alias to "String".
 pub type UserId = String;
 
+/// Representation of a device counter
+pub type Counter = u32;
+
 /// A challenge issued by the server. This contains a set of random bytes
 /// which should always be kept private. This type can be serialised or
 /// deserialised by serde as required for your storage needs.
@@ -260,7 +263,7 @@ pub(crate) struct CollectedClientDataRaw {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenBinding {
     pub status: String,
-    pub id:Option<String>
+    pub id: Option<String>,
 }
 
 // Should this be tryfrom

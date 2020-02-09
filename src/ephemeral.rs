@@ -2,21 +2,15 @@
 //! This stores all challenges and credentials in memory - IE they are lost on
 //! service restart. It's only really useful for demo-sites, testing and as an
 //! example/reference implementation of the WebauthnConfig trait.
-use lru::LruCache;
-use std::collections::BTreeMap;
 
 use crate::proto::{Challenge, Credential, CredentialID, UserId};
 use crate::WebauthnConfig;
-
-const CHALLENGE_CACHE_SIZE: usize = 256;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider
 /// This stores all challenges and credentials in memory - IE they are lost on
 /// service restart. It's only really useful for demo-sites, testing and as an
 /// example/reference implementation of the WebauthnConfig trait.
 pub struct WebauthnEphemeralConfig {
-    chals: LruCache<UserId, Challenge>,
-    creds: BTreeMap<UserId, BTreeMap<CredentialID, Credential>>,
     rp_name: String,
     rp_id: String,
     rp_origin: String,
@@ -24,8 +18,11 @@ pub struct WebauthnEphemeralConfig {
 
 impl std::fmt::Debug for WebauthnEphemeralConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "WebauthnEphemeralConfig{{ chals -> {{???}}, creds: {:?}, rp_name: {:?}, rp_id: {:?}, rp_origin: {:?} }}",
-            self.creds, self.rp_name, self.rp_id, self.rp_origin)
+        write!(
+            f,
+            "WebauthnEphemeralConfig{{ rp_name: {:?}, rp_id: {:?}, rp_origin: {:?} }}",
+            self.rp_name, self.rp_id, self.rp_origin
+        )
     }
 }
 
@@ -40,6 +37,12 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
         self.rp_id.clone()
     }
 
+    /// Retrieve the relying party origin. See the trait documentation for more.
+    fn get_origin(&self) -> &String {
+        &self.rp_origin
+    }
+
+    /*
     /// Persist a challenge associated to a userId. See the trait documentation for more.
     fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()> {
         self.chals.put(userid, challenge);
@@ -125,11 +128,7 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
             None => None,
         }
     }
-
-    /// Retrieve the relying party origin. See the trait documentation for more.
-    fn get_origin(&self) -> &String {
-        &self.rp_origin
-    }
+    */
 }
 
 impl WebauthnEphemeralConfig {
@@ -138,8 +137,6 @@ impl WebauthnEphemeralConfig {
     /// name, origin and id.
     pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
         WebauthnEphemeralConfig {
-            chals: LruCache::new(CHALLENGE_CACHE_SIZE),
-            creds: BTreeMap::new(),
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
             rp_origin: rp_origin.to_string(),

@@ -97,6 +97,8 @@ pub enum WebauthnError {
     CredentialPossibleCompromise,
     /// The credential counter could not be updated.
     CredentialCounterUpdateFailure,
+    /// The provided call back failed to allow reporting the credential failure.
+    CredentialCompromiseReportFailure,
 
     /// The trust path could not be established.
     TrustFailure,

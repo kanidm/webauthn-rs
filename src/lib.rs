@@ -47,9 +47,23 @@ use crate::crypto::{compute_sha256, COSEContentType};
 use crate::error::WebauthnError;
 use crate::proto::{
     AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge,
-    CreationChallengeResponse, Credential, JSONExtensions, PubKeyCredParams, PublicKeyCredential,
-    RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy,
+    Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams,
+    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
+    UserVerificationPolicy,
 };
+
+pub struct RegistrationState {
+    policy: UserVerificationPolicy,
+    chal: Challenge,
+}
+
+pub struct AuthenticationState {
+    // Allowed credentials?
+    username: UserId,
+    creds: Vec<Credential>,
+    policy: UserVerificationPolicy,
+    chal: Challenge,
+}
 
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
@@ -120,12 +134,14 @@ impl<T> Webauthn<T> {
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_register(
         &mut self,
-        username: UserId,
-    ) -> Result<CreationChallengeResponse, WebauthnError>
+        username: &UserId,
+        policy: Option<UserVerificationPolicy>,
+    ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
         T: WebauthnConfig,
     {
-        let policy = self.config.policy_user_verification(&username);
+        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
+        // let policy = self.config.policy_user_verification(&username);
         let chal = self.generate_challenge();
         let c = CreationChallengeResponse::new(
             self.config.get_relying_party_name(),
@@ -135,13 +151,23 @@ impl<T> Webauthn<T> {
             chal.to_string(),
             self.pkcp.clone(),
             self.config.get_authenticator_timeout(),
-            policy,
+            policy.clone(),
         );
 
+        let wr = RegistrationState {
+            policy: policy,
+            chal: chal,
+        };
+
+        // This should have an opaque type of username + chal + policy
+        /*
         self.config
             .persist_challenge(username, chal)
             .map_err(|_| WebauthnError::ChallengePersistenceError)?;
+        // Needs to be Ok((opaque, json))
         Ok(c)
+        */
+        Ok((c, wr))
     }
 
     /// Process a credential registration response. This is the output of
@@ -152,21 +178,22 @@ impl<T> Webauthn<T> {
     /// At this time we deviate from the standard and base64 some fields, but we are
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn register_credential(
-        &mut self,
+        &self,
         reg: RegisterPublicKeyCredential,
-        username: UserId,
-    ) -> Result<(), WebauthnError>
+        state: RegistrationState,
+        does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
+    ) -> Result<Credential, WebauthnError>
     where
         T: WebauthnConfig,
     {
         // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
         // get the challenge (it's username associated)
-        let chal = self
-            .config
-            .retrieve_challenge(&username)
-            .ok_or(WebauthnError::ChallengeNotFound)?;
+        // Policy should also come from the chal
 
-        let policy = self.config.policy_user_verification(&username);
+        let RegistrationState { policy, chal } = state;
+
+        // TODO: check the req username matches? I think it's not possible, the caller needs to
+        // create the linkage between the username and the state.
 
         // send to register_credential_internal
         let credential = self.register_credential_internal(reg, policy, chal)?;
@@ -176,23 +203,25 @@ impl<T> Webauthn<T> {
         // Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration,
         // e.g. while deleting the older registration.
 
-        let cred_exist_result = self
-            .config
-            .does_exist_credential(&username, &credential)
+        let cred_exist_result = does_exist_fn(&credential.cred_id)
             .map_err(|_| WebauthnError::CredentialExistCheckError)?;
 
         if cred_exist_result {
             return Err(WebauthnError::CredentialAlreadyExists);
         }
 
+        /*
         // match res, if good, save cred.
         self.config
             .persist_credential(username, credential)
             .map_err(|_| WebauthnError::CredentialPersistenceError)
+        */
+
+        Ok(credential)
     }
 
     pub(crate) fn register_credential_internal(
-        &mut self,
+        &self,
         reg: RegisterPublicKeyCredential,
         policy: UserVerificationPolicy,
         chal: Challenge,
@@ -382,7 +411,7 @@ impl<T> Webauthn<T> {
         // Already returned above if trust failed.
 
         // So we return the credential here, and the caller persists it.
-        // We turn this into  a"helper" and serialisable credential structure that
+        // We turn this into a "helper" and serialisable credential structure that
         // people can use a bit nicer.
         Ok(credential)
     }
@@ -519,17 +548,27 @@ impl<T> Webauthn<T> {
     pub fn authenticate_credential(
         &mut self,
         rsp: PublicKeyCredential,
-        username: String,
-    ) -> Result<(), WebauthnError>
+        state: AuthenticationState,
+    ) -> Result<Option<(CredentialID, Counter)>, WebauthnError>
     where
         T: WebauthnConfig,
     {
         // https://w3c.github.io/webauthn/#verifying-assertion
         // Lookup challenge
+
+        let AuthenticationState {
+            username,
+            creds,
+            policy,
+            chal,
+        } = state;
+
+        /*
         let chal = self
             .config
             .retrieve_challenge(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
+        */
 
         // If the allowCredentials option was given when this authentication ceremony was initiated,
         // verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
@@ -551,10 +590,14 @@ impl<T> Webauthn<T> {
             //      verify that the identified user is the owner of credentialSource. If
             //      credential.response.userHandle is present, let userHandle be its value. Verify that
             //      userHandle also maps to the same user.
+
+            /*
             let creds = self
                 .config
                 .retrieve_credentials(&username)
                 .ok_or(WebauthnError::CredentialRetrievalError)?;
+            */
+
             //  If the user was not identified before the authentication ceremony was initiated,
             //      verify that credential.response.userHandle is present, and that the user identified
             //      by this value is the owner of credentialSource.
@@ -575,7 +618,7 @@ impl<T> Webauthn<T> {
             cred_opt.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let policy = self.config.policy_user_verification(&username);
+        // let policy = self.config.policy_user_verification(&username);
 
         let counter = self.verify_credential_internal(rsp, policy, chal, &cred)?;
 
@@ -587,9 +630,11 @@ impl<T> Webauthn<T> {
                 // greater than the signature counter value stored in conjunction with credential’s id attribute.
                 //       Update the stored signature counter value, associated with credential’s id attribute,
                 //       to be the value of authData.signCount.
+                /*
                 self.config
                     .credential_update_counter(&username, &cred, counter)
-                    .map_err(|_| WebauthnError::CredentialCounterUpdateFailure)
+                */
+                Ok(Some((cred.cred_id.clone(), counter)))
             // If all the above steps are successful, continue with the authentication ceremony as
             // appropriate. Otherwise, fail the authentication ceremony.
             } else {
@@ -599,15 +644,12 @@ impl<T> Webauthn<T> {
                 //      Parties should incorporate this information into their risk scoring. Whether the
                 //      Relying Party updates the stored signature counter value in this case, or not,
                 //      or fails the authentication ceremony or not, is Relying Party-specific.
-                self.config
-                    .credential_report_invalid_counter(&username, &cred, counter)
-                    .map_err(|_| WebauthnError::CredentialCounterUpdateFailure)?;
                 Err(WebauthnError::CredentialPossibleCompromise)
             }
         } else {
             // If all the above steps are successful, continue with the authentication ceremony as
             // appropriate. Otherwise, fail the authentication ceremony.
-            Ok(())
+            Ok(None)
         }
     }
 
@@ -619,31 +661,27 @@ impl<T> Webauthn<T> {
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_authenticate(
         &mut self,
-        username: UserId,
-    ) -> Result<RequestChallengeResponse, WebauthnError>
+        username: &UserId,
+        creds: Vec<Credential>,
+        policy: Option<UserVerificationPolicy>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
     {
         let chal = self.generate_challenge();
 
+        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
+
         // Get the user's existing creds if any.
-
-        let uc = self.config.retrieve_credentials(&username);
-
         // println!("login_challenge: {:?}", uc);
 
-        let ac = match uc {
-            Some(creds) => creds
-                .iter()
-                .map(|cred| AllowCredentials {
-                    type_: "public-key".to_string(),
-                    id: base64::encode(cred.cred_id.as_slice()),
-                })
-                .collect(),
-            None => Vec::new(),
-        };
-
-        let policy = self.config.policy_user_verification(&username);
+        let ac = creds
+            .iter()
+            .map(|cred| AllowCredentials {
+                type_: "public-key".to_string(),
+                id: base64::encode(cred.cred_id.as_slice()),
+            })
+            .collect();
 
         // Store the chal associated to the user.
         // Now put that into the correct challenge format
@@ -652,12 +690,20 @@ impl<T> Webauthn<T> {
             self.config.get_authenticator_timeout(),
             self.config.get_relying_party_id(),
             ac,
-            policy,
+            policy.clone(),
         );
+        let st = AuthenticationState {
+            username: username.clone(),
+            creds: creds,
+            policy: policy,
+            chal: chal,
+        };
+        /*
         self.config
             .persist_challenge(username, chal)
             .map_err(|_| WebauthnError::ChallengePersistenceError)?;
-        Ok(r)
+        */
+        Ok((r, st))
     }
 }
 
@@ -695,47 +741,58 @@ pub trait WebauthnConfig {
     ///
     /// The UserId and Challenge are both serialisable with serde for storage in a database or
     /// structure of some kind.
-    fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()>;
+    // CLEANUP
+    // fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()>;
 
     /// Given a UserId, return the challenge if one is present. If not challenge is found return
     /// None (which will cause the client operation to fail with correct error messages). It's important
     /// to note here the use of `Option<Challenge>` - you should remove the Challenge from the
     /// datastore as part of this request to prevent challenge re-use or bruteforce attacks from
     /// occuring.
-    fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge>;
+    // CLEANUP
+    // fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge>;
 
     /// Given a userId and a Credential, determine if this credential already exists and is
     /// registered to the user. It may be of benefit to determine if the credential belongs to
     /// *any* other user in your system to prevent credential re-use.
-    fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()>;
+    // CLEANUP
+    // fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()>;
 
     /// On a sucessful registration, persist this Credential associated to UserId.
-    fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()>;
+    // CLEANUP
+    // fn persist_credential(&mut self, userid: UserId, credential: Credential) -> Result<(), ()>;
 
     /// Given a userId, retrieve the set of all Credentials that the UserId has associated.
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<&Credential>>;
+    // CLEANUP
+    // fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<&Credential>>;
 
     /// Given a userId and Credential, update it's authentication counter to "counter". This
     /// helps to minimise threats from replay or reuse attacks by ensuring the counter is always
     /// advancing.
+    // CLEANUP
+    /*
     fn credential_update_counter(
         &mut self,
         userid: &UserId,
         cred: &Credential,
         counter: u32,
     ) -> Result<(), ()>;
+    */
 
     /// Given a userId and Credential, if the counter value has gone backwards or is replayed
     /// this callback is called to allow reporting of a possible compromise of the Credential.
     /// You should take site appropriate action, ranging from audit-logging of the possible
     /// compromise, disabling of the Credential, disabling the account, or other appropriate
     /// actions.
+    // CLEANUP
+    /*
     fn credential_report_invalid_counter(
         &mut self,
         userid: &UserId,
         cred: &Credential,
         counter: u32,
     ) -> Result<(), ()>;
+    */
 
     /// Get the list of valid credential algorthims that this servie will accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
@@ -797,21 +854,24 @@ pub trait WebauthnConfig {
         }
     }
 
-    /// A callback allowing you to specify a per-user credential verification
-    /// policy. Given the user and credential id, determine if the user verification
-    /// policy for this operation. This can be used to ensure that users with certain
-    /// security levels must have verified credentials, while others merely need any
-    /// credential. This also applies to registration. For more details, see UserVerificationPolicy
-    ///
-    /// Note this is not per credential, because as a policy it only makes sense per user.
-    /// Changing this value for a user may cause existing credentials to fail as they may
-    /// not support verification - arguably a good thing if their requirements have become
-    /// stricter.
-    ///
-    /// The default policy returns "preffered" for all credentials.
+    // A callback allowing you to specify a per-user credential verification
+    // policy. Given the user and credential id, determine if the user verification
+    // policy for this operation. This can be used to ensure that users with certain
+    // security levels must have verified credentials, while others merely need any
+    // credential. This also applies to registration. For more details, see UserVerificationPolicy
+    //
+    // Note this is not per credential, because as a policy it only makes sense per user.
+    // Changing this value for a user may cause existing credentials to fail as they may
+    // not support verification - arguably a good thing if their requirements have become
+    // stricter.
+    //
+    // The default policy returns "preffered" for all credentials.
+    // CLEANUP
+    /*
     fn policy_user_verification(&self, _userid: &UserId) -> UserVerificationPolicy {
         UserVerificationPolicy::Preferred
     }
+    */
 }
 
 #[cfg(test)]

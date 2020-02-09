@@ -2,13 +2,21 @@ use actix::prelude::*;
 use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::error::WebauthnError;
 use webauthn_rs::proto::{
-    CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
-    RequestChallengeResponse,
+    CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
+    RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
 };
-use webauthn_rs::Webauthn;
+use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
+
+use lru::LruCache;
+use std::collections::BTreeMap;
+
+const CHALLENGE_CACHE_SIZE: usize = 256;
 
 pub struct WebauthnActor {
     wan: Webauthn<WebauthnEphemeralConfig>,
+    reg_chals: LruCache<UserId, RegistrationState>,
+    auth_chals: LruCache<UserId, AuthenticationState>,
+    creds: BTreeMap<UserId, BTreeMap<CredentialID, Credential>>,
 }
 
 impl Actor for WebauthnActor {
@@ -19,6 +27,9 @@ impl WebauthnActor {
     pub fn new(config: WebauthnEphemeralConfig) -> Self {
         WebauthnActor {
             wan: Webauthn::new(config),
+            reg_chals: LruCache::new(CHALLENGE_CACHE_SIZE),
+            auth_chals: LruCache::new(CHALLENGE_CACHE_SIZE),
+            creds: BTreeMap::new(),
         }
     }
 }
@@ -37,7 +48,9 @@ impl Handler<ChallengeRegister> for WebauthnActor {
 
     fn handle(&mut self, msg: ChallengeRegister, _: &mut Self::Context) -> Self::Result {
         debug!("handle ChallengeRegister -> {:?}", msg);
-        self.wan.generate_challenge_register(msg.username)
+        let (ccr, rs) = self.wan.generate_challenge_register(&msg.username, None)?;
+        self.reg_chals.put(msg.username, rs);
+        Ok(ccr)
     }
 }
 
@@ -55,7 +68,18 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
 
     fn handle(&mut self, msg: ChallengeAuthenticate, _: &mut Self::Context) -> Self::Result {
         debug!("handle ChallengeAuthenticate -> {:?}", msg);
-        self.wan.generate_challenge_authenticate(msg.username)
+
+        let creds = match self.creds.get(&msg.username) {
+            Some(creds) => Some(creds.iter().map(|(_, v)| v.clone()).collect()),
+            None => None,
+        }
+        .ok_or(WebauthnError::CredentialRetrievalError)?;
+
+        let (acr, st) = self
+            .wan
+            .generate_challenge_authenticate(&msg.username, creds, None)?;
+        self.auth_chals.put(msg.username, st);
+        Ok(acr)
     }
 }
 
@@ -74,7 +98,33 @@ impl Handler<Register> for WebauthnActor {
 
     fn handle(&mut self, msg: Register, _: &mut Self::Context) -> Self::Result {
         debug!("handle Register -> {:?}", msg);
-        self.wan.register_credential(msg.reg, msg.username)
+
+        let Register { username, reg } = msg;
+
+        let rs = self
+            .reg_chals
+            .pop(&username)
+            .ok_or(WebauthnError::ChallengeNotFound)?;
+        self.wan
+            .register_credential(reg, rs, |cred_id| match self.creds.get(&username) {
+                Some(ucreds) => Ok(ucreds.contains_key(cred_id)),
+                None => Ok(false),
+            })
+            .map(|cred| {
+                match self.creds.get_mut(&username) {
+                    Some(v) => {
+                        let cred_id = cred.cred_id.clone();
+                        v.insert(cred_id, cred);
+                    }
+                    None => {
+                        let mut t = BTreeMap::new();
+                        let credential_id = cred.cred_id.clone();
+                        t.insert(credential_id, cred);
+                        self.creds.insert(username, t);
+                    }
+                };
+                ()
+            })
     }
 }
 
@@ -93,6 +143,27 @@ impl Handler<Authenticate> for WebauthnActor {
 
     fn handle(&mut self, msg: Authenticate, _: &mut Self::Context) -> Self::Result {
         debug!("handle Authenticate -> {:?}", msg);
-        self.wan.authenticate_credential(msg.lgn, msg.username)
+        let Authenticate { lgn, username } = msg;
+        let st = self
+            .auth_chals
+            .pop(&username)
+            .ok_or(WebauthnError::ChallengeNotFound)?;
+        self.wan.authenticate_credential(lgn, st).map(|r| {
+            r.map(|(cred_id, counter)| {
+                match self.creds.get_mut(&username) {
+                    Some(v) => {
+                        let mut c = v.remove(&cred_id).unwrap();
+                        c.counter = counter;
+                        v.insert(cred_id.clone(), c);
+                        Ok(())
+                    }
+                    None => {
+                        // Invalid state but not end of world ...
+                        Err(())
+                    }
+                }
+            });
+            ()
+        })
     }
 }
