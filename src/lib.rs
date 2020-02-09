@@ -788,8 +788,8 @@ mod tests {
     use crate::crypto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
     use crate::ephemeral::WebauthnEphemeralConfig;
     use crate::proto::{
-        Challenge, Credential, PublicKeyCredential, RegisterPublicKeyCredential,
-        UserVerificationPolicy, AuthenticatorAttestationResponseRaw,
+        AuthenticatorAttestationResponseRaw, Challenge, Credential, PublicKeyCredential,
+        RegisterPublicKeyCredential, UserVerificationPolicy,
     };
     use crate::Webauthn;
 
@@ -955,7 +955,6 @@ mod tests {
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
-
 
     #[test]
     fn test_registration_ipados_5ci() {

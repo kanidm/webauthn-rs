@@ -49,7 +49,11 @@ pub enum AttestationType {
     Self_(Credential),
     /// The credential is authenticated using a CA, and may provide a
     /// ca chain to validate to it's root.
-    AttCa(Credential, crypto::X509PublicKey, Vec<crypto::X509PublicKey>),
+    AttCa(
+        Credential,
+        crypto::X509PublicKey,
+        Vec<crypto::X509PublicKey>,
+    ),
     /// Unimplemented
     ECDAA,
     /// No Attestation type was provided with this Credential. If in doubt
@@ -101,16 +105,17 @@ pub(crate) fn verify_packed_attestation(
             // encoded in X.509 format. The attestation certificate attestnCert MUST be the first
             // element in the array.
             // x5c: [ attestnCert: bytes, * (caCert: bytes) ]
-            let x5c_array_ref = x5c.as_array()
+            let x5c_array_ref = x5c
+                .as_array()
                 .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
-            let arr_x509: Result<Vec<_>, _> = x5c_array_ref.iter()
+            let arr_x509: Result<Vec<_>, _> = x5c_array_ref
+                .iter()
                 .map(|values| {
-                    values.as_bytes()
+                    values
+                        .as_bytes()
                         .ok_or(WebauthnError::AttestationStatementX5CInvalid)
-                        .and_then(|b|
-                            crypto::X509PublicKey::try_from(b.as_slice())
-                        )
+                        .and_then(|b| crypto::X509PublicKey::try_from(b.as_slice()))
                 })
                 .collect();
 
@@ -153,7 +158,7 @@ pub(crate) fn verify_packed_attestation(
 
             if let Some(aaguid) = attestn_cert.get_fido_gen_ce_aaguid() {
                 if acd.aaguid != aaguid {
-                    return Err(WebauthnError::AttestationCertificateAAGUIDMismatch)
+                    return Err(WebauthnError::AttestationCertificateAAGUIDMismatch);
                 }
             }
 
@@ -165,12 +170,8 @@ pub(crate) fn verify_packed_attestation(
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
             Ok(AttestationType::Basic(
-                Credential::new(
-                    acd,
-                    credential_public_key,
-                    counter,
-                ),
-                attestn_cert
+                Credential::new(acd, credential_public_key, counter),
+                attestn_cert,
             ))
         }
         (None, Some(_ecdaa_key_id)) => {
