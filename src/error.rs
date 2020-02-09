@@ -56,6 +56,9 @@ pub enum WebauthnError {
     /// The attestation Certificates OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not
     /// match the aaguid of the token.
     AttestationCertificateAAGUIDMismatch,
+    /// The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
+    /// are not met by this attestation certificate.
+    AttestationCertificateRequirementsNotMet,
 
     /// The X5C trust root is not a valid algorithm for signing.
     CertificatePublicKeyInvalid,

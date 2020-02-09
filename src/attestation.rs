@@ -93,10 +93,9 @@ pub(crate) fn verify_packed_attestation(
         att_stmt_map.get(ecdaa_key_id_key),
     ) {
         (Some(x5c), _) => {
+            println!("x5c");
             let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
-            println!("_x5c");
-            println!("{:?}", x5c);
 
             // The elements of this array contain attestnCert and its certificate chain, each
             // encoded in X.509 format. The attestation certificate attestnCert MUST be the first
