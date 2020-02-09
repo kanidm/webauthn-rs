@@ -107,7 +107,8 @@ impl Handler<Register> for WebauthnActor {
             .reg_chals
             .pop(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
-        let r = self.wan
+        let r = self
+            .wan
             .register_credential(reg, rs, |cred_id| match self.creds.get(&username) {
                 Some(ucreds) => Ok(ucreds.contains_key(cred_id)),
                 None => Ok(false),

@@ -111,31 +111,41 @@ impl X509PublicKey {
         //  A UTF8String of the vendor’s choosing
         let subject_name_ref = self.pubk.subject_name();
 
-        let subject_c = subject_name_ref.entries_by_nid(nid::Nid::from_raw(14)).into_iter().take(1).next();
-        let subject_o = subject_name_ref.entries_by_nid(nid::Nid::from_raw(17)).into_iter().take(1).next();
-        let subject_ou = subject_name_ref.entries_by_nid(nid::Nid::from_raw(18)).into_iter().take(1).next();
-        let subject_cn = subject_name_ref.entries_by_nid(nid::Nid::from_raw(13)).into_iter().take(1).next();
+        let subject_c = subject_name_ref
+            .entries_by_nid(nid::Nid::from_raw(14))
+            .into_iter()
+            .take(1)
+            .next();
+        let subject_o = subject_name_ref
+            .entries_by_nid(nid::Nid::from_raw(17))
+            .into_iter()
+            .take(1)
+            .next();
+        let subject_ou = subject_name_ref
+            .entries_by_nid(nid::Nid::from_raw(18))
+            .into_iter()
+            .take(1)
+            .next();
+        let subject_cn = subject_name_ref
+            .entries_by_nid(nid::Nid::from_raw(13))
+            .into_iter()
+            .take(1)
+            .next();
 
         if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
-            return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
         }
 
         match subject_ou {
-            Some(ou) => {
-                match ou.data().as_utf8() {
-                    Ok(ou_d) => {
-                        if ou_d.to_string() != "Authenticator Attestation" {
-                            return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
-                        }
-                    }
-                    Err(_) => {
-                        return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+            Some(ou) => match ou.data().as_utf8() {
+                Ok(ou_d) => {
+                    if ou_d.to_string() != "Authenticator Attestation" {
+                        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
                     }
                 }
-            }
-            None => {
-                return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
-            }
+                Err(_) => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+            },
+            None => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
         }
 
         // If the related attestation root certificate is used for multiple authenticator models,
