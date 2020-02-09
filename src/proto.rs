@@ -12,6 +12,12 @@ use crate::error::*;
 /// Representation of a UserId. This is currently a type alias to "String".
 pub type UserId = String;
 
+/// Representation of a device counter
+pub type Counter = u32;
+
+/// Representation of an AAGUID
+pub type Aaguid = Vec<u8>;
+
 /// A challenge issued by the server. This contains a set of random bytes
 /// which should always be kept private. This type can be serialised or
 /// deserialised by serde as required for your storage needs.
@@ -260,7 +266,7 @@ pub(crate) struct CollectedClientDataRaw {
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenBinding {
     pub status: String,
-    pub id:Option<String>
+    pub id: Option<String>,
 }
 
 // Should this be tryfrom
@@ -288,7 +294,7 @@ impl TryFrom<&Vec<u8>> for CollectedClientData {
 
 #[derive(Debug)]
 pub(crate) struct AttestedCredentialData {
-    pub(crate) aaguid: Vec<u8>,
+    pub(crate) aaguid: Aaguid,
     pub(crate) credential_id: CredentialID,
     pub(crate) credential_pk: serde_cbor::Value,
 }
@@ -465,11 +471,11 @@ impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationR
 pub struct RegisterPublicKeyCredential {
     // See standard PublicKeyCredential and Credential
     // https://w3c.github.io/webauthn/#iface-pkcredential
-    id: String,
-    rawId: String,
+    pub(crate) id: String,
+    pub(crate) rawId: String,
     pub(crate) response: AuthenticatorAttestationResponseRaw,
     #[serde(rename = "type")]
-    type_: String,
+    pub(crate) type_: String,
     // discovery
     // identifier
     // clientExtensionsResults

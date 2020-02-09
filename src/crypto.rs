@@ -10,6 +10,7 @@ use std::convert::TryFrom;
 
 // use super::constants::*;
 use super::error::*;
+use crate::proto::Aaguid;
 // use super::proto::*;
 
 // Why OpenSSL over another rust crate?
@@ -88,6 +89,70 @@ impl X509PublicKey {
         verifier
             .verify(signature.as_slice())
             .map_err(|e| WebauthnError::OpenSSLError(e))
+    }
+
+    pub(crate) fn assert_packed_attest_req(&self) -> Result<(), WebauthnError> {
+        // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
+        // Statement Certificate Requirements.
+        // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
+
+        // The attestation certificate MUST have the following fields/extensions:
+        // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
+
+        // Subject field MUST be set to:
+        //
+        // Subject-C
+        //  ISO 3166 code specifying the country where the Authenticator vendor is incorporated (PrintableString)
+        // Subject-O
+        //  Legal name of the Authenticator vendor (UTF8String)
+        // Subject-OU
+        //  Literal string “Authenticator Attestation” (UTF8String)
+        // Subject-CN
+        //  A UTF8String of the vendor’s choosing
+        let subject_name_ref = self.pubk.subject_name();
+
+        let subject_c = subject_name_ref.entries_by_nid(nid::Nid::from_raw(14)).into_iter().take(1).next();
+        let subject_o = subject_name_ref.entries_by_nid(nid::Nid::from_raw(17)).into_iter().take(1).next();
+        let subject_ou = subject_name_ref.entries_by_nid(nid::Nid::from_raw(18)).into_iter().take(1).next();
+        let subject_cn = subject_name_ref.entries_by_nid(nid::Nid::from_raw(13)).into_iter().take(1).next();
+
+        if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
+            return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+        }
+
+        match subject_ou {
+            Some(ou) => {
+                match ou.data().as_utf8() {
+                    Ok(ou_d) => {
+                        if ou_d.to_string() != "Authenticator Attestation" {
+                            return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+                        }
+                    }
+                    Err(_) => {
+                        return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+                    }
+                }
+            }
+            None => {
+                return Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+            }
+        }
+
+        // If the related attestation root certificate is used for multiple authenticator models,
+        // the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
+        // containing the AAGUID as a 16-byte OCTET STRING. The extension MUST NOT be marked as critical.
+
+        // The Basic Constraints extension MUST have the CA component set to false.
+
+        // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL
+        // Distribution Point extension [RFC5280] are both OPTIONAL as the status of many
+        // attestation certificates is available through authenticator metadata services. See, for
+        // example, the FIDO Metadata Service [FIDOMetadataService].
+        Ok(())
+    }
+
+    pub(crate) fn get_fido_gen_ce_aaguid(&self) -> Option<Aaguid> {
+        None
     }
 }
 

@@ -1,4 +1,4 @@
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
+use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslMethod};
 // use openssl::ec::{EcKey, EcGroup};
 use openssl::asn1::Asn1Time;
 use openssl::bn::{BigNum, MsbOption};
