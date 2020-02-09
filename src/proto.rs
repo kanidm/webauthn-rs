@@ -468,11 +468,11 @@ impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationR
 pub struct RegisterPublicKeyCredential {
     // See standard PublicKeyCredential and Credential
     // https://w3c.github.io/webauthn/#iface-pkcredential
-    id: String,
-    rawId: String,
+    pub(crate) id: String,
+    pub(crate) rawId: String,
     pub(crate) response: AuthenticatorAttestationResponseRaw,
     #[serde(rename = "type")]
-    type_: String,
+    pub(crate) type_: String,
     // discovery
     // identifier
     // clientExtensionsResults

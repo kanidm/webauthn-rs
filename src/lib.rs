@@ -17,7 +17,7 @@
 
 extern crate base64;
 extern crate lru;
-// #[macro_use]
+#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate serde_derive;
@@ -789,7 +789,7 @@ mod tests {
     use crate::ephemeral::WebauthnEphemeralConfig;
     use crate::proto::{
         Challenge, Credential, PublicKeyCredential, RegisterPublicKeyCredential,
-        UserVerificationPolicy,
+        UserVerificationPolicy, AuthenticatorAttestationResponseRaw,
     };
     use crate::Webauthn;
 
@@ -954,5 +954,39 @@ mod tests {
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
+    }
+
+
+    #[test]
+    fn test_registration_ipados_5ci() {
+        let wan_c = WebauthnEphemeralConfig::new(
+            "https://172.20.0.141:8443/auth",
+            "https://172.20.0.141:8443",
+            "172.20.0.141",
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let chal = Challenge(
+            base64::decode_mode(
+                "tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=",
+                base64::Base64Mode::Standard,
+            )
+            .unwrap(),
+        );
+
+        let rsp_d = RegisterPublicKeyCredential {
+            id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),
+            rawId: "uZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzQ==".to_string(),
+            response: AuthenticatorAttestationResponseRaw {
+                attestationObject: "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIhAKAZODmj+uF5qXsDY2NFol3apRjld544KRUpHzwfk5cbAiBnp2gHmamr2xr46ilQuhzIR9BwMlwtxWd6IT2QEYeo7WN4NWOBWQLBMIICvTCCAaWgAwIBAgIEK/F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt+pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V/62aS5+1gK3rr+Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn/Cd+S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE+aFa4kTe6NQQfi8+yiZrQ8N+JL4f7gNdQPSrH+r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa+5cqNF4G1fPCofvw9W4lKnObuPakr0x/icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2+0m1f1mwQS8yRD5+/aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ/mXnUQ6TTsgRqPvPXgQPbSyGMf2z/DIPbQqCD/Bmc4dj9o6LozheBdDtcZCAjSPTAd/uiaGF1dGhEYXRhWMS3tF916xTswLEZrAO3fy8EzMmvvR8f5wWM7F5+4KJ0ikEAAAACxe9V/62aS5+1gK3rr+Am0ABAuZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzaUBAgMmIAEhWCDCfn9t/BeDFfwG32Ms/owb5hFeBYUcaCmQRauVoRrI8yJYII97t5wYshX4dZ+iRas0vPwaOwYvZ1wTOnVn+QDbCF/E".to_string(),
+                clientDataJSON: "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwib3JpZ2luIjoiaHR0cHM6XC9cLzE3Mi4yMC4wLjE0MTo4NDQzIiwiY2hhbGxlbmdlIjoidHZSMW0tZF9vaFhyd1Z4UWpNZ0g4S25vdkhaN0JSV2habURONFRWTXBOVSJ9".to_string(),
+            },
+            type_: "public-key".to_string(),
+        };
+
+        let result =
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
+        println!("{:?}", result);
+        assert!(result.is_ok());
     }
 }

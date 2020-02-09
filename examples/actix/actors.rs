@@ -50,6 +50,7 @@ impl Handler<ChallengeRegister> for WebauthnActor {
         debug!("handle ChallengeRegister -> {:?}", msg);
         let (ccr, rs) = self.wan.generate_challenge_register(&msg.username, None)?;
         self.reg_chals.put(msg.username, rs);
+        debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
     }
 }
@@ -79,6 +80,7 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
             .wan
             .generate_challenge_authenticate(&msg.username, creds, None)?;
         self.auth_chals.put(msg.username, st);
+        debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok(acr)
     }
 }
@@ -105,7 +107,7 @@ impl Handler<Register> for WebauthnActor {
             .reg_chals
             .pop(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
-        self.wan
+        let r = self.wan
             .register_credential(reg, rs, |cred_id| match self.creds.get(&username) {
                 Some(ucreds) => Ok(ucreds.contains_key(cred_id)),
                 None => Ok(false),
@@ -123,8 +125,11 @@ impl Handler<Register> for WebauthnActor {
                         self.creds.insert(username, t);
                     }
                 };
+                debug!("{:?}", self.creds);
                 ()
-            })
+            });
+        debug!("complete Register -> {:?}", r);
+        r
     }
 }
 
@@ -148,7 +153,7 @@ impl Handler<Authenticate> for WebauthnActor {
             .auth_chals
             .pop(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
-        self.wan.authenticate_credential(lgn, st).map(|r| {
+        let r = self.wan.authenticate_credential(lgn, st).map(|r| {
             r.map(|(cred_id, counter)| {
                 match self.creds.get_mut(&username) {
                     Some(v) => {
@@ -164,6 +169,8 @@ impl Handler<Authenticate> for WebauthnActor {
                 }
             });
             ()
-        })
+        });
+        debug!("complete Authenticate -> {:?}", r);
+        r
     }
 }

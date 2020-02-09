@@ -117,8 +117,8 @@ fn challenge_register(
         .and_then(|res| {
             match res {
                 Ok(chal) => Ok(HttpResponse::Ok().json(chal)),
-                Err(_) => {
-                    // TODO: Log this error
+                Err(e) => {
+                    debug!("challenge_register -> {:?}", e);
                     Ok(HttpResponse::InternalServerError().json(()))
                 }
             }
@@ -137,8 +137,8 @@ fn challenge_login(
         .and_then(|res| {
             match res {
                 Ok(chal) => Ok(HttpResponse::Ok().json(chal)),
-                Err(_) => {
-                    // TODO: Log this error
+                Err(e) => {
+                    debug!("challenge_login -> {:?}", e);
                     Ok(HttpResponse::InternalServerError().json(()))
                 }
             }
@@ -162,8 +162,8 @@ fn register(
         .and_then(|res| {
             match res {
                 Ok(_) => Ok(HttpResponse::Ok().json(())),
-                Err(_) => {
-                    // TODO: Log this error
+                Err(e) => {
+                    debug!("register -> {:?}", e);
                     Ok(HttpResponse::InternalServerError().json(()))
                 }
             }
@@ -200,8 +200,9 @@ fn login(
                         }
                     }
                 }
-                Err(_) => {
+                Err(e) => {
                     // TODO: Log this error
+                    debug!("login -> {:?}", e);
                     Ok(HttpResponse::InternalServerError().json(()))
                 }
             }
