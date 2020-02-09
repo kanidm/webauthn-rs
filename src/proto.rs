@@ -15,6 +15,9 @@ pub type UserId = String;
 /// Representation of a device counter
 pub type Counter = u32;
 
+/// Representation of an AAGUID
+pub type Aaguid = Vec<u8>;
+
 /// A challenge issued by the server. This contains a set of random bytes
 /// which should always be kept private. This type can be serialised or
 /// deserialised by serde as required for your storage needs.
@@ -291,7 +294,7 @@ impl TryFrom<&Vec<u8>> for CollectedClientData {
 
 #[derive(Debug)]
 pub(crate) struct AttestedCredentialData {
-    pub(crate) aaguid: Vec<u8>,
+    pub(crate) aaguid: Aaguid,
     pub(crate) credential_id: CredentialID,
     pub(crate) credential_pk: serde_cbor::Value,
 }

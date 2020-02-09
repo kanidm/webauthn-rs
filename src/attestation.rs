@@ -47,8 +47,9 @@ pub enum AttestationType {
     /// The credential is authenticated using surrogate basic attestation
     /// it uses the credential private key to create the attestation signature
     Self_(Credential),
-    /// Unimplemented
-    AttCa,
+    /// The credential is authenticated using a CA, and may provide a
+    /// ca chain to validate to it's root.
+    AttCa(Credential, crypto::X509PublicKey, Vec<crypto::X509PublicKey>),
     /// Unimplemented
     ECDAA,
     /// No Attestation type was provided with this Credential. If in doubt
@@ -91,11 +92,87 @@ pub(crate) fn verify_packed_attestation(
         att_stmt_map.get(x5c_key),
         att_stmt_map.get(ecdaa_key_id_key),
     ) {
-        (Some(_x5c), _) => {
+        (Some(x5c), _) => {
+            let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
-            // TODO: Perform the appropriate verification procedure
             println!("_x5c");
-            Err(WebauthnError::AttestationNotSupported)
+            println!("{:?}", x5c);
+
+            // The elements of this array contain attestnCert and its certificate chain, each
+            // encoded in X.509 format. The attestation certificate attestnCert MUST be the first
+            // element in the array.
+            // x5c: [ attestnCert: bytes, * (caCert: bytes) ]
+            let x5c_array_ref = x5c.as_array()
+                .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+
+            let arr_x509: Result<Vec<_>, _> = x5c_array_ref.iter()
+                .map(|values| {
+                    values.as_bytes()
+                        .ok_or(WebauthnError::AttestationStatementX5CInvalid)
+                        .and_then(|b|
+                            crypto::X509PublicKey::try_from(b.as_slice())
+                        )
+                })
+                .collect();
+
+            let mut arr_x509 = arr_x509?;
+
+            // Must have at least one x509 cert
+            if arr_x509.len() == 0 {
+                return Err(WebauthnError::AttestationStatementX5CInvalid);
+            }
+
+            let attestn_cert = arr_x509.remove(0);
+
+            // Verify that sig is a valid signature over the concatenation of authenticatorData
+            // and clientDataHash using the attestation public key in attestnCert with the
+            // algorithm specified in alg.
+
+            let verification_data: Vec<u8> = auth_data_bytes
+                .iter()
+                .chain(client_data_hash.iter())
+                .map(|b| *b)
+                .collect();
+            let is_valid_signature = att_stmt_map
+                .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+                .and_then(|s| s.as_bytes())
+                .ok_or(WebauthnError::AttestationStatementSigMissing)
+                .and_then(|sig| attestn_cert.verify_signature(&sig, &verification_data))?;
+            if !is_valid_signature {
+                return Err(WebauthnError::AttestationStatementSigInvalid);
+            }
+
+            // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
+            // Statement Certificate Requirements.
+            // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
+
+            attestn_cert.assert_packed_attest_req()?;
+
+            // If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4
+            // (id-fido-gen-ce-aaguid) verify that the value of this extension matches the aaguid
+            // in authenticatorData.
+
+            if let Some(aaguid) = attestn_cert.get_fido_gen_ce_aaguid() {
+                if acd.aaguid != aaguid {
+                    return Err(WebauthnError::AttestationCertificateAAGUIDMismatch)
+                }
+            }
+
+            // Optionally, inspect x5c and consult externally provided knowledge to determine
+            // whether attStmt conveys a Basic or AttCA attestation.
+            // TODO: I'm not clear on this ....
+
+            // If successful, return implementation-specific values representing attestation type
+            // Basic, AttCA or uncertainty, and attestation trust path x5c.
+
+            Ok(AttestationType::Basic(
+                Credential::new(
+                    acd,
+                    credential_public_key,
+                    counter,
+                ),
+                attestn_cert
+            ))
         }
         (None, Some(_ecdaa_key_id)) => {
             // 3. If ecdaaKeyId is present, then the attestation type is ECDAA.

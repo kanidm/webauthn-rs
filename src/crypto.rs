@@ -10,6 +10,7 @@ use std::convert::TryFrom;
 
 // use super::constants::*;
 use super::error::*;
+use crate::proto::Aaguid;
 // use super::proto::*;
 
 // Why OpenSSL over another rust crate?
@@ -88,6 +89,17 @@ impl X509PublicKey {
         verifier
             .verify(signature.as_slice())
             .map_err(|e| WebauthnError::OpenSSLError(e))
+    }
+
+    pub(crate) fn assert_packed_attest_req(&self) -> Result<(), WebauthnError> {
+        // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
+        // Statement Certificate Requirements.
+        // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
+        unimplemented!();
+    }
+
+    pub(crate) fn get_fido_gen_ce_aaguid(&self) -> Option<Aaguid> {
+        unimplemented!();
     }
 }
 
