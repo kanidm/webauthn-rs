@@ -94,11 +94,13 @@ pub(crate) fn verify_packed_attestation(
         (Some(_x5c), _) => {
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
             // TODO: Perform the appropriate verification procedure
+            println!("_x5c");
             Err(WebauthnError::AttestationNotSupported)
         }
         (None, Some(_ecdaa_key_id)) => {
             // 3. If ecdaaKeyId is present, then the attestation type is ECDAA.
             // TODO: Perform the the verification procedure for ECDAA
+            println!("_ecdaa_key_id");
             Err(WebauthnError::AttestationNotSupported)
         }
         (None, None) => {
