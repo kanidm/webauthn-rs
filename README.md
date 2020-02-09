@@ -2,9 +2,6 @@
 Webauthn-rs
 ==========
 
-NOTE: This library has NOT received a proper security review of operations yet!!! Help
-out and review this crate!
-
 Webauthn is a modern approach to hardware based authentication, consisting of
 a user with an authenticator device, a browser or client that interacts with the
 device, and a server that is able to generate challenges and verify the

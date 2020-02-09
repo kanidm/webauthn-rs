@@ -3,7 +3,6 @@
 //! service restart. It's only really useful for demo-sites, testing and as an
 //! example/reference implementation of the WebauthnConfig trait.
 
-use crate::proto::{Challenge, Credential, CredentialID, UserId};
 use crate::WebauthnConfig;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider

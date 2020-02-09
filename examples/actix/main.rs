@@ -33,7 +33,7 @@ use actix_web::middleware::session::RequestSession;
 use futures::future::Future;
 
 use rand::prelude::*;
-use time::Duration;
+// use time::Duration;
 
 use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
@@ -81,17 +81,17 @@ struct CmdOptions {
 fn index_view(req: &HttpRequest<AppState>) -> HttpResponse {
     let some_userid = match req.session().get::<String>("userid") {
         Ok(v) => v,
-        Err(e) => {
+        Err(_e) => {
             return HttpResponse::InternalServerError().body("Internal Server Error");
         }
     };
 
-    println!("{:?}", some_userid);
+    // println!("{:?}", some_userid);
 
     if some_userid.is_none() {
         match req.session().set("anonymous", true) {
             Ok(_) => {}
-            Err(e) => {
+            Err(_e) => {
                 return HttpResponse::InternalServerError().body("Internal Server Error");
             }
         }
@@ -275,13 +275,13 @@ fn main() {
             // Need a registration
             .resource("/register/{username}", |r| {
                 r.method(http::Method::POST)
-                    .with_async_config(register, |((cfg),)| {
+                    .with_async_config(register, |(cfg,)| {
                         cfg.0.limit(4096);
                     })
             })
             .resource("/login/{username}", |r| {
                 r.method(http::Method::POST)
-                    .with_async_config(login, |((cfg),)| {
+                    .with_async_config(login, |(cfg,)| {
                         cfg.0.limit(4096);
                     })
             })
