@@ -111,8 +111,7 @@ impl<T> Webauthn<T> {
             .collect();
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
-            // We use stdrng because unlike thread_rng, it's a csprng, which given
-            // this is a cryptographic operation, we kind of want!
+            // Use a per-thread csprng
             rng: rand::thread_rng(),
             config: config,
             pkcp: pkcp,
@@ -551,7 +550,6 @@ impl<T> Webauthn<T> {
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_authenticate(
         &mut self,
-        _username: &UserId,
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>

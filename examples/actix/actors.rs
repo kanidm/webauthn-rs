@@ -78,7 +78,7 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
 
         let (acr, st) = self
             .wan
-            .generate_challenge_authenticate(&msg.username, creds, None)?;
+            .generate_challenge_authenticate(creds, None)?;
         self.auth_chals.put(msg.username, st);
         debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok(acr)
