@@ -8,9 +8,12 @@ use std::convert::TryFrom;
 
 use crate::crypto;
 use crate::error::*;
+use crate::base64_data::Base64UrlSafeData;
+
+use serde::{Serialize, Deserialize};
 
 /// Representation of a UserId. This is currently a type alias to "String".
-pub type UserId = String;
+pub type UserId = Vec<u8>;
 
 /// Representation of a device counter
 pub type Counter = u32;
@@ -19,28 +22,18 @@ pub type Counter = u32;
 pub type Aaguid = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes
-/// which should always be kept private. This type can be serialised or
-/// deserialised by serde as required for your storage needs.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Challenge(pub Vec<u8>);
 
-impl std::fmt::Debug for Challenge {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
-        )
+impl Into<Base64UrlSafeData> for Challenge {
+    fn into(self) -> Base64UrlSafeData {
+        Base64UrlSafeData(self.0)
     }
 }
 
-impl std::fmt::Display for Challenge {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            base64::encode_mode(&self.0, base64::Base64Mode::Standard)
-        )
+impl From<Base64UrlSafeData> for Challenge {
+    fn from(d: Base64UrlSafeData) -> Self {
+        Challenge(d.0)
     }
 }
 
@@ -116,20 +109,22 @@ impl ToString for UserVerificationPolicy {
 }
 
 // These are the primary communication structures you will need to handle.
-
-pub(crate) type CBORExtensions = serde_cbor::Value;
 pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
+/// Relying Party Entity
 #[derive(Debug, Serialize)]
-struct RelayingParty {
-    name: String,
+pub struct RelyingParty {
+    pub(crate) name: String,
+    pub(crate) id: String,
 }
 
+/// User Entity
 #[derive(Debug, Serialize)]
-struct User {
-    id: String,
-    name: String,
-    displayName: String,
+#[serde(rename = "camelCase")]
+pub struct User {
+    pub(crate) id: Base64UrlSafeData,
+    pub(crate) name: String,
+    pub(crate) display_name: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -147,22 +142,74 @@ pub(crate) struct AllowCredentials {
     pub(crate) id: String,
 }
 
+/// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize)]
-struct PublicKeyCredentialCreationOptions {
-    // https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
-    rp: RelayingParty,
-    user: User,
-    // Should this just be bytes?
-    challenge: String,
-    pubKeyCredParams: Vec<PubKeyCredParams>,
-    timeout: u32,
-    attestation: String,
-    // excludeCredentials
-    // authenticatorSelection
-    // See get_extensions for typing details here.
-    // I suspect it's actually a map in json.
-    extensions: Option<JSONExtensions>,
-    userVerification: String,
+#[serde(rename_all="camelCase")]
+pub struct PublicKeyCredentialCreationOptions {
+    pub(crate) rp: RelyingParty,
+    pub(crate) user: User,
+    pub(crate) challenge: Base64UrlSafeData,
+    pub(crate) pub_key_cred_params: Vec<PubKeyCredParams>,
+    pub(crate) timeout: Option<u32>,
+    pub(crate) attestation: Option<AttestationConveyancePreference>,
+    pub(crate) exclude_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
+    pub(crate) authenticator_selection: Option<AuthenticatorSelectionCriteria>,
+    pub(crate) extensions: Option<JSONExtensions>,
+}
+
+/// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
+#[derive(Debug, Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct AuthenticatorSelectionCriteria {
+    authenticator_attachment: Option<String>,
+    require_resident_key: Option<bool>,
+    user_verification: Option<String>
+}
+
+
+/// https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference
+#[derive(Debug, Serialize)]
+#[serde(rename_all="lowercase")]
+pub enum AttestationConveyancePreference {
+    /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none
+    None,
+
+    /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-indirect
+    Indirect,
+
+    /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-direct
+    Direct,
+}
+
+/// https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor
+#[derive(Debug, Serialize)]
+pub struct PublicKeyCredentialDescriptor {
+    #[serde(rename = "type")]
+    type_: String,
+    id: Base64UrlSafeData,
+    transports: Option<Vec<AuthenticatorTransport>>
+}
+
+impl PublicKeyCredentialDescriptor {
+    /// Constructed from a byte array
+    pub fn from_bytes(bytes: Vec<u8>) -> Self {
+        Self { type_: "public-key".to_string(), id: Base64UrlSafeData(bytes), transports: None}
+    }
+}
+
+/// https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport
+#[derive(Debug, Serialize)]
+#[serde(rename_all="lowercase")]
+#[allow(unused)]
+pub enum AuthenticatorTransport {
+    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-usb
+    Usb,
+    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-nfc
+    Nfc,
+    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-ble
+    Ble,
+    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-internal
+    Internal,
 }
 
 /// A JSON serialisable challenge which is issued to the user's webbrowser
@@ -171,48 +218,18 @@ struct PublicKeyCredentialCreationOptions {
 /// and transmit it to the client only.
 #[derive(Debug, Serialize)]
 pub struct CreationChallengeResponse {
-    publicKey: PublicKeyCredentialCreationOptions,
+    pub(crate) publicKey: PublicKeyCredentialCreationOptions,
 }
 
-impl CreationChallengeResponse {
-    pub(crate) fn new(
-        relaying_party: String,
-        user_id: String,
-        user_name: String,
-        user_display_name: String,
-        challenge: String,
-        pkcp: Vec<PubKeyCredParams>,
-        timeout: u32,
-        userVerificationPolicy: UserVerificationPolicy,
-    ) -> CreationChallengeResponse {
-        CreationChallengeResponse {
-            publicKey: PublicKeyCredentialCreationOptions {
-                rp: RelayingParty {
-                    name: relaying_party,
-                },
-                user: User {
-                    id: user_id,
-                    name: user_name,
-                    displayName: user_display_name,
-                },
-                challenge: challenge,
-                pubKeyCredParams: pkcp,
-                timeout: timeout,
-                attestation: "direct".to_string(),
-                extensions: None,
-                userVerification: userVerificationPolicy.to_string(),
-            },
-        }
-    }
-}
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all="camelCase")]
 pub(crate) struct PublicKeyCredentialRequestOptions {
-    challenge: String,
+    challenge: Base64UrlSafeData,
     timeout: u32,
-    rpId: String,
-    allowCredentials: Vec<AllowCredentials>,
-    userVerification: String,
+    rp_id: String,
+    allow_credentials: Vec<AllowCredentials>,
+    user_verification: String,
     extensions: Option<JSONExtensions>,
 }
 
@@ -227,40 +244,32 @@ pub struct RequestChallengeResponse {
 
 impl RequestChallengeResponse {
     pub(crate) fn new(
-        challenge: String,
+        challenge: Challenge,
         timeout: u32,
         relaying_party: String,
-        allowCredentials: Vec<AllowCredentials>,
-        userVerificationPolicy: UserVerificationPolicy,
+        allow_credentials: Vec<AllowCredentials>,
+        user_verification_policy: UserVerificationPolicy,
     ) -> Self {
         RequestChallengeResponse {
             publicKey: PublicKeyCredentialRequestOptions {
-                challenge: challenge,
-                timeout: timeout,
-                rpId: relaying_party,
-                allowCredentials: allowCredentials,
-                userVerification: userVerificationPolicy.to_string(),
+                challenge: challenge.into(),
+                timeout,
+                rp_id: relaying_party,
+                allow_credentials,
+                user_verification: user_verification_policy.to_string(),
                 extensions: None,
             },
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct CollectedClientData {
+    #[serde(rename = "type")]
     pub(crate) type_: String,
-    pub(crate) challenge: Vec<u8>,
+    pub(crate) challenge: Base64UrlSafeData,
     pub(crate) origin: String,
     pub(crate) tokenBinding: Option<TokenBinding>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct CollectedClientDataRaw {
-    #[serde(rename = "type")]
-    pub type_: String,
-    pub challenge: String,
-    pub origin: String,
-    pub tokenBinding: Option<TokenBinding>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -273,22 +282,10 @@ pub(crate) struct TokenBinding {
 impl TryFrom<&Vec<u8>> for CollectedClientData {
     type Error = WebauthnError;
     fn try_from(data: &Vec<u8>) -> Result<CollectedClientData, WebauthnError> {
-        let ccdr: CollectedClientDataRaw =
+        let ccd: CollectedClientData =
             serde_json::from_slice(&data).map_err(|e| WebauthnError::ParseJSONFailure(e))?;
 
-        let chal_vec: Vec<u8> = base64::decode_mode(&ccdr.challenge, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(
-                &ccdr.challenge,
-                base64::Base64Mode::UrlSafe,
-            ))
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-
-        Ok(CollectedClientData {
-            type_: ccdr.type_.clone(),
-            challenge: chal_vec,
-            origin: ccdr.origin.clone(),
-            tokenBinding: ccdr.tokenBinding.clone(),
-        })
+        Ok(ccd)
     }
 }
 
@@ -390,43 +387,38 @@ impl TryFrom<&Vec<u8>> for AuthenticatorData {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all="camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
-    pub(crate) authData: &'a [u8],
+    pub(crate) auth_data: &'a [u8],
     pub(crate) fmt: String,
-    pub(crate) attStmt: serde_cbor::Value,
+    pub(crate) att_stmt: serde_cbor::Value,
 }
 
 #[derive(Debug)]
 pub(crate) struct AttestationObject {
-    pub(crate) authData: AuthenticatorData,
-    pub(crate) authDataBytes: Vec<u8>,
+    pub(crate) auth_data: AuthenticatorData,
+    pub(crate) auth_data_bytes: Vec<u8>,
     pub(crate) fmt: String,
     // https://w3c.github.io/webauthn/#generating-an-attestation-object
-    pub(crate) attStmt: serde_cbor::Value,
+    pub(crate) att_stmt: serde_cbor::Value,
 }
 
-impl TryFrom<&String> for AttestationObject {
+impl TryFrom<&[u8]> for AttestationObject {
     type Error = WebauthnError;
 
-    fn try_from(data: &String) -> Result<AttestationObject, WebauthnError> {
-        // println!("data: {:?}", data);
-        let attest_data_vec: Vec<u8> = base64::decode_mode(&data, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(&data, base64::Base64Mode::UrlSafe))
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-
-        // println!("attest_data_vec: {:?}", attest_data_vec);
-        let aoi: AttestationObjectInner = serde_cbor::from_slice(&attest_data_vec)
+    fn try_from(data: &[u8]) -> Result<AttestationObject, WebauthnError> {
+        let aoi: AttestationObjectInner = serde_cbor::from_slice(&data)
             .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
-        let authDataBytes: Vec<u8> = aoi.authData.iter().map(|b| *b).collect();
+        let authDataBytes: Vec<u8> = aoi.auth_data.iter().map(|b| *b).collect();
 
         let authData = AuthenticatorData::try_from(&authDataBytes)?;
 
         // Yay! Now we can assemble a reasonably sane structure.
         Ok(AttestationObject {
             fmt: aoi.fmt.clone(),
-            authData: authData,
-            authDataBytes: authDataBytes,
-            attStmt: aoi.attStmt.clone(),
+            auth_data: authData,
+            auth_data_bytes: authDataBytes,
+            att_stmt: aoi.att_stmt.clone(),
         })
     }
 }
@@ -434,8 +426,8 @@ impl TryFrom<&String> for AttestationObject {
 // https://w3c.github.io/webauthn/#authenticatorattestationresponse
 #[derive(Debug, Deserialize)]
 pub(crate) struct AuthenticatorAttestationResponseRaw {
-    pub(crate) attestationObject: String,
-    pub(crate) clientDataJSON: String,
+    pub(crate) attestationObject: Base64UrlSafeData,
+    pub(crate) clientDataJSON: Base64UrlSafeData,
 }
 
 pub(crate) struct AuthenticatorAttestationResponse {
@@ -447,16 +439,13 @@ pub(crate) struct AuthenticatorAttestationResponse {
 impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse {
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
-        let ccdjr = base64::decode(aarr.clientDataJSON.as_str())
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-
-        let ccdj = CollectedClientData::try_from(&ccdjr)?;
-        let ao = AttestationObject::try_from(&aarr.attestationObject)?;
+        let ccdj = CollectedClientData::try_from(&aarr.clientDataJSON.0)?;
+        let ao = AttestationObject::try_from(aarr.attestationObject.0.as_slice())?;
 
         Ok(AuthenticatorAttestationResponse {
             attestation_object: ao,
             client_data_json: ccdj,
-            client_data_json_bytes: ccdjr,
+            client_data_json_bytes: aarr.clientDataJSON.0.clone(),
         })
     }
 }
@@ -472,7 +461,7 @@ pub struct RegisterPublicKeyCredential {
     // See standard PublicKeyCredential and Credential
     // https://w3c.github.io/webauthn/#iface-pkcredential
     pub(crate) id: String,
-    pub(crate) rawId: String,
+    pub(crate) rawId: Base64UrlSafeData,
     pub(crate) response: AuthenticatorAttestationResponseRaw,
     #[serde(rename = "type")]
     pub(crate) type_: String,
@@ -495,11 +484,11 @@ pub(crate) struct AuthenticatorAssertionResponse {
 impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
-        let ccdjr = base64::decode(aarr.clientDataJSON.as_str())
+        let ccdjr = base64::decode_config(aarr.clientDataJSON.as_str(), base64::URL_SAFE_NO_PAD)
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-        let adr = base64::decode(aarr.authenticatorData.as_str())
+        let adr = base64::decode_config(aarr.authenticatorData.as_str(), base64::URL_SAFE_NO_PAD)
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-        let sigr = base64::decode(aarr.signature.as_str())
+        let sigr = base64::decode_config(aarr.signature.as_str(), base64::URL_SAFE_NO_PAD)
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
         // Do we need to deconstruct this first?
@@ -553,17 +542,25 @@ mod tests {
     #[test]
     fn deserialise_register_response() {
         let x = r#"
-        {"id":"4oiUggKcrpRIlB-cFzFbfkx_BNeM7UAnz3wO7ZpT4I2GL_n-g8TICyJTHg11l0wyc-VkQUVnJ0yM08-1D5oXnw","rawId":"4oiUggKcrpRIlB+cFzFbfkx/BNeM7UAnz3wO7ZpT4I2GL/n+g8TICyJTHg11l0wyc+VkQUVnJ0yM08+1D5oXnw==","response":{"attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQOKIlIICnK6USJQfnBcxW35MfwTXjO1AJ898Du2aU+CNhi/5/oPEyAsiUx4NdZdMMnPlZEFFZydMjNPPtQ+aF5+lAQIDJiABIVggFo08FM4Je1yfCSuPsxP6h0zvlJSjfocUk75EvXw2oSMiWCArRwLD8doar0bACWS1PgVJKzp/wStyvOkTd4NlWHW8rQ==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJwZENXRDJWamRMSVkzN2VSYTVfazdhS3BqdkF2VmNOY04ycVozMjk0blpVIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"},"type":"public-key"}
+        {   "id":"4oiUggKcrpRIlB-cFzFbfkx_BNeM7UAnz3wO7ZpT4I2GL_n-g8TICyJTHg11l0wyc-VkQUVnJ0yM08-1D5oXnw",
+            "rawId":"4oiUggKcrpRIlB-cFzFbfkx_BNeM7UAnz3wO7ZpT4I2GL_n-g8TICyJTHg11l0wyc-VkQUVnJ0yM08-1D5oXnw",
+            "response":{
+                "attestationObject":"o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQOKIlIICnK6USJQfnBcxW35MfwTXjO1AJ898Du2aU-CNhi_5_oPEyAsiUx4NdZdMMnPlZEFFZydMjNPPtQ-aF5-lAQIDJiABIVggFo08FM4Je1yfCSuPsxP6h0zvlJSjfocUk75EvXw2oSMiWCArRwLD8doar0bACWS1PgVJKzp_wStyvOkTd4NlWHW8rQ",
+                "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJwZENXRDJWamRMSVkzN2VSYTVfazdhS3BqdkF2VmNOY04ycVozMjk0blpVIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"
+            },
+            "type":"public-key"
+        }
         "#;
         let _y: RegisterPublicKeyCredential = serde_json::from_str(x).unwrap();
     }
 
     #[test]
     fn deserialise_AttestationObject() {
-        let raw_ao = "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg==".to_string();
+        let raw_ao = base64::decode(
+            "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg=="
+        ).unwrap();
 
-        let _ao = AttestationObject::try_from(&raw_ao).unwrap();
-        // println!("{:?}", ao);
+        let _ao = AttestationObject::try_from(raw_ao.as_slice()).unwrap();
     }
     // Add tests for when the objects are too short.
 }
