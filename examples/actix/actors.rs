@@ -49,7 +49,7 @@ impl Handler<ChallengeRegister> for WebauthnActor {
     fn handle(&mut self, msg: ChallengeRegister, _: &mut Self::Context) -> Self::Result {
         debug!("handle ChallengeRegister -> {:?}", msg);
         let (ccr, rs) = self.wan.generate_challenge_register(&msg.username, None)?;
-        self.reg_chals.put(msg.username, rs);
+        self.reg_chals.put(msg.username.into_bytes(), rs);
         debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
     }
@@ -70,7 +70,7 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
     fn handle(&mut self, msg: ChallengeAuthenticate, _: &mut Self::Context) -> Self::Result {
         debug!("handle ChallengeAuthenticate -> {:?}", msg);
 
-        let creds = match self.creds.get(&msg.username) {
+        let creds = match self.creds.get(&msg.username.as_bytes().to_vec()) {
             Some(creds) => Some(creds.iter().map(|(_, v)| v.clone()).collect()),
             None => None,
         }
@@ -79,7 +79,7 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
         let (acr, st) = self
             .wan
             .generate_challenge_authenticate(creds, None)?;
-        self.auth_chals.put(msg.username, st);
+        self.auth_chals.put(msg.username.as_bytes().to_vec(), st);
         debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok(acr)
     }
@@ -102,6 +102,7 @@ impl Handler<Register> for WebauthnActor {
         debug!("handle Register -> {:?}", msg);
 
         let Register { username, reg } = msg;
+        let username = username.as_bytes().to_vec();
 
         let rs = self
             .reg_chals
@@ -152,11 +153,11 @@ impl Handler<Authenticate> for WebauthnActor {
         let Authenticate { lgn, username } = msg;
         let st = self
             .auth_chals
-            .pop(&username)
+            .pop(&username.as_bytes().to_vec())
             .ok_or(WebauthnError::ChallengeNotFound)?;
         let r = self.wan.authenticate_credential(lgn, st).map(|r| {
             r.map(|(cred_id, counter)| {
-                match self.creds.get_mut(&username) {
+                match self.creds.get_mut(&username.as_bytes().to_vec()) {
                     Some(v) => {
                         let mut c = v.remove(&cred_id).unwrap();
                         c.counter = counter;

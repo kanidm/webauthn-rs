@@ -18,8 +18,6 @@
 extern crate base64;
 extern crate lru;
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate serde_derive;
 // extern crate byteorder;
 extern crate openssl;
@@ -32,6 +30,7 @@ pub mod crypto;
 pub mod ephemeral;
 pub mod error;
 pub mod proto;
+mod base64_data;
 
 use rand::prelude::*;
 use std::convert::TryFrom;
@@ -42,12 +41,8 @@ use crate::attestation::{
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::{compute_sha256, COSEContentType};
 use crate::error::WebauthnError;
-use crate::proto::{
-    AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge,
-    Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams,
-    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
-    UserVerificationPolicy,
-};
+use crate::proto::{AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams, PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy, PublicKeyCredentialCreationOptions, RelyingParty, User, AttestationConveyancePreference, PublicKeyCredentialDescriptor};
+use crate::base64_data::Base64UrlSafeData;
 
 /// The in progress state of a credential registration attempt. You must persist this associated
 /// to the UserID requesting the registration.
@@ -98,8 +93,8 @@ impl<T> Webauthn<T> {
     /// You should see the Documentation for WebauthnConfig, which is the main part of
     /// the code you will interact with for site-specific customisation.
     pub fn new(config: T) -> Self
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         let pkcp = config
             .get_credential_algorithms()
@@ -120,8 +115,27 @@ impl<T> Webauthn<T> {
     }
 
     fn generate_challenge(&mut self) -> Challenge {
-        Challenge((0..CHALLENGE_SIZE_BYTES).map(|_| self.rng.gen()).collect())
+        Challenge(self.rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
     }
+
+    /// Generate a new challenge for client registration.
+    /// Same as `generate_challenge_register_options` but default options
+    pub fn generate_challenge_register(
+        &mut self,
+        user_name: &String,
+        policy: Option<UserVerificationPolicy>,
+    ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
+        where T: WebauthnConfig,
+    {
+        self.generate_challenge_register_options(
+            user_name.as_bytes().to_vec(),
+            user_name.clone(),
+            user_name.clone(),
+            vec![],
+            policy
+        )
+    }
+
 
     /// Generate a new challenge for client registration. This is the first step in
     /// the lifecycle of a credential. This function will return the
@@ -136,31 +150,51 @@ impl<T> Webauthn<T> {
     ///
     /// At this time we deviate from the standard and base64 some fields, but we are
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
-    pub fn generate_challenge_register(
+    pub fn generate_challenge_register_options(
         &mut self,
-        username: &UserId,
+        user_id: UserId,
+        user_name: String,
+        user_display_name: String,
+        exclude_credentials: Vec<CredentialID>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
         // let policy = self.config.policy_user_verification(&username);
-        let chal = self.generate_challenge();
-        let c = CreationChallengeResponse::new(
-            self.config.get_relying_party_name(),
-            username.clone(),
-            username.clone(),
-            username.clone(),
-            chal.to_string(),
-            self.pkcp.clone(),
-            self.config.get_authenticator_timeout(),
-            policy.clone(),
-        );
+        let challenge = self.generate_challenge();
+        let c = CreationChallengeResponse {
+            publicKey: PublicKeyCredentialCreationOptions {
+                rp: RelyingParty {
+                    name: self.config.get_relying_party_name(),
+                    id: self.config.get_relying_party_id()
+                },
+                user: User {
+                    id: Base64UrlSafeData(user_id),
+                    name: user_name,
+                    display_name: user_display_name,
+                },
+                challenge: challenge.clone().into(),
+                pub_key_cred_params: self.config.get_credential_algorithms().into_iter().map(|alg|{
+                   PubKeyCredParams {
+                       type_: "public-key".to_string(),
+                       alg: alg as i64,
+                   }
+                }).collect(),
+                timeout: Some(self.config.get_authenticator_timeout()),
+                attestation: Some(self.config.get_attestation_preference()),
+                exclude_credentials: Some(
+                    exclude_credentials.into_iter().map(PublicKeyCredentialDescriptor::from_bytes).collect()
+                ),
+                authenticator_selection: None,
+                extensions: None
+            }
+        };
 
         let wr = RegistrationState {
-            policy: policy,
-            chal: chal,
+            policy,
+            chal: challenge,
         };
 
         // This should have an opaque type of username + chal + policy
@@ -187,8 +221,8 @@ impl<T> Webauthn<T> {
         state: RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<Credential, WebauthnError>
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
         // get the challenge (it's username associated)
@@ -223,8 +257,8 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: Challenge,
     ) -> Result<Credential, WebauthnError>
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         // println!("reg: {:?}", reg);
 
@@ -248,7 +282,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the create() call.
-        if data.client_data_json.challenge != chal.0 {
+        if data.client_data_json.challenge.0 != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -284,12 +318,12 @@ impl<T> Webauthn<T> {
         //
         //  NOW: Remember that RP ID https://w3c.github.io/webauthn/#rp-id is NOT THE SAME as the RP name
         // it's actually derived from the RP origin.
-        if data.attestation_object.authData.rp_id_hash != self.rp_id_hash {
+        if data.attestation_object.auth_data.rp_id_hash != self.rp_id_hash {
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
         // Verify that the User Present bit of the flags in authData is set.
-        if !data.attestation_object.authData.user_present {
+        if !data.attestation_object.auth_data.user_present {
             return Err(WebauthnError::UserNotPresent);
         }
 
@@ -297,13 +331,13 @@ impl<T> Webauthn<T> {
         // of the flags in authData is set.
         match policy {
             UserVerificationPolicy::Required => {
-                if !data.attestation_object.authData.user_verified {
+                if !data.attestation_object.auth_data.user_verified {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
             UserVerificationPolicy::Preferred => {}
             UserVerificationPolicy::Discouraged => {
-                if data.attestation_object.authData.user_verified {
+                if data.attestation_object.auth_data.user_verified {
                     return Err(WebauthnError::UserVerifiedWhenDiscouraged);
                 }
             }
@@ -321,7 +355,7 @@ impl<T> Webauthn<T> {
         // TODO: Today we send NO EXTENSIONS, so we'll never have a case where the extensions
         // are present! But because extensions are possible from the config we WILL need to manage
         // this situation eventually!!!
-        match &data.attestation_object.authData.extensions {
+        match &data.attestation_object.auth_data.extensions {
             Some(_ex) => {
                 // We don't know how to handle client extensions yet!!!
                 return Err(WebauthnError::InvalidExtensions);
@@ -349,7 +383,7 @@ impl<T> Webauthn<T> {
 
         let acd = &data
             .attestation_object
-            .authData
+            .auth_data
             .acd
             .ok_or(WebauthnError::MissingAttestationCredentialData)?;
 
@@ -361,20 +395,20 @@ impl<T> Webauthn<T> {
 
         let attest_result = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
-                &data.attestation_object.attStmt,
+                &data.attestation_object.att_stmt,
                 acd,
                 // &attest_data.authDataBytes,
                 &client_data_json_hash,
-                &data.attestation_object.authData.rp_id_hash,
+                &data.attestation_object.auth_data.rp_id_hash,
                 // &rp_hash,
-                data.attestation_object.authData.counter,
+                data.attestation_object.auth_data.counter,
             ),
             AttestationFormat::Packed => verify_packed_attestation(
-                &data.attestation_object.attStmt,
+                &data.attestation_object.att_stmt,
                 acd,
-                data.attestation_object.authDataBytes,
+                data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
-                data.attestation_object.authData.counter,
+                data.attestation_object.auth_data.counter,
             ),
             _ => {
                 // No other types are currently implemented
@@ -421,8 +455,8 @@ impl<T> Webauthn<T> {
         chal: Challenge,
         cred: &Credential,
     ) -> Result<u32, WebauthnError>
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
@@ -444,7 +478,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
-        if c.challenge != chal.0 {
+        if c.challenge.0 != chal.0 {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -553,8 +587,8 @@ impl<T> Webauthn<T> {
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         let chal = self.generate_challenge();
 
@@ -574,7 +608,7 @@ impl<T> Webauthn<T> {
         // Store the chal associated to the user.
         // Now put that into the correct challenge format
         let r = RequestChallengeResponse::new(
-            chal.to_string(),
+            chal.clone(),
             self.config.get_authenticator_timeout(),
             self.config.get_relying_party_id(),
             ac,
@@ -582,9 +616,9 @@ impl<T> Webauthn<T> {
         );
         let st = AuthenticationState {
             // username: username.clone(),
-            creds: creds,
-            policy: policy,
-            chal: chal,
+            creds,
+            policy,
+            chal,
         };
         Ok((r, st))
     }
@@ -607,8 +641,8 @@ impl<T> Webauthn<T> {
         rsp: PublicKeyCredential,
         state: AuthenticationState,
     ) -> Result<Option<(CredentialID, Counter)>, WebauthnError>
-    where
-        T: WebauthnConfig,
+        where
+            T: WebauthnConfig,
     {
         // https://w3c.github.io/webauthn/#verifying-assertion
         // Lookup challenge
@@ -626,8 +660,8 @@ impl<T> Webauthn<T> {
         // that would be equivalent to what was allowed.
         // println!("rsp: {:?}", rsp);
 
-        let raw_id = base64::decode_mode(&rsp.rawId, base64::Base64Mode::Standard)
-            .or(base64::decode_mode(&rsp.rawId, base64::Base64Mode::UrlSafe))
+        let raw_id = base64::decode_config(&rsp.rawId, base64::URL_SAFE_NO_PAD)
+            .or(base64::decode_config(&rsp.rawId, base64::URL_SAFE_NO_PAD))
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
         let cred = {
@@ -673,8 +707,8 @@ impl<T> Webauthn<T> {
                 //       Update the stored signature counter value, associated with credential’s id attribute,
                 //       to be the value of authData.signCount.
                 Ok(Some((cred.cred_id.clone(), counter)))
-            // If all the above steps are successful, continue with the authentication ceremony as
-            // appropriate. Otherwise, fail the authentication ceremony.
+                // If all the above steps are successful, continue with the authentication ceremony as
+                // appropriate. Otherwise, fail the authentication ceremony.
             } else {
                 // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
                 //      This is a signal that the authenticator may be cloned, i.e. at least two copies
@@ -731,6 +765,12 @@ pub trait WebauthnConfig {
     /// rely on the defaults.
     fn get_authenticator_timeout(&self) -> u32 {
         AUTHENTICATOR_TIMEOUT
+    }
+
+    /// Returns the default attestation type
+    /// Defaults to `direct`
+    fn get_attestation_preference(&self) -> AttestationConveyancePreference {
+        AttestationConveyancePreference::Direct
     }
 
     /// Returns a site policy on if user verification of the authenticator is required. This currently
@@ -790,6 +830,7 @@ mod tests {
         RegisterPublicKeyCredential, UserVerificationPolicy,
     };
     use crate::Webauthn;
+    use crate::base64_data::Base64UrlSafeData;
 
     #[test]
     fn test_ephemeral() {}
@@ -815,7 +856,14 @@ mod tests {
         // And this is the response, from a real device. Let's register it!
 
         let rsp = r#"
-        {"id":"0xYE4bQ_HZM51-XYwp7WHJu8RfeA2Oz3_9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1_aQpTtKLeGu6Ig","rawId":"0xYE4bQ/HZM51+XYwp7WHJu8RfeA2Oz3/9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1/aQpTtKLeGu6Ig==","response":{"attestationObject":"o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEcwRQIhALjRb43YFcbJ3V9WiYPpIrZkhgzAM6KTR8KIjwCXejBCAiAO5Lvp1VW4dYBhBDv7HZIrxZb1SwKKYOLfFRXykRxMqGN4NWOBWQLBMIICvTCCAaWgAwIBAgIEGKxGwDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNDEzOTQzNDg4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEeeo7LHxJcBBiIwzSP+tg5SkxcdSD8QC+hZ1rD4OXAwG1Rs3Ubs/K4+PzD4Hp7WK9Jo1MHr03s7y+kqjCrutOOqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBSAwIQYLKwYBBAGC5RwBAQQEEgQQy2lIHo/3QDmT7AonKaFUqDAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCXnQOX2GD4LuFdMRx5brr7Ivqn4ITZurTGG7tX8+a0wYpIN7hcPE7b5IND9Nal2bHO2orh/tSRKSFzBY5e4cvda9rAdVfGoOjTaCW6FZ5/ta2M2vgEhoz5Do8fiuoXwBa1XCp61JfIlPtx11PXm5pIS2w3bXI7mY0uHUMGvxAzta74zKXLslaLaSQibSKjWKt9h+SsXy4JGqcVefOlaQlJfXL1Tga6wcO0QTu6Xq+Uw7ZPNPnrpBrLauKDd202RlN4SP7ohL3d9bG6V5hUz/3OusNEBZUn5W3VmPj1ZnFavkMB3RkRMOa58MZAORJT4imAPzrvJ0vtv94/y71C6tZ5aGF1dGhEYXRhWMQSyhe0mvIolDbzA+AWYDCiHlJdJm4gkmdDOAGo/UBxoEEAAAAAAAAAAAAAAAAAAAAAAAAAAABA0xYE4bQ/HZM51+XYwp7WHJu8RfeA2Oz3/9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1/aQpTtKLeGu6IqUBAgMmIAEhWCCe1KvqpcVWN416/QZc8vJynt3uo3/WeJ2R4uj6kJbaiiJYIDC5ssxxummKviGgLoP9ZLFb836A9XfRO7op18QY3i5m","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"},"type":"public-key"}
+        {
+            "id":"0xYE4bQ_HZM51-XYwp7WHJu8RfeA2Oz3_9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1_aQpTtKLeGu6Ig",
+            "rawId":"0xYE4bQ_HZM51-XYwp7WHJu8RfeA2Oz3_9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1_aQpTtKLeGu6Ig",
+            "response":{
+                 "attestationObject":"o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEcwRQIhALjRb43YFcbJ3V9WiYPpIrZkhgzAM6KTR8KIjwCXejBCAiAO5Lvp1VW4dYBhBDv7HZIrxZb1SwKKYOLfFRXykRxMqGN4NWOBWQLBMIICvTCCAaWgAwIBAgIEGKxGwDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNDEzOTQzNDg4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEeeo7LHxJcBBiIwzSP-tg5SkxcdSD8QC-hZ1rD4OXAwG1Rs3Ubs_K4-PzD4Hp7WK9Jo1MHr03s7y-kqjCrutOOqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBSAwIQYLKwYBBAGC5RwBAQQEEgQQy2lIHo_3QDmT7AonKaFUqDAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCXnQOX2GD4LuFdMRx5brr7Ivqn4ITZurTGG7tX8-a0wYpIN7hcPE7b5IND9Nal2bHO2orh_tSRKSFzBY5e4cvda9rAdVfGoOjTaCW6FZ5_ta2M2vgEhoz5Do8fiuoXwBa1XCp61JfIlPtx11PXm5pIS2w3bXI7mY0uHUMGvxAzta74zKXLslaLaSQibSKjWKt9h-SsXy4JGqcVefOlaQlJfXL1Tga6wcO0QTu6Xq-Uw7ZPNPnrpBrLauKDd202RlN4SP7ohL3d9bG6V5hUz_3OusNEBZUn5W3VmPj1ZnFavkMB3RkRMOa58MZAORJT4imAPzrvJ0vtv94_y71C6tZ5aGF1dGhEYXRhWMQSyhe0mvIolDbzA-AWYDCiHlJdJm4gkmdDOAGo_UBxoEEAAAAAAAAAAAAAAAAAAAAAAAAAAABA0xYE4bQ_HZM51-XYwp7WHJu8RfeA2Oz3_9HnNIZAKqRTz9gsUlF3QO7EqcJ0pgLSwDcq6cL1_aQpTtKLeGu6IqUBAgMmIAEhWCCe1KvqpcVWN416_QZc8vJynt3uo3_WeJ2R4uj6kJbaiiJYIDC5ssxxummKviGgLoP9ZLFb836A9XfRO7op18QY3i5m",
+                 "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovLzEyNy4wLjAuMTo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9"
+            },
+            "type":"public-key"}
         "#;
         // turn it into our "deserialised struct"
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
@@ -838,11 +886,9 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let chal = Challenge(
-            base64::decode_mode(
+            base64::decode(
                 "+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc",
-                base64::Base64Mode::Standard,
-            )
-            .unwrap(),
+            ).unwrap(),
         );
 
         let rsp = r#"
@@ -873,16 +919,22 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let chal = Challenge(
-            base64::decode_mode(
-                "lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=",
-                base64::Base64Mode::Standard,
-            )
-            .unwrap(),
+            base64::decode(
+                "lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo="
+            ).unwrap(),
         );
 
         // Example generated using navigator.credentials.create on Chrome Version 77.0.3865.120
         // using Touch ID on MacBook running MacOS 10.15
-        let rsp = r#"{"id":"ATk_7QKbi_ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa","rawId":"ATk/7QKbi/ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa","response":{"attestationObject":"o2NmbXRmcGFja2VkZ2F0dFN0bXSiY2FsZyZjc2lnWEcwRQIgLXPjBtVEhBH3KdUDFFk3LAd9EtHogllIf48vjX4wgfECIQCXOymmfg12FPMXEdwpSjjtmrvki4K8y0uYxqWN5Bw6DGhhdXRoRGF0YViuSZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2NFXaqejq3OAAI1vMYKZIsLJfHwVQMAKgE5P+0Cm4v57Unadei13lOkQ3/WJ0SyA0wqhIyRc3OqygYW6qEmHHMTWqUBAgMmIAEhWCDNRS/Gw52ow5PNrC9OdFTFNudDmZO6Y3wmM9N8e0tJICJYIC09iIH5/RrT5tbS0PIw3srdAxYDMGao7yWgu0JFIEzT","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJsUDZtV05BdEctX1Z2MTVpTTdsYl9YUmtkV012VlEtbFR5S3dadU9nMVZvIiwiZXh0cmFfa2V5c19tYXlfYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Ojg0NDMiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0="},"type":"public-key"}
+        let rsp = r#"{
+                        "id":"ATk_7QKbi_ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa",
+                        "rawId":"ATk_7QKbi_ntSdp16LXeU6RDf9YnRLIDTCqEjJFzc6rKBhbqoSYccxNa",
+                        "response":{
+                            "attestationObject":"o2NmbXRmcGFja2VkZ2F0dFN0bXSiY2FsZyZjc2lnWEcwRQIgLXPjBtVEhBH3KdUDFFk3LAd9EtHogllIf48vjX4wgfECIQCXOymmfg12FPMXEdwpSjjtmrvki4K8y0uYxqWN5Bw6DGhhdXRoRGF0YViuSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NFXaqejq3OAAI1vMYKZIsLJfHwVQMAKgE5P-0Cm4v57Unadei13lOkQ3_WJ0SyA0wqhIyRc3OqygYW6qEmHHMTWqUBAgMmIAEhWCDNRS_Gw52ow5PNrC9OdFTFNudDmZO6Y3wmM9N8e0tJICJYIC09iIH5_RrT5tbS0PIw3srdAxYDMGao7yWgu0JFIEzT",
+                            "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJsUDZtV05BdEctX1Z2MTVpTTdsYl9YUmtkV012VlEtbFR5S3dadU9nMVZvIiwiZXh0cmFfa2V5c19tYXlfYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCIsIm9yaWdpbiI6Imh0dHBzOi8vbG9jYWxob3N0Ojg0NDMiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0"
+                            },
+                        "type":"public-key"
+                      }
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
         let result =
@@ -932,14 +984,21 @@ mod tests {
         };
 
         // Persist it to our fake db.
-        // wan_c.persist_credential("xxx".to_string(), cred);
-
         let wan = Webauthn::new(wan_c);
 
         // Captured authentication attempt
-
         let rsp = r#"
-        {"id":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ","rawId":"at+FfKGsOI21EhtCu7Vx+7t7FKkpUOyKXIkEBBD/vC+eym/AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ==","response":{"authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4/krrmihjLHmVzzuoMdl2MBAAAAFA==","clientDataJSON":"eyJjaGFsbGVuZ2UiOiJXZ1h6X2tUdjNXVVUxa3c4aG0tT0dvR1M0WkNIWF8zYkVxSEgyUHZWcDhNIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9","signature":"MEYCIQDmLVOqv85cdRup4Fr8Pf9zC4AWO+XKBJqa8xPwYFCCMAIhAOiExLoyes0xipmUmq0BVlqJaCKLn/MFKG9GIDsCGq/+","userHandle":null},"type":"public-key"}
+        {
+            "id":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ",
+            "rawId":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ",
+            "response":{
+                "authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MBAAAAFA",
+                "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJXZ1h6X2tUdjNXVVUxa3c4aG0tT0dvR1M0WkNIWF8zYkVxSEgyUHZWcDhNIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9",
+                "signature":"MEYCIQDmLVOqv85cdRup4Fr8Pf9zC4AWO-XKBJqa8xPwYFCCMAIhAOiExLoyes0xipmUmq0BVlqJaCKLn_MFKG9GIDsCGq_-",
+                "userHandle":null
+            },
+            "type":"public-key"
+        }
         "#;
         let rsp_d: PublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
@@ -964,19 +1023,23 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let chal = Challenge(
-            base64::decode_mode(
+            base64::decode(
                 "tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=",
-                base64::Base64Mode::Standard,
-            )
-            .unwrap(),
+            ).unwrap(),
         );
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),
-            rawId: "uZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzQ==".to_string(),
+            rawId: Base64UrlSafeData(
+                base64::decode("uZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzQ==").unwrap()
+            ),
             response: AuthenticatorAttestationResponseRaw {
-                attestationObject: "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIhAKAZODmj+uF5qXsDY2NFol3apRjld544KRUpHzwfk5cbAiBnp2gHmamr2xr46ilQuhzIR9BwMlwtxWd6IT2QEYeo7WN4NWOBWQLBMIICvTCCAaWgAwIBAgIEK/F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt+pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V/62aS5+1gK3rr+Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn/Cd+S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE+aFa4kTe6NQQfi8+yiZrQ8N+JL4f7gNdQPSrH+r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa+5cqNF4G1fPCofvw9W4lKnObuPakr0x/icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2+0m1f1mwQS8yRD5+/aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ/mXnUQ6TTsgRqPvPXgQPbSyGMf2z/DIPbQqCD/Bmc4dj9o6LozheBdDtcZCAjSPTAd/uiaGF1dGhEYXRhWMS3tF916xTswLEZrAO3fy8EzMmvvR8f5wWM7F5+4KJ0ikEAAAACxe9V/62aS5+1gK3rr+Am0ABAuZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzaUBAgMmIAEhWCDCfn9t/BeDFfwG32Ms/owb5hFeBYUcaCmQRauVoRrI8yJYII97t5wYshX4dZ+iRas0vPwaOwYvZ1wTOnVn+QDbCF/E".to_string(),
-                clientDataJSON: "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwib3JpZ2luIjoiaHR0cHM6XC9cLzE3Mi4yMC4wLjE0MTo4NDQzIiwiY2hhbGxlbmdlIjoidHZSMW0tZF9vaFhyd1Z4UWpNZ0g4S25vdkhaN0JSV2habURONFRWTXBOVSJ9".to_string(),
+                attestationObject: Base64UrlSafeData(
+                    base64::decode("o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIhAKAZODmj+uF5qXsDY2NFol3apRjld544KRUpHzwfk5cbAiBnp2gHmamr2xr46ilQuhzIR9BwMlwtxWd6IT2QEYeo7WN4NWOBWQLBMIICvTCCAaWgAwIBAgIEK/F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt+pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V/62aS5+1gK3rr+Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn/Cd+S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE+aFa4kTe6NQQfi8+yiZrQ8N+JL4f7gNdQPSrH+r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa+5cqNF4G1fPCofvw9W4lKnObuPakr0x/icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2+0m1f1mwQS8yRD5+/aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ/mXnUQ6TTsgRqPvPXgQPbSyGMf2z/DIPbQqCD/Bmc4dj9o6LozheBdDtcZCAjSPTAd/uiaGF1dGhEYXRhWMS3tF916xTswLEZrAO3fy8EzMmvvR8f5wWM7F5+4KJ0ikEAAAACxe9V/62aS5+1gK3rr+Am0ABAuZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzaUBAgMmIAEhWCDCfn9t/BeDFfwG32Ms/owb5hFeBYUcaCmQRauVoRrI8yJYII97t5wYshX4dZ+iRas0vPwaOwYvZ1wTOnVn+QDbCF/E").unwrap()
+                ),
+                clientDataJSON: Base64UrlSafeData(
+                    base64::decode("eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwib3JpZ2luIjoiaHR0cHM6XC9cLzE3Mi4yMC4wLjE0MTo4NDQzIiwiY2hhbGxlbmdlIjoidHZSMW0tZF9vaFhyd1Z4UWpNZ0g4S25vdkhaN0JSV2habURONFRWTXBOVSJ9").unwrap()
+                ),
             },
             type_: "public-key".to_string(),
         };

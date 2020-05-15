@@ -15,7 +15,7 @@ categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
 
 [dependencies]
-base64 = "0.2"
+base64 = "0.12"
 lru = "0.1"
 log = "0.4"
 nom = "4.2"
