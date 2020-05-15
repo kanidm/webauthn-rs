@@ -579,6 +579,7 @@ impl RequestChallengeResponse {
         relaying_party: String,
         allow_credentials: Vec<AllowCredentials>,
         user_verification_policy: UserVerificationPolicy,
+        extensions: Option<JSONExtensions>
     ) -> Self {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
@@ -587,7 +588,7 @@ impl RequestChallengeResponse {
                 rp_id: relaying_party,
                 allow_credentials,
                 user_verification: user_verification_policy,
-                extensions: None,
+                extensions,
             },
         }
     }
@@ -617,19 +618,17 @@ pub struct TokenBinding {
     pub id: Option<String>,
 }
 
-// Should this be tryfrom
 impl TryFrom<&Vec<u8>> for CollectedClientData {
     type Error = WebauthnError;
     fn try_from(data: &Vec<u8>) -> Result<CollectedClientData, WebauthnError> {
         let ccd: CollectedClientData =
             serde_json::from_slice(&data).map_err(WebauthnError::ParseJSONFailure)?;
-
         Ok(ccd)
     }
 }
 
-#[derive(Debug)]
 /// Attested Credential Data
+#[derive(Debug, Clone)]
 pub(crate) struct AttestedCredentialData {
     /// The guid of the authenticator. May indicate manufacturer.
     pub(crate) aaguid: Aaguid,
@@ -640,23 +639,35 @@ pub(crate) struct AttestedCredentialData {
 }
 
 /// https://w3c.github.io/webauthn/#sctn-attestation
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthenticatorData {
     /// Hash of the relying party id.
     pub(crate) rp_id_hash: Vec<u8>,
-    // pub(crate) flags: u8,
     /// The counter of this credentials activations.
-    pub(crate) counter: u32,
+    pub counter: u32,
     /// Flag if the user was present.
-    pub(crate) user_present: bool,
+    pub user_present: bool,
     /// Flag is the user verified to the device. Implies presence.
-    pub(crate) user_verified: bool,
+    pub user_verified: bool,
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
-    // pub(crate) extensions: Option<CBORExtensions>,
     /// Extensions supplied by the device.
-    pub(crate) extensions: Option<()>,
-    // pub(crate) excess: Vec<u8>,
+    pub(crate) extensions: Option<serde_cbor::Value>,
+}
+
+impl AuthenticatorData {
+    /// get an extension value for an identifier
+    pub fn get_extension_for_identifier(&self, id: String) -> Option<&[u8]> {
+        self.extensions
+            .as_ref()
+            .map(|v| cbor_try_map!(v).ok())
+            .flatten()
+            .map(|map| map.get(&serde_cbor::Value::Text(id)))
+            .flatten()
+            .map(|v| cbor_try_bytes!(v).ok())
+            .flatten()
+            .map(|v| v.as_slice())
+    }
 }
 
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
@@ -672,10 +683,11 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     Ok((&i[cred_len..], v))
 }
 
-named!( extensions_parser<&[u8], ()>,
+named!( extensions_parser<&[u8], serde_cbor::Value>,
     // Just throw the bytes into cbor?
     do_parse!(
-        (())
+        extensions: cbor_parser >>
+        (extensions)
     )
 );
 
@@ -716,7 +728,6 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
         counter: u32!(nom::Endianness::Big) >>
         acd: cond!(data_flags.1, acd_parser) >>
         extensions: cond!(data_flags.0, extensions_parser) >>
-        // excess: call!(nom::rest) >>
         (AuthenticatorData {
             rp_id_hash: rp_id_hash.to_vec(),
             counter,
@@ -748,8 +759,9 @@ pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) att_stmt: serde_cbor::Value,
 }
 
-#[derive(Debug)]
+
 /// Attestation Object
+#[derive(Debug)]
 pub struct AttestationObject {
     /// auth_data.
     pub(crate) auth_data: AuthenticatorData,
@@ -793,7 +805,7 @@ pub struct AuthenticatorAttestationResponseRaw {
     pub client_data_json: Base64UrlSafeData,
 }
 
-///
+/// Parsed AuthenticatorResponse
 pub(crate) struct AuthenticatorAttestationResponse {
     pub(crate) attestation_object: AttestationObject,
     pub(crate) client_data_json: CollectedClientData,
@@ -938,6 +950,13 @@ pub struct PublicKeyCredential {
     /// The authenticator type.
     #[serde(rename = "type")]
     pub type_: String,
+}
+
+impl PublicKeyCredential {
+    /// Get the supplied userHandle if provided
+    pub fn get_user_handle(&self) -> Option<&[u8]> {
+        self.response.user_handle.as_ref().map(|uh| uh.as_ref())
+    }
 }
 
 #[cfg(feature = "wasm")]
