@@ -13,8 +13,6 @@ use crate::proto::{
     TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
 };
 use log::debug;
-// use serde_cbor::{ObjectKey, Value};
-// use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -258,6 +256,7 @@ pub(crate) fn verify_fidou2f_attestation(
     // https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L61
     let att_cert_array =
         cbor_try_array!(x5c).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+
     // Now it's a vec<Value>, get the first.
     if att_cert_array.len() != 1 {
         return Err(WebauthnError::AttestationStatementX5CInvalid);
@@ -276,7 +275,6 @@ pub(crate) fn verify_fidou2f_attestation(
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
     //
     // // try from asserts this condition given the alg.
-
     let cerificate_public_key =
         crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEContentType::ECDSA_SHA256))?;
 
