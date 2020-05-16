@@ -46,19 +46,21 @@ use crate::base64_data::Base64UrlSafeData;
 
 /// The in progress state of a credential registration attempt. You must persist this associated
 /// to the UserID requesting the registration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistrationState {
     policy: UserVerificationPolicy,
-    chal: Challenge,
+    challenge: Base64UrlSafeData,
 }
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
 /// requesting the registration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthenticationState {
     // Allowed credentials?
     // username: UserId,
-    creds: Vec<Credential>,
+    credentials: Vec<Credential>,
     policy: UserVerificationPolicy,
-    chal: Challenge,
+    challenge: Base64UrlSafeData,
 }
 
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
@@ -165,7 +167,7 @@ impl<T> Webauthn<T> {
         // let policy = self.config.policy_user_verification(&username);
         let challenge = self.generate_challenge();
         let c = CreationChallengeResponse {
-            publicKey: PublicKeyCredentialCreationOptions {
+            public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
                     name: self.config.get_relying_party_name(),
                     id: self.config.get_relying_party_id()
@@ -194,7 +196,7 @@ impl<T> Webauthn<T> {
 
         let wr = RegistrationState {
             policy,
-            chal: challenge,
+            challenge: challenge.into(),
         };
 
         // This should have an opaque type of username + chal + policy
@@ -228,13 +230,13 @@ impl<T> Webauthn<T> {
         // get the challenge (it's username associated)
         // Policy should also come from the chal
 
-        let RegistrationState { policy, chal } = state;
+        let RegistrationState { policy, challenge } = state;
 
         // TODO: check the req username matches? I think it's not possible, the caller needs to
         // create the linkage between the username and the state.
 
         // send to register_credential_internal
-        let credential = self.register_credential_internal(reg, policy, chal)?;
+        let credential = self.register_credential_internal(reg, policy, challenge.into())?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -616,9 +618,9 @@ impl<T> Webauthn<T> {
         );
         let st = AuthenticationState {
             // username: username.clone(),
-            creds,
+            credentials: creds,
             policy,
-            chal,
+            challenge: chal.into(),
         };
         Ok((r, st))
     }
@@ -648,9 +650,9 @@ impl<T> Webauthn<T> {
         // Lookup challenge
 
         let AuthenticationState {
-            creds,
+            credentials: creds,
             policy,
-            chal,
+            challenge: chal,
         } = state;
 
         // If the allowCredentials option was given when this authentication ceremony was initiated,
@@ -696,7 +698,7 @@ impl<T> Webauthn<T> {
 
         // let policy = self.config.policy_user_verification(&username);
 
-        let counter = self.verify_credential_internal(rsp, policy, chal, &cred)?;
+        let counter = self.verify_credential_internal(rsp, policy, chal.into(), &cred)?;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
         // conjunction with credential’s id attribute is nonzero, then run the following sub-step:

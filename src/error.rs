@@ -7,108 +7,140 @@ use serde_json::error::Error as JSONError;
 // use nom::Err as NOMError;
 
 /// Possible errors that may occur during Webauthn Operation proessing.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
+#[allow(missing_docs)]
 pub enum WebauthnError {
-    /// The JSON from the client did not indicate webauthn.<method> correctly.
+    #[error("The JSON from the client did not indicate webauthn.<method> correctly")]
     InvalidClientDataType,
-    /// The client response challenge differs from the latest challenge issued to
-    /// the userId.
+
+    #[error("The client response challenge differs from the latest challenge issued to the userId")]
     MismatchedChallenge,
-    /// There are no challenges associated to the UserId.
+
+    #[error("There are no challenges associated to the UserId")]
     ChallengeNotFound,
-    /// The clients relying party origin does not match our servers information
+
+    #[error("The clients relying party origin does not match our servers information")]
     InvalidRPOrigin,
-    /// The clients relying party id hash does not match the hash of our
-    /// relying party id.
+
+    #[error("The clients relying party id hash does not match the hash of our relying party id")]
     InvalidRPIDHash,
-    /// The user present bit is not set, and required.
+
+    #[error("The user present bit is not set, and required")]
     UserNotPresent,
-    /// The user verified bit is not set, and required by policy.
+
+    #[error("The user verified bit is not set, and required by policy")]
     UserNotVerified,
-    /// The user verified even through discouragement.
+
+    #[error("The user verified even through discouragement")]
     UserVerifiedWhenDiscouraged,
-    /// The extensions are unknown to this server.
+
+    #[error("The extensions are unknown to this server")]
     InvalidExtensions,
-    /// The required attestation data is not present in the response.
+
+    #[error("The required attestation data is not present in the response")]
     MissingAttestationCredentialData,
-    /// The attestation format requested is not able to be processed
-    /// by this server - please report an issue to add the attestation format.
+
+    #[error("The attestation format requested is not able to be processed by this server - please report an issue to add the attestation format")]
     AttestationNotSupported,
 
-    /// A failure occured in persisting the Challenge data.
+    #[error("A failure occured in persisting the Challenge data")]
     ChallengePersistenceError,
 
-    /// The attestation statement map is not valid.
+    #[error("The attestation statement map is not valid")]
     AttestationStatementMapInvalid,
-    /// The attestation statement signature is not present.
+
+    #[error("The attestation statement signature is not present")]
     AttestationStatementSigMissing,
-    /// The attestation statement signature is not valid.
+
+    #[error("The attestation statement signature is not valid")]
     AttestationStatementSigInvalid,
-    /// The attestation statement x5c (trust root) is not present.
+
+    #[error("The attestation statement x5c (trust root) is not present")]
     AttestationStatementX5CMissing,
-    /// The attestation statement x5c (trust root) is not valid.
+
+    #[error("The attestation statement x5c (trust root) is not valid")]
     AttestationStatementX5CInvalid,
-    /// The attestation statement alg does not match algorithm of the
-    /// credentialPublicKey in authenticatorData
+
+    #[error("The attestation statement alg does not match algorithm of the credentialPublicKey in authenticatorData")]
     AttestationStatementAlgMismatch,
-    /// The attestation trust could not be established.
+
+    #[error("The attestation trust could not be established")]
     AttestationTrustFailure,
-    /// The attestation Certificates OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not
-    /// match the aaguid of the token.
+
+    #[error("The attestation Certificates OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not match the aaguid of the token")]
     AttestationCertificateAAGUIDMismatch,
-    /// The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
-    /// are not met by this attestation certificate.
+
+    #[error("The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements are not met by this attestation certificate")]
     AttestationCertificateRequirementsNotMet,
 
-    /// The X5C trust root is not a valid algorithm for signing.
+    #[error("The X5C trust root is not a valid algorithm for signing")]
     CertificatePublicKeyInvalid,
 
-    /// A base64 parser failure has occured
-    ParseBase64Failure(b64DecodeError),
-    /// A CBOR parser failure has occured
-    ParseCBORFailure(CBORError),
-    /// A JSON parser failure has occured
-    ParseJSONFailure(JSONError),
-    /// A NOM parser failure has occured.
+
+    #[error("A base64 parser failure has occurred")]
+    ParseBase64Failure(#[from] b64DecodeError),
+
+    #[error("A CBOR parser failure has occurred")]
+    ParseCBORFailure(#[from] CBORError),
+
+    #[error("A JSON parser failure has occurred")]
+    ParseJSONFailure(#[from] JSONError),
+
+
+    #[error("A NOM parser failure has occurred")]
     ParseNOMFailure,
-    /// In parsing the attestation object, there was insufficent data
+
+    #[error("In parsing the attestation object, there was insufficient data")]
     ParseInsufficentBytesAvailable,
-    /// An openSSL Error has occured
-    OpenSSLError(OpenSSLErrorStack),
-    /// The requested OpenSSL curve is not supported by OpenSSL.
+
+    #[error("An openSSL Error has occured")]
+    OpenSSLError(#[from] OpenSSLErrorStack),
+
+    #[error("The requested OpenSSL curve is not supported by OpenSSL")]
     OpenSSLErrorNoCurveName,
 
-    /// The COSEKey contains invalid CBOR which can not be processed.
+    #[error("The COSEKey contains invalid CBOR which can not be processed")]
     COSEKeyInvalidCBORValue,
-    /// The COSEKey type is not supported by this implementation.
+
+    #[error("The COSEKey type is not supported by this implementation")]
     COSEKeyInvalidType,
-    /// The COSEKey contains invalid X/Y coordinate data.
+
+    #[error("The COSEKey contains invalid X/Y coordinate data")]
     COSEKeyECDSAXYInvalid,
-    /// The COSEKey uses a curve that is not supported by this implementation.
+
+    #[error("The COSEKey uses a curve that is not supported by this implementation")]
     COSEKeyECDSAInvalidCurve,
-    /// The COSEKey contains invalid cryptographic algorithm request.
+
+    #[error("The COSEKey contains invalid cryptographic algorithm request")]
     COSEKeyECDSAContentType,
 
-    /// The credential exist check failed
+    #[error("The credential exist check failed")]
     CredentialExistCheckError,
-    /// The credential already exists
+
+    #[error("The credential already exists")]
     CredentialAlreadyExists,
-    /// The credential was not able to be persisted
+
+    #[error("The credential was not able to be persisted")]
     CredentialPersistenceError,
-    /// The credential was not able to be retrieved
+
+    #[error("The credential was not able to be retrieved")]
     CredentialRetrievalError,
-    /// The credential requested could not be found.
+
+    #[error("The credential requested could not be found")]
     CredentialNotFound,
-    /// The credential may have be compromised and should be inspected.
+
+    #[error("The credential may have be compromised and should be inspected")]
     CredentialPossibleCompromise,
-    /// The credential counter could not be updated.
+
+    #[error("The credential counter could not be updated")]
     CredentialCounterUpdateFailure,
-    /// The provided call back failed to allow reporting the credential failure.
+
+    #[error("The provided call back failed to allow reporting the credential failure")]
     CredentialCompromiseReportFailure,
 
-    /// The trust path could not be established.
+    #[error("The trust path could not be established")]
     TrustFailure,
 
-    /// Authentication has failed.
+    #[error("Authentication has failed")]
     AuthenticationFailure,
 }
