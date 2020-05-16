@@ -84,6 +84,7 @@ impl PartialEq<Credential> for Credential {
 /// the only interaction - we only verify a user is present, but we don't have extra details
 /// to the legitimacy of that user.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum UserVerificationPolicy {
     /// Require User Verification bit to be set, and fail the registration or authentication
     /// if false. If the authenticator is not able to perform verification, it may not be
@@ -98,21 +99,12 @@ pub enum UserVerificationPolicy {
     Discouraged,
 }
 
-impl ToString for UserVerificationPolicy {
-    fn to_string(&self) -> String {
-        match self {
-            UserVerificationPolicy::Required => "required".to_string(),
-            UserVerificationPolicy::Preferred => "preferred".to_string(),
-            UserVerificationPolicy::Discouraged => "discouraged".to_string(),
-        }
-    }
-}
-
 // These are the primary communication structures you will need to handle.
 pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
 /// Relying Party Entity
 #[derive(Debug, Serialize)]
+#[serde(rename_all="camelCase")]
 pub struct RelyingParty {
     pub(crate) name: String,
     pub(crate) id: String,
@@ -120,7 +112,7 @@ pub struct RelyingParty {
 
 /// User Entity
 #[derive(Debug, Serialize)]
-#[serde(rename = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct User {
     pub(crate) id: Base64UrlSafeData,
     pub(crate) name: String,
@@ -217,8 +209,9 @@ pub enum AuthenticatorTransport {
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
 #[derive(Debug, Serialize)]
+#[serde(rename_all="camelCase")]
 pub struct CreationChallengeResponse {
-    pub(crate) publicKey: PublicKeyCredentialCreationOptions,
+    pub(crate) public_key: PublicKeyCredentialCreationOptions,
 }
 
 
@@ -229,7 +222,7 @@ pub(crate) struct PublicKeyCredentialRequestOptions {
     timeout: u32,
     rp_id: String,
     allow_credentials: Vec<AllowCredentials>,
-    user_verification: String,
+    user_verification: UserVerificationPolicy,
     extensions: Option<JSONExtensions>,
 }
 
@@ -256,7 +249,7 @@ impl RequestChallengeResponse {
                 timeout,
                 rp_id: relaying_party,
                 allow_credentials,
-                user_verification: user_verification_policy.to_string(),
+                user_verification: user_verification_policy,
                 extensions: None,
             },
         }

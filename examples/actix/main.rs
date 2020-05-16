@@ -229,7 +229,7 @@ fn main() {
     let domain = opt.rp_id.clone();
 
     // Generate TLS certs as needed.
-    let ssl_params = generate_dyn_ssl_params(domain.as_str());
+    // let ssl_params = generate_dyn_ssl_params(domain.as_str());
 
     let wan_c = WebauthnEphemeralConfig::new(
         opt.rp_name.as_str(),
@@ -277,7 +277,9 @@ fn main() {
             )
     });
     server
-        .bind_openssl(opt.bind.as_str(), ssl_params)
+        // .bind_openssl(opt.bind.as_str(), ssl_params)
+        // .unwrap()
+        .bind("localhost:8080")
         .unwrap()
         .run();
 

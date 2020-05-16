@@ -129,7 +129,7 @@ function login() {
           pk.response.authenticatorData = toBase64(credentials.response.authenticatorData);
           pk.response.clientDataJSON = toBase64(credentials.response.clientDataJSON);
           pk.response.signature = toBase64(credentials.response.signature);
-          pk.response.userHandle = credentials.response.userHandle;
+          pk.response.userHandle = toBase64(credentials.response.userHandle);
           pk.type = credentials.type;
 
           return fetch(LOGIN_URL + username, {
@@ -161,10 +161,21 @@ function login() {
 
 // HOLY WHAT THIS ONLY WORKS WITH A SINGLE CHARACTER WTF
 
+
 function toBase64(data) {
-  return btoa(String.fromCharCode.apply(null, new Uint8Array(data)))
+    let b64val = btoa(String.fromCharCode.apply(null, new Uint8Array(data)));
+    return b64val.replace(/\//g, '_').replace(/\+/g, '-').replace(/=/g, '');
 }
 
 function fromBase64(data) {
-  return Uint8Array.from(atob(data), c => c.charCodeAt(0))
+    let fixed = data.replace(/_/g, '/').replace(/-/g, '+');
+    while (fixed.length % 4 !== 0) {
+        fixed += "=";
+    }
+    return toArray(atob(fixed));
 }
+
+function toArray(str) {
+    return Uint8Array.from(str, c => c.charCodeAt(0));
+}
+

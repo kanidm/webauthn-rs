@@ -27,6 +27,7 @@ serde_json = "1.0"
 # We could consider replacing this with openssl rand.
 openssl = "0.10"
 rand = "0.6"
+thiserror = "1.0"
 
 [dev-dependencies]
 askama = "0.6"
