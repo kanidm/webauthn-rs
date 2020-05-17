@@ -466,7 +466,7 @@ impl<T> Webauthn<T> {
         let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
         // println!("data: {:?}", data);
 
-        let c = &data.clientDataJSON;
+        let c = &data.client_data;
 
         // Let C, the client data claimed as used for the signature, be the result of running an
         // implementation-specific JSON parser on JSONtext.
@@ -495,7 +495,7 @@ impl<T> Webauthn<T> {
         // Token Binding ID for the connection.
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
-        if data.authenticatorData.rp_id_hash != self.rp_id_hash {
+        if data.authenticator_data.rp_id_hash != self.rp_id_hash {
             /*
             println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
             let a: String = base64::encode(&data.authenticatorData.rp_id_hash);
@@ -506,7 +506,7 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the User Present bit of the flags in authData is set.
-        if !data.authenticatorData.user_present {
+        if !data.authenticator_data.user_present {
             return Err(WebauthnError::UserNotPresent);
         }
 
@@ -514,13 +514,13 @@ impl<T> Webauthn<T> {
         // the flags in authData is set.
         match policy {
             UserVerificationPolicy::Required => {
-                if !data.authenticatorData.user_verified {
+                if !data.authenticator_data.user_verified {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
             UserVerificationPolicy::Preferred => {}
             UserVerificationPolicy::Discouraged => {
-                if data.authenticatorData.user_verified {
+                if data.authenticator_data.user_verified {
                     return Err(WebauthnError::UserVerifiedWhenDiscouraged);
                 }
             }
@@ -538,7 +538,7 @@ impl<T> Webauthn<T> {
         // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the
         // Relying Party MUST be prepared to handle cases where none or not all of the requested
         // extensions were acted upon.
-        match &data.authenticatorData.extensions {
+        match &data.authenticator_data.extensions {
             Some(_ex) => {
                 // pass
             }
@@ -546,7 +546,7 @@ impl<T> Webauthn<T> {
         }
 
         // Let hash be the result of computing a hash over the cData using SHA-256.
-        let client_data_json_hash = compute_sha256(data.clientDataJSONBytes.as_slice());
+        let client_data_json_hash = compute_sha256(data.client_data_bytes.as_slice());
 
         // Using the credential public key looked up in step 3, verify that sig is a valid signature
         // over the binary concatenation of authData and hash.
@@ -554,7 +554,7 @@ impl<T> Webauthn<T> {
         // authenticators. See §6.1.2 FIDO U2F Signature Format Compatibility.
 
         let verification_data: Vec<u8> = data
-            .authenticatorDataBytes
+            .authenticator_data_bytes
             .iter()
             .chain(client_data_json_hash.iter())
             .map(|b| *b)
@@ -568,7 +568,7 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::AuthenticationFailure);
         }
 
-        Ok(data.authenticatorData.counter)
+        Ok(data.authenticator_data.counter)
     }
 
     /// Generate a challenge for an authenticate request for a user. You must supply the set of
@@ -662,8 +662,8 @@ impl<T> Webauthn<T> {
         // that would be equivalent to what was allowed.
         // println!("rsp: {:?}", rsp);
 
-        let raw_id = base64::decode_config(&rsp.rawId, base64::URL_SAFE_NO_PAD)
-            .or(base64::decode_config(&rsp.rawId, base64::URL_SAFE_NO_PAD))
+        let raw_id = base64::decode_config(&rsp.raw_id, base64::URL_SAFE_NO_PAD)
+            .or(base64::decode_config(&rsp.raw_id, base64::URL_SAFE_NO_PAD))
             .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
 
         let cred = {
@@ -1032,14 +1032,14 @@ mod tests {
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),
-            rawId: Base64UrlSafeData(
+            raw_id: Base64UrlSafeData(
                 base64::decode("uZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzQ==").unwrap()
             ),
             response: AuthenticatorAttestationResponseRaw {
-                attestationObject: Base64UrlSafeData(
+                attestation_object: Base64UrlSafeData(
                     base64::decode("o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIhAKAZODmj+uF5qXsDY2NFol3apRjld544KRUpHzwfk5cbAiBnp2gHmamr2xr46ilQuhzIR9BwMlwtxWd6IT2QEYeo7WN4NWOBWQLBMIICvTCCAaWgAwIBAgIEK/F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt+pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V/62aS5+1gK3rr+Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn/Cd+S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE+aFa4kTe6NQQfi8+yiZrQ8N+JL4f7gNdQPSrH+r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa+5cqNF4G1fPCofvw9W4lKnObuPakr0x/icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2+0m1f1mwQS8yRD5+/aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ/mXnUQ6TTsgRqPvPXgQPbSyGMf2z/DIPbQqCD/Bmc4dj9o6LozheBdDtcZCAjSPTAd/uiaGF1dGhEYXRhWMS3tF916xTswLEZrAO3fy8EzMmvvR8f5wWM7F5+4KJ0ikEAAAACxe9V/62aS5+1gK3rr+Am0ABAuZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzaUBAgMmIAEhWCDCfn9t/BeDFfwG32Ms/owb5hFeBYUcaCmQRauVoRrI8yJYII97t5wYshX4dZ+iRas0vPwaOwYvZ1wTOnVn+QDbCF/E").unwrap()
                 ),
-                clientDataJSON: Base64UrlSafeData(
+                client_data_json: Base64UrlSafeData(
                     base64::decode("eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwib3JpZ2luIjoiaHR0cHM6XC9cLzE3Mi4yMC4wLjE0MTo4NDQzIiwiY2hhbGxlbmdlIjoidHZSMW0tZF9vaFhyd1Z4UWpNZ0g4S25vdkhaN0JSV2habURONFRWTXBOVSJ9").unwrap()
                 ),
             },
