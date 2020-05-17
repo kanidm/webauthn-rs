@@ -5,8 +5,19 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Base64UrlSafeData(pub Vec<u8>);
 
+impl Into<Vec<u8>> for Base64UrlSafeData {
+    fn into(self) -> Vec<u8> {
+        self.0
+    }
+}
 impl AsRef<[u8]> for Base64UrlSafeData {
     fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl AsRef<Vec<u8>> for Base64UrlSafeData {
+    fn as_ref(&self) -> &Vec<u8> {
         &self.0
     }
 }
