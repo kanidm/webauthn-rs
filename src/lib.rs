@@ -496,12 +496,6 @@ impl<T> Webauthn<T> {
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
         if data.authenticator_data.rp_id_hash != self.rp_id_hash {
-            /*
-            println!("rp_id_hash from authenitcatorData does not match our rp_id_hash");
-            let a: String = base64::encode(&data.authenticatorData.rp_id_hash);
-            let b: String = base64::encode(&self.rp_id_hash);
-            println!("{:?} != {:?}", a, b);
-            */
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
@@ -597,8 +591,6 @@ impl<T> Webauthn<T> {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
 
         // Get the user's existing creds if any.
-        // println!("login_challenge: {:?}", uc);
-
         let ac = creds
             .iter()
             .map(|cred| AllowCredentials {
@@ -662,10 +654,6 @@ impl<T> Webauthn<T> {
         // that would be equivalent to what was allowed.
         // println!("rsp: {:?}", rsp);
 
-        let raw_id = base64::decode_config(&rsp.raw_id, base64::URL_SAFE_NO_PAD)
-            .or(base64::decode_config(&rsp.raw_id, base64::URL_SAFE_NO_PAD))
-            .map_err(|e| WebauthnError::ParseBase64Failure(e))?;
-
         let cred = {
             // Identify the user being authenticated and verify that this user is the owner of the public
             // key credential source credentialSource identified by credential.id:
@@ -686,7 +674,7 @@ impl<T> Webauthn<T> {
             // inappropriate for your use case), look up the corresponding credential public key.
 
             let cred_opt: Option<Credential> = creds.iter().fold(None, |acc, c| {
-                if acc.is_none() && c.cred_id == raw_id {
+                if acc.is_none() && c.cred_id == rsp.raw_id.0 {
                     Some((*c).clone())
                 } else {
                     acc
