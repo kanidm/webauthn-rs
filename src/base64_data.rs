@@ -10,14 +10,15 @@ impl Into<Vec<u8>> for Base64UrlSafeData {
         self.0
     }
 }
-impl AsRef<[u8]> for Base64UrlSafeData {
-    fn as_ref(&self) -> &[u8] {
+
+impl AsRef<Vec<u8>> for Base64UrlSafeData {
+    fn as_ref(&self) -> &Vec<u8> {
         &self.0
     }
 }
 
-impl AsRef<Vec<u8>> for Base64UrlSafeData {
-    fn as_ref(&self) -> &Vec<u8> {
+impl AsRef<[u8]> for Base64UrlSafeData {
+    fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
