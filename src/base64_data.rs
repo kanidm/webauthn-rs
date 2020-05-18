@@ -25,6 +25,13 @@ impl AsRef<[u8]> for Base64UrlSafeData {
 
 struct Base64UrlSafeDataVisitor;
 
+static ALLOWED_DECODING_FORMATS: &'static [base64::Config] = &[
+    base64::URL_SAFE_NO_PAD,
+    base64::URL_SAFE,
+    base64::STANDARD,
+    base64::STANDARD_NO_PAD
+];
+
 impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
     type Value = Base64UrlSafeData;
 
@@ -34,12 +41,15 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where
         E: Error, {
 
-        match base64::decode_config(v, base64::URL_SAFE_NO_PAD) {
-            Ok(data) => Ok(Base64UrlSafeData(data)),
-            Err(_) => {
-                Err(serde::de::Error::invalid_value(Unexpected::Str(v), &self))
-            }
+        // Forgive alt base64 decoding formats
+        for config in  ALLOWED_DECODING_FORMATS {
+            match base64::decode_config(v, *config) {
+                Ok(data) => return Ok(Base64UrlSafeData(data)),
+                Err(_) => {}
+            };
         }
+
+        Err(serde::de::Error::invalid_value(Unexpected::Str(v), &self))
     }
 }
 
