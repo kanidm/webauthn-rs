@@ -12,13 +12,14 @@ use crate::base64_data::Base64UrlSafeData;
 
 use serde::{Serialize, Deserialize};
 
-/// Representation of a UserId. This is currently a type alias to "String".
+/// Representation of a UserId
 pub type UserId = Vec<u8>;
 
 /// Representation of a device counter
 pub type Counter = u32;
 
 /// Representation of an AAGUID
+/// https://www.w3.org/TR/webauthn/#aaguid
 pub type Aaguid = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes

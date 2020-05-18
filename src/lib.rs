@@ -464,7 +464,6 @@ impl<T> Webauthn<T> {
         // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
         let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
-        // println!("data: {:?}", data);
 
         let c = &data.client_data;
 
@@ -668,23 +667,21 @@ impl<T> Webauthn<T> {
             //      verify that credential.response.userHandle is present, and that the user identified
             //      by this value is the owner of credentialSource.
             //
-            // TODO: Not done yet
+            // TODO: support webauthn in user-less mode -- i.e. the authenticator tells us the userhandle
+            // TODO: and we must see if this userhandle is allowed entry
 
             // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
             // inappropriate for your use case), look up the corresponding credential public key.
-
-            let cred_opt: Option<Credential> = creds.iter().fold(None, |acc, c| {
-                if acc.is_none() && c.cred_id == rsp.raw_id.0 {
-                    Some((*c).clone())
-                } else {
-                    acc
+            let mut found_cred:Option<Credential> = None;
+            for cred in creds {
+                if cred.cred_id == rsp.raw_id.0 {
+                    found_cred = Some(cred);
+                    break
                 }
-            });
+            }
 
-            cred_opt.ok_or(WebauthnError::CredentialNotFound)?
+            found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
-
-        // let policy = self.config.policy_user_verification(&username);
 
         let counter = self.verify_credential_internal(rsp, policy, chal.into(), &cred)?;
 
