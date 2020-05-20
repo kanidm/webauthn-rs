@@ -58,15 +58,17 @@ struct CmdOptions {
     #[structopt(
         short = "n",
         long = "name",
-        default_value = "https://localhost:8443/auth"
+        default_value = "http://localhost:8080/auth"
     )]
     rp_name: String,
-    #[structopt(short = "o", long = "origin", default_value = "https://localhost:8443")]
+    #[structopt(short = "o", long = "origin", default_value = "http://localhost:8080")]
     rp_origin: String,
     #[structopt(short = "i", long = "id", default_value = "localhost")]
     rp_id: String,
-    #[structopt(short = "b", long = "bind", default_value = "127.0.0.1:8443")]
+    #[structopt(short = "b", long = "bind", default_value = "localhost:8080")]
     bind: String,
+    #[structopt(short = "s", long = "tls")]
+    enable_tls: bool,
 }
 
 // fn index_view(session: Session) -> HttpResponse {
@@ -214,7 +216,7 @@ async fn login(
 }
 
 fn main() {
-    let opt = CmdOptions::from_args();
+    let opt:CmdOptions = CmdOptions::from_args();
 
     if opt.debug {
         std::env::set_var("RUST_LOG", "actix_web=info,webauthn_rs=debug,actix=debug");
@@ -228,9 +230,6 @@ fn main() {
     let prefix = opt.prefix.clone();
     let domain = opt.rp_id.clone();
 
-    // Generate TLS certs as needed.
-    // let ssl_params = generate_dyn_ssl_params(domain.as_str());
-
     let wan_c = WebauthnEphemeralConfig::new(
         opt.rp_name.as_str(),
         opt.rp_origin.as_str(),
@@ -242,6 +241,7 @@ fn main() {
 
     let mut stdrng = StdRng::from_entropy();
     let cookie_sig: Vec<_> = (0..32).map(|_| stdrng.gen()).collect();
+
 
     // Start http server
     let server = HttpServer::new(move || {
@@ -276,12 +276,16 @@ fn main() {
                     .route("/login/{username}", web::post().to(login)),
             )
     });
-    server
-        // .bind_openssl(opt.bind.as_str(), ssl_params)
-        // .unwrap()
-        .bind("localhost:8080")
-        .unwrap()
-        .run();
+
+    let server = if opt.enable_tls {
+        // Generate TLS certs as needed.
+        let ssl_params = generate_dyn_ssl_params(opt.rp_id.as_str());
+        server.bind_openssl(opt.bind.as_str(), ssl_params)
+    } else {
+        server.bind(opt.bind.as_str())
+    };
+
+    server.unwrap().run();
 
     println!("Started http server: {}", opt.rp_name.as_str());
     let _ = sys.run();

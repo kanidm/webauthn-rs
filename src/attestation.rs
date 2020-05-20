@@ -11,6 +11,7 @@ use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
 use serde_cbor::{ObjectKey, Value};
 use std::collections::BTreeMap;
+use log::debug;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -97,7 +98,7 @@ pub(crate) fn verify_packed_attestation(
         att_stmt_map.get(ecdaa_key_id_key),
     ) {
         (Some(x5c), _) => {
-            println!("x5c");
+            debug!("x5c");
             let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
 
@@ -177,7 +178,7 @@ pub(crate) fn verify_packed_attestation(
         (None, Some(_ecdaa_key_id)) => {
             // 3. If ecdaaKeyId is present, then the attestation type is ECDAA.
             // TODO: Perform the the verification procedure for ECDAA
-            println!("_ecdaa_key_id");
+            debug!("_ecdaa_key_id");
             Err(WebauthnError::AttestationNotSupported)
         }
         (None, None) => {
@@ -308,7 +309,7 @@ pub(crate) fn verify_fidou2f_attestation(
     let verified = cerificate_public_key.verify_signature(&sig, &verification_data)?;
 
     if !verified {
-        println!("signature verification failed!");
+        log::error!("signature verification failed!");
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
