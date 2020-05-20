@@ -41,7 +41,7 @@ use crate::attestation::{
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::{compute_sha256, COSEContentType};
 use crate::error::WebauthnError;
-use crate::proto::{AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams, PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy, PublicKeyCredentialCreationOptions, RelyingParty, User, AttestationConveyancePreference, PublicKeyCredentialDescriptor};
+use crate::proto::{AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams, PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy, PublicKeyCredentialCreationOptions, RelyingParty, User, AttestationConveyancePreference, PublicKeyCredentialDescriptor, AuthenticatorSelectionCriteria};
 use crate::base64_data::Base64UrlSafeData;
 
 /// The in progress state of a credential registration attempt. You must persist this associated
@@ -163,7 +163,7 @@ impl<T> Webauthn<T> {
         where
             T: WebauthnConfig,
     {
-        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
+        let policy = policy.unwrap_or(UserVerificationPolicy::Discouraged);
         // let policy = self.config.policy_user_verification(&username);
         let challenge = self.generate_challenge();
         let c = CreationChallengeResponse {
@@ -189,7 +189,11 @@ impl<T> Webauthn<T> {
                 exclude_credentials: Some(
                     exclude_credentials.into_iter().map(PublicKeyCredentialDescriptor::from_bytes).collect()
                 ),
-                authenticator_selection: None,
+                authenticator_selection: Some(AuthenticatorSelectionCriteria {
+                    authenticator_attachment: None,
+                    require_resident_key: None,
+                    user_verification: Some(policy.clone())
+                }),
                 extensions: None
             }
         };
@@ -393,16 +397,14 @@ impl<T> Webauthn<T> {
         // This returns an AttestationType, containing all the metadata needed for
         // step 15.
 
-        // let rp_hash = compute_sha256(self.config.get_relying_party_name().as_bytes());
+        log::debug!("attestation is: {:?}", &attest_format);
 
         let attest_result = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
                 &data.attestation_object.att_stmt,
                 acd,
-                // &attest_data.authDataBytes,
                 &client_data_json_hash,
                 &data.attestation_object.auth_data.rp_id_hash,
-                // &rp_hash,
                 data.attestation_object.auth_data.counter,
             ),
             AttestationFormat::Packed => verify_packed_attestation(

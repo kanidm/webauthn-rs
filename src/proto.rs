@@ -143,10 +143,20 @@ pub struct PublicKeyCredentialCreationOptions {
     pub(crate) user: User,
     pub(crate) challenge: Base64UrlSafeData,
     pub(crate) pub_key_cred_params: Vec<PubKeyCredParams>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) timeout: Option<u32>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) attestation: Option<AttestationConveyancePreference>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) exclude_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) authenticator_selection: Option<AuthenticatorSelectionCriteria>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) extensions: Option<JSONExtensions>,
 }
 
@@ -154,9 +164,14 @@ pub struct PublicKeyCredentialCreationOptions {
 #[derive(Debug, Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct AuthenticatorSelectionCriteria {
-    authenticator_attachment: Option<String>,
-    require_resident_key: Option<bool>,
-    user_verification: Option<String>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) authenticator_attachment: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) require_resident_key: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) user_verification: Option<UserVerificationPolicy>
 }
 
 
