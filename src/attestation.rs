@@ -321,3 +321,17 @@ pub(crate) fn verify_fidou2f_attestation(
 
     Ok(AttestationType::Basic(credential, cerificate_public_key))
 }
+
+// https://www.w3.org/TR/webauthn/#none-attestation
+pub(crate) fn verify_none_attestation(
+    // att_stmt: &serde_cbor::Value,
+    acd: &AttestedCredentialData,
+    counter: u32,
+) -> Result<AttestationType, WebauthnError> {
+    // No attestation is performed, simply provide a credential.
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let credential = Credential::new(acd, credential_public_key, counter);
+    Ok(AttestationType::None(credential))
+}
+
+

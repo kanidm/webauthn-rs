@@ -8,6 +8,20 @@ const LGN_CHALLENGE_URL = "/auth/challenge/login/";
 const REGISTER_URL = "/auth/register/";
 const LOGIN_URL = "/auth/login/";
 
+PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+  .then(function(available){
+        console.log('platform auth -> ' + available);
+      if(available){
+            // We can proceed with the creation of a PublicKeyCredential
+            // with this authenticator
+       } else {
+            // Use another kind of authenticator or a classical login/password
+            // workflow
+       }
+ }).catch(function(err){
+    // Something went wrong
+    console.error(err);
+ });
 
 function toast_o_matic(message) {
     var toast_arena = document.getElementById("toast_arena");
@@ -29,7 +43,7 @@ function toast_o_matic(message) {
 
 function register() {
   var username = document.getElementById("username").value;
-  // if this returns an error, how to handle?
+
   fetch(REG_CHALLENGE_URL + username, {method: "POST"})
     .then(res => {
         // Handle error?
@@ -88,7 +102,7 @@ function register() {
     .catch(err => console.log(err, err.stack))
 }
 
-function login() {
+function login(mevent) {
   var username = document.getElementById("username").value;
   fetch(LGN_CHALLENGE_URL + username, {method: "POST"})
     .then(res => {
@@ -158,9 +172,6 @@ function login() {
     }) // then(chal
     .catch(err => console.log(err, err.stack))
 }
-
-// HOLY WHAT THIS ONLY WORKS WITH A SINGLE CHARACTER WTF
-
 
 function toBase64(data) {
     let b64val = btoa(String.fromCharCode.apply(null, new Uint8Array(data)));

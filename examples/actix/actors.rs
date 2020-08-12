@@ -4,6 +4,7 @@ use webauthn_rs::error::WebauthnError;
 use webauthn_rs::proto::{
     CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
     RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
+    UserVerificationPolicy
 };
 use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
 
@@ -48,7 +49,9 @@ impl Handler<ChallengeRegister> for WebauthnActor {
 
     fn handle(&mut self, msg: ChallengeRegister, _: &mut Self::Context) -> Self::Result {
         debug!("handle ChallengeRegister -> {:?}", msg);
-        let (ccr, rs) = self.wan.generate_challenge_register(&msg.username, None)?;
+        let (ccr, rs) = self.wan.generate_challenge_register(&msg.username, Some(
+            UserVerificationPolicy::Preferred
+        ))?;
         self.reg_chals.put(msg.username.into_bytes(), rs);
         debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)

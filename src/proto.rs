@@ -133,6 +133,10 @@ pub(crate) struct AllowCredentials {
     #[serde(rename = "type")]
     pub(crate) type_: String,
     pub(crate) id: String,
+    /// https://www.w3.org/TR/webauthn/#transport
+    /// may be usb, nfc, ble, internal
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) transports: Option<Vec<String>>,
 }
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
@@ -164,14 +168,25 @@ pub struct PublicKeyCredentialCreationOptions {
 #[derive(Debug, Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct AuthenticatorSelectionCriteria {
+    /// https://www.w3.org/TR/webauthn/#attachment
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) authenticator_attachment: Option<String>,
+    pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) require_resident_key: Option<bool>,
+    /// https://www.w3.org/TR/webauthn/#resident-credential
+    pub(crate) require_resident_key: bool,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) user_verification: Option<UserVerificationPolicy>
+    pub(crate) user_verification: UserVerificationPolicy,
+}
+
+/// https://www.w3.org/TR/webauthn/#attachment
+#[derive(Debug, Copy, Clone, Serialize)]
+pub enum AuthenticatorAttachment {
+    /// https://www.w3.org/TR/webauthn/#attachment
+    #[serde(rename = "platform")]
+    Platform,
+    /// https://www.w3.org/TR/webauthn/#attachment
+    #[serde(rename = "cross-platform")]
+    CrossPlatform,
 }
 
 

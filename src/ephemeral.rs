@@ -4,6 +4,7 @@
 //! example/reference implementation of the WebauthnConfig trait.
 
 use crate::WebauthnConfig;
+use crate::proto::AuthenticatorAttachment;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider
 /// This stores all challenges and credentials in memory - IE they are lost on
@@ -13,6 +14,7 @@ pub struct WebauthnEphemeralConfig {
     rp_name: String,
     rp_id: String,
     rp_origin: String,
+    attachment: Option<AuthenticatorAttachment>,
 }
 
 impl std::fmt::Debug for WebauthnEphemeralConfig {
@@ -39,6 +41,10 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     /// Retrieve the relying party origin. See the trait documentation for more.
     fn get_origin(&self) -> &String {
         &self.rp_origin
+    }
+
+    fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
+        self.attachment
     }
 
     /*
@@ -134,11 +140,14 @@ impl WebauthnEphemeralConfig {
     /// Create a new Webauthn Ephemeral instance. This requires a provided relying party
     /// name, origin and id. See the trait documentation for more detail on relying party
     /// name, origin and id.
-    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
+    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str,
+        attachment: Option<AuthenticatorAttachment>,
+    ) -> Self {
         WebauthnEphemeralConfig {
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
             rp_origin: rp_origin.to_string(),
+            attachment,
         }
     }
 }

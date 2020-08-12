@@ -36,12 +36,12 @@ use rand::prelude::*;
 use std::convert::TryFrom;
 
 use crate::attestation::{
-    verify_fidou2f_attestation, verify_packed_attestation, AttestationFormat, AttestationType,
+    verify_fidou2f_attestation, verify_packed_attestation, verify_none_attestation, AttestationFormat, AttestationType,
 };
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::{compute_sha256, COSEContentType};
 use crate::error::WebauthnError;
-use crate::proto::{AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams, PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy, PublicKeyCredentialCreationOptions, RelyingParty, User, AttestationConveyancePreference, PublicKeyCredentialDescriptor, AuthenticatorSelectionCriteria};
+use crate::proto::{AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams, PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy, PublicKeyCredentialCreationOptions, RelyingParty, User, AttestationConveyancePreference, PublicKeyCredentialDescriptor, AuthenticatorSelectionCriteria, AuthenticatorAttachment};
 use crate::base64_data::Base64UrlSafeData;
 
 /// The in progress state of a credential registration attempt. You must persist this associated
@@ -126,6 +126,7 @@ impl<T> Webauthn<T> {
         &mut self,
         user_name: &String,
         policy: Option<UserVerificationPolicy>,
+
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
         where T: WebauthnConfig,
     {
@@ -133,7 +134,7 @@ impl<T> Webauthn<T> {
             user_name.as_bytes().to_vec(),
             user_name.clone(),
             user_name.clone(),
-            vec![],
+            None,
             policy
         )
     }
@@ -157,14 +158,13 @@ impl<T> Webauthn<T> {
         user_id: UserId,
         user_name: String,
         user_display_name: String,
-        exclude_credentials: Vec<CredentialID>,
+        exclude_credentials: Option<Vec<CredentialID>>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
         where
             T: WebauthnConfig,
     {
-        let policy = policy.unwrap_or(UserVerificationPolicy::Discouraged);
-        // let policy = self.config.policy_user_verification(&username);
+        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
         let challenge = self.generate_challenge();
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
@@ -186,13 +186,13 @@ impl<T> Webauthn<T> {
                 }).collect(),
                 timeout: Some(self.config.get_authenticator_timeout()),
                 attestation: Some(self.config.get_attestation_preference()),
-                exclude_credentials: Some(
-                    exclude_credentials.into_iter().map(PublicKeyCredentialDescriptor::from_bytes).collect()
-                ),
+                exclude_credentials:
+                    exclude_credentials.map(|creds| creds.into_iter().map(PublicKeyCredentialDescriptor::from_bytes).collect())
+                ,
                 authenticator_selection: Some(AuthenticatorSelectionCriteria {
-                    authenticator_attachment: None,
-                    require_resident_key: None,
-                    user_verification: Some(policy.clone())
+                    authenticator_attachment: self.config.get_authenticator_attachment(),
+                    require_resident_key: self.config.get_require_resident_key(),
+                    user_verification: policy.clone(),
                 }),
                 extensions: None
             }
@@ -333,6 +333,9 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::UserNotPresent);
         }
 
+        // TODO: Is it possible to verify the attachement policy and resident
+        // key requirement here?
+
         // If user verification is required for this registration, verify that the User Verified bit
         // of the flags in authData is set.
         match policy {
@@ -412,6 +415,11 @@ impl<T> Webauthn<T> {
                 acd,
                 data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
+                data.attestation_object.auth_data.counter,
+            ),
+            AttestationFormat::None => verify_none_attestation(
+                // &data.attestation_object.att_stmt,
+                acd,
                 data.attestation_object.auth_data.counter,
             ),
             _ => {
@@ -597,6 +605,7 @@ impl<T> Webauthn<T> {
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
                 id: base64::encode(cred.cred_id.as_slice()),
+                transports: None,
             })
             .collect();
 
@@ -757,15 +766,29 @@ pub trait WebauthnConfig {
     }
 
     /// Returns the default attestation type
-    /// Defaults to `direct`
+    /// Defaults to `None`
     fn get_attestation_preference(&self) -> AttestationConveyancePreference {
-        AttestationConveyancePreference::Direct
+        AttestationConveyancePreference::None
     }
 
-    /// Returns a site policy on if user verification of the authenticator is required. This currently
-    /// defaults to "false" due to implementation limitations, as per:
-    /// https://github.com/Firstyear/webauthn-rs/issues/7
-    fn get_user_verification_required(&self) -> bool {
+    /// Get the preferred policy on authenticator attachement. Defaults to None (allowing
+    /// any attachment method).
+    ///
+    /// NOTE: This is not enforced, as the client may modify the registration request to
+    /// disregard this, and no part of the registration response indicates attachement.
+    ///
+    /// Default of None allows any attachment method.
+    fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
+        None
+    }
+
+    /// Get the site policy on if the registration should use a resident key so that
+    /// username and other details can be embedded into the authenticator
+    /// to allow bypassing that part of the workflow.
+    ///
+    /// Defaults to "false" aka non-resident keys.
+    /// See also: https://www.w3.org/TR/webauthn/#resident-credential
+    fn get_require_resident_key(&self) -> bool {
         false
     }
 
@@ -800,6 +823,7 @@ pub trait WebauthnConfig {
         match at {
             AttestationType::Basic(credential, _ca) => Ok(credential),
             AttestationType::Self_(credential) => Ok(credential),
+            AttestationType::None(credential) => Ok(credential),
             _ => {
                 // We don't know how to assert trust in this yet, or we just
                 // don't trust it at all (Uncertain, None).

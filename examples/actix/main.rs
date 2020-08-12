@@ -27,7 +27,7 @@ use actix_web::{cookie, middleware, App, HttpServer};
 use rand::prelude::*;
 
 use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
-use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
+use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential, AuthenticatorAttachment};
 
 mod actors;
 mod crypto;
@@ -58,10 +58,11 @@ struct CmdOptions {
     #[structopt(
         short = "n",
         long = "name",
-        default_value = "http://localhost:8080/auth"
+        default_value = "localhost"
     )]
     rp_name: String,
     #[structopt(short = "o", long = "origin", default_value = "http://localhost:8080")]
+    /// Must match your sites domain/port/url
     rp_origin: String,
     #[structopt(short = "i", long = "id", default_value = "localhost")]
     rp_id: String,
@@ -234,6 +235,8 @@ fn main() {
         opt.rp_name.as_str(),
         opt.rp_origin.as_str(),
         opt.rp_id.as_str(),
+        None,
+        // Some(AuthenticatorAttachment::Platform),
     );
 
     let wan = WebauthnActor::new(wan_c);
