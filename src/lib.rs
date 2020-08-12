@@ -25,24 +25,32 @@ extern crate openssl;
 extern crate nom;
 
 pub mod attestation;
+mod base64_data;
 mod constants;
 pub mod crypto;
 pub mod ephemeral;
 pub mod error;
 pub mod proto;
-mod base64_data;
 
 use rand::prelude::*;
 use std::convert::TryFrom;
 
 use crate::attestation::{
-    verify_fidou2f_attestation, verify_packed_attestation, verify_none_attestation, AttestationFormat, AttestationType,
+    verify_fidou2f_attestation, verify_none_attestation, verify_packed_attestation,
+    AttestationFormat, AttestationType,
 };
+use crate::base64_data::Base64UrlSafeData;
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::{compute_sha256, COSEContentType};
 use crate::error::WebauthnError;
-use crate::proto::{AllowCredentials, AuthenticatorAssertionResponse, AuthenticatorAttestationResponse, Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions, PubKeyCredParams, PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy, PublicKeyCredentialCreationOptions, RelyingParty, User, AttestationConveyancePreference, PublicKeyCredentialDescriptor, AuthenticatorSelectionCriteria, AuthenticatorAttachment};
-use crate::base64_data::Base64UrlSafeData;
+use crate::proto::{
+    AllowCredentials, AttestationConveyancePreference, AuthenticatorAssertionResponse,
+    AuthenticatorAttachment, AuthenticatorAttestationResponse, AuthenticatorSelectionCriteria,
+    Challenge, Counter, CreationChallengeResponse, Credential, CredentialID, JSONExtensions,
+    PubKeyCredParams, PublicKeyCredential, PublicKeyCredentialCreationOptions,
+    PublicKeyCredentialDescriptor, RegisterPublicKeyCredential, RelyingParty,
+    RequestChallengeResponse, User, UserId, UserVerificationPolicy,
+};
 
 /// The in progress state of a credential registration attempt. You must persist this associated
 /// to the UserID requesting the registration.
@@ -95,8 +103,8 @@ impl<T> Webauthn<T> {
     /// You should see the Documentation for WebauthnConfig, which is the main part of
     /// the code you will interact with for site-specific customisation.
     pub fn new(config: T) -> Self
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         let pkcp = config
             .get_credential_algorithms()
@@ -126,19 +134,18 @@ impl<T> Webauthn<T> {
         &mut self,
         user_name: &String,
         policy: Option<UserVerificationPolicy>,
-
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
-        where T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         self.generate_challenge_register_options(
             user_name.as_bytes().to_vec(),
             user_name.clone(),
             user_name.clone(),
             None,
-            policy
+            policy,
         )
     }
-
 
     /// Generate a new challenge for client registration. This is the first step in
     /// the lifecycle of a credential. This function will return the
@@ -161,8 +168,8 @@ impl<T> Webauthn<T> {
         exclude_credentials: Option<Vec<CredentialID>>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
         let challenge = self.generate_challenge();
@@ -170,7 +177,7 @@ impl<T> Webauthn<T> {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
                     name: self.config.get_relying_party_name(),
-                    id: self.config.get_relying_party_id()
+                    id: self.config.get_relying_party_id(),
                 },
                 user: User {
                     id: Base64UrlSafeData(user_id),
@@ -178,24 +185,30 @@ impl<T> Webauthn<T> {
                     display_name: user_display_name,
                 },
                 challenge: challenge.clone().into(),
-                pub_key_cred_params: self.config.get_credential_algorithms().into_iter().map(|alg|{
-                   PubKeyCredParams {
-                       type_: "public-key".to_string(),
-                       alg: alg as i64,
-                   }
-                }).collect(),
+                pub_key_cred_params: self
+                    .config
+                    .get_credential_algorithms()
+                    .into_iter()
+                    .map(|alg| PubKeyCredParams {
+                        type_: "public-key".to_string(),
+                        alg: alg as i64,
+                    })
+                    .collect(),
                 timeout: Some(self.config.get_authenticator_timeout()),
                 attestation: Some(self.config.get_attestation_preference()),
-                exclude_credentials:
-                    exclude_credentials.map(|creds| creds.into_iter().map(PublicKeyCredentialDescriptor::from_bytes).collect())
-                ,
+                exclude_credentials: exclude_credentials.map(|creds| {
+                    creds
+                        .into_iter()
+                        .map(PublicKeyCredentialDescriptor::from_bytes)
+                        .collect()
+                }),
                 authenticator_selection: Some(AuthenticatorSelectionCriteria {
                     authenticator_attachment: self.config.get_authenticator_attachment(),
                     require_resident_key: self.config.get_require_resident_key(),
                     user_verification: policy.clone(),
                 }),
-                extensions: None
-            }
+                extensions: None,
+            },
         };
 
         let wr = RegistrationState {
@@ -227,8 +240,8 @@ impl<T> Webauthn<T> {
         state: RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<Credential, WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
         // get the challenge (it's username associated)
@@ -263,8 +276,8 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: Challenge,
     ) -> Result<Credential, WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         // println!("reg: {:?}", reg);
 
@@ -467,8 +480,8 @@ impl<T> Webauthn<T> {
         chal: Challenge,
         cred: &Credential,
     ) -> Result<u32, WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
@@ -592,8 +605,8 @@ impl<T> Webauthn<T> {
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         let chal = self.generate_challenge();
 
@@ -645,8 +658,8 @@ impl<T> Webauthn<T> {
         rsp: PublicKeyCredential,
         state: AuthenticationState,
     ) -> Result<Option<(CredentialID, Counter)>, WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         // https://w3c.github.io/webauthn/#verifying-assertion
         // Lookup challenge
@@ -683,11 +696,11 @@ impl<T> Webauthn<T> {
 
             // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
             // inappropriate for your use case), look up the corresponding credential public key.
-            let mut found_cred:Option<Credential> = None;
+            let mut found_cred: Option<Credential> = None;
             for cred in creds {
                 if cred.cred_id == rsp.raw_id.0 {
                     found_cred = Some(cred);
-                    break
+                    break;
                 }
             }
 
@@ -705,8 +718,8 @@ impl<T> Webauthn<T> {
                 //       Update the stored signature counter value, associated with credential’s id attribute,
                 //       to be the value of authData.signCount.
                 Ok(Some((cred.cred_id.clone(), counter)))
-                // If all the above steps are successful, continue with the authentication ceremony as
-                // appropriate. Otherwise, fail the authentication ceremony.
+            // If all the above steps are successful, continue with the authentication ceremony as
+            // appropriate. Otherwise, fail the authentication ceremony.
             } else {
                 // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
                 //      This is a signal that the authenticator may be cloned, i.e. at least two copies
@@ -730,7 +743,7 @@ impl<T> Webauthn<T> {
 pub trait WebauthnConfig {
     /// Returns a copy of your relying parties name. This is generally any text identifier
     /// you wish, but should rarely if ever change. Changes to the relying party name may
-    /// confuse authenticators and causes their credentials to be lost.
+    /// confuse authenticators and will cause their credentials to be lost.
     ///
     /// Examples of names could be "My Awesome Site", "https://my-awesome-site.com.au"
     fn get_relying_party_name(&self) -> String;
@@ -738,15 +751,18 @@ pub trait WebauthnConfig {
     /// Returns a reference to your sites origin. The origin is the URL to your site with
     /// protocol and port. This should rarely, if ever change. In production usage this
     /// value must always be https://, however http://localhost is acceptable for testing
-    /// only. We may add warnings or errors for non-https:// urls in the future.
+    /// only. We may add warnings or errors for non-https:// urls in the future. Changing this
+    /// may cause associated authenticators to lose credentials.
     ///
     /// Examples of this value could be. "https://my-site.com.au", "https://my-site.com.au:8443"
     fn get_origin(&self) -> &String;
 
-    /// Returs the relying party id. This should rarely if ever change, and is used as an id
+    /// Returns the relying party id. This should never change, and is used as an id
     /// in cryptographic operations and credential scoping. This is defined as the domain name
     /// of the service, minuse all protocol, port and location data. For example:
     ///   `https://name:port/path -> name`
+    ///
+    /// If changed, all associated credentials will be lost in all authenticators.
     ///
     /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
     fn get_relying_party_id(&self) -> String;
@@ -759,13 +775,13 @@ pub trait WebauthnConfig {
     }
 
     /// Return a timeout on how long the authenticator has to respond to a challenge. This value
-    /// defaults to 6000 milliseconds. You likely won't need to implemented this function, and should
+    /// defaults to 6000 milliseconds. You likely won't need to implement this function, and should
     /// rely on the defaults.
     fn get_authenticator_timeout(&self) -> u32 {
         AUTHENTICATOR_TIMEOUT
     }
 
-    /// Returns the default attestation type
+    /// Returns the default attestation type. Options are `None`, `Direct` and `Indirect`.
     /// Defaults to `None`
     fn get_attestation_preference(&self) -> AttestationConveyancePreference {
         AttestationConveyancePreference::None
@@ -775,7 +791,8 @@ pub trait WebauthnConfig {
     /// any attachment method).
     ///
     /// NOTE: This is not enforced, as the client may modify the registration request to
-    /// disregard this, and no part of the registration response indicates attachement.
+    /// disregard this, and no part of the registration response indicates attachement. This
+    /// is purely a hint, and is NOT a security enforcment.
     ///
     /// Default of None allows any attachment method.
     fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
@@ -785,6 +802,10 @@ pub trait WebauthnConfig {
     /// Get the site policy on if the registration should use a resident key so that
     /// username and other details can be embedded into the authenticator
     /// to allow bypassing that part of the workflow.
+    ///
+    /// NOTE: This is not enforced as the client may modify the registration request
+    /// to disregard this, and no part of the registration process indicates residence of
+    /// the credentials. This is not a security enforcement.
     ///
     /// Defaults to "false" aka non-resident keys.
     /// See also: https://www.w3.org/TR/webauthn/#resident-credential
@@ -835,6 +856,7 @@ pub trait WebauthnConfig {
 
 #[cfg(test)]
 mod tests {
+    use crate::base64_data::Base64UrlSafeData;
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::crypto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
     use crate::ephemeral::WebauthnEphemeralConfig;
@@ -843,7 +865,6 @@ mod tests {
         RegisterPublicKeyCredential, UserVerificationPolicy,
     };
     use crate::Webauthn;
-    use crate::base64_data::Base64UrlSafeData;
 
     #[test]
     fn test_ephemeral() {}
@@ -898,11 +919,8 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(
-            base64::decode(
-                "+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc",
-            ).unwrap(),
-        );
+        let chal =
+            Challenge(base64::decode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc").unwrap());
 
         let rsp = r#"
         {
@@ -931,11 +949,8 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(
-            base64::decode(
-                "lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo="
-            ).unwrap(),
-        );
+        let chal =
+            Challenge(base64::decode("lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=").unwrap());
 
         // Example generated using navigator.credentials.create on Chrome Version 77.0.3865.120
         // using Touch ID on MacBook running MacOS 10.15
@@ -1035,11 +1050,8 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(
-            base64::decode(
-                "tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=",
-            ).unwrap(),
-        );
+        let chal =
+            Challenge(base64::decode("tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=").unwrap());
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),

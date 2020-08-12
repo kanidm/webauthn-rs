@@ -9,9 +9,9 @@ use crate::crypto;
 use crate::crypto::COSEContentType;
 use crate::error::WebauthnError;
 use crate::proto::{AttestedCredentialData, Credential};
+use log::debug;
 use serde_cbor::{ObjectKey, Value};
 use std::collections::BTreeMap;
-use log::debug;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -333,5 +333,3 @@ pub(crate) fn verify_none_attestation(
     let credential = Credential::new(acd, credential_public_key, counter);
     Ok(AttestationType::None(credential))
 }
-
-

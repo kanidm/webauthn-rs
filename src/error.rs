@@ -13,7 +13,9 @@ pub enum WebauthnError {
     #[error("The JSON from the client did not indicate webauthn.<method> correctly")]
     InvalidClientDataType,
 
-    #[error("The client response challenge differs from the latest challenge issued to the userId")]
+    #[error(
+        "The client response challenge differs from the latest challenge issued to the userId"
+    )]
     MismatchedChallenge,
 
     #[error("There are no challenges associated to the UserId")]
@@ -76,7 +78,6 @@ pub enum WebauthnError {
     #[error("The X5C trust root is not a valid algorithm for signing")]
     CertificatePublicKeyInvalid,
 
-
     #[error("A base64 parser failure has occurred")]
     ParseBase64Failure(#[from] b64DecodeError),
 
@@ -85,7 +86,6 @@ pub enum WebauthnError {
 
     #[error("A JSON parser failure has occurred")]
     ParseJSONFailure(#[from] JSONError),
-
 
     #[error("A NOM parser failure has occurred")]
     ParseNOMFailure,

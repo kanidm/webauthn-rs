@@ -401,8 +401,7 @@ impl COSEKey {
                     .chain(ecpk.y.iter())
                     .map(|b| *b)
                     .collect())
-            }
-            // _ => Err(WebauthnError::COSEKeyInvalidType),
+            } // _ => Err(WebauthnError::COSEKeyInvalidType),
         }
     }
 
@@ -425,8 +424,7 @@ impl COSEKey {
                 ec_key
                     .check_key()
                     .map_err(|e| WebauthnError::OpenSSLError(e))
-            }
-            // _ => Err(WebauthnError::COSEKeyInvalid),
+            } // _ => Err(WebauthnError::COSEKeyInvalid),
         }
     }
 
@@ -448,14 +446,14 @@ impl COSEKey {
 
                 // Validate the key is sound. IIRC this actually checks the values
                 // are correctly on the curve as specified
-                ec_key.check_key()
+                ec_key
+                    .check_key()
                     .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
                 let p =
                     pkey::PKey::from_ec_key(ec_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
                 Ok(p)
-            }
-            // _ => Err(WebauthnError::COSEKeyInvalid),
+            } // _ => Err(WebauthnError::COSEKeyInvalid),
         }
     }
 

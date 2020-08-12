@@ -3,8 +3,8 @@
 //! service restart. It's only really useful for demo-sites, testing and as an
 //! example/reference implementation of the WebauthnConfig trait.
 
-use crate::WebauthnConfig;
 use crate::proto::AuthenticatorAttachment;
+use crate::WebauthnConfig;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider
 /// This stores all challenges and credentials in memory - IE they are lost on
@@ -140,7 +140,10 @@ impl WebauthnEphemeralConfig {
     /// Create a new Webauthn Ephemeral instance. This requires a provided relying party
     /// name, origin and id. See the trait documentation for more detail on relying party
     /// name, origin and id.
-    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str,
+    pub fn new(
+        rp_name: &str,
+        rp_origin: &str,
+        rp_id: &str,
         attachment: Option<AuthenticatorAttachment>,
     ) -> Self {
         WebauthnEphemeralConfig {

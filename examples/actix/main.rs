@@ -27,7 +27,9 @@ use actix_web::{cookie, middleware, App, HttpServer};
 use rand::prelude::*;
 
 use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
-use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential, AuthenticatorAttachment};
+use webauthn_rs::proto::{
+    AuthenticatorAttachment, PublicKeyCredential, RegisterPublicKeyCredential,
+};
 
 mod actors;
 mod crypto;
@@ -55,11 +57,7 @@ struct CmdOptions {
     debug: bool,
     #[structopt(short = "p", long = "prefix", default_value = "/auth")]
     prefix: String,
-    #[structopt(
-        short = "n",
-        long = "name",
-        default_value = "localhost"
-    )]
+    #[structopt(short = "n", long = "name", default_value = "localhost")]
     rp_name: String,
     #[structopt(short = "o", long = "origin", default_value = "http://localhost:8080")]
     /// Must match your sites domain/port/url
@@ -217,7 +215,7 @@ async fn login(
 }
 
 fn main() {
-    let opt:CmdOptions = CmdOptions::from_args();
+    let opt: CmdOptions = CmdOptions::from_args();
 
     if opt.debug {
         std::env::set_var("RUST_LOG", "actix_web=info,webauthn_rs=debug,actix=debug");
@@ -244,7 +242,6 @@ fn main() {
 
     let mut stdrng = StdRng::from_entropy();
     let cookie_sig: Vec<_> = (0..32).map(|_| stdrng.gen()).collect();
-
 
     // Start http server
     let server = HttpServer::new(move || {

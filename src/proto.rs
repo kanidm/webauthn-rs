@@ -6,11 +6,11 @@
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+use crate::base64_data::Base64UrlSafeData;
 use crate::crypto;
 use crate::error::*;
-use crate::base64_data::Base64UrlSafeData;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
@@ -105,7 +105,7 @@ pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
 /// Relying Party Entity
 #[derive(Debug, Serialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct RelyingParty {
     pub(crate) name: String,
     pub(crate) id: String,
@@ -141,7 +141,7 @@ pub(crate) struct AllowCredentials {
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialCreationOptions {
     pub(crate) rp: RelyingParty,
     pub(crate) user: User,
@@ -166,7 +166,7 @@ pub struct PublicKeyCredentialCreationOptions {
 
 /// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
 #[derive(Debug, Serialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct AuthenticatorSelectionCriteria {
     /// https://www.w3.org/TR/webauthn/#attachment
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -189,10 +189,9 @@ pub enum AuthenticatorAttachment {
     CrossPlatform,
 }
 
-
 /// https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference
 #[derive(Debug, Serialize)]
-#[serde(rename_all="lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum AttestationConveyancePreference {
     /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none
     None,
@@ -210,19 +209,23 @@ pub struct PublicKeyCredentialDescriptor {
     #[serde(rename = "type")]
     type_: String,
     id: Base64UrlSafeData,
-    transports: Option<Vec<AuthenticatorTransport>>
+    transports: Option<Vec<AuthenticatorTransport>>,
 }
 
 impl PublicKeyCredentialDescriptor {
     /// Constructed from a byte array
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        Self { type_: "public-key".to_string(), id: Base64UrlSafeData(bytes), transports: None}
+        Self {
+            type_: "public-key".to_string(),
+            id: Base64UrlSafeData(bytes),
+            transports: None,
+        }
     }
 }
 
 /// https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport
 #[derive(Debug, Serialize)]
-#[serde(rename_all="lowercase")]
+#[serde(rename_all = "lowercase")]
 #[allow(unused)]
 pub enum AuthenticatorTransport {
     /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-usb
@@ -240,14 +243,13 @@ pub enum AuthenticatorTransport {
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
 #[derive(Debug, Serialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CreationChallengeResponse {
     pub(crate) public_key: PublicKeyCredentialCreationOptions,
 }
 
-
 #[derive(Debug, Serialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct PublicKeyCredentialRequestOptions {
     challenge: Base64UrlSafeData,
     timeout: u32,
@@ -411,7 +413,7 @@ impl TryFrom<&Vec<u8>> for AuthenticatorData {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) auth_data: &'a [u8],
     pub(crate) fmt: String,
@@ -431,8 +433,8 @@ impl TryFrom<&[u8]> for AttestationObject {
     type Error = WebauthnError;
 
     fn try_from(data: &[u8]) -> Result<AttestationObject, WebauthnError> {
-        let aoi: AttestationObjectInner = serde_cbor::from_slice(&data)
-            .map_err(|e| WebauthnError::ParseCBORFailure(e))?;
+        let aoi: AttestationObjectInner =
+            serde_cbor::from_slice(&data).map_err(|e| WebauthnError::ParseCBORFailure(e))?;
         let auth_data_bytes: Vec<u8> = aoi.auth_data.iter().map(|b| *b).collect();
 
         let auth_data = AuthenticatorData::try_from(&auth_data_bytes)?;
@@ -451,14 +453,13 @@ impl TryFrom<&[u8]> for AttestationObject {
 #[derive(Debug, Deserialize)]
 pub struct AuthenticatorAttestationResponseRaw {
     /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-attestationobject
-    #[serde(rename="attestationObject")]
+    #[serde(rename = "attestationObject")]
     pub attestation_object: Base64UrlSafeData,
 
     /// https://w3c.github.io/webauthn/#dom-authenticatorresponse-clientdatajson
-    #[serde(rename="clientDataJSON")]
+    #[serde(rename = "clientDataJSON")]
     pub client_data_json: Base64UrlSafeData,
 }
-
 
 pub(crate) struct AuthenticatorAttestationResponse {
     pub(crate) attestation_object: AttestationObject,
@@ -491,7 +492,7 @@ impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationR
 pub struct RegisterPublicKeyCredential {
     pub(crate) id: String,
 
-    #[serde(rename="rawId")]
+    #[serde(rename = "rawId")]
     pub(crate) raw_id: Base64UrlSafeData,
 
     /// https://w3c.github.io/webauthn/#dom-publickeycredential-response
@@ -520,7 +521,7 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
             client_data: CollectedClientData::try_from(aarr.client_data_json.as_ref())?,
             client_data_bytes: aarr.client_data_json.clone().into(),
             signature: aarr.signature.clone().into(),
-            user_handle: aarr.user_handle.clone().map(|uh| uh.into())
+            user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
         })
     }
 }
@@ -528,15 +529,15 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
 // https://w3c.github.io/webauthn/#authenticatorassertionresponse
 #[derive(Debug, Deserialize)]
 pub(crate) struct AuthenticatorAssertionResponseRaw {
-    #[serde(rename="authenticatorData")]
+    #[serde(rename = "authenticatorData")]
     authenticator_data: Base64UrlSafeData,
 
-    #[serde(rename="clientDataJSON")]
+    #[serde(rename = "clientDataJSON")]
     client_data_json: Base64UrlSafeData,
 
     signature: Base64UrlSafeData,
 
-    #[serde(rename="userHandle")]
+    #[serde(rename = "userHandle")]
     user_handle: Option<Base64UrlSafeData>,
 }
 
@@ -549,7 +550,7 @@ pub(crate) struct AuthenticatorAssertionResponseRaw {
 #[derive(Debug, Deserialize)]
 pub struct PublicKeyCredential {
     pub(crate) id: String,
-    #[serde(rename="rawId")]
+    #[serde(rename = "rawId")]
     pub(crate) raw_id: Base64UrlSafeData,
     pub(crate) response: AuthenticatorAssertionResponseRaw,
     #[serde(rename = "type")]
