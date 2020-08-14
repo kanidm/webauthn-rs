@@ -24,6 +24,17 @@ examples in the examples folder. These examples should demonstrate secure and
 valid use, so please report any issues found, and we'd love to see more examples
 contributed!
 
+Known Supported Keys/Harwdare
+-----------------------------
+
+* Yubico 5c + MacOS 10.14 + Firefox/Edge
+* Yubico 5ci + iPadOS 14
+* TouchID + iPadOS
+* Windows Hello + Chrome
+
+If your key/browser combination don't work (generally due to missing crypto routines)
+please open an issue so that I can help you generate vectors and add support!
+
 Feedback
 --------
 

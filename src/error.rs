@@ -105,8 +105,11 @@ pub enum WebauthnError {
     #[error("The COSEKey type is not supported by this implementation")]
     COSEKeyInvalidType,
 
-    #[error("The COSEKey contains invalid X/Y coordinate data")]
+    #[error("The COSEKey contains invalid ECDSA X/Y coordinate data")]
     COSEKeyECDSAXYInvalid,
+
+    #[error("The COSEKey contains invalid RSA modulus/exponent data")]
+    COSEKeyRSANEInvalid,
 
     #[error("The COSEKey uses a curve that is not supported by this implementation")]
     COSEKeyECDSAInvalidCurve,

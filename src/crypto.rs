@@ -5,7 +5,7 @@
 
 #![allow(non_camel_case_types)]
 
-use openssl::{bn, ec, hash, nid, pkey, sha, sign, x509};
+use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 use std::convert::TryFrom;
 
 // use super::constants::*;
@@ -231,6 +231,8 @@ pub enum COSEContentType {
     ECDSA_SHA384 = -35, // recommends curve SECP384R1
     /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
     ECDSA_SHA512 = -36, // recommends curve SECP521R1
+    /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5
+    RS256 = -257,
 }
 
 impl TryFrom<i64> for COSEContentType {
@@ -240,6 +242,7 @@ impl TryFrom<i64> for COSEContentType {
             -7 => Ok(COSEContentType::ECDSA_SHA256),
             -35 => Ok(COSEContentType::ECDSA_SHA384),
             -36 => Ok(COSEContentType::ECDSA_SHA512),
+            -257 => Ok(COSEContentType::RS256),
             _ => Err(WebauthnError::COSEKeyECDSAContentType),
         }
     }
@@ -251,6 +254,7 @@ impl From<&COSEContentType> for i64 {
             COSEContentType::ECDSA_SHA256 => -7,
             COSEContentType::ECDSA_SHA384 => -35,
             COSEContentType::ECDSA_SHA512 => -6,
+            COSEContentType::RS256 => -257,
         }
     }
 }
@@ -269,6 +273,16 @@ pub struct COSEEC2Key {
     pub y: [u8; 32],
 }
 
+/// A COSE RSA PublicKey. This is a provided credential from a registered
+/// authenticator.
+/// You will likely never need to interact with this value, as it is part of the Credential
+/// API.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct COSERSAKey {
+    pub n: Vec<u8>,
+    pub e: [u8; 3],
+}
+
 /// The type of Key contained within a COSE value. You should never need
 /// to alter or change this type.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -278,6 +292,8 @@ pub enum COSEKeyType {
     // EC_OKP,
     // EC_Symmetric,
     // EC_Reserved, // should always be invalid.
+    /// Identifies this as an RSA key
+    RSA(COSERSAKey),
 }
 
 /// A COSE Key as provided by the Authenticator. You should never need
@@ -324,7 +340,10 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             .as_i64()
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
 
+        // https://www.iana.org/assignments/cose/cose.xhtml
+        // https://www.w3.org/TR/webauthn/#sctn-encoded-credPubKey-examples
         match key_type {
+            // 1 => {} OctetKey
             2 => {
                 // This indicates this is an EC2 key consisting of crv, x, y, which are stored in
                 // crv (-1), x (-2) and y (-3)
@@ -384,7 +403,54 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 // return it
                 Ok(cose_key)
             }
-            _ => Err(WebauthnError::COSEKeyInvalidType),
+            3 => {
+                // RSAKey
+
+                // -37 -> PS256
+                // -257 -> RS256 aka RSASSA-PKCS1-v1_5 with SHA-256
+
+                // -1 -> n 256 bytes
+                // -2 -> e 3 bytes
+
+                let n_value = m
+                    .get(&serde_cbor::ObjectKey::Integer(-1))
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let n = n_value
+                    .as_bytes()
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+                let e_value = m
+                    .get(&serde_cbor::ObjectKey::Integer(-2))
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let e = e_value
+                    .as_bytes()
+                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+
+                if n.len() != 256 || e.len() != 3 {
+                    return Err(WebauthnError::COSEKeyRSANEInvalid);
+                }
+
+                // Set the n and e, we know they are proper sizes.
+                let mut e_temp = [0; 3];
+                e_temp.copy_from_slice(e.as_slice());
+
+                // Right, now build the struct.
+                let cose_key = COSEKey {
+                    type_: COSEContentType::try_from(content_type)?,
+                    key: COSEKeyType::RSA(COSERSAKey {
+                        n: n.to_vec(),
+                        e: e_temp,
+                    }),
+                };
+
+                cose_key.validate()?;
+                // return it
+                Ok(cose_key)
+            }
+            _ => {
+                log::debug!("try from");
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }
     }
 }
@@ -401,7 +467,11 @@ impl COSEKey {
                     .chain(ecpk.y.iter())
                     .map(|b| *b)
                     .collect())
-            } // _ => Err(WebauthnError::COSEKeyInvalidType),
+            }
+            _ => {
+                log::debug!("get_alg_key_ecc_x962_raw");
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }
     }
 
@@ -424,7 +494,23 @@ impl COSEKey {
                 ec_key
                     .check_key()
                     .map_err(|e| WebauthnError::OpenSSLError(e))
-            } // _ => Err(WebauthnError::COSEKeyInvalid),
+            }
+            COSEKeyType::RSA(rsak) => {
+                let nbn =
+                    bn::BigNum::from_slice(&rsak.n).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ebn =
+                    bn::BigNum::from_slice(&rsak.e).map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let _rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                /*
+                // Only applies to keys with private components!
+                rsa_key
+                    .check_key()
+                    .map_err(|e| WebauthnError::OpenSSLError(e))
+                */
+                Ok(())
+            } // _ => Err(WebauthnError::COSEKeyInvalidType)
         }
     }
 
@@ -453,7 +539,11 @@ impl COSEKey {
                 let p =
                     pkey::PKey::from_ec_key(ec_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
                 Ok(p)
-            } // _ => Err(WebauthnError::COSEKeyInvalid),
+            }
+            _ => {
+                log::debug!("get_openssl_pkey");
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }
     }
 
@@ -465,6 +555,7 @@ impl COSEKey {
         let pkey = self.get_openssl_pkey()?;
 
         // TODO: Should this determine the hash type from the x509 cert? Or other?
+        // This needs to work based no the COSEContentType!!!
         let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
         verifier
