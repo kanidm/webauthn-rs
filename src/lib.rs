@@ -430,11 +430,9 @@ impl<T> Webauthn<T> {
                 &client_data_json_hash,
                 data.attestation_object.auth_data.counter,
             ),
-            AttestationFormat::None => verify_none_attestation(
-                // &data.attestation_object.att_stmt,
-                acd,
-                data.attestation_object.auth_data.counter,
-            ),
+            AttestationFormat::None => {
+                verify_none_attestation(acd, data.attestation_object.auth_data.counter)
+            }
             _ => {
                 // No other types are currently implemented
                 Err(WebauthnError::AttestationNotSupported)
@@ -767,7 +765,7 @@ pub trait WebauthnConfig {
     /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
     fn get_relying_party_id(&self) -> String;
 
-    /// Get the list of valid credential algorthims that this servie will accept. Unless you have
+    /// Get the list of valid credential algorthims that this service can accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
     /// implementation.
     fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
@@ -782,15 +780,18 @@ pub trait WebauthnConfig {
     }
 
     /// Returns the default attestation type. Options are `None`, `Direct` and `Indirect`.
-    /// Defaults to `None`
+    /// Defaults to `None`.
+    ///
+    /// IMPORTANT: You *must* also implement policy_verify_trust if you change this from
+    /// `None`.
     fn get_attestation_preference(&self) -> AttestationConveyancePreference {
         AttestationConveyancePreference::None
     }
 
-    /// Get the preferred policy on authenticator attachement. Defaults to None (allowing
+    /// Get the preferred policy on authenticator attachement hint. Defaults to None (use
     /// any attachment method).
     ///
-    /// NOTE: This is not enforced, as the client may modify the registration request to
+    /// WARNING: This is not enforced, as the client may modify the registration request to
     /// disregard this, and no part of the registration response indicates attachement. This
     /// is purely a hint, and is NOT a security enforcment.
     ///
@@ -801,9 +802,9 @@ pub trait WebauthnConfig {
 
     /// Get the site policy on if the registration should use a resident key so that
     /// username and other details can be embedded into the authenticator
-    /// to allow bypassing that part of the workflow.
+    /// to allow bypassing that part of the interaction flow.
     ///
-    /// NOTE: This is not enforced as the client may modify the registration request
+    /// WARNING: This is not enforced as the client may modify the registration request
     /// to disregard this, and no part of the registration process indicates residence of
     /// the credentials. This is not a security enforcement.
     ///

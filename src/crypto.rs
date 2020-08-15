@@ -187,6 +187,8 @@ pub enum ECDSACurve {
     SECP384R1 = 2,
     /// Identifies this curve as SECP521R1
     SECP521R1 = 3,
+    // /// Identifies this OKP as ED25519
+    // ED25519 = 6,
 }
 
 impl TryFrom<u64> for ECDSACurve {
@@ -216,23 +218,26 @@ impl ECDSACurve {
 /// use this value.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum COSEContentType {
-    //    +-----------+-------+-----------------------------------------------+
-    //    | Name      | Value | Description                                   |
-    //    +-----------+-------+-----------------------------------------------+
-    //    | OKP       | 1     | Octet Key Pair                                |
-    //    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
-    //    |           |       | pair                                          |
-    //    | Symmetric | 4     | Symmetric Keys                                |
-    //    | Reserved  | 0     | This value is reserved                        |
-    //    +-----------+-------+-----------------------------------------------+
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
     ECDSA_SHA256 = -7, // recommends curve SECP256R1
     /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
     ECDSA_SHA384 = -35, // recommends curve SECP384R1
     /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
     ECDSA_SHA512 = -36, // recommends curve SECP521R1
-    /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5
+    /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
     RS256 = -257,
+    /// Identifies this key as RS384 aka RSASSA-PKCS1-v1_5 w/ SHA-384
+    RS384 = -258,
+    /// Identifies this key as RS512 aka RSASSA-PKCS1-v1_5 w/ SHA-512
+    RS512 = -259,
+    /// Identifies this key as PS256 aka RSASSA-PSS w/ SHA-256
+    PS256 = -37,
+    /// Identifies this key as PS384 aka RSASSA-PSS w/ SHA-384
+    PS384 = -38,
+    /// Identifies this key as PS512 aka RSASSA-PSS w/ SHA-512
+    PS512 = -39,
+    /// Identifies this key as EdDSA (likely curve ed25519)
+    EDDSA = -8,
 }
 
 impl TryFrom<i64> for COSEContentType {
@@ -243,6 +248,12 @@ impl TryFrom<i64> for COSEContentType {
             -35 => Ok(COSEContentType::ECDSA_SHA384),
             -36 => Ok(COSEContentType::ECDSA_SHA512),
             -257 => Ok(COSEContentType::RS256),
+            -258 => Ok(COSEContentType::RS384),
+            -259 => Ok(COSEContentType::RS512),
+            -37 => Ok(COSEContentType::PS256),
+            -38 => Ok(COSEContentType::PS384),
+            -39 => Ok(COSEContentType::PS512),
+            -8 => Ok(COSEContentType::EDDSA),
             _ => Err(WebauthnError::COSEKeyECDSAContentType),
         }
     }
@@ -255,6 +266,12 @@ impl From<&COSEContentType> for i64 {
             COSEContentType::ECDSA_SHA384 => -35,
             COSEContentType::ECDSA_SHA512 => -6,
             COSEContentType::RS256 => -257,
+            COSEContentType::RS384 => -258,
+            COSEContentType::RS512 => -259,
+            COSEContentType::PS256 => -37,
+            COSEContentType::PS384 => -38,
+            COSEContentType::PS512 => -39,
+            COSEContentType::EDDSA => -8,
         }
     }
 }
@@ -279,7 +296,9 @@ pub struct COSEEC2Key {
 /// API.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct COSERSAKey {
+    /// An RSA modulus
     pub n: Vec<u8>,
+    /// An RSA exponent
     pub e: [u8; 3],
 }
 
@@ -287,9 +306,19 @@ pub struct COSERSAKey {
 /// to alter or change this type.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum COSEKeyType {
+    //    +-----------+-------+-----------------------------------------------+
+    //    | Name      | Value | Description                                   |
+    //    +-----------+-------+-----------------------------------------------+
+    //    | OKP       | 1     | Octet Key Pair                                |
+    //    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
+    //    |           |       | pair                                          |
+    //    | Symmetric | 4     | Symmetric Keys                                |
+    //    | Reserved  | 0     | This value is reserved                        |
+    //    +-----------+-------+-----------------------------------------------+
+    /// Identifies this as an Eliptic Curve octet key pair
+    EC_OKP,
     /// Identifies this as an Eliptic Curve EC2 key
     EC_EC2(COSEEC2Key),
-    // EC_OKP,
     // EC_Symmetric,
     // EC_Reserved, // should always be invalid.
     /// Identifies this as an RSA key
@@ -510,7 +539,8 @@ impl COSEKey {
                     .map_err(|e| WebauthnError::OpenSSLError(e))
                 */
                 Ok(())
-            } // _ => Err(WebauthnError::COSEKeyInvalidType)
+            }
+            _ => Err(WebauthnError::COSEKeyInvalidType),
         }
     }
 
@@ -552,12 +582,11 @@ impl COSEKey {
                 let p =
                     pkey::PKey::from_rsa(rsa_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
                 Ok(p)
-            } /*
-              _ => {
-                  log::debug!("get_openssl_pkey");
-                  Err(WebauthnError::COSEKeyInvalidType)
-              }
-              */
+            }
+            _ => {
+                log::debug!("get_openssl_pkey");
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }
     }
 
@@ -583,8 +612,7 @@ impl COSEKey {
 
                 Ok(verifier)
             }
-            COSEContentType::ECDSA_SHA384 => Err(WebauthnError::COSEKeyInvalidType),
-            COSEContentType::ECDSA_SHA512 => Err(WebauthnError::COSEKeyInvalidType),
+            _ => Err(WebauthnError::COSEKeyInvalidType),
         }?;
 
         verifier
