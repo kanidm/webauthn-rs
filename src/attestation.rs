@@ -80,11 +80,11 @@ fn is_matching_agorithm(
 // Perform the Verification procedure for 8.2. Packed Attestation Statement Format
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
 pub(crate) fn verify_packed_attestation(
-    att_stmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
+    counter: u32,
+    att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
     client_data_hash: &Vec<u8>,
-    counter: u32,
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map = att_stmt
@@ -218,12 +218,12 @@ pub(crate) fn verify_packed_attestation(
 // https://w3c.github.io/webauthn/#fido-u2f-attestation
 // https://medium.com/@herrjemand/verifying-fido-u2f-attestations-in-fido2-f83fab80c355
 pub(crate) fn verify_fidou2f_attestation(
-    att_stmt: &serde_cbor::Value,
     acd: &AttestedCredentialData,
+    counter: u32,
+    att_stmt: &serde_cbor::Value,
     // authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
     rp_id_hash: &Vec<u8>,
-    counter: u32,
 ) -> Result<AttestationType, WebauthnError> {
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     //
@@ -331,4 +331,116 @@ pub(crate) fn verify_none_attestation(
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
     let credential = Credential::new(acd, credential_public_key, counter);
     Ok(AttestationType::None(credential))
+}
+
+// https://w3c.github.io/webauthn/#sctn-tpm-attestation
+pub(crate) fn verify_tpm_attestation(
+    acd: &AttestedCredentialData,
+    counter: u32,
+    att_stmt: &serde_cbor::Value,
+    auth_data_bytes: Vec<u8>,
+    client_data_hash: &Vec<u8>,
+) -> Result<AttestationType, WebauthnError> {
+    log::debug!("begin verify_tpm_attest");
+
+    /*
+        $$attStmtType // = (
+                               fmt: "tpm",
+                               attStmt: tpmStmtFormat
+                           )
+
+        tpmStmtFormat = {
+                            ver: "2.0",
+                            (
+                                alg: COSEAlgorithmIdentifier,
+                                x5c: [ aikCert: bytes, * (caCert: bytes) ]
+                            )
+                            sig: bytes,
+                            certInfo: bytes,
+                            pubArea: bytes
+                        }
+
+        ver
+        The version of the TPM specification to which the signature conforms.
+
+        alg
+        A COSEAlgorithmIdentifier containing the identifier of the algorithm used to generate the attestation signature.
+
+        x5c
+        aikCert followed by its certificate chain, in X.509 encoding.
+
+        aikCert
+        The AIK certificate used for the attestation, in X.509 encoding.
+
+        sig
+        The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
+
+        certInfo
+        The TPMS_ATTEST structure over which the above signature was computed, as specified in [TPMv2-Part2] section 10.12.8.
+
+        pubArea
+        The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
+    */
+
+    // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR
+    // decoding on it to extract the contained fields.
+
+    // Verify that the public key specified by the parameters and unique fields of pubArea is
+    // identical to the credentialPublicKey in the attestedCredentialData in authenticatorData.
+
+    // Concatenate authenticatorData and clientDataHash to form attToBeSigned.
+
+    // Validate that certInfo is valid:
+
+    // Verify that magic is set to TPM_GENERATED_VALUE.
+
+    // Verify that type is set to TPM_ST_ATTEST_CERTIFY.
+
+    // Verify that extraData is set to the hash of attToBeSigned using the hash algorithm
+    // employed in "alg".
+
+    // Verify that attested contains a TPMS_CERTIFY_INFO structure as specified in [TPMv2-Part2]
+    // section 10.12.3, whose name field contains a valid Name for pubArea, as computed using the
+    // algorithm in the nameAlg field of pubArea using the procedure specified in [TPMv2-Part1] section 16.
+    // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+    // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+
+    // Verify that x5c is present.
+
+    // Note that the remaining fields in the "Standard Attestation Structure" [TPMv2-Part1]
+    // section 31.2, i.e., qualifiedSigner, clockInfo and firmwareVersion are ignored. These fields
+    // MAY be used as an input to risk engines.
+    // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+
+    // Verify the sig is a valid signature over certInfo using the attestation public key in
+    // aikCert with the algorithm specified in alg.
+
+    // Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation Statement Certificate
+    // Requirements.
+    /*
+    TPM attestation certificate MUST have the following fields/extensions:
+
+    Version MUST be set to 3.
+
+    Subject field MUST be set to empty.
+
+    The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
+    https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
+
+    The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
+
+    The Basic Constraints extension MUST have the CA component set to false.
+
+    An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
+    Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
+    available through metadata services. See, for example, the FIDO Metadata Service [FIDOMetadataService].
+    */
+
+    // If aikCert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
+    // verify that the value of this extension matches the aaguid in authenticatorData.
+
+    // If successful, return implementation-specific values representing attestation type AttCA
+    // and attestation trust path x5c.
+
+    Err(WebauthnError::AttestationNotSupported)
 }

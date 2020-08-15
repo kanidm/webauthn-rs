@@ -37,7 +37,7 @@ use std::convert::TryFrom;
 
 use crate::attestation::{
     verify_fidou2f_attestation, verify_none_attestation, verify_packed_attestation,
-    AttestationFormat, AttestationType,
+    verify_tpm_attestation, AttestationFormat, AttestationType,
 };
 use crate::base64_data::Base64UrlSafeData;
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
@@ -417,18 +417,25 @@ impl<T> Webauthn<T> {
 
         let attest_result = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
-                &data.attestation_object.att_stmt,
                 acd,
+                data.attestation_object.auth_data.counter,
+                &data.attestation_object.att_stmt,
                 &client_data_json_hash,
                 &data.attestation_object.auth_data.rp_id_hash,
-                data.attestation_object.auth_data.counter,
             ),
             AttestationFormat::Packed => verify_packed_attestation(
-                &data.attestation_object.att_stmt,
                 acd,
+                data.attestation_object.auth_data.counter,
+                &data.attestation_object.att_stmt,
                 data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
+            ),
+            AttestationFormat::TPM => verify_tpm_attestation(
+                acd,
                 data.attestation_object.auth_data.counter,
+                &data.attestation_object.att_stmt,
+                data.attestation_object.auth_data_bytes,
+                &client_data_json_hash,
             ),
             AttestationFormat::None => {
                 verify_none_attestation(acd, data.attestation_object.auth_data.counter)
@@ -846,6 +853,7 @@ pub trait WebauthnConfig {
         match at {
             AttestationType::Basic(credential, _ca) => Ok(credential),
             AttestationType::Self_(credential) => Ok(credential),
+            AttestationType::AttCa(credential) => Ok(credential),
             AttestationType::None(credential) => Ok(credential),
             _ => {
                 // We don't know how to assert trust in this yet, or we just
