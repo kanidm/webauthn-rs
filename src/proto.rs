@@ -530,15 +530,15 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
 #[derive(Debug, Deserialize)]
 pub(crate) struct AuthenticatorAssertionResponseRaw {
     #[serde(rename = "authenticatorData")]
-    authenticator_data: Base64UrlSafeData,
+    pub(crate) authenticator_data: Base64UrlSafeData,
 
     #[serde(rename = "clientDataJSON")]
-    client_data_json: Base64UrlSafeData,
+    pub(crate) client_data_json: Base64UrlSafeData,
 
-    signature: Base64UrlSafeData,
+    pub(crate) signature: Base64UrlSafeData,
 
     #[serde(rename = "userHandle")]
-    user_handle: Option<Base64UrlSafeData>,
+    pub(crate) user_handle: Option<Base64UrlSafeData>,
 }
 
 /// A client response to an authentication challenge. This contains all required

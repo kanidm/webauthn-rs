@@ -540,10 +540,24 @@ impl COSEKey {
                     pkey::PKey::from_ec_key(ec_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
                 Ok(p)
             }
-            _ => {
-                log::debug!("get_openssl_pkey");
-                Err(WebauthnError::COSEKeyInvalidType)
-            }
+            COSEKeyType::RSA(rsak) => {
+                let nbn =
+                    bn::BigNum::from_slice(&rsak.n).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ebn =
+                    bn::BigNum::from_slice(&rsak.e).map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let p =
+                    pkey::PKey::from_rsa(rsa_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                Ok(p)
+            } /*
+              _ => {
+                  log::debug!("get_openssl_pkey");
+                  Err(WebauthnError::COSEKeyInvalidType)
+              }
+              */
         }
     }
 
@@ -554,10 +568,25 @@ impl COSEKey {
     ) -> Result<bool, WebauthnError> {
         let pkey = self.get_openssl_pkey()?;
 
-        // TODO: Should this determine the hash type from the x509 cert? Or other?
-        // This needs to work based no the COSEContentType!!!
-        let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
+        let mut verifier = match &self.type_ {
+            COSEContentType::ECDSA_SHA256 => {
+                sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))
+            }
+            COSEContentType::RS256 => {
+                let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                verifier
+                    .set_rsa_padding(rsa::Padding::PKCS1)
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                Ok(verifier)
+            }
+            COSEContentType::ECDSA_SHA384 => Err(WebauthnError::COSEKeyInvalidType),
+            COSEContentType::ECDSA_SHA512 => Err(WebauthnError::COSEKeyInvalidType),
+        }?;
+
         verifier
             .update(verification_data.as_slice())
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
