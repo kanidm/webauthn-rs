@@ -10,6 +10,7 @@
 //! EVEN if they are NOT supported. This to is aid in test vector collection.
 
 use crate::crypto::COSEContentType;
+use crate::proto::AttestationConveyancePreference;
 use crate::proto::AuthenticatorAttachment;
 use crate::WebauthnConfig;
 
@@ -59,6 +60,11 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     /// Retrieve the authenticator attachment hint. See the trait documentation for more.
     fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
         self.attachment
+    }
+
+    /// Retrieve the authenticator attestation preference. See the trait documentation for more.
+    fn get_attestation_preference(&self) -> AttestationConveyancePreference {
+        AttestationConveyancePreference::Direct
     }
 
     /// Retrieve the list of support algorithms.

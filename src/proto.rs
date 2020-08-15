@@ -94,6 +94,12 @@ pub enum UserVerificationPolicy {
     /// Prefer User Verification bit to be set, and yolo the registration or authentication
     /// if false. This means if the authenticator can perform verification, do it, but don't
     /// mind if not.
+    ///
+    /// WARNING: This setting is effectively useless. Either you *want* user verification
+    /// so require `Required`, or you do not want it, so use `Discouraged`. This setting
+    /// will prompt users for verification, but without enforcing that it is present.
+    ///
+    /// As a result, this setting is effectively `Discouraged` and should be AVOIDED.
     Preferred,
     /// Request that no verification is performed, and fail if it is. This is intended to
     /// minimise user interaction in workflows, but is potentially a security risk to use.
@@ -178,6 +184,9 @@ pub struct AuthenticatorSelectionCriteria {
     pub(crate) user_verification: UserVerificationPolicy,
 }
 
+/// The authenticator attachment hint. This is NOT enforced, and is only used
+/// to help a user select a relevant authenticator type.
+///
 /// https://www.w3.org/TR/webauthn/#attachment
 #[derive(Debug, Copy, Clone, Serialize)]
 pub enum AuthenticatorAttachment {
@@ -196,6 +205,9 @@ pub enum AttestationConveyancePreference {
     /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none
     None,
 
+    /// WARNING: This allows the user to choose if they send a attestation
+    /// to your service. You either want this (use `Direct`) or do not (use `None`).
+    /// This option is effectively the same as `None` and should be AVOIDED.
     /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-indirect
     Indirect,
 
