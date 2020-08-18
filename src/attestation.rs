@@ -65,18 +65,6 @@ pub enum AttestationType {
     Uncertain(Credential),
 }
 
-// Check that alg from att_stmt_map matches alg_from_auhenticator_data
-fn is_matching_agorithm(
-    att_stmt_map: &BTreeMap<ObjectKey, Value>,
-    alg_from_auhenticator_data: &COSEContentType,
-) -> bool {
-    att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
-        .and_then(|alg| alg.as_i64())
-        .map(|alg| alg == i64::from(alg_from_auhenticator_data))
-        .unwrap_or(false)
-}
-
 // Perform the Verification procedure for 8.2. Packed Attestation Statement Format
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
 pub(crate) fn verify_packed_attestation(
@@ -93,12 +81,21 @@ pub(crate) fn verify_packed_attestation(
 
     let x5c_key = &serde_cbor::ObjectKey::String("x5c".to_string());
     let ecdaa_key_id_key = &serde_cbor::ObjectKey::String("ecdaaKeyId".to_string());
+
+    let alg_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+        .ok_or(WebauthnError::AttestationStatementAlgMissing)?;
+
+    let alg = alg_value
+        .as_i64()
+        .ok_or(WebauthnError::AttestationStatementAlgInvalid)
+        .and_then(COSEContentType::try_from)?;
+
     match (
         att_stmt_map.get(x5c_key),
         att_stmt_map.get(ecdaa_key_id_key),
     ) {
         (Some(x5c), _) => {
-            debug!("x5c");
             let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
 
@@ -116,7 +113,7 @@ pub(crate) fn verify_packed_attestation(
                     values
                         .as_bytes()
                         .ok_or(WebauthnError::AttestationStatementX5CInvalid)
-                        .and_then(|b| crypto::X509PublicKey::try_from(b.as_slice()))
+                        .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
                 })
                 .collect();
 
@@ -186,7 +183,7 @@ pub(crate) fn verify_packed_attestation(
             let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
             // 4.a. Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
-            if !is_matching_agorithm(att_stmt_map, &credential_public_key.type_) {
+            if alg != credential_public_key.type_ {
                 return Err(WebauthnError::AttestationStatementAlgMismatch);
             }
 
@@ -273,16 +270,10 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
     //
-    // Now, the standard is not super clear here about this, and what format these bytes are in.
-    // I am assuming for now it's x509 DER.
+    // // try from asserts this condition given the alg.
 
-    let cerificate_public_key = crypto::X509PublicKey::try_from(att_cert.as_slice())?;
-
-    // Check the types to make sure it's ec p256.
-
-    if !(cerificate_public_key.is_secp256r1()?) {
-        return Err(WebauthnError::CertificatePublicKeyInvalid);
-    }
+    let cerificate_public_key =
+        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEContentType::ECDSA_SHA256))?;
 
     // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
     //
@@ -343,47 +334,90 @@ pub(crate) fn verify_tpm_attestation(
 ) -> Result<AttestationType, WebauthnError> {
     log::debug!("begin verify_tpm_attest");
 
-    /*
-        $$attStmtType // = (
-                               fmt: "tpm",
-                               attStmt: tpmStmtFormat
-                           )
-
-        tpmStmtFormat = {
-                            ver: "2.0",
-                            (
-                                alg: COSEAlgorithmIdentifier,
-                                x5c: [ aikCert: bytes, * (caCert: bytes) ]
-                            )
-                            sig: bytes,
-                            certInfo: bytes,
-                            pubArea: bytes
-                        }
-
-        ver
-        The version of the TPM specification to which the signature conforms.
-
-        alg
-        A COSEAlgorithmIdentifier containing the identifier of the algorithm used to generate the attestation signature.
-
-        x5c
-        aikCert followed by its certificate chain, in X.509 encoding.
-
-        aikCert
-        The AIK certificate used for the attestation, in X.509 encoding.
-
-        sig
-        The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
-
-        certInfo
-        The TPMS_ATTEST structure over which the above signature was computed, as specified in [TPMv2-Part2] section 10.12.8.
-
-        pubArea
-        The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
-    */
-
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR
     // decoding on it to extract the contained fields.
+    let att_stmt_map = att_stmt
+        .as_object()
+        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+
+    // The version of the TPM specification to which the signature conforms.
+    let ver_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("ver".to_string()))
+        .ok_or(WebauthnError::AttestationStatementVerMissing)?;
+
+    let ver = ver_value
+        .as_string()
+        .ok_or(WebauthnError::AttestationStatementVerInvalid)?;
+
+    if ver != "2.0" {
+        return Err(WebauthnError::AttestationStatementVerUnsupported);
+    }
+
+    // A COSEAlgorithmIdentifier containing the identifier of the algorithm used to generate the attestation signature.
+    // String("alg"): I64(-65535),
+    let alg_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+        .ok_or(WebauthnError::AttestationStatementAlgMissing)?;
+
+    let alg = alg_value
+        .as_i64()
+        .ok_or(WebauthnError::AttestationStatementAlgInvalid)
+        .and_then(COSEContentType::try_from)?;
+
+    eprintln!("alg = {:?}", alg);
+
+    // The TPMS_ATTEST structure over which the above signature was computed, as specified in [TPMv2-Part2] section 10.12.8.
+    // String("certInfo"): Bytes([]),
+    let certinfo_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("certInfo".to_string()))
+        .ok_or(WebauthnError::AttestationStatementCertInfoMissing)?;
+
+    eprintln!("certinfo_value -> {:?}", certinfo_value);
+
+    // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
+    // String("pubArea"): Bytes([]),
+    let pubarea_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("pubArea".to_string()))
+        .ok_or(WebauthnError::AttestationStatementPubAreaMissing)?;
+
+    eprintln!("pubinfo_value -> {:?}", pubarea_value);
+
+    // The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
+    // String("sig"): Bytes([]),
+    let sig_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+
+    eprintln!("sig_value -> {:?}", sig_value);
+
+    // x5c -> aikCert followed by its certificate chain, in X.509 encoding.
+    // String("x5c"): Array( // root Bytes([]), // chain Bytes([])])
+    let x5c_value = att_stmt_map
+        .get(&serde_cbor::ObjectKey::String("x5c".to_string()))
+        .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
+
+    let x5c_array_ref = x5c_value
+        .as_array()
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+
+    let arr_x509: Result<Vec<_>, _> = x5c_array_ref
+        .iter()
+        .map(|values| {
+            values
+                .as_bytes()
+                .ok_or(WebauthnError::AttestationStatementX5CInvalid)
+                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+        })
+        .collect();
+
+    let mut arr_x509 = arr_x509?;
+
+    // Must have at least one x509 cert
+    if arr_x509.len() == 0 {
+        return Err(WebauthnError::AttestationStatementX5CInvalid);
+    }
+
+    let root_ca_cert = arr_x509.remove(0);
 
     // Verify that the public key specified by the parameters and unique fields of pubArea is
     // identical to the credentialPublicKey in the attestedCredentialData in authenticatorData.

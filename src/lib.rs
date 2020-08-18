@@ -853,7 +853,7 @@ pub trait WebauthnConfig {
         match at {
             AttestationType::Basic(credential, _ca) => Ok(credential),
             AttestationType::Self_(credential) => Ok(credential),
-            AttestationType::AttCa(credential) => Ok(credential),
+            AttestationType::AttCa(credential, ca_root, ca_chain) => Ok(credential),
             AttestationType::None(credential) => Ok(credential),
             _ => {
                 // We don't know how to assert trust in this yet, or we just

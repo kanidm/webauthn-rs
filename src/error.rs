@@ -57,14 +57,35 @@ pub enum WebauthnError {
     #[error("The attestation statement signature is not valid")]
     AttestationStatementSigInvalid,
 
+    #[error("The attestation statement version is not present")]
+    AttestationStatementVerMissing,
+
+    #[error("The attestation statement version is not valid")]
+    AttestationStatementVerInvalid,
+
+    #[error("The attestation statement version not supported")]
+    AttestationStatementVerUnsupported,
+
     #[error("The attestation statement x5c (trust root) is not present")]
     AttestationStatementX5CMissing,
 
     #[error("The attestation statement x5c (trust root) is not valid")]
     AttestationStatementX5CInvalid,
 
+    #[error("The attestation statement algorithmm is not present")]
+    AttestationStatementAlgMissing,
+
+    #[error("The attestation statement certinfo is not present")]
+    AttestationStatementCertInfoMissing,
+
+    #[error("The attestation statement pubarea is not present")]
+    AttestationStatementPubAreaMissing,
+
     #[error("The attestation statement alg does not match algorithm of the credentialPublicKey in authenticatorData")]
     AttestationStatementAlgMismatch,
+
+    #[error("The attestation statement alg does not match algorithm of the credentialPublicKey in authenticatorData")]
+    AttestationStatementAlgInvalid,
 
     #[error("The attestation trust could not be established")]
     AttestationTrustFailure,

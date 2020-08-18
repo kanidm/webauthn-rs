@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 //! JSON Protocol Structs and representations for communication with authenticators
 //! and clients.
 
@@ -569,9 +567,119 @@ pub struct PublicKeyCredential {
     pub(crate) type_: String,
 }
 
+// TPM datatypes.
+//
+pub const TPM_GENERATED_VALUE: u32 = 0xff544347;
+
+#[derive(Debug)]
+#[repr(u16)]
+pub enum TpmSt {
+    RspCommand = 0x00c4,
+    Null = 0x8000,
+    NoSessions = 0x8001,
+    Sessions = 0x8002,
+    ReservedA = 0x8003,
+    ReservedB = 0x8004,
+    AttestNV = 0x8014,
+    AttestCommandAudit = 0x8015,
+    AttestSessionAudit = 0x8016,
+    AttestCertify = 0x8017,
+    AttestQuote = 0x8018,
+    AttestTime = 0x8019,
+    AttestCreation = 0x801a,
+    ReservedC = 0x801b,
+    Creation = 0x8021,
+    Verified = 0x8022,
+    AuthSecret = 0x8023,
+    Hashcheck = 0x8024,
+    AuthSigned = 0x8025,
+    FUManifest = 0x8029,
+}
+
+impl TpmSt {
+    fn new(v: u16) -> Option<Self> {
+        match v {
+            0x00c4 => Some(TpmSt::RspCommand),
+            0x8000 => Some(TpmSt::Null),
+            0x8001 => Some(TpmSt::NoSessions),
+            0x8002 => Some(TpmSt::Sessions),
+            0x8003 => Some(TpmSt::ReservedA),
+            0x8004 => Some(TpmSt::ReservedB),
+            0x8014 => Some(TpmSt::AttestNV),
+            0x8015 => Some(TpmSt::AttestCommandAudit),
+            0x8016 => Some(TpmSt::AttestSessionAudit),
+            0x8017 => Some(TpmSt::AttestCertify),
+            0x8018 => Some(TpmSt::AttestQuote),
+            0x8019 => Some(TpmSt::AttestTime),
+            0x801a => Some(TpmSt::AttestCreation),
+            0x801b => Some(TpmSt::ReservedC),
+            0x8021 => Some(TpmSt::Creation),
+            0x8022 => Some(TpmSt::Verified),
+            0x8023 => Some(TpmSt::AuthSecret),
+            0x8024 => Some(TpmSt::Hashcheck),
+            0x8025 => Some(TpmSt::AuthSigned),
+            0x8029 => Some(TpmSt::FUManifest),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Tpm2bName {
+    None,
+    Handle(u32),
+    Digest(Vec<u8>)
+}
+
+#[derive(Debug)]
+pub struct TpmsAttest {
+    magic: u32,
+    type_: TpmSt,
+    qualifiedSigner: Tpm2bName,
+    // extraData: TPM2B_DATA,
+    // clockInfo: TPMS_CLOCK_INFO,
+    // firmwareVersion: u64,
+    // typeattested: TPMU_ATTEST,
+}
+
+named!( tpm2b_name<&[u8], Tpm2bName>,
+    switch!(u16!(nom::Endianness::Big),
+        0 => value!(Tpm2bName::None) |
+        4 => map!(u32!(nom::Endianness::Big), Tpm2bName::Handle) |
+        size => map!(take!(size), |d| Tpm2bName::Digest(d.to_vec()))
+    )
+);
+
+
+named!( tpmsattest_parser<&[u8], TpmsAttest>,
+    do_parse!(
+        magic: u32!(nom::Endianness::Big) >>
+        type_: map_opt!(u16!(nom::Endianness::Big), TpmSt::new) >>
+        qualifiedSigner: tpm2b_name >>
+        (TpmsAttest {
+            magic, type_, qualifiedSigner
+        })
+
+    )
+);
+
+impl TryFrom<&[u8]> for TpmsAttest {
+    type Error = WebauthnError;
+
+    fn try_from(data: &[u8]) -> Result<TpmsAttest, WebauthnError> {
+        tpmsattest_parser(data)
+            .map_err(|_| WebauthnError::ParseNOMFailure)
+            .map(|(_, v)| v)
+    }
+}
+
+pub struct TpmtPublic {}
+
+pub struct TpmtSignature {}
+
 #[cfg(test)]
 mod tests {
-    use super::{AttestationObject, RegisterPublicKeyCredential};
+    use super::{AttestationObject, RegisterPublicKeyCredential, TpmsAttest, TPM_GENERATED_VALUE};
     use serde_json;
     use std::convert::TryFrom;
 
@@ -599,4 +707,23 @@ mod tests {
         let _ao = AttestationObject::try_from(raw_ao.as_slice()).unwrap();
     }
     // Add tests for when the objects are too short.
+    //
+    #[test]
+    fn deserialise_tpms_attest() {
+        let data: Vec<u8> = vec![
+            255, 84, 67, 71, 128, 23, 0, 34, 0, 11, 174, 74, 152, 70, 1, 87, 191, 156, 96, 74, 177,
+            221, 37, 132, 6, 8, 101, 35, 124, 216, 85, 173, 85, 195, 115, 137, 194, 247, 145, 61,
+            82, 40, 0, 20, 234, 98, 144, 49, 146, 39, 99, 47, 44, 82, 115, 48, 64, 40, 152, 224,
+            227, 42, 63, 133, 0, 0, 0, 2, 219, 215, 137, 38, 187, 106, 183, 8, 100, 145, 106, 200,
+            1, 86, 5, 220, 81, 118, 234, 131, 141, 0, 34, 0, 11, 239, 53, 112, 255, 253, 12, 189,
+            168, 16, 253, 10, 149, 108, 7, 31, 212, 143, 21, 153, 7, 7, 153, 99, 73, 205, 97, 90,
+            110, 182, 120, 4, 250, 0, 34, 0, 11, 249, 72, 224, 84, 16, 96, 147, 197, 167, 195, 110,
+            181, 77, 207, 147, 16, 34, 64, 139, 185, 120, 190, 196, 209, 213, 29, 1, 136, 76, 235,
+            223, 247,
+        ];
+
+        let tpms_attest = TpmsAttest::try_from(data.as_slice()).unwrap();
+        println!("{:?}", tpms_attest);
+        assert!(tpms_attest.magic == TPM_GENERATED_VALUE);
+    }
 }

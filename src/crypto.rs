@@ -24,11 +24,48 @@ use crate::proto::Aaguid;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
+fn verify_signature(
+    pkey: &pkey::PKeyRef<pkey::Public>,
+    stype: COSEContentType,
+    signature: &[u8],
+    verification_data: &[u8],
+) -> Result<bool, WebauthnError> {
+    let mut verifier = match stype {
+        COSEContentType::ECDSA_SHA256 => sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+            .map_err(|e| WebauthnError::OpenSSLError(e)),
+        COSEContentType::RS256 => {
+            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+            verifier
+                .set_rsa_padding(rsa::Padding::PKCS1)
+                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+            Ok(verifier)
+        }
+        COSEContentType::INSECURE_RS1 => {
+            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), &pkey)
+                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+            verifier
+                .set_rsa_padding(rsa::Padding::PKCS1)
+                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+            Ok(verifier)
+        }
+        _ => Err(WebauthnError::COSEKeyInvalidType),
+    }?;
+
+    verifier
+        .update(verification_data)
+        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+    verifier
+        .verify(signature)
+        .map_err(|e| WebauthnError::OpenSSLError(e))
+}
+
 /// An X509PublicKey. This is what is otherwise known as a public certificate
 /// which comprises a public key and other signed metadata related to the issuer
 /// of the key.
 pub struct X509PublicKey {
     pubk: x509::X509,
+    t: COSEContentType,
 }
 
 impl std::fmt::Debug for X509PublicKey {
@@ -37,39 +74,43 @@ impl std::fmt::Debug for X509PublicKey {
     }
 }
 
-impl TryFrom<&[u8]> for X509PublicKey {
+impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
     type Error = WebauthnError;
 
     // Must be DER bytes. If you have PEM, base64decode first!
-    fn try_from(d: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from((d, t): (&[u8], COSEContentType)) -> Result<Self, Self::Error> {
         let pubk = x509::X509::from_der(d).map_err(|e| WebauthnError::OpenSSLError(e))?;
-        Ok(X509PublicKey { pubk: pubk })
+
+        match &t {
+            COSEContentType::ECDSA_SHA256 => {
+                let pk = pubk
+                    .public_key()
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let ec_key = pk.ec_key().map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                ec_key
+                    .check_key()
+                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+
+                let ec_grpref = ec_key.group();
+
+                let ec_curve = ec_grpref
+                    .curve_name()
+                    .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
+
+                if ec_curve != nid::Nid::X9_62_PRIME256V1 {
+                    return Err(WebauthnError::CertificatePublicKeyInvalid);
+                }
+            }
+            _ => {}
+        }
+
+        Ok(X509PublicKey { pubk, t })
     }
 }
 
 impl X509PublicKey {
-    pub(crate) fn is_secp256r1(&self) -> Result<bool, WebauthnError> {
-        // Can we get the public key?
-        let pk = self
-            .pubk
-            .public_key()
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
-
-        let ec_key = pk.ec_key().map_err(|e| WebauthnError::OpenSSLError(e))?;
-
-        ec_key
-            .check_key()
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
-
-        let ec_grpref = ec_key.group();
-
-        let ec_curve = ec_grpref
-            .curve_name()
-            .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
-
-        Ok(ec_curve == nid::Nid::X9_62_PRIME256V1)
-    }
-
     pub(crate) fn verify_signature(
         &self,
         signature: &Vec<u8>,
@@ -80,15 +121,12 @@ impl X509PublicKey {
             .public_key()
             .map_err(|e| WebauthnError::OpenSSLError(e))?;
 
-        // TODO: Should this determine the hash type from the x509 cert? Or other?
-        let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
-        verifier
-            .update(verification_data.as_slice())
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
-        verifier
-            .verify(signature.as_slice())
-            .map_err(|e| WebauthnError::OpenSSLError(e))
+        verify_signature(
+            &pkey,
+            self.t,
+            signature.as_slice(),
+            verification_data.as_slice(),
+        )
     }
 
     pub(crate) fn assert_packed_attest_req(&self) -> Result<(), WebauthnError> {
@@ -216,7 +254,7 @@ impl ECDSACurve {
 /// A COSE Key Content type, indicating the type of key and hash type
 /// that should be used with this key. You shouldn't need to alter or
 /// use this value.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum COSEContentType {
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
     ECDSA_SHA256 = -7, // recommends curve SECP256R1
@@ -238,6 +276,9 @@ pub enum COSEContentType {
     PS512 = -39,
     /// Identifies this key as EdDSA (likely curve ed25519)
     EDDSA = -8,
+    /// Identifies this as an INSECURE RS1 aka RSASSA-PKCS1-v1_5 using SHA-1. This is not
+    /// used by validators, but can exist in some windows hello tpm's
+    INSECURE_RS1 = -65535,
 }
 
 impl TryFrom<i64> for COSEContentType {
@@ -254,6 +295,7 @@ impl TryFrom<i64> for COSEContentType {
             -38 => Ok(COSEContentType::PS384),
             -39 => Ok(COSEContentType::PS512),
             -8 => Ok(COSEContentType::EDDSA),
+            -65535 => Ok(COSEContentType::INSECURE_RS1),
             _ => Err(WebauthnError::COSEKeyECDSAContentType),
         }
     }
@@ -272,6 +314,7 @@ impl From<&COSEContentType> for i64 {
             COSEContentType::PS384 => -38,
             COSEContentType::PS512 => -39,
             COSEContentType::EDDSA => -8,
+            COSEContentType::INSECURE_RS1 => -65535,
         }
     }
 }
@@ -596,31 +639,12 @@ impl COSEKey {
         verification_data: &Vec<u8>,
     ) -> Result<bool, WebauthnError> {
         let pkey = self.get_openssl_pkey()?;
-
-        let mut verifier = match &self.type_ {
-            COSEContentType::ECDSA_SHA256 => {
-                sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))
-            }
-            COSEContentType::RS256 => {
-                let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
-
-                verifier
-                    .set_rsa_padding(rsa::Padding::PKCS1)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
-
-                Ok(verifier)
-            }
-            _ => Err(WebauthnError::COSEKeyInvalidType),
-        }?;
-
-        verifier
-            .update(verification_data.as_slice())
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
-        verifier
-            .verify(signature.as_slice())
-            .map_err(|e| WebauthnError::OpenSSLError(e))
+        verify_signature(
+            &pkey,
+            self.type_,
+            signature.as_slice(),
+            verification_data.as_slice(),
+        )
     }
 }
 
