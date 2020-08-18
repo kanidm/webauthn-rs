@@ -625,6 +625,29 @@ impl TpmSt {
 }
 
 #[derive(Debug)]
+pub struct TpmsClockInfo {
+    clock: u64,
+    reset_count: u32,
+    restart_count: u32,
+    safe: bool  // u8
+}
+
+named!( tpmsclockinfo_parser<&[u8], TpmsClockInfo>,
+    do_parse!(
+        clock: u64!(nom::Endianness::Big) >>
+        reset_count: u32!(nom::Endianness::Big) >>
+        restart_count: u32!(nom::Endianness::Big) >>
+        safe: switch!(take!(1),
+            [0] => value!(false) |
+            [1] => value!(true)
+        ) >>
+        (TpmsClockInfo {
+            clock, reset_count, restart_count, safe
+        })
+    )
+);
+
+#[derive(Debug)]
 pub enum Tpm2bName {
     None,
     Handle(u32),
@@ -632,14 +655,26 @@ pub enum Tpm2bName {
 }
 
 #[derive(Debug)]
+pub enum TpmuAttest {
+    AttestCertify(Tpm2bName, Tpm2bName),
+    // AttestNV 
+    // AttestCommandAudit 
+    // AttestSessionAudit 
+    // AttestQuote 
+    // AttestTime 
+    // AttestCreation 
+    Invalid
+}
+
+#[derive(Debug)]
 pub struct TpmsAttest {
     magic: u32,
     type_: TpmSt,
     qualifiedSigner: Tpm2bName,
-    // extraData: TPM2B_DATA,
-    // clockInfo: TPMS_CLOCK_INFO,
-    // firmwareVersion: u64,
-    // typeattested: TPMU_ATTEST,
+    extraData: Option<Vec<u8>>,
+    clockInfo: TpmsClockInfo,
+    firmwareVersion: u64,
+    typeattested: TpmuAttest,
 }
 
 named!( tpm2b_name<&[u8], Tpm2bName>,
@@ -650,16 +685,44 @@ named!( tpm2b_name<&[u8], Tpm2bName>,
     )
 );
 
+named!( tpm2b_data<&[u8], Option<Vec<u8>>>,
+    switch!(u16!(nom::Endianness::Big),
+        0 => value!(None) |
+        size => map!(take!(size), |d| Some(d.to_vec()))
+    )
+);
+
+named! ( tpmuattestcertify<&[u8], TpmuAttest>,
+    do_parse!(
+        name: tpm2b_name >>
+        qualifiedName: tpm2b_name >>
+        (
+            TpmuAttest::AttestCertify(name, qualifiedName)
+        )
+    )
+);
 
 named!( tpmsattest_parser<&[u8], TpmsAttest>,
     do_parse!(
-        magic: u32!(nom::Endianness::Big) >>
+        magic: verify!(u32!(nom::Endianness::Big), |x| x == TPM_GENERATED_VALUE) >>
         type_: map_opt!(u16!(nom::Endianness::Big), TpmSt::new) >>
         qualifiedSigner: tpm2b_name >>
+        extraData: tpm2b_data >>
+        clockInfo: tpmsclockinfo_parser >>
+        firmwareVersion: u64!(nom::Endianness::Big) >>
+        // we *could* try to parse this generically, BUT I can't work out how to amke nom
+        // reach back to type_ to switch on the type. However, webauthn ONLY needs attestCertify
+        // so we can blindly attempt to parse this as it is.
+        typeattested: tpmuattestcertify >>
+        /*
+        typeattested: switch!(type_,
+            TpmSt::AttestCertify => tpmuattestcertify |
+            _ => value!(TpmuAttest::Invalid)
+        ) >>
+        */
         (TpmsAttest {
-            magic, type_, qualifiedSigner
+            magic, type_, qualifiedSigner, extraData, clockInfo, firmwareVersion, typeattested
         })
-
     )
 );
 
@@ -668,14 +731,27 @@ impl TryFrom<&[u8]> for TpmsAttest {
 
     fn try_from(data: &[u8]) -> Result<TpmsAttest, WebauthnError> {
         tpmsattest_parser(data)
-            .map_err(|_| WebauthnError::ParseNOMFailure)
+            .map_err(|e| {
+                log::debug!("{:?}", e);
+                eprintln!("{:?}", e);
+                WebauthnError::ParseNOMFailure
+            })
             .map(|(_, v)| v)
     }
 }
 
-pub struct TpmtPublic {}
+pub struct TpmtPublic {
+    // type
+    // nameAlg
+    // objectAttributes
+    // authPolicy
+    // 
+}
 
-pub struct TpmtSignature {}
+pub struct TpmtSignature {
+    // sigAlg
+    // signature - TPMU_SIGNATURE
+}
 
 #[cfg(test)]
 mod tests {
@@ -711,11 +787,25 @@ mod tests {
     #[test]
     fn deserialise_tpms_attest() {
         let data: Vec<u8> = vec![
-            255, 84, 67, 71, 128, 23, 0, 34, 0, 11, 174, 74, 152, 70, 1, 87, 191, 156, 96, 74, 177,
-            221, 37, 132, 6, 8, 101, 35, 124, 216, 85, 173, 85, 195, 115, 137, 194, 247, 145, 61,
-            82, 40, 0, 20, 234, 98, 144, 49, 146, 39, 99, 47, 44, 82, 115, 48, 64, 40, 152, 224,
-            227, 42, 63, 133, 0, 0, 0, 2, 219, 215, 137, 38, 187, 106, 183, 8, 100, 145, 106, 200,
-            1, 86, 5, 220, 81, 118, 234, 131, 141, 0, 34, 0, 11, 239, 53, 112, 255, 253, 12, 189,
+            255, 84, 67, 71, // magic
+            128, 23, // type_
+            0, 34, // 2b_name size
+            0, 11, 174, 74, 152, 70, 1, 87,
+            191, 156, 96, 74, 177, 221, 37, 132,
+            6, 8, 101, 35, 124, 216, 85, 173,
+            85, 195, 115, 137, 194, 247, 145, 61,
+            82, 40, // 2b_name data
+            0, 20, // exdata size
+            234, 98, 144, 49, 146, 39, 99, 47,
+            44, 82, 115, 48, 64, 40, 152, 224,
+            227, 42, 63, 133, // ext data
+            0, 0, 0, 2, 219, 215, 137, 38, // clock
+            187, 106, 183, 8, // reset
+            100, 145, 106, 200, // restart
+            1, // safe
+            86, 5, 220, 81, 118, 234, 131, 141,  // fw vers
+            0, 34, // type attested.
+            0, 11, 239, 53, 112, 255, 253, 12, 189,
             168, 16, 253, 10, 149, 108, 7, 31, 212, 143, 21, 153, 7, 7, 153, 99, 73, 205, 97, 90,
             110, 182, 120, 4, 250, 0, 34, 0, 11, 249, 72, 224, 84, 16, 96, 147, 197, 167, 195, 110,
             181, 77, 207, 147, 16, 34, 64, 139, 185, 120, 190, 196, 209, 213, 29, 1, 136, 76, 235,
