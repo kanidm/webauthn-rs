@@ -6,9 +6,9 @@
 use std::convert::TryFrom;
 
 use crate::crypto;
-use crate::crypto::COSEContentType;
+use crate::crypto::{COSEContentType, COSEKeyType, compute_sha256};
 use crate::error::WebauthnError;
-use crate::proto::{AttestedCredentialData, Credential};
+use crate::proto::{AttestedCredentialData, Credential, TpmsAttest, TpmtPublic, TpmSt, TpmuPublicParms, TpmuPublicId, TpmuAttest, TpmAlgId, Tpm2bName};
 use log::debug;
 use serde_cbor::{ObjectKey, Value};
 use std::collections::BTreeMap;
@@ -372,7 +372,13 @@ pub(crate) fn verify_tpm_attestation(
         .get(&serde_cbor::ObjectKey::String("certInfo".to_string()))
         .ok_or(WebauthnError::AttestationStatementCertInfoMissing)?;
 
-    eprintln!("certinfo_value -> {:?}", certinfo_value);
+    let certinfo_bytes = certinfo_value
+        .as_bytes()
+        .ok_or(WebauthnError::AttestationStatementCertInfoMissing)?;
+
+    let certinfo = TpmsAttest::try_from(certinfo_bytes.as_slice())?;
+
+    eprintln!("certinfo -> {:?}", certinfo);
 
     // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
     // String("pubArea"): Bytes([]),
@@ -380,7 +386,13 @@ pub(crate) fn verify_tpm_attestation(
         .get(&serde_cbor::ObjectKey::String("pubArea".to_string()))
         .ok_or(WebauthnError::AttestationStatementPubAreaMissing)?;
 
-    eprintln!("pubinfo_value -> {:?}", pubarea_value);
+    let pubarea_bytes = pubarea_value
+        .as_bytes()
+        .ok_or(WebauthnError::AttestationStatementPubAreaMissing)?;
+
+    let pubarea = TpmtPublic::try_from(pubarea_bytes.as_slice())?;
+
+    eprintln!("pubarea -> {:?}", pubarea);
 
     // The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
     // String("sig"): Bytes([]),
@@ -421,33 +433,106 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that the public key specified by the parameters and unique fields of pubArea is
     // identical to the credentialPublicKey in the attestedCredentialData in authenticatorData.
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+
+    // Check the algo is the same
+    match (credential_public_key.key, pubarea.parameters, pubarea.unique) {
+        (COSEKeyType::RSA(cose_rsa), TpmuPublicParms::Rsa(_tpm_parms), TpmuPublicId::Rsa(tpm_modulus)) => {
+            // Is it possible to check the exponent? I think it's not ... as the tpm_parms and the
+            // cose rse disagree in my test vectors.
+            // cose_rsa.e != tpm_parms.exponent ||
+
+            // check the pkey is the same.
+            if cose_rsa.n != tpm_modulus {
+                return Err(WebauthnError::AttestationTpmPubareaMismatch)
+            }
+        }
+        _ => {
+            return Err(WebauthnError::AttestationTpmPubareaMismatch)
+        }
+    }
 
     // Concatenate authenticatorData and clientDataHash to form attToBeSigned.
+    let verification_data: Vec<u8> = auth_data_bytes
+        .iter()
+        .chain(client_data_hash.iter())
+        .map(|b| *b)
+        .collect();
 
     // Validate that certInfo is valid:
+    // Done in parsing.
 
     // Verify that magic is set to TPM_GENERATED_VALUE.
+    // Done in parsing.
 
     // Verify that type is set to TPM_ST_ATTEST_CERTIFY.
+    if certinfo.type_ != TpmSt::AttestCertify {
+        return Err(WebauthnError::AttestationTpmStInvalid)
+    }
+
+    let extra_data_hash = match certinfo.extraData {
+        Some(h) => h,
+        None => {
+            return Err(WebauthnError::AttestationTpmExtraDataInvalid)
+        }
+    };
 
     // Verify that extraData is set to the hash of attToBeSigned using the hash algorithm
     // employed in "alg".
+    let hash_verification_data = alg.only_hash_from_type(verification_data.as_slice())?;
+
+    if hash_verification_data != extra_data_hash {
+        return Err(WebauthnError::AttestationTpmExtraDataMismatch)
+    }
+
+    // verification_data
 
     // Verify that attested contains a TPMS_CERTIFY_INFO structure as specified in [TPMv2-Part2]
     // section 10.12.3, whose name field contains a valid Name for pubArea, as computed using the
     // algorithm in the nameAlg field of pubArea using the procedure specified in [TPMv2-Part1] section 16.
     // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
     // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
+    match certinfo.typeattested {
+        TpmuAttest::AttestCertify(name, _qname) => {
+
+            let name = match name {
+                Tpm2bName::Digest(name) => name,
+                _ => return Err(WebauthnError::AttestationTpmPubareaHashInvalid),
+            };
+            // Name contains two bytes at the start for what algo is used. The spec
+            // says nothing about validating them, so instead we prepend the bytes into the hash
+            // so we do enforce these are checked
+            let hname = match pubarea.nameAlg {
+                TpmAlgId::Sha256 => {
+                    let mut v = vec![0, 11];
+                    let mut r = compute_sha256(pubarea_bytes);
+                    v.append(&mut r);
+                    v
+                }
+                _ => return Err(WebauthnError::AttestationTpmPubareaHashUnknown),
+            };
+            if hname != name {
+                return Err(WebauthnError::AttestationTpmPubareaHashInvalid);
+            }
+        }
+        _ => {
+            return Err(WebauthnError::AttestationTpmAttestCertifyInvalid)
+        }
+    }
 
     // Verify that x5c is present.
+    // done in parsing.
 
     // Note that the remaining fields in the "Standard Attestation Structure" [TPMv2-Part1]
     // section 31.2, i.e., qualifiedSigner, clockInfo and firmwareVersion are ignored. These fields
     // MAY be used as an input to risk engines.
     // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-1-Architecture-01.38.pdf
+    // for now, we ignore, but we could pass these into the attestation result.
 
     // Verify the sig is a valid signature over certInfo using the attestation public key in
     // aikCert with the algorithm specified in alg.
+
+
 
     // Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation Statement Certificate
     // Requirements.

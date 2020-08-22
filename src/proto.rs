@@ -571,7 +571,7 @@ pub struct PublicKeyCredential {
 //
 pub const TPM_GENERATED_VALUE: u32 = 0xff544347;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[repr(u16)]
 pub enum TpmSt {
     RspCommand = 0x00c4,
@@ -668,13 +668,13 @@ pub enum TpmuAttest {
 
 #[derive(Debug)]
 pub struct TpmsAttest {
-    magic: u32,
-    type_: TpmSt,
-    qualifiedSigner: Tpm2bName,
-    extraData: Option<Vec<u8>>,
-    clockInfo: TpmsClockInfo,
-    firmwareVersion: u64,
-    typeattested: TpmuAttest,
+    pub magic: u32,
+    pub type_: TpmSt,
+    pub qualifiedSigner: Tpm2bName,
+    pub extraData: Option<Vec<u8>>,
+    pub clockInfo: TpmsClockInfo,
+    pub firmwareVersion: u64,
+    pub typeattested: TpmuAttest,
 }
 
 named!( tpm2b_name<&[u8], Tpm2bName>,
@@ -733,29 +733,266 @@ impl TryFrom<&[u8]> for TpmsAttest {
         tpmsattest_parser(data)
             .map_err(|e| {
                 log::debug!("{:?}", e);
-                eprintln!("{:?}", e);
+                // eprintln!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
     }
 }
 
-pub struct TpmtPublic {
-    // type
-    // nameAlg
-    // objectAttributes
-    // authPolicy
-    // 
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u16)]
+pub enum TpmAlgId {
+    Error = 0x0000,
+    Rsa = 0x0001,
+    Sha1 = 0x0004,
+    Hmac = 0x0005,
+    Aes = 0x0006,
+    // Mgf1 = 0x0007,
+    // KeyedHash = 0x0008,
+    // Xor = 0x000A,
+    Sha256 = 0x000B,
+    Sha384 = 0x000C,
+    Sha512 = 0x000D,
+    Null = 0x0010,
+    // Sm3_256 = 0x0012,
+    // Sm4 = 0x0013,
+    RsaSSA = 0x0014,
+    // RsAes = 0x0015,
+    RsaPSS = 0x0016,
+    // Oaep = 0x0017,
+    Ecdsa = 0x0018,
+    // Ecdh = 0x0019,
+    Ecdaa = 0x001A,
+    // Sm2 = 0x001B,
+    // EcSchnorr = 0x001C,
+    // EcMqv = 0x001D,
+    // Kdf1Sp80056A = 0x0020,
+    // Kdf2 = 0x0021,
+    // Kdf1Sp800108 = 0x0022,
+    Ecc = 0x0023,
+    // Symcipher = 0x0025,
+    // Camellia = 0x0026,
+    // Ctr = 0x0040,
+    // Ofb = 0x0041,
+    // Cbc = 0x0042,
+    // Cfb = 0x0043,
+    // Ecb = 0x0044,
 }
 
+impl TpmAlgId {
+    fn new(v: u16) -> Option<Self> {
+        match v {
+            0x0000 => Some(TpmAlgId::Error),
+            0x0001 => Some(TpmAlgId::Rsa),
+            0x0004 => Some(TpmAlgId::Sha1),
+            0x0005 => Some(TpmAlgId::Hmac),
+            0x0006 => Some(TpmAlgId::Aes),
+            0x000B => Some(TpmAlgId::Sha256),
+            0x000C => Some(TpmAlgId::Sha384),
+            0x000D => Some(TpmAlgId::Sha512),
+            0x0010 => Some(TpmAlgId::Null),
+            0x0014 => Some(TpmAlgId::RsaSSA),
+            0x0016 => Some(TpmAlgId::RsaPSS),
+            0x0018 => Some(TpmAlgId::Ecdsa),
+            0x001A => Some(TpmAlgId::Ecdaa),
+            0x0023 => Some(TpmAlgId::Ecc),
+            _ => None,
+        }
+    }
+}
+
+// Later, this probably would be rewritten interms of the chosen
+// symetric algo, but for now it's always Null
+#[derive(Debug)]
+pub struct TpmtSymDefObject {
+    algorithm: TpmAlgId,
+    // keybits: Option<()>,
+    // mode: Option<()>,
+    // details
+}
+
+fn parse_tpmtsymdefobject(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtSymDefObject>> {
+    let (data, algorithm) = map_opt!(input, u16!(nom::Endianness::Big), TpmAlgId::new)?;
+    match algorithm {
+        TpmAlgId::Null => {
+            Ok((data, None))
+        }
+        _ => Err(nom::Err::Failure(nom::Context::Code(input, nom::ErrorKind::Custom(2)))),
+    }
+}
+
+#[derive(Debug)]
+pub struct TpmtRsaScheme {
+    algorithm: TpmAlgId,
+    // details
+}
+
+fn parse_tpmtrsascheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtRsaScheme>> {
+    let (data, algorithm) = map_opt!(input, u16!(nom::Endianness::Big), TpmAlgId::new)?;
+    match algorithm {
+        TpmAlgId::Null => {
+            Ok((data, None))
+        }
+        _ => Err(nom::Err::Failure(nom::Context::Code(input, nom::ErrorKind::Custom(2)))),
+    }
+}
+
+#[derive(Debug)]
+pub struct TpmsRsaParms {
+    // TPMT_SYM_DEF_OBJECT + ALG_NULL
+    symmetric: Option<TpmtSymDefObject>,
+    // TPMT_RSA_SCHEME+ (rsapss, rsassa, null)
+    scheme: Option<TpmtRsaScheme>,
+    // TPMI_RSA_KEY_BITS
+    keybits: u16,
+    // u32
+    pub exponent: u32,
+}
+
+named!( tpmsrsaparms_parser<&[u8], TpmsRsaParms>,
+    do_parse!(
+        symmetric: parse_tpmtsymdefobject >>
+        scheme: parse_tpmtrsascheme >>
+        keybits: u16!(nom::Endianness::Big) >>
+        exponent: u32!(nom::Endianness::Big) >>
+        (TpmsRsaParms {
+            symmetric, scheme, keybits, exponent
+        })
+    )
+);
+
+/*
+#[derive(Debug)]
+pub struct TpmsEccParms {
+}
+*/
+
+#[derive(Debug)]
+pub enum TpmuPublicParms {
+    // KeyedHash
+    // Symcipher
+    Rsa(TpmsRsaParms),
+    // Ecc(TpmsEccParms),
+    // Asym
+}
+
+fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPublicParms> {
+    // eprintln!("tpmupublicparms input -> {:?}", input);
+    match alg {
+        TpmAlgId::Rsa => tpmsrsaparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Rsa(inner))),
+        _ => Err(nom::Err::Failure(nom::Context::Code(input, nom::ErrorKind::Custom(2)))),
+    }
+}
+
+#[derive(Debug)]
+pub enum TpmuPublicId {
+    // KeyedHash
+    // Symcipher
+    Rsa(Vec<u8>),
+    // Ecc(TpmsEccParms),
+    // Asym
+}
+
+named!( tpmsrsapublickey_parser<&[u8], Vec<u8>>,
+    switch!(u16!(nom::Endianness::Big),
+        0 => value!(Vec::new()) |
+        size => map!(take!(size), |d| d.to_vec())
+    )
+);
+
+fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPublicId> {
+    // eprintln!("tpmupublicparms input -> {:?}", input);
+    match alg {
+        TpmAlgId::Rsa => tpmsrsapublickey_parser(input).map(|(data, inner)| (data, TpmuPublicId::Rsa(inner))),
+        _ => Err(nom::Err::Failure(nom::Context::Code(input, nom::ErrorKind::Custom(2)))),
+    }
+}
+
+#[derive(Debug)]
+pub struct TpmtPublic {
+    pub type_: TpmAlgId,
+    pub nameAlg: TpmAlgId,
+    // TPMA_OBJECT
+    pub objectAttributes: u32,
+    pub authPolicy: Option<Vec<u8>>,
+    //
+    // TPMU_PUBLIC_PARMS
+    pub parameters: TpmuPublicParms,
+    // TPMU_PUBLIC_ID
+    pub unique: TpmuPublicId,
+}
+
+impl TryFrom<&[u8]> for TpmtPublic {
+    type Error = WebauthnError;
+
+    fn try_from(data: &[u8]) -> Result<TpmtPublic, WebauthnError> {
+        tpmtpublic_parser(data)
+            .map_err(|e| {
+                log::debug!("{:?}", e);
+                // eprintln!("{:?}", e);
+                WebauthnError::ParseNOMFailure
+            })
+            .map(|(_, v)| v)
+    }
+}
+
+named!( tpm2b_digest<&[u8], Option<Vec<u8>>>,
+    switch!(u16!(nom::Endianness::Big),
+        0 => value!(None) |
+        size => map!(take!(size), |d| Some(d.to_vec()))
+    )
+);
+
+named!( tpmtpublic_parser<&[u8], TpmtPublic>,
+    do_parse!(
+        type_: map_opt!(u16!(nom::Endianness::Big), TpmAlgId::new) >>
+        nameAlg: map_opt!(u16!(nom::Endianness::Big), TpmAlgId::new) >>
+        objectAttributes: u32!(nom::Endianness::Big) >>
+        authPolicy: tpm2b_digest >>
+        parameters: call!(parse_tpmupublicparms, type_) >>
+        unique: call!(parse_tpmupublicid, type_) >>
+        (TpmtPublic {
+            type_, nameAlg, objectAttributes, authPolicy, parameters, unique
+        })
+    )
+);
+
+#[derive(Debug)]
 pub struct TpmtSignature {
-    // sigAlg
+    sigAlg: TpmAlgId,
     // signature - TPMU_SIGNATURE
 }
 
+impl TryFrom<&[u8]> for TpmtSignature {
+    type Error = WebauthnError;
+
+    fn try_from(data: &[u8]) -> Result<TpmtSignature, WebauthnError> {
+        tpmtsignature_parser(data)
+            .map_err(|e| {
+                log::debug!("{:?}", e);
+                // eprintln!("{:?}", e);
+                WebauthnError::ParseNOMFailure
+            })
+            .map(|(_, v)| v)
+    }
+}
+
+named!( tpmtsignature_parser<&[u8], TpmtSignature>,
+    do_parse!(
+        sigAlg: map_opt!(u16!(nom::Endianness::Big), TpmAlgId::new) >>
+        (TpmtSignature {
+            sigAlg
+        })
+    )
+);
+
 #[cfg(test)]
 mod tests {
-    use super::{AttestationObject, RegisterPublicKeyCredential, TpmsAttest, TPM_GENERATED_VALUE};
+    use super::{AttestationObject, RegisterPublicKeyCredential, TpmsAttest, TPM_GENERATED_VALUE,
+        TpmtPublic, TpmtSignature
+    };
     use serde_json;
     use std::convert::TryFrom;
 
@@ -815,5 +1052,23 @@ mod tests {
         let tpms_attest = TpmsAttest::try_from(data.as_slice()).unwrap();
         println!("{:?}", tpms_attest);
         assert!(tpms_attest.magic == TPM_GENERATED_VALUE);
+    }
+
+    #[test]
+    fn deserialise_tpmt_public() {
+    // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
+        let data: Vec<u8> = vec![0, 1, 0, 11, 0, 6, 4, 114, 0, 32, 157, 255, 203, 243, 108, 56, 58, 230, 153, 251, 152, 104, 220, 109, 203, 137, 215, 21, 56, 132, 190, 40, 3, 146, 44, 18, 65, 88, 191, 173, 34, 174, 0, 16, 0, 16, 8, 0, 0, 0, 0, 0, 1, 0, 220, 20, 243, 114, 251, 142, 90, 236, 17, 204, 181, 223, 8, 72, 230, 209, 122, 44, 90, 55, 96, 134, 69, 16, 125, 139, 112, 81, 154, 230, 133, 211, 129, 37, 75, 208, 222, 70, 210, 239, 209, 188, 152, 93, 222, 222, 154, 169, 217, 160, 90, 243, 135, 151, 25, 87, 240, 178, 106, 119, 150, 89, 23, 223, 158, 88, 107, 72, 101, 61, 184, 132, 19, 110, 144, 107, 22, 178, 252, 206, 50, 207, 11, 177, 137, 35, 139, 68, 212, 148, 121, 249, 50, 35, 89, 52, 47, 26, 23, 6, 15, 115, 155, 127, 59, 168, 208, 196, 78, 125, 205, 0, 98, 43, 223, 233, 65, 137, 103, 2, 227, 35, 81, 107, 247, 230, 186, 111, 27, 4, 57, 42, 220, 32, 29, 181, 159, 6, 176, 182, 94, 191, 222, 212, 235, 60, 101, 83, 86, 217, 203, 151, 251, 254, 219, 204, 195, 10, 74, 147, 5, 27, 167, 127, 117, 149, 245, 157, 92, 124, 2, 196, 214, 107, 246, 228, 171, 229, 100, 212, 67, 88, 215, 75, 33, 183, 199, 51, 171, 210, 213, 65, 45, 96, 96, 226, 29, 130, 254, 58, 92, 252, 133, 207, 105, 63, 156, 208, 149, 142, 9, 83, 1, 193, 217, 244, 35, 137, 43, 138, 137, 140, 82, 231, 195, 145, 213, 230, 185, 245, 104, 105, 62, 142, 124, 34, 9, 157, 167, 188, 243, 112, 104, 248, 63, 50, 19, 53, 173, 69, 12, 39, 252, 9, 69, 223]
+        ;
+        let tpmt_public = TpmtPublic::try_from(data.as_slice()).unwrap();
+        println!("{:?}", tpmt_public);
+    }
+
+    #[test]
+    fn deserialise_tpmt_signature() {
+    // The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
+        let data: Vec<u8> = vec![5, 3, 162, 216, 151, 57, 210, 103, 145, 121, 161, 186, 63, 232, 221, 255, 89, 37, 17, 59, 155, 241, 77, 30, 35, 201, 30, 140, 84, 214, 250, 185, 47, 248, 58, 89, 177, 187, 231, 202, 220, 45, 167, 126, 243, 194, 94, 33, 39, 205, 163, 51, 40, 171, 35, 118, 196, 244, 247, 143, 166, 193, 223, 94, 244, 157, 121, 220, 22, 94, 163, 15, 151, 223, 214, 131, 105, 202, 40, 16, 176, 11, 154, 102, 100, 212, 174, 103, 166, 92, 90, 154, 224, 20, 165, 106, 127, 53, 91, 230, 217, 199, 172, 195, 203, 242, 41, 158, 64, 252, 65, 9, 155, 160, 63, 40, 94, 94, 64, 145, 173, 71, 85, 173, 2, 199, 18, 148, 88, 223, 93, 154, 203, 197, 170, 142, 35, 249, 146, 107, 146, 2, 14, 54, 39, 151, 181, 10, 176, 216, 117, 25, 196, 2, 205, 159, 140, 155, 56, 89, 87, 31, 135, 93, 97, 78, 95, 176, 228, 72, 237, 130, 171, 23, 66, 232, 35, 115, 218, 105, 168, 6, 253, 121, 161, 129, 44, 78, 252, 44, 11, 23, 172, 66, 37, 214, 113, 128, 28, 33, 209, 66, 34, 32, 196, 153, 80, 87, 243, 162, 7, 25, 62, 252, 243, 174, 31, 168, 98, 123, 100, 2, 143, 134, 36, 154, 236, 18, 128, 175, 185, 189, 177, 51, 53, 216, 190, 43, 63, 35, 84, 14, 64, 249, 23, 9, 125, 147, 160, 176, 137, 30, 174, 245, 148, 189]
+        ;
+        let tpmt_sig = TpmtSignature::try_from(data.as_slice()).unwrap();
+        println!("{:?}", tpmt_sig);
     }
 }

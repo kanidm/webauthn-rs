@@ -319,6 +319,21 @@ impl From<&COSEContentType> for i64 {
     }
 }
 
+impl COSEContentType {
+    pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> 
+        Result<Vec<u8>, WebauthnError> {
+        match self {
+            COSEContentType::INSECURE_RS1 => {
+                // sha1
+                hash::hash(hash::MessageDigest::sha1(), input)
+                    .map(|dbytes| Vec::from(dbytes.as_ref()))
+                    .map_err(|e| WebauthnError::OpenSSLError(e))
+            }
+            _ => Err(WebauthnError::COSEKeyInvalidType),
+        }
+    }
+}
+
 /// A COSE Eliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential

@@ -93,6 +93,27 @@ pub enum WebauthnError {
     #[error("The attestation Certificates OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not match the aaguid of the token")]
     AttestationCertificateAAGUIDMismatch,
 
+    #[error("The attestation created by the tpm is not correct")]
+    AttestationTpmStInvalid,
+
+    #[error("The tpm attestation and key algorithms do not match")]
+    AttestationTpmPubareaMismatch,
+
+    #[error("The tpm attestation extradata is missing or invalid")]
+    AttestationTpmExtraDataInvalid,
+
+    #[error("The tpm attestation extradata does not match the hash of the verification data")]
+    AttestationTpmExtraDataMismatch,
+
+    #[error("The tpm requested hash over pubarea is unknown")]
+    AttestationTpmPubareaHashUnknown,
+
+    #[error("The tpm requested hash over pubarea is invalid")]
+    AttestationTpmPubareaHashInvalid,
+
+    #[error("The tpms attest certify structure is invalid")]
+    AttestationTpmAttestCertifyInvalid,
+
     #[error("The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements are not met by this attestation certificate")]
     AttestationCertificateRequirementsNotMet,
 
