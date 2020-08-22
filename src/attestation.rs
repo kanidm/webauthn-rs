@@ -6,12 +6,15 @@
 use std::convert::TryFrom;
 
 use crate::crypto;
-use crate::crypto::{COSEContentType, COSEKeyType, compute_sha256};
+use crate::crypto::{compute_sha256, COSEContentType, COSEKeyType};
 use crate::error::WebauthnError;
-use crate::proto::{AttestedCredentialData, Credential, TpmsAttest, TpmtPublic, TpmSt, TpmuPublicParms, TpmuPublicId, TpmuAttest, TpmAlgId, Tpm2bName};
+use crate::proto::{
+    AttestedCredentialData, Credential, Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic,
+    TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
+};
 use log::debug;
-use serde_cbor::{ObjectKey, Value};
-use std::collections::BTreeMap;
+// use serde_cbor::{ObjectKey, Value};
+// use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -400,9 +403,15 @@ pub(crate) fn verify_tpm_attestation(
         .get(&serde_cbor::ObjectKey::String("sig".to_string()))
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
-    eprintln!("sig_value -> {:?}", sig_value);
+    let sig_bytes = sig_value
+        .as_bytes()
+        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
-    // x5c -> aikCert followed by its certificate chain, in X.509 encoding.
+    let sig = TpmtSignature::try_from(sig_bytes.as_slice())?;
+
+    eprintln!("sig -> {:?}", sig);
+
+    // x5c -> aik_cert followed by its certificate chain, in X.509 encoding.
     // String("x5c"): Array( // root Bytes([]), // chain Bytes([])])
     let x5c_value = att_stmt_map
         .get(&serde_cbor::ObjectKey::String("x5c".to_string()))
@@ -429,27 +438,33 @@ pub(crate) fn verify_tpm_attestation(
         return Err(WebauthnError::AttestationStatementX5CInvalid);
     }
 
-    let root_ca_cert = arr_x509.remove(0);
+    let aik_cert = arr_x509.remove(0);
 
     // Verify that the public key specified by the parameters and unique fields of pubArea is
     // identical to the credentialPublicKey in the attestedCredentialData in authenticatorData.
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
     // Check the algo is the same
-    match (credential_public_key.key, pubarea.parameters, pubarea.unique) {
-        (COSEKeyType::RSA(cose_rsa), TpmuPublicParms::Rsa(_tpm_parms), TpmuPublicId::Rsa(tpm_modulus)) => {
+    match (
+        &credential_public_key.key,
+        &pubarea.parameters,
+        &pubarea.unique,
+    ) {
+        (
+            COSEKeyType::RSA(cose_rsa),
+            TpmuPublicParms::Rsa(_tpm_parms),
+            TpmuPublicId::Rsa(tpm_modulus),
+        ) => {
             // Is it possible to check the exponent? I think it's not ... as the tpm_parms and the
             // cose rse disagree in my test vectors.
             // cose_rsa.e != tpm_parms.exponent ||
 
             // check the pkey is the same.
-            if cose_rsa.n != tpm_modulus {
-                return Err(WebauthnError::AttestationTpmPubareaMismatch)
+            if &cose_rsa.n != tpm_modulus {
+                return Err(WebauthnError::AttestationTpmPubareaMismatch);
             }
         }
-        _ => {
-            return Err(WebauthnError::AttestationTpmPubareaMismatch)
-        }
+        _ => return Err(WebauthnError::AttestationTpmPubareaMismatch),
     }
 
     // Concatenate authenticatorData and clientDataHash to form attToBeSigned.
@@ -467,14 +482,12 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that type is set to TPM_ST_ATTEST_CERTIFY.
     if certinfo.type_ != TpmSt::AttestCertify {
-        return Err(WebauthnError::AttestationTpmStInvalid)
+        return Err(WebauthnError::AttestationTpmStInvalid);
     }
 
-    let extra_data_hash = match certinfo.extraData {
+    let extra_data_hash = match certinfo.extra_data {
         Some(h) => h,
-        None => {
-            return Err(WebauthnError::AttestationTpmExtraDataInvalid)
-        }
+        None => return Err(WebauthnError::AttestationTpmExtraDataInvalid),
     };
 
     // Verify that extraData is set to the hash of attToBeSigned using the hash algorithm
@@ -482,7 +495,7 @@ pub(crate) fn verify_tpm_attestation(
     let hash_verification_data = alg.only_hash_from_type(verification_data.as_slice())?;
 
     if hash_verification_data != extra_data_hash {
-        return Err(WebauthnError::AttestationTpmExtraDataMismatch)
+        return Err(WebauthnError::AttestationTpmExtraDataMismatch);
     }
 
     // verification_data
@@ -494,7 +507,6 @@ pub(crate) fn verify_tpm_attestation(
     // https://www.trustedcomputinggroup.org/wp-content/uploads/TPM-Rev-2.0-Part-2-Structures-01.38.pdf
     match certinfo.typeattested {
         TpmuAttest::AttestCertify(name, _qname) => {
-
             let name = match name {
                 Tpm2bName::Digest(name) => name,
                 _ => return Err(WebauthnError::AttestationTpmPubareaHashInvalid),
@@ -502,7 +514,7 @@ pub(crate) fn verify_tpm_attestation(
             // Name contains two bytes at the start for what algo is used. The spec
             // says nothing about validating them, so instead we prepend the bytes into the hash
             // so we do enforce these are checked
-            let hname = match pubarea.nameAlg {
+            let hname = match pubarea.name_alg {
                 TpmAlgId::Sha256 => {
                     let mut v = vec![0, 11];
                     let mut r = compute_sha256(pubarea_bytes);
@@ -515,9 +527,7 @@ pub(crate) fn verify_tpm_attestation(
                 return Err(WebauthnError::AttestationTpmPubareaHashInvalid);
             }
         }
-        _ => {
-            return Err(WebauthnError::AttestationTpmAttestCertifyInvalid)
-        }
+        _ => return Err(WebauthnError::AttestationTpmAttestCertifyInvalid),
     }
 
     // Verify that x5c is present.
@@ -530,36 +540,36 @@ pub(crate) fn verify_tpm_attestation(
     // for now, we ignore, but we could pass these into the attestation result.
 
     // Verify the sig is a valid signature over certInfo using the attestation public key in
-    // aikCert with the algorithm specified in alg.
+    // aik_cert with the algorithm specified in alg.
 
+    let sig_valid = match sig {
+        TpmtSignature::RawSignature(dsig) => {
+            // Alg was pre-loaded into the x509 struct during parsing
+            // so we should just be able to verify
+            aik_cert.verify_signature(&dsig, certinfo_bytes)?
+        }
+    };
 
+    eprintln!("sig_valid -> {:?}", sig_valid);
 
-    // Verify that aikCert meets the requirements in § 8.3.1 TPM Attestation Statement Certificate
+    if !sig_valid {
+        return Err(WebauthnError::AttestationStatementSigInvalid);
+    }
+
+    // Verify that aik_cert meets the requirements in § 8.3.1 TPM Attestation Statement Certificate
     // Requirements.
-    /*
-    TPM attestation certificate MUST have the following fields/extensions:
+    aik_cert.assert_tpm_attest_req()?;
 
-    Version MUST be set to 3.
-
-    Subject field MUST be set to empty.
-
-    The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
-    https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
-
-    The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
-
-    The Basic Constraints extension MUST have the CA component set to false.
-
-    An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
-    Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
-    available through metadata services. See, for example, the FIDO Metadata Service [FIDOMetadataService].
-    */
-
-    // If aikCert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
+    // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     // verify that the value of this extension matches the aaguid in authenticatorData.
+    //
+    // Currently not possible to access extensions with openssl rust.
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
-
-    Err(WebauthnError::AttestationNotSupported)
+    Ok(AttestationType::AttCa(
+        Credential::new(acd, credential_public_key, counter),
+        aik_cert,
+        arr_x509,
+    ))
 }

@@ -851,9 +851,9 @@ pub trait WebauthnConfig {
     fn policy_verify_trust(&self, at: AttestationType) -> Result<Credential, ()> {
         log::debug!("policy_verify_trust -> {:?}", at);
         match at {
-            AttestationType::Basic(credential, _ca) => Ok(credential),
+            AttestationType::Basic(credential, _attest_cert) => Ok(credential),
             AttestationType::Self_(credential) => Ok(credential),
-            AttestationType::AttCa(credential, ca_root, ca_chain) => Ok(credential),
+            AttestationType::AttCa(credential, _attest_cert, _ca_chain) => Ok(credential),
             AttestationType::None(credential) => Ok(credential),
             _ => {
                 // We don't know how to assert trust in this yet, or we just

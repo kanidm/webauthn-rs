@@ -27,9 +27,7 @@ use actix_web::{cookie, middleware, App, HttpServer};
 use rand::prelude::*;
 
 use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
-use webauthn_rs::proto::{
-    AuthenticatorAttachment, PublicKeyCredential, RegisterPublicKeyCredential,
-};
+use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
 
 mod actors;
 mod crypto;

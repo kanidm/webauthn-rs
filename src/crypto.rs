@@ -129,6 +129,37 @@ impl X509PublicKey {
         )
     }
 
+    pub(crate) fn assert_tpm_attest_req(&self) -> Result<(), WebauthnError> {
+        // TPM attestation certificate MUST have the following fields/extensions:
+
+        // Version MUST be set to 3.
+        // version is not an attribute in openssl rust so I can't verify this
+
+        // Subject field MUST be set to empty.
+        let subject_name_ref = self.pubk.subject_name();
+        if subject_name_ref.entries().count() != 0 {
+            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+        }
+
+        // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
+        // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
+        //
+        // I actually have no idea how to parse or process this ...
+        // self.pubk.subject_alt_names
+
+        // Today there is no way to view eku/bc from openssl rust
+
+        // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
+
+        // The Basic Constraints extension MUST have the CA component set to false.
+
+        // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
+        // Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
+        // available through metadata services. See, for example, the FIDO Metadata Service [FIDOMetadataService].
+
+        Ok(())
+    }
+
     pub(crate) fn assert_packed_attest_req(&self) -> Result<(), WebauthnError> {
         // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
         // Statement Certificate Requirements.
@@ -320,8 +351,7 @@ impl From<&COSEContentType> for i64 {
 }
 
 impl COSEContentType {
-    pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> 
-        Result<Vec<u8>, WebauthnError> {
+    pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> Result<Vec<u8>, WebauthnError> {
         match self {
             COSEContentType::INSECURE_RS1 => {
                 // sha1
