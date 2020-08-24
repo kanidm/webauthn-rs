@@ -2,7 +2,15 @@
 //! This stores all challenges and credentials in memory - IE they are lost on
 //! service restart. It's only really useful for demo-sites, testing and as an
 //! example/reference implementation of the WebauthnConfig trait.
+//!
+//! IMPORTANT: DO NOT USE THIS IN PRODUCTION. YOU MUST IMPLEMENT YOUR OWN STRUCT
+//! DERIVING `WebauthnConfig`!!! This structure WILL be removed in a future release!
+//!
+//! By default this implementation advertises support for all possible authenticators
+//! EVEN if they are NOT supported. This to is aid in test vector collection.
 
+use crate::crypto::COSEContentType;
+use crate::proto::AttestationConveyancePreference;
 use crate::proto::AuthenticatorAttachment;
 use crate::WebauthnConfig;
 
@@ -10,6 +18,12 @@ use crate::WebauthnConfig;
 /// This stores all challenges and credentials in memory - IE they are lost on
 /// service restart. It's only really useful for demo-sites, testing and as an
 /// example/reference implementation of the WebauthnConfig trait.
+///
+/// IMPORTANT: DO NOT USE THIS IN PRODUCTION. YOU MUST IMPLEMENT YOUR OWN STRUCT
+/// DERIVING `WebauthnConfig`!!! This structure WILL be removed in a future release!
+///
+/// By default this implementation advertises support for all possible authenticators
+/// EVEN if they are NOT supported. This to is aid in test vector collection.
 pub struct WebauthnEphemeralConfig {
     rp_name: String,
     rp_id: String,
@@ -43,97 +57,34 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
         &self.rp_origin
     }
 
+    /// Retrieve the authenticator attachment hint. See the trait documentation for more.
     fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
         self.attachment
     }
 
-    /*
-    /// Persist a challenge associated to a userId. See the trait documentation for more.
-    fn persist_challenge(&mut self, userid: UserId, challenge: Challenge) -> Result<(), ()> {
-        self.chals.put(userid, challenge);
-        Ok(())
+    /// Retrieve the authenticator attestation preference. See the trait documentation for more.
+    fn get_attestation_preference(&self) -> AttestationConveyancePreference {
+        AttestationConveyancePreference::Direct
     }
 
-    /// Retrieve a challenge associated to a userId. See the trait documentation for more.
-    fn retrieve_challenge(&mut self, userid: &UserId) -> Option<Challenge> {
-        self.chals.pop(userid)
+    /// Retrieve the list of support algorithms.
+    ///
+    /// WARNING: This returns *all* possible algorithms, not just SUPPORTED ones. This
+    /// is so that
+    fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
+        vec![
+            COSEContentType::ECDSA_SHA256,
+            COSEContentType::ECDSA_SHA384,
+            COSEContentType::ECDSA_SHA512,
+            COSEContentType::RS256,
+            COSEContentType::RS384,
+            COSEContentType::RS512,
+            COSEContentType::PS256,
+            COSEContentType::PS384,
+            COSEContentType::PS512,
+            COSEContentType::EDDSA,
+        ]
     }
-
-    /// Assert if a credential related to a userId exists. See the trait documentation for more.
-    fn does_exist_credential(&self, userid: &UserId, cred: &Credential) -> Result<bool, ()> {
-        match self.creds.get(userid) {
-            Some(creds) => Ok(creds.contains_key(&cred.cred_id)),
-            None => Ok(false),
-        }
-    }
-
-    /// Persist a credential related to a userId. See the trait documentation for more.
-    fn persist_credential(&mut self, userid: UserId, cred: Credential) -> Result<(), ()> {
-        match self.creds.get_mut(&userid) {
-            Some(v) => {
-                let cred_id = cred.cred_id.clone();
-                v.insert(cred_id, cred);
-            }
-            None => {
-                let mut t = BTreeMap::new();
-                let credential_id = cred.cred_id.clone();
-                t.insert(credential_id, cred);
-                self.creds.insert(userid, t);
-            }
-        };
-        Ok(())
-    }
-
-    /// Update a credentials counter. See the trait documentation for more.
-    fn credential_update_counter(
-        &mut self,
-        userid: &UserId,
-        cred: &Credential,
-        counter: u32,
-    ) -> Result<(), ()> {
-        match self.creds.get_mut(userid) {
-            Some(v) => {
-                let cred_id = cred.cred_id.clone();
-                let _ = v.remove(&cred_id);
-                let mut c = cred.clone();
-                c.counter = counter;
-                v.insert(cred_id, c);
-                Ok(())
-            }
-            None => {
-                // Invalid state but not end of world ...
-                Err(())
-            }
-        }
-    }
-
-    /// Report an invalid credential counter. See the trait documentation for more.
-    fn credential_report_invalid_counter(
-        &mut self,
-        userid: &UserId,
-        cred: &Credential,
-        _counter: u32,
-    ) -> Result<(), ()> {
-        match self.creds.get_mut(userid) {
-            Some(v) => {
-                v.remove(&cred.cred_id);
-                Ok(())
-            }
-            None => {
-                // Invalid state but not end of world ...
-                Err(())
-            }
-        }
-    }
-
-    /// Retrieve the credentials associated to a userId. See the trait documentation for more.
-    fn retrieve_credentials(&self, userid: &UserId) -> Option<Vec<&Credential>> {
-        match self.creds.get(userid) {
-            Some(creds) => Some(creds.iter().map(|(_, v)| v).collect()),
-            None => None,
-        }
-    }
-    */
 }
 
 impl WebauthnEphemeralConfig {

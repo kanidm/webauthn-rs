@@ -24,6 +24,26 @@ examples in the examples folder. These examples should demonstrate secure and
 valid use, so please report any issues found, and we'd love to see more examples
 contributed!
 
+Known Supported Keys/Harwdare
+-----------------------------
+
+* Yubico 5c + MacOS 10.14 + Firefox/Edge
+* Yubico 5ci + iPadOS 14 + Safari/Brave
+* TouchID + iPadOS + Safari
+* Windows Hello + Windows 10 + Chrome
+
+If your key/browser combination don't work (generally due to missing crypto routines)
+please open an issue so that I can help you generate vectors and add support!
+
+FIDO Compliance
+---------------
+
+This library has been carefully implemented to follow the w3c standard for webauthn processing
+to ensure correct behaviour. However, not all elements of the standard are implemented (yet).
+This means the library is not yet FIDO compliant. It is a goal to improve this library to meet
+that standard over time as more test vectors and hardware becomes available, but the current
+focus has been on supporting the most popular key types.
+
 Feedback
 --------
 
@@ -44,8 +64,9 @@ using a series of Rust crates which (while still great!) have not seen the same
 level of scrutiny.
 
 The second is that OpenSSL is the only library I have found that allows us to
-reconstruct an EC public key from it's X/Y points for signature verification.
-Without this, we are not able to perform authentication of credentials.
+reconstruct an EC public key from it's X/Y points or an RSA public key from it's
+n/e for use with signature verification.
+Without this, we are not able to parse authenticator credentials to perform authentication.
 
 Resources
 ---------
