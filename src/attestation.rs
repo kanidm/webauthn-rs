@@ -78,20 +78,18 @@ pub(crate) fn verify_packed_attestation(
     client_data_hash: &Vec<u8>,
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
-    let att_stmt_map = att_stmt
-        .as_object()
-        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
 
-    let x5c_key = &serde_cbor::ObjectKey::String("x5c".to_string());
-    let ecdaa_key_id_key = &serde_cbor::ObjectKey::String("ecdaaKeyId".to_string());
+    let x5c_key = &serde_cbor::Value::Text("x5c".to_string());
+    let ecdaa_key_id_key = &serde_cbor::Value::Text("ecdaaKeyId".to_string());
 
     let alg_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+        .get(&serde_cbor::Value::Text("alg".to_string()))
         .ok_or(WebauthnError::AttestationStatementAlgMissing)?;
 
-    let alg = alg_value
-        .as_i64()
-        .ok_or(WebauthnError::AttestationStatementAlgInvalid)
+    let alg = cbor_try_i128!(alg_value)
+        .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
         .and_then(COSEContentType::try_from)?;
 
     match (
@@ -106,16 +104,14 @@ pub(crate) fn verify_packed_attestation(
             // encoded in X.509 format. The attestation certificate attestnCert MUST be the first
             // element in the array.
             // x5c: [ attestnCert: bytes, * (caCert: bytes) ]
-            let x5c_array_ref = x5c
-                .as_array()
-                .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+            let x5c_array_ref =
+                cbor_try_array!(x5c).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
             let arr_x509: Result<Vec<_>, _> = x5c_array_ref
                 .iter()
                 .map(|values| {
-                    values
-                        .as_bytes()
-                        .ok_or(WebauthnError::AttestationStatementX5CInvalid)
+                    cbor_try_bytes!(values)
+                        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
                         .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
                 })
                 .collect();
@@ -139,9 +135,9 @@ pub(crate) fn verify_packed_attestation(
                 .map(|b| *b)
                 .collect();
             let is_valid_signature = att_stmt_map
-                .get(&serde_cbor::ObjectKey::String("sig".to_string()))
-                .and_then(|s| s.as_bytes())
+                .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
+                .and_then(|s| cbor_try_bytes!(s))
                 .and_then(|sig| attestn_cert.verify_signature(&sig, &verification_data))?;
             if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
@@ -197,9 +193,9 @@ pub(crate) fn verify_packed_attestation(
                 .map(|b| *b)
                 .collect();
             let is_valid_signature = att_stmt_map
-                .get(&serde_cbor::ObjectKey::String("sig".to_string()))
-                .and_then(|s| s.as_bytes())
+                .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
+                .and_then(|s| cbor_try_bytes!(s))
                 .and_then(|sig| credential_public_key.verify_signature(&sig, &verification_data))?;
             if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
@@ -235,26 +231,22 @@ pub(crate) fn verify_fidou2f_attestation(
     // Apparently, aaguid must be 0x00
 
     // Check that x5c has exactly one element and let att_cert be that element.
-    let att_stmt_map = att_stmt
-        .as_object()
-        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
     let x5c = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("x5c".to_string()))
+        .get(&serde_cbor::Value::Text("x5c".to_string()))
         .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
 
     let sig_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+        .get(&serde_cbor::Value::Text("sig".to_string()))
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
-    let sig = sig_value
-        .as_bytes()
-        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+    let sig =
+        cbor_try_bytes!(sig_value).map_err(|_| WebauthnError::AttestationStatementSigMissing)?;
 
     // https://github.com/duo-labs/webauthn/blob/master/protocol/attestation_u2f.go#L61
-    let att_cert_array = x5c
-        .as_array()
-        // Option<Vec<Value>>
-        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+    let att_cert_array =
+        cbor_try_array!(x5c).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
     // Now it's a vec<Value>, get the first.
     if att_cert_array.len() != 1 {
         return Err(WebauthnError::AttestationStatementX5CInvalid);
@@ -267,9 +259,8 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // This is the certificate public key.
     // Let certificate public key be the public key conveyed by att_cert.
-    let att_cert = att_cert_bytes
-        .as_bytes()
-        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+    let att_cert = cbor_try_bytes!(att_cert_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
     //
@@ -339,18 +330,16 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR
     // decoding on it to extract the contained fields.
-    let att_stmt_map = att_stmt
-        .as_object()
-        .ok_or(WebauthnError::AttestationStatementMapInvalid)?;
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
 
     // The version of the TPM specification to which the signature conforms.
     let ver_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("ver".to_string()))
+        .get(&serde_cbor::Value::Text("ver".to_string()))
         .ok_or(WebauthnError::AttestationStatementVerMissing)?;
 
-    let ver = ver_value
-        .as_string()
-        .ok_or(WebauthnError::AttestationStatementVerInvalid)?;
+    let ver =
+        cbor_try_string!(ver_value).map_err(|_| WebauthnError::AttestationStatementVerInvalid)?;
 
     if ver != "2.0" {
         return Err(WebauthnError::AttestationStatementVerUnsupported);
@@ -359,12 +348,11 @@ pub(crate) fn verify_tpm_attestation(
     // A COSEAlgorithmIdentifier containing the identifier of the algorithm used to generate the attestation signature.
     // String("alg"): I64(-65535),
     let alg_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("alg".to_string()))
+        .get(&serde_cbor::Value::Text("alg".to_string()))
         .ok_or(WebauthnError::AttestationStatementAlgMissing)?;
 
-    let alg = alg_value
-        .as_i64()
-        .ok_or(WebauthnError::AttestationStatementAlgInvalid)
+    let alg = cbor_try_i128!(alg_value)
+        .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
         .and_then(COSEContentType::try_from)?;
 
     eprintln!("alg = {:?}", alg);
@@ -372,12 +360,11 @@ pub(crate) fn verify_tpm_attestation(
     // The TPMS_ATTEST structure over which the above signature was computed, as specified in [TPMv2-Part2] section 10.12.8.
     // String("certInfo"): Bytes([]),
     let certinfo_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("certInfo".to_string()))
+        .get(&serde_cbor::Value::Text("certInfo".to_string()))
         .ok_or(WebauthnError::AttestationStatementCertInfoMissing)?;
 
-    let certinfo_bytes = certinfo_value
-        .as_bytes()
-        .ok_or(WebauthnError::AttestationStatementCertInfoMissing)?;
+    let certinfo_bytes = cbor_try_bytes!(certinfo_value)
+        .map_err(|_| WebauthnError::AttestationStatementCertInfoMissing)?;
 
     let certinfo = TpmsAttest::try_from(certinfo_bytes.as_slice())?;
 
@@ -386,12 +373,11 @@ pub(crate) fn verify_tpm_attestation(
     // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
     // String("pubArea"): Bytes([]),
     let pubarea_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("pubArea".to_string()))
+        .get(&serde_cbor::Value::Text("pubArea".to_string()))
         .ok_or(WebauthnError::AttestationStatementPubAreaMissing)?;
 
-    let pubarea_bytes = pubarea_value
-        .as_bytes()
-        .ok_or(WebauthnError::AttestationStatementPubAreaMissing)?;
+    let pubarea_bytes = cbor_try_bytes!(pubarea_value)
+        .map_err(|_| WebauthnError::AttestationStatementPubAreaMissing)?;
 
     let pubarea = TpmtPublic::try_from(pubarea_bytes.as_slice())?;
 
@@ -400,12 +386,11 @@ pub(crate) fn verify_tpm_attestation(
     // The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
     // String("sig"): Bytes([]),
     let sig_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("sig".to_string()))
+        .get(&serde_cbor::Value::Text("sig".to_string()))
         .ok_or(WebauthnError::AttestationStatementSigMissing)?;
 
-    let sig_bytes = sig_value
-        .as_bytes()
-        .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+    let sig_bytes =
+        cbor_try_bytes!(sig_value).map_err(|_| WebauthnError::AttestationStatementSigMissing)?;
 
     let sig = TpmtSignature::try_from(sig_bytes.as_slice())?;
 
@@ -414,19 +399,17 @@ pub(crate) fn verify_tpm_attestation(
     // x5c -> aik_cert followed by its certificate chain, in X.509 encoding.
     // String("x5c"): Array( // root Bytes([]), // chain Bytes([])])
     let x5c_value = att_stmt_map
-        .get(&serde_cbor::ObjectKey::String("x5c".to_string()))
+        .get(&serde_cbor::Value::Text("x5c".to_string()))
         .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
 
-    let x5c_array_ref = x5c_value
-        .as_array()
-        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+    let x5c_array_ref =
+        cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
         .iter()
         .map(|values| {
-            values
-                .as_bytes()
-                .ok_or(WebauthnError::AttestationStatementX5CInvalid)
+            cbor_try_bytes!(values)
+                .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
                 .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
         })
         .collect();

@@ -260,9 +260,9 @@ pub enum ECDSACurve {
     // ED25519 = 6,
 }
 
-impl TryFrom<u64> for ECDSACurve {
+impl TryFrom<i128> for ECDSACurve {
     type Error = WebauthnError;
-    fn try_from(u: u64) -> Result<Self, Self::Error> {
+    fn try_from(u: i128) -> Result<Self, Self::Error> {
         match u {
             1 => Ok(ECDSACurve::SECP256R1),
             2 => Ok(ECDSACurve::SECP384R1),
@@ -312,9 +312,9 @@ pub enum COSEContentType {
     INSECURE_RS1 = -65535,
 }
 
-impl TryFrom<i64> for COSEContentType {
+impl TryFrom<i128> for COSEContentType {
     type Error = WebauthnError;
-    fn try_from(i: i64) -> Result<Self, Self::Error> {
+    fn try_from(i: i128) -> Result<Self, Self::Error> {
         match i {
             -7 => Ok(COSEContentType::ECDSA_SHA256),
             -35 => Ok(COSEContentType::ECDSA_SHA384),
@@ -426,9 +426,7 @@ pub struct COSEKey {
 impl TryFrom<&serde_cbor::Value> for COSEKey {
     type Error = WebauthnError;
     fn try_from(d: &serde_cbor::Value) -> Result<COSEKey, Self::Error> {
-        let m = d
-            .as_object()
-            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+        let m = cbor_try_map!(d)?;
 
         // See also https://tools.ietf.org/html/rfc8152#section-3.1
         // These values look like:
@@ -444,18 +442,14 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
         // First, value 1 for the key type.
 
         let key_type_value = m
-            .get(&serde_cbor::ObjectKey::Integer(1))
+            .get(&serde_cbor::Value::Integer(1))
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-        let key_type = key_type_value
-            .as_u64()
-            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+        let key_type = cbor_try_i128!(key_type_value)?;
 
         let content_type_value = m
-            .get(&serde_cbor::ObjectKey::Integer(3))
+            .get(&serde_cbor::Value::Integer(3))
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-        let content_type = content_type_value
-            .as_i64()
-            .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+        let content_type = cbor_try_i128!(content_type_value)?;
 
         // https://www.iana.org/assignments/cose/cose.xhtml
         // https://www.w3.org/TR/webauthn/#sctn-encoded-credPubKey-examples
@@ -467,29 +461,23 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 // Get these values now ....
 
                 let curve_type_value = m
-                    .get(&serde_cbor::ObjectKey::Integer(-1))
+                    .get(&serde_cbor::Value::Integer(-1))
                     .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let curve_type = curve_type_value
-                    .as_u64()
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let curve_type = cbor_try_i128!(curve_type_value)?;
 
                 // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
 
                 // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
 
                 let x_value = m
-                    .get(&serde_cbor::ObjectKey::Integer(-2))
+                    .get(&serde_cbor::Value::Integer(-2))
                     .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let x = x_value
-                    .as_bytes()
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let x = cbor_try_bytes!(x_value)?;
 
                 let y_value = m
-                    .get(&serde_cbor::ObjectKey::Integer(-3))
+                    .get(&serde_cbor::Value::Integer(-3))
                     .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let y = y_value
-                    .as_bytes()
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let y = cbor_try_bytes!(y_value)?;
 
                 if x.len() != 32 || y.len() != 32 {
                     return Err(WebauthnError::COSEKeyECDSAXYInvalid);
@@ -530,18 +518,14 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 // -2 -> e 3 bytes
 
                 let n_value = m
-                    .get(&serde_cbor::ObjectKey::Integer(-1))
+                    .get(&serde_cbor::Value::Integer(-1))
                     .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let n = n_value
-                    .as_bytes()
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let n = cbor_try_bytes!(n_value)?;
 
                 let e_value = m
-                    .get(&serde_cbor::ObjectKey::Integer(-2))
+                    .get(&serde_cbor::Value::Integer(-2))
                     .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let e = e_value
-                    .as_bytes()
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+                let e = cbor_try_bytes!(e_value)?;
 
                 if n.len() != 256 || e.len() != 3 {
                     return Err(WebauthnError::COSEKeyRSANEInvalid);

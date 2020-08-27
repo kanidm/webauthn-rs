@@ -24,6 +24,8 @@ extern crate openssl;
 #[macro_use]
 extern crate nom;
 
+#[macro_use]
+mod macros;
 pub mod attestation;
 mod base64_data;
 mod constants;
