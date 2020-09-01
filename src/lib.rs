@@ -16,7 +16,6 @@
 #![warn(missing_docs)]
 
 extern crate base64;
-extern crate lru;
 #[macro_use]
 extern crate serde_derive;
 // extern crate byteorder;

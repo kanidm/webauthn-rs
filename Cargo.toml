@@ -16,21 +16,20 @@ license = "MPL-2.0"
 
 [dependencies]
 base64 = "0.12"
-lru = "0.1"
 log = "0.4"
 nom = "4.2"
 serde = "1.0"
-serde_bytes = "0.10"
+serde_bytes = "0.11"
 serde_cbor = "0.11"
 serde_derive = "1.0"
 serde_json = "1.0"
 # We could consider replacing this with openssl rand.
 openssl = "0.10"
-rand = "0.6"
+rand = "0.7"
 thiserror = "1.0"
 
 [dev-dependencies]
-askama = "0.6"
+askama = "0.10"
 
 # This only supports up to 0.7. See examples/actix/main.rs for more.
 actix = "0.9"
@@ -40,10 +39,12 @@ actix-files = "0.2"
 
 # cookie = "0.11"
 log = "0.4"
-env_logger = "0.6"
+env_logger = "0.7"
 futures = "0.3"
-time = "0.1"
+time = "0.2"
 openssl = "0.10"
 
-structopt = { version = "0.2", default-features = false }
+lru = "0.6"
+
+structopt = { version = "0.3", default-features = false }
 
