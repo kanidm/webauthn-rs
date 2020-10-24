@@ -677,7 +677,7 @@ impl COSEKey {
     }
 }
 
-pub(crate) fn compute_sha256(data: &[u8]) -> Vec<u8> {
+pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);
     hasher.finish().iter().map(|b| *b).collect()

@@ -26,7 +26,7 @@ extern crate nom;
 #[macro_use]
 mod macros;
 pub mod attestation;
-mod base64_data;
+pub mod base64_data;
 mod constants;
 pub mod crypto;
 pub mod ephemeral;
@@ -308,6 +308,11 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.origin matches the Relying Party's origin.
         if &data.client_data_json.origin != self.config.get_origin() {
+            log::debug!(
+                "{} != {}",
+                data.client_data_json.origin,
+                self.config.get_origin()
+            );
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
@@ -492,7 +497,10 @@ impl<T> Webauthn<T> {
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
-        let data = AuthenticatorAssertionResponse::try_from(&rsp.response)?;
+        let data = AuthenticatorAssertionResponse::try_from(&rsp.response).map_err(|e| {
+            log::debug!("AuthenticatorAssertionResponse::try_from -> {:?}", e);
+            e
+        })?;
 
         let c = &data.client_data;
 
@@ -623,7 +631,7 @@ impl<T> Webauthn<T> {
             .iter()
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
-                id: base64::encode(cred.cred_id.as_slice()),
+                id: Base64UrlSafeData(cred.cred_id.clone()),
                 transports: None,
             })
             .collect();

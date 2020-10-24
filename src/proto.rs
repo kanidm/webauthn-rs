@@ -82,7 +82,7 @@ impl PartialEq<Credential> for Credential {
 /// An example of a non-verified interaction is a yubico device with no pin where touch is
 /// the only interaction - we only verify a user is present, but we don't have extra details
 /// to the legitimacy of that user.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum UserVerificationPolicy {
     /// Require User Verification bit to be set, and fail the registration or authentication
@@ -111,61 +111,61 @@ pub(crate) type JSONExtensions = BTreeMap<String, String>;
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelyingParty {
-    pub(crate) name: String,
-    pub(crate) id: String,
+    pub name: String,
+    pub id: String,
 }
 
 /// User Entity
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    pub(crate) id: Base64UrlSafeData,
-    pub(crate) name: String,
-    pub(crate) display_name: String,
+    pub id: Base64UrlSafeData,
+    pub name: String,
+    pub display_name: String,
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub(crate) struct PubKeyCredParams {
+pub struct PubKeyCredParams {
     #[serde(rename = "type")]
-    pub(crate) type_: String,
+    pub type_: String,
     // Should this be a diff size?
-    pub(crate) alg: i64,
+    pub alg: i64,
 }
 
-#[derive(Debug, Serialize, Clone)]
-pub(crate) struct AllowCredentials {
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct AllowCredentials {
     #[serde(rename = "type")]
-    pub(crate) type_: String,
-    pub(crate) id: String,
+    pub type_: String,
+    pub id: Base64UrlSafeData,
     /// https://www.w3.org/TR/webauthn/#transport
     /// may be usb, nfc, ble, internal
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) transports: Option<Vec<String>>,
+    pub transports: Option<Vec<String>>,
 }
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialCreationOptions {
-    pub(crate) rp: RelyingParty,
-    pub(crate) user: User,
-    pub(crate) challenge: Base64UrlSafeData,
-    pub(crate) pub_key_cred_params: Vec<PubKeyCredParams>,
+    pub rp: RelyingParty,
+    pub user: User,
+    pub challenge: Base64UrlSafeData,
+    pub pub_key_cred_params: Vec<PubKeyCredParams>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) timeout: Option<u32>,
+    pub timeout: Option<u32>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) attestation: Option<AttestationConveyancePreference>,
+    pub attestation: Option<AttestationConveyancePreference>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) exclude_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
+    pub exclude_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) authenticator_selection: Option<AuthenticatorSelectionCriteria>,
+    pub authenticator_selection: Option<AuthenticatorSelectionCriteria>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) extensions: Option<JSONExtensions>,
+    pub extensions: Option<JSONExtensions>,
 }
 
 /// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
@@ -174,19 +174,19 @@ pub struct PublicKeyCredentialCreationOptions {
 pub struct AuthenticatorSelectionCriteria {
     /// https://www.w3.org/TR/webauthn/#attachment
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
+    pub authenticator_attachment: Option<AuthenticatorAttachment>,
 
     /// https://www.w3.org/TR/webauthn/#resident-credential
-    pub(crate) require_resident_key: bool,
+    pub require_resident_key: bool,
 
-    pub(crate) user_verification: UserVerificationPolicy,
+    pub user_verification: UserVerificationPolicy,
 }
 
 /// The authenticator attachment hint. This is NOT enforced, and is only used
 /// to help a user select a relevant authenticator type.
 ///
 /// https://www.w3.org/TR/webauthn/#attachment
-#[derive(Debug, Copy, Clone, Serialize)]
+#[derive(Debug, Copy, Clone, Serialize, PartialEq)]
 pub enum AuthenticatorAttachment {
     /// https://www.w3.org/TR/webauthn/#attachment
     #[serde(rename = "platform")]
@@ -255,18 +255,19 @@ pub enum AuthenticatorTransport {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreationChallengeResponse {
-    pub(crate) public_key: PublicKeyCredentialCreationOptions,
+    pub public_key: PublicKeyCredentialCreationOptions,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PublicKeyCredentialRequestOptions {
-    challenge: Base64UrlSafeData,
-    timeout: u32,
-    rp_id: String,
-    allow_credentials: Vec<AllowCredentials>,
-    user_verification: UserVerificationPolicy,
-    extensions: Option<JSONExtensions>,
+pub struct PublicKeyCredentialRequestOptions {
+    pub challenge: Base64UrlSafeData,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u32>,
+    pub rp_id: String,
+    pub allow_credentials: Vec<AllowCredentials>,
+    pub user_verification: UserVerificationPolicy,
+    pub extensions: Option<JSONExtensions>,
 }
 
 /// A JSON serialisable challenge which is issued to the user's webbrowser
@@ -276,7 +277,7 @@ pub(crate) struct PublicKeyCredentialRequestOptions {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestChallengeResponse {
-    public_key: PublicKeyCredentialRequestOptions,
+    pub public_key: PublicKeyCredentialRequestOptions,
 }
 
 impl RequestChallengeResponse {
@@ -290,7 +291,7 @@ impl RequestChallengeResponse {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
                 challenge: challenge.into(),
-                timeout,
+                timeout: Some(timeout),
                 rp_id: relaying_party,
                 allow_credentials,
                 user_verification: user_verification_policy,
@@ -300,18 +301,18 @@ impl RequestChallengeResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct CollectedClientData {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CollectedClientData {
     #[serde(rename = "type")]
-    pub(crate) type_: String,
-    pub(crate) challenge: Base64UrlSafeData,
-    pub(crate) origin: String,
+    pub type_: String,
+    pub challenge: Base64UrlSafeData,
+    pub origin: String,
     #[serde(rename = "tokenBinding")]
-    pub(crate) token_binding: Option<TokenBinding>,
+    pub token_binding: Option<TokenBinding>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub(crate) struct TokenBinding {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TokenBinding {
     pub status: String,
     pub id: Option<String>,
 }
@@ -336,7 +337,7 @@ pub(crate) struct AttestedCredentialData {
 
 // https://w3c.github.io/webauthn/#sctn-attestation
 #[derive(Debug)]
-pub(crate) struct AuthenticatorData {
+pub struct AuthenticatorData {
     pub(crate) rp_id_hash: Vec<u8>,
     // pub(crate) flags: u8,
     pub(crate) counter: u32,
@@ -345,6 +346,7 @@ pub(crate) struct AuthenticatorData {
     pub(crate) acd: Option<AttestedCredentialData>,
     // pub(crate) extensions: Option<CBORExtensions>,
     pub(crate) extensions: Option<()>,
+    // pub(crate) excess: Vec<u8>,
 }
 
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
@@ -404,6 +406,7 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
         counter: u32!(nom::Endianness::Big) >>
         acd: cond!(data_flags.1, acd_parser) >>
         extensions: cond!(data_flags.0, extensions_parser) >>
+        // excess: call!(nom::rest) >>
         (AuthenticatorData {
             rp_id_hash: rp_id_hash.to_vec(),
             counter: counter,
@@ -411,6 +414,7 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
             user_present: data_flags.3,
             acd: acd,
             extensions: extensions,
+            // excess: excess.to_vec(),
         })
     )
 );
@@ -419,7 +423,10 @@ impl TryFrom<&Vec<u8>> for AuthenticatorData {
     type Error = WebauthnError;
     fn try_from(auth_data_bytes: &Vec<u8>) -> Result<Self, Self::Error> {
         authenticator_data_parser(auth_data_bytes.as_slice())
-            .map_err(|_| WebauthnError::ParseNOMFailure)
+            .map_err(|e| {
+                log::debug!("nom -> {:?}", e);
+                WebauthnError::ParseNOMFailure
+            })
             .map(|(_, ad)| ad)
     }
 }
@@ -433,7 +440,7 @@ pub(crate) struct AttestationObjectInner<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct AttestationObject {
+pub struct AttestationObject {
     pub(crate) auth_data: AuthenticatorData,
     pub(crate) auth_data_bytes: Vec<u8>,
     pub(crate) fmt: String,
@@ -462,7 +469,7 @@ impl TryFrom<&[u8]> for AttestationObject {
 }
 
 /// https://w3c.github.io/webauthn/#authenticatorattestationresponse
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AuthenticatorAttestationResponseRaw {
     /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-attestationobject
     #[serde(rename = "attestationObject")]
@@ -500,18 +507,18 @@ impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationR
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
 /// https://w3c.github.io/webauthn/#iface-pkcredential
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct RegisterPublicKeyCredential {
-    pub(crate) id: String,
+    pub id: String,
 
     #[serde(rename = "rawId")]
-    pub(crate) raw_id: Base64UrlSafeData,
+    pub raw_id: Base64UrlSafeData,
 
     /// https://w3c.github.io/webauthn/#dom-publickeycredential-response
     pub response: AuthenticatorAttestationResponseRaw,
 
     #[serde(rename = "type")]
-    pub(crate) type_: String,
+    pub type_: String,
 }
 
 #[derive(Debug)]
@@ -539,18 +546,18 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
 }
 
 // https://w3c.github.io/webauthn/#authenticatorassertionresponse
-#[derive(Debug, Deserialize)]
-pub(crate) struct AuthenticatorAssertionResponseRaw {
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AuthenticatorAssertionResponseRaw {
     #[serde(rename = "authenticatorData")]
-    pub(crate) authenticator_data: Base64UrlSafeData,
+    pub authenticator_data: Base64UrlSafeData,
 
     #[serde(rename = "clientDataJSON")]
-    pub(crate) client_data_json: Base64UrlSafeData,
+    pub client_data_json: Base64UrlSafeData,
 
-    pub(crate) signature: Base64UrlSafeData,
+    pub signature: Base64UrlSafeData,
 
     #[serde(rename = "userHandle")]
-    pub(crate) user_handle: Option<Base64UrlSafeData>,
+    pub user_handle: Option<Base64UrlSafeData>,
 }
 
 /// A client response to an authentication challenge. This contains all required
@@ -559,14 +566,14 @@ pub(crate) struct AuthenticatorAssertionResponseRaw {
 ///
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PublicKeyCredential {
-    pub(crate) id: String,
+    pub id: String,
     #[serde(rename = "rawId")]
-    pub(crate) raw_id: Base64UrlSafeData,
-    pub(crate) response: AuthenticatorAssertionResponseRaw,
+    pub raw_id: Base64UrlSafeData,
+    pub response: AuthenticatorAssertionResponseRaw,
     #[serde(rename = "type")]
-    pub(crate) type_: String,
+    pub type_: String,
 }
 
 // ===== tpm shit show begins =====

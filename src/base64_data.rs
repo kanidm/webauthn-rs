@@ -5,6 +5,16 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Base64UrlSafeData(pub Vec<u8>);
 
+impl fmt::Display for Base64UrlSafeData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            base64::encode_config(&self, base64::URL_SAFE_NO_PAD)
+        )
+    }
+}
+
 impl Into<Vec<u8>> for Base64UrlSafeData {
     fn into(self) -> Vec<u8> {
         self.0
