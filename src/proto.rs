@@ -108,7 +108,7 @@ pub enum UserVerificationPolicy {
 pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
 /// Relying Party Entity
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelyingParty {
     pub name: String,
@@ -116,7 +116,7 @@ pub struct RelyingParty {
 }
 
 /// User Entity
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: Base64UrlSafeData,
@@ -124,7 +124,7 @@ pub struct User {
     pub display_name: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct PubKeyCredParams {
     #[serde(rename = "type")]
     pub type_: String,
@@ -144,7 +144,7 @@ pub struct AllowCredentials {
 }
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialCreationOptions {
     pub rp: RelyingParty,
@@ -169,7 +169,7 @@ pub struct PublicKeyCredentialCreationOptions {
 }
 
 /// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorSelectionCriteria {
     /// https://www.w3.org/TR/webauthn/#attachment
@@ -186,7 +186,7 @@ pub struct AuthenticatorSelectionCriteria {
 /// to help a user select a relevant authenticator type.
 ///
 /// https://www.w3.org/TR/webauthn/#attachment
-#[derive(Debug, Copy, Clone, Serialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AuthenticatorAttachment {
     /// https://www.w3.org/TR/webauthn/#attachment
     #[serde(rename = "platform")]
@@ -197,7 +197,7 @@ pub enum AuthenticatorAttachment {
 }
 
 /// https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AttestationConveyancePreference {
     /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none
@@ -214,7 +214,7 @@ pub enum AttestationConveyancePreference {
 }
 
 /// https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct PublicKeyCredentialDescriptor {
     #[serde(rename = "type")]
     type_: String,
@@ -234,7 +234,7 @@ impl PublicKeyCredentialDescriptor {
 }
 
 /// https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[allow(unused)]
 pub enum AuthenticatorTransport {
@@ -252,13 +252,13 @@ pub enum AuthenticatorTransport {
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreationChallengeResponse {
     pub public_key: PublicKeyCredentialCreationOptions,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialRequestOptions {
     pub challenge: Base64UrlSafeData,
@@ -274,7 +274,7 @@ pub struct PublicKeyCredentialRequestOptions {
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestChallengeResponse {
     pub public_key: PublicKeyCredentialRequestOptions,
@@ -301,7 +301,7 @@ impl RequestChallengeResponse {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct CollectedClientData {
     #[serde(rename = "type")]
     pub type_: String,
@@ -469,7 +469,7 @@ impl TryFrom<&[u8]> for AttestationObject {
 }
 
 /// https://w3c.github.io/webauthn/#authenticatorattestationresponse
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticatorAttestationResponseRaw {
     /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-attestationobject
     #[serde(rename = "attestationObject")]
