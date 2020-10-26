@@ -90,7 +90,6 @@ pub struct AuthenticationState {
 /// as much as possible.
 #[derive(Debug)]
 pub struct Webauthn<T> {
-    rng: ThreadRng,
     config: T,
     pkcp: Vec<PubKeyCredParams>,
     rp_id_hash: Vec<u8>,
@@ -118,21 +117,21 @@ impl<T> Webauthn<T> {
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
             // Use a per-thread csprng
-            rng: rand::thread_rng(),
             config: config,
             pkcp: pkcp,
             rp_id_hash: rp_id_hash,
         }
     }
 
-    fn generate_challenge(&mut self) -> Challenge {
-        Challenge(self.rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
+    fn generate_challenge(&self) -> Challenge {
+        let mut rng = rand::thread_rng();
+        Challenge(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
     }
 
     /// Generate a new challenge for client registration.
     /// Same as `generate_challenge_register_options` but default options
     pub fn generate_challenge_register(
-        &mut self,
+        &self,
         user_name: &String,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
@@ -162,7 +161,7 @@ impl<T> Webauthn<T> {
     /// At this time we deviate from the standard and base64 some fields, but we are
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_register_options(
-        &mut self,
+        &self,
         user_id: UserId,
         user_name: String,
         user_display_name: String,
@@ -615,7 +614,7 @@ impl<T> Webauthn<T> {
     /// At this time we deviate from the standard and base64 some fields, but we are
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_authenticate(
-        &mut self,
+        &self,
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
@@ -668,7 +667,7 @@ impl<T> Webauthn<T> {
     /// At this time we deviate from the standard and base64 some fields, but we are
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn authenticate_credential(
-        &mut self,
+        &self,
         rsp: PublicKeyCredential,
         state: AuthenticationState,
     ) -> Result<Option<(CredentialID, Counter)>, WebauthnError>
