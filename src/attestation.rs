@@ -73,6 +73,7 @@ pub enum AttestationType {
 pub(crate) fn verify_packed_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
     client_data_hash: &Vec<u8>,
@@ -167,7 +168,7 @@ pub(crate) fn verify_packed_attestation(
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
             Ok(AttestationType::Basic(
-                Credential::new(acd, credential_public_key, counter),
+                Credential::new(acd, credential_public_key, counter, user_verified),
                 attestn_cert,
             ))
         }
@@ -206,6 +207,7 @@ pub(crate) fn verify_packed_attestation(
                 acd,
                 credential_public_key,
                 counter,
+                user_verified
             )))
         }
     }
@@ -216,6 +218,7 @@ pub(crate) fn verify_packed_attestation(
 pub(crate) fn verify_fidou2f_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    user_verified: bool,
     att_stmt: &serde_cbor::Value,
     // authDataBytes: &Vec<u8>,
     client_data_hash: &Vec<u8>,
@@ -298,7 +301,7 @@ pub(crate) fn verify_fidou2f_attestation(
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
-    let credential = Credential::new(acd, credential_public_key, counter);
+    let credential = Credential::new(acd, credential_public_key, counter, user_verified);
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
@@ -311,10 +314,13 @@ pub(crate) fn verify_fidou2f_attestation(
 pub(crate) fn verify_none_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    user_verified: bool,
 ) -> Result<AttestationType, WebauthnError> {
     // No attestation is performed, simply provide a credential.
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
-    let credential = Credential::new(acd, credential_public_key, counter);
+    let credential = Credential::new(acd, credential_public_key, counter,
+                user_verified
+    );
     Ok(AttestationType::None(credential))
 }
 
@@ -322,6 +328,7 @@ pub(crate) fn verify_none_attestation(
 pub(crate) fn verify_tpm_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
     client_data_hash: &Vec<u8>,
@@ -551,7 +558,9 @@ pub(crate) fn verify_tpm_attestation(
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
     Ok(AttestationType::AttCa(
-        Credential::new(acd, credential_public_key, counter),
+        Credential::new(acd, credential_public_key, counter, 
+                user_verified
+        ),
         aik_cert,
         arr_x509,
     ))

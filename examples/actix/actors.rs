@@ -50,7 +50,7 @@ impl Handler<ChallengeRegister> for WebauthnActor {
         debug!("handle ChallengeRegister -> {:?}", msg);
         let (ccr, rs) = self
             .wan
-            .generate_challenge_register(&msg.username, Some(UserVerificationPolicy::Required))?;
+            .generate_challenge_register(&msg.username, Some(UserVerificationPolicy::Discouraged))?;
         self.reg_chals.put(msg.username.into_bytes(), rs);
         debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
@@ -78,7 +78,7 @@ impl Handler<ChallengeAuthenticate> for WebauthnActor {
         }
         .ok_or(WebauthnError::CredentialRetrievalError)?;
 
-        let (acr, st) = self.wan.generate_challenge_authenticate(creds, None)?;
+        let (acr, st) = self.wan.generate_challenge_authenticate(creds)?;
         self.auth_chals.put(msg.username.as_bytes().to_vec(), st);
         debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok(acr)
@@ -110,7 +110,7 @@ impl Handler<Register> for WebauthnActor {
             .ok_or(WebauthnError::ChallengeNotFound)?;
         let r = self
             .wan
-            .register_credential(reg, rs, |cred_id| match self.creds.get(&username) {
+            .register_credential(&reg, rs, |cred_id| match self.creds.get(&username) {
                 Some(ucreds) => Ok(ucreds.contains_key(cred_id)),
                 None => Ok(false),
             })
@@ -155,7 +155,7 @@ impl Handler<Authenticate> for WebauthnActor {
             .auth_chals
             .pop(&username.as_bytes().to_vec())
             .ok_or(WebauthnError::ChallengeNotFound)?;
-        let r = self.wan.authenticate_credential(lgn, st).map(|r| {
+        let r = self.wan.authenticate_credential(&lgn, st).map(|r| {
             r.map(|(cred_id, counter)| {
                 match self.creds.get_mut(&username.as_bytes().to_vec()) {
                     Some(v) => {

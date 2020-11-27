@@ -132,7 +132,7 @@ impl<T> Webauthn<T> {
     /// Same as `generate_challenge_register_options` but default options
     pub fn generate_challenge_register(
         &self,
-        user_name: &String,
+        user_name: &str,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
@@ -140,8 +140,8 @@ impl<T> Webauthn<T> {
     {
         self.generate_challenge_register_options(
             user_name.as_bytes().to_vec(),
-            user_name.clone(),
-            user_name.clone(),
+            user_name.to_string(),
+            user_name.to_string(),
             None,
             policy,
         )
@@ -172,6 +172,11 @@ impl<T> Webauthn<T> {
         T: WebauthnConfig,
     {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
+
+        if policy == UserVerificationPolicy::Preferred {
+            log::warn!("UserVerificationPolicy::Preferred is misleading! You should select Discouraged or Required!");
+        }
+
         let challenge = self.generate_challenge();
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
@@ -236,7 +241,7 @@ impl<T> Webauthn<T> {
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn register_credential(
         &self,
-        reg: RegisterPublicKeyCredential,
+        reg: &RegisterPublicKeyCredential,
         state: RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<Credential, WebauthnError>
@@ -272,7 +277,7 @@ impl<T> Webauthn<T> {
 
     pub(crate) fn register_credential_internal(
         &self,
-        reg: RegisterPublicKeyCredential,
+        reg: &RegisterPublicKeyCredential,
         policy: UserVerificationPolicy,
         chal: Challenge,
     ) -> Result<Credential, WebauthnError>
@@ -424,6 +429,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 &client_data_json_hash,
                 &data.attestation_object.auth_data.rp_id_hash,
@@ -431,6 +437,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::Packed => verify_packed_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
@@ -438,12 +445,15 @@ impl<T> Webauthn<T> {
             AttestationFormat::TPM => verify_tpm_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::None => {
-                verify_none_attestation(acd, data.attestation_object.auth_data.counter)
+                verify_none_attestation(acd, data.attestation_object.auth_data.counter,
+                data.attestation_object.auth_data.user_verified,
+                )
             }
             _ => {
                 // No other types are currently implemented
@@ -485,7 +495,7 @@ impl<T> Webauthn<T> {
     // https://w3c.github.io/webauthn/#verifying-assertion
     pub(crate) fn verify_credential_internal(
         &self,
-        rsp: PublicKeyCredential,
+        rsp: &PublicKeyCredential,
         policy: UserVerificationPolicy,
         chal: Challenge,
         cred: &Credential,
@@ -493,6 +503,10 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
+        if policy == UserVerificationPolicy::Preferred {
+            return Err(WebauthnError::InconsistentUserVerificationPolicy)
+        }
+
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
@@ -521,6 +535,11 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.origin matches the Relying Party's origin.
         if &c.origin != self.config.get_origin() {
+            log::debug!(
+                "{} != {}",
+                c.origin,
+                self.config.get_origin()
+            );
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
@@ -613,17 +632,52 @@ impl<T> Webauthn<T> {
     ///
     /// At this time we deviate from the standard and base64 some fields, but we are
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
+    ///
+    /// NOTE: `WebauthnError::InconsistentUserVerificationPolicy`
+    ///
+    /// This error is returning when the set of credentials has a mix of verified
+    /// and unverified credentials. This is due to an issue with the webauthn standard
+    /// as noted at https://github.com/w3c/webauthn/issues/1510. What can occur is that
+    /// when you *register* a credential, you set an expectation as to the verification
+    /// policy of that credential, and if that credential can soley be a MFA on it's own
+    /// or requires extra material to function as an MFA. However, when you mix credentials
+    /// you can have unverified credentials require verification (register discouraged, or
+    /// u2f on ctap1, then authenticate preferred and ctap2) or verified credentials NOT
+    /// need verification.
+    ///
+    /// As a result, this means the set of credentials that is provided must be internally
+    /// consistent so that the policy can be set to discouraged or required based on
+    /// the credentials given. This means you *must* consider a UX to allow the user to
+    /// choose if they wish to use a verified token or not as webauthn as a standard can
+    /// not make this distinction.
+    ///
+    /// An alternate suggestion is that the policy is *always* preferred and then the
+    /// authenticate_credential yields the verification bit to the caller, but this
+    /// still causes issues with ctap1 / ctap2 interop.
     pub fn generate_challenge_authenticate(
         &self,
         creds: Vec<Credential>,
-        policy: Option<UserVerificationPolicy>,
+        // policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
     {
         let chal = self.generate_challenge();
 
-        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
+        let verified = creds.iter()
+            .all(|cred| cred.verified);
+        let unverified = creds.iter()
+            .all(|cred| !cred.verified);
+
+        if !verified && !unverified {
+            return Err(WebauthnError::InconsistentUserVerificationPolicy)
+        }
+
+        let policy = if verified {
+            UserVerificationPolicy::Required
+        } else {
+            UserVerificationPolicy::Discouraged
+        };
 
         // Get the user's existing creds if any.
         let ac = creds
@@ -668,7 +722,7 @@ impl<T> Webauthn<T> {
     /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn authenticate_credential(
         &self,
-        rsp: PublicKeyCredential,
+        rsp: &PublicKeyCredential,
         state: AuthenticationState,
     ) -> Result<Option<(CredentialID, Counter)>, WebauthnError>
     where
@@ -768,7 +822,7 @@ pub trait WebauthnConfig {
     /// may cause associated authenticators to lose credentials.
     ///
     /// Examples of this value could be. "https://my-site.com.au", "https://my-site.com.au:8443"
-    fn get_origin(&self) -> &String;
+    fn get_origin(&self) -> &str;
 
     /// Returns the relying party id. This should never change, and is used as an id
     /// in cryptographic operations and credential scoping. This is defined as the domain name
@@ -923,7 +977,7 @@ mod tests {
 
         // Now register, providing our fake challenge.
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, zero_chal);
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, zero_chal);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -955,7 +1009,7 @@ mod tests {
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, chal);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -987,7 +1041,7 @@ mod tests {
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, chal);
         assert!(result.is_ok());
     }
 
@@ -1031,6 +1085,7 @@ mod tests {
                     ],
                 }),
             },
+            verified: false,
         };
 
         // Persist it to our fake db.
@@ -1054,8 +1109,8 @@ mod tests {
 
         // Now verify it!
         let r = wan.verify_credential_internal(
-            rsp_d,
-            UserVerificationPolicy::Preferred,
+            &rsp_d,
+            UserVerificationPolicy::Discouraged,
             zero_chal,
             &cred,
         );
@@ -1093,7 +1148,7 @@ mod tests {
         };
 
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Preferred, chal);
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, chal);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1162,7 +1217,7 @@ mod tests {
         };
 
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal);
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal);
         println!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
@@ -1219,7 +1274,7 @@ mod tests {
         };
 
         let r =
-            wan.verify_credential_internal(rsp_d, UserVerificationPolicy::Required, chal, &cred);
+            wan.verify_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal, &cred);
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
@@ -1512,7 +1567,7 @@ mod tests {
         };
 
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal);
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal);
         println!("{:?}", result);
         assert!(result.is_ok());
     }

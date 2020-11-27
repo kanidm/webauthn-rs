@@ -52,14 +52,30 @@ pub struct Credential {
     pub cred: crypto::COSEKey,
     /// The counter for this credential
     pub counter: u32,
+    /// During registration, if this credential was verified
+    /// then this is true. If not it is false. This is based on
+    /// the policy at the time of registration of the credential.
+    ///
+    /// This is a deviation from the Webauthn specification, because
+    /// it clarifies the user experience of the credentials to UV
+    /// being a per-credential attribute, rather than a per-authentication
+    /// ceremony attribute. For example it can be surprising to register
+    /// a credential as un-verified but then to use verification with it
+    /// in the future.
+    pub verified: bool,
 }
 
 impl Credential {
-    pub(crate) fn new(acd: &AttestedCredentialData, ck: crypto::COSEKey, counter: u32) -> Self {
+    pub(crate) fn new(acd: &AttestedCredentialData,
+        ck: crypto::COSEKey,
+        counter: u32,
+        verified: bool,
+        ) -> Self {
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
             counter,
+            verified,
         }
     }
 }

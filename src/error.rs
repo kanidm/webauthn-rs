@@ -188,4 +188,7 @@ pub enum WebauthnError {
 
     #[error("Authentication has failed")]
     AuthenticationFailure,
+
+    #[error("Inconsistent Credential Verification and User Verification Policy")]
+    InconsistentUserVerificationPolicy,
 }
