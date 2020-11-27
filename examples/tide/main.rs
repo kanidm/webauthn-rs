@@ -6,7 +6,7 @@ extern crate webauthn_rs;
 
 use askama::Template;
 
-use xactor::*;
+use std::sync::Arc;
 
 use rand::prelude::*;
 
@@ -21,16 +21,7 @@ use crate::actors::*;
 #[template(path = "index.html")]
 struct IndexTemplate;
 
-#[derive(Clone)]
-struct AppState {
-    wan: Addr<WebauthnActor>,
-}
-
-impl AppState {
-    fn new(wan: Addr<WebauthnActor>) -> Self {
-        AppState { wan }
-    }
-}
+type AppState = Arc<WebauthnActor>;
 
 #[derive(Debug, StructOpt)]
 struct CmdOptions {
@@ -66,11 +57,7 @@ async fn index_view(mut request: tide::Request<AppState>) -> tide::Result {
 
 async fn challenge_register(request: tide::Request<AppState>) -> tide::Result {
     let username = request.param("username")?.parse()?;
-    let actor_res = request
-        .state()
-        .wan
-        .call(ChallengeRegister { username })
-        .await?;
+    let actor_res = request.state().challenge_register(username).await;
     let res = match actor_res {
         Ok(chal) => tide::Response::builder(tide::StatusCode::Ok)
             .body(tide::Body::from_json(&chal)?)
@@ -85,11 +72,7 @@ async fn challenge_register(request: tide::Request<AppState>) -> tide::Result {
 
 async fn challenge_login(request: tide::Request<AppState>) -> tide::Result {
     let username = request.param("username")?.parse()?;
-    let actor_res = request
-        .state()
-        .wan
-        .call(ChallengeAuthenticate { username })
-        .await?;
+    let actor_res = request.state().challenge_authenticate(&username).await;
     let res = match actor_res {
         Ok(chal) => tide::Response::builder(tide::StatusCode::Ok)
             .body(tide::Body::from_json(&chal)?)
@@ -105,7 +88,7 @@ async fn challenge_login(request: tide::Request<AppState>) -> tide::Result {
 async fn register(mut request: tide::Request<AppState>) -> tide::Result {
     let username = request.param("username")?.parse()?;
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
-    let actor_res = request.state().wan.call(Register { username, reg }).await?;
+    let actor_res = request.state().register(&username, &reg).await;
     let res = match actor_res {
         Ok(()) => tide::Response::new(tide::StatusCode::Ok),
         Err(e) => {
@@ -118,36 +101,27 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
 
 async fn login(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
+    let username_copy = username.clone();
     let lgn = request.body_json::<PublicKeyCredential>().await?;
 
-    let actor_res = request
-        .state()
-        .wan
-        .call(Authenticate {
-            username: username.clone(),
-            lgn,
-        })
-        .await?;
-
-    let session = request.session_mut();
-    let res = match actor_res {
-        Ok(_) => {
-            // Clear the anonymous flag
-            session.remove("anonymous");
-            tide::log::debug!("removed anonymous flag");
-
-            // Set the userid
-            match session.insert("userid", username) {
-                Ok(_) => tide::Response::new(tide::StatusCode::Ok),
-                Err(_) => tide::Response::new(tide::StatusCode::InternalServerError),
-            }
-        }
+    match request.state().authenticate(&username_copy, &lgn).await {
+        Ok(()) => (),
         Err(e) => {
             tide::log::debug!("login -> {:?}", e);
-            tide::Response::new(tide::StatusCode::InternalServerError)
+            return Ok(tide::Response::new(tide::StatusCode::InternalServerError));
         }
     };
-    Ok(res)
+
+    let session = request.session_mut();
+
+    // Clear the anonymous flag
+    session.remove("anonymous");
+    tide::log::debug!("removed anonymous flag");
+
+    // Set the userid
+    session.insert_raw("userid", username);
+
+    Ok(tide::Response::new(tide::StatusCode::Ok))
 }
 
 #[async_std::main]
@@ -173,8 +147,8 @@ async fn main() -> tide::Result<()> {
     );
 
     let wan = WebauthnActor::new(wan_c);
-    let wan_addr = wan.start().await?;
-    let app_state = AppState::new(wan_addr);
+
+    let app_state = Arc::new(wan);
 
     let mut app = tide::with_state(app_state);
     let cookie_sig = StdRng::from_entropy().gen::<[u8; 32]>();

@@ -31,19 +31,11 @@ thiserror = "1.0"
 [dev-dependencies]
 askama = "0.10"
 
-# This only supports up to 0.7. See examples/actix/main.rs for more.
-actix = "0.10"
-actix-web = { version = "2.0", features = ["openssl"] }
-actix-session = "0.3"
-actix-files = "0.2"
-
 # Example, use the version numbers you need
-tide = "0.15.0"
-tide-rustls = "0.1.3"
-askama_tide = "0.12.0"
-async-std = { version = "1.6.0", features = ["attributes"] }
-xactor = "0.7.8"
-async-trait = "0.1.42"
+tide = "0.15"
+# tide-rustls = "0.1"
+askama_tide = "0.12"
+async-std = { version = "1.6", features = ["attributes"] }
 
 # cookie = "0.11"
 log = "0.4"
