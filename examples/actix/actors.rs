@@ -48,9 +48,10 @@ impl Handler<ChallengeRegister> for WebauthnActor {
 
     fn handle(&mut self, msg: ChallengeRegister, _: &mut Self::Context) -> Self::Result {
         debug!("handle ChallengeRegister -> {:?}", msg);
-        let (ccr, rs) = self
-            .wan
-            .generate_challenge_register(&msg.username, Some(UserVerificationPolicy::Discouraged))?;
+        let (ccr, rs) = self.wan.generate_challenge_register(
+            &msg.username,
+            Some(UserVerificationPolicy::Discouraged),
+        )?;
         self.reg_chals.put(msg.username.into_bytes(), rs);
         debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
