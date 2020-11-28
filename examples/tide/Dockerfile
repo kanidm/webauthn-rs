@@ -1,4 +1,5 @@
-FROM opensuse/leap:latest
+ARG BASE_IMAGE=opensuse/leap:latest
+FROM ${BASE_IMAGE} AS builder
 MAINTAINER wbrown@suse.de
 
 EXPOSE 8080
@@ -13,10 +14,12 @@ RUN zypper in -y gcc libopenssl-devel openssl wget && \
     chmod +x rustup-init && \
     ./rustup-init -v -y && \
     source /root/.profile && \
-    cargo build --example actix --release && \
+    cargo build --example tide --release && \
     zypper rm -y gcc libopenssl-devel && \
     rm -r rustup-init /root/.rustup
 
-CMD ['/src/target/release/examples/actix']
+COPY --from=builder /src/target/release/examples/tide /sbin/
+
+CMD ['/sbin/tide']
 
 
