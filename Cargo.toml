@@ -31,7 +31,6 @@ thiserror = "1.0"
 [dev-dependencies]
 askama = "0.10"
 
-# Example, use the version numbers you need
 tide = "0.15"
 # tide-rustls = "0.1"
 askama_tide = "0.12"
