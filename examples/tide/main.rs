@@ -14,6 +14,7 @@ use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
 
 mod actors;
+mod crypto;
 
 use crate::actors::*;
 
@@ -40,6 +41,10 @@ struct CmdOptions {
     bind: String,
     #[structopt(short = "s", long = "tls")]
     enable_tls: bool,
+    #[structopt(short = "c", long = "tls-cert", default_value = "tempcert.cert")]
+    tls_temp_certificate_path: String,
+    #[structopt(short = "k", long = "tls-key", default_value = "tempkey.key")]
+    tls_temp_key_path: String,
 }
 
 async fn index_view(mut request: tide::Request<AppState>) -> tide::Result {
@@ -169,18 +174,22 @@ async fn main() -> tide::Result<()> {
     app.at("/auth/login/:username").post(login);
     app.at("/auth/static/").serve_dir("static")?;
 
-    // TODO: tide_rustls uses version 0.14.0 (we're on 0.15.0) and uses rustls over openssl
-    // if opt.enable_tls {
-    // //     let ssl_params = generate_dyn_ssl_params(opt.rp_id.as_str());
-    //     let listener = tide_rustls::TlsListener::build()
-    //         .addrs(opt.bind.as_str())
-    //         .cert(std::env::var("TIDE_CERT_PATH").unwrap())
-    //         .key(std::env::var("TIDE_KEY_PATH").unwrap())
-    //         .finish()?;
-    //     app.listen(listener).await?;
-    // } else {
-    app.listen(opt.bind).await?;
-    // };
+    if opt.enable_tls {
+        crypto::generate_dyn_ssl_files(
+            opt.rp_id.as_str(),
+            &opt.tls_temp_certificate_path,
+            &opt.tls_temp_key_path,
+        )?;
+        app.listen(
+            tide_rustls::TlsListener::build()
+                .addrs(opt.bind.as_str())
+                .cert(&opt.tls_temp_certificate_path)
+                .key(&opt.tls_temp_key_path),
+        )
+        .await?;
+    } else {
+        app.listen(opt.bind).await?;
+    };
 
     Ok(())
 }

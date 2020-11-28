@@ -30,9 +30,8 @@ thiserror = "1.0"
 
 [dev-dependencies]
 askama = "0.10"
-
 tide = "0.15"
-# tide-rustls = "0.1"
+tide-rustls = "0.1"
 askama_tide = "0.12"
 async-std = { version = "1.6", features = ["attributes"] }
 
