@@ -131,8 +131,6 @@ async fn main() -> tide::Result<()> {
 
     if opt.debug {
         tide::log::with_level(tide::log::LevelFilter::Debug);
-    } else {
-        tide::log::start();
     }
 
     tide::log::debug!("Started logging ...");
