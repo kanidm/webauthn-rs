@@ -6,21 +6,14 @@ use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use openssl::x509::{X509Name, X509};
 
+use rustls::{internal::pemfile, ServerConfig};
+
 use openssl::x509::extension::{
     AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, SubjectAlternativeName,
     SubjectKeyIdentifier,
 };
 
-use std::{
-    fs::File,
-    io::{self, Write},
-};
-
-pub fn generate_dyn_ssl_files(
-    domain: &str,
-    cert_file: &String,
-    key_file: &String,
-) -> io::Result<()> {
+pub fn generate_dyn_ssl_config(domain: &str) -> ServerConfig {
     // I think this doesn't work yet 2019-07-26
     // TODO: Is this the correct curve choice?
     /*
@@ -31,9 +24,6 @@ pub fn generate_dyn_ssl_files(
 
     let rsa = Rsa::generate(2048).unwrap();
     let dyn_pkey = PKey::from_rsa(rsa).unwrap();
-
-    let mut key_file = File::create(key_file)?;
-    key_file.write_all(&dyn_pkey.private_key_to_pem_pkcs8().unwrap())?;
 
     // Gen the alt/cn?
 
@@ -102,8 +92,19 @@ pub fn generate_dyn_ssl_files(
 
     let cert: X509 = builder.build();
 
-    let mut cert_file = File::create(cert_file)?;
-    cert_file.write_all(&cert.to_pem().unwrap())?;
+    let mut pkey_bytes: &[u8] = &dyn_pkey.private_key_to_pem_pkcs8().unwrap();
+    let mut cert_bytes: &[u8] = &cert.to_pem().unwrap();
 
-    Ok(())
+    let rustls_pkey = pemfile::pkcs8_private_keys(&mut pkey_bytes)
+        .unwrap()
+        .pop()
+        .unwrap();
+    let rustls_certs = pemfile::certs(&mut cert_bytes).unwrap();
+
+    let mut server_config = ServerConfig::new(rustls::NoClientAuth::new());
+    server_config
+        .set_single_cert(rustls_certs, rustls_pkey)
+        .unwrap();
+
+    server_config
 }

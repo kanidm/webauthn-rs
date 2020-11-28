@@ -41,10 +41,6 @@ struct CmdOptions {
     bind: String,
     #[structopt(short = "s", long = "tls")]
     enable_tls: bool,
-    #[structopt(short = "c", long = "tls-cert", default_value = "tempcert.cert")]
-    tls_temp_certificate_path: String,
-    #[structopt(short = "k", long = "tls-key", default_value = "tempkey.key")]
-    tls_temp_key_path: String,
 }
 
 async fn index_view(mut request: tide::Request<AppState>) -> tide::Result {
@@ -175,16 +171,11 @@ async fn main() -> tide::Result<()> {
     app.at("/auth/static/").serve_dir("static")?;
 
     if opt.enable_tls {
-        crypto::generate_dyn_ssl_files(
-            opt.rp_id.as_str(),
-            &opt.tls_temp_certificate_path,
-            &opt.tls_temp_key_path,
-        )?;
+        let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
         app.listen(
             tide_rustls::TlsListener::build()
                 .addrs(opt.bind.as_str())
-                .cert(&opt.tls_temp_certificate_path)
-                .key(&opt.tls_temp_key_path),
+                .config(server_config),
         )
         .await?;
     } else {
