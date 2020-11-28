@@ -6,9 +6,9 @@ use webauthn_rs::proto::{
 };
 use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
 
+use async_std::sync::Mutex;
 use lru::LruCache;
 use std::collections::BTreeMap;
-use std::sync::Mutex;
 
 type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
 
@@ -39,10 +39,7 @@ impl WebauthnActor {
         let (ccr, rs) = self
             .wan
             .generate_challenge_register(&username, Some(UserVerificationPolicy::Required))?;
-        self.reg_chals
-            .lock()
-            .unwrap()
-            .put(username.into_bytes(), rs);
+        self.reg_chals.lock().await.put(username.into_bytes(), rs);
         tide::log::debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
     }
@@ -53,12 +50,7 @@ impl WebauthnActor {
     ) -> WebauthnResult<RequestChallengeResponse> {
         tide::log::debug!("handle ChallengeAuthenticate -> {:?}", username);
 
-        let creds = match self
-            .creds
-            .lock()
-            .unwrap()
-            .get(&username.as_bytes().to_vec())
-        {
+        let creds = match self.creds.lock().await.get(&username.as_bytes().to_vec()) {
             Some(creds) => Some(creds.iter().map(|(_, v)| v.clone()).collect()),
             None => None,
         }
@@ -67,7 +59,7 @@ impl WebauthnActor {
         let (acr, st) = self.wan.generate_challenge_authenticate(creds)?;
         self.auth_chals
             .lock()
-            .unwrap()
+            .await
             .put(username.as_bytes().to_vec(), st);
         tide::log::debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok(acr)
@@ -89,34 +81,32 @@ impl WebauthnActor {
         let rs = self
             .reg_chals
             .lock()
-            .unwrap()
+            .await
             .pop(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
-        let r = self
-            .wan
-            .register_credential(reg, rs, |cred_id| {
-                match self.creds.lock().unwrap().get_mut(&username) {
-                    Some(ucreds) => Ok(ucreds.contains_key(cred_id)),
-                    None => Ok(false),
-                }
-            })
-            .map(|cred| {
-                let mut creds = self.creds.lock().unwrap();
-                match creds.get_mut(&username) {
-                    Some(v) => {
-                        let cred_id = cred.cred_id.clone();
-                        v.insert(cred_id, cred);
-                    }
-                    None => {
+        let mut creds = self.creds.lock().await;
+        let r = match creds.get_mut(&username) {
+            Some(ucreds) => self
+                .wan
+                .register_credential(reg, rs, |cred_id| Ok(ucreds.contains_key(cred_id)))
+                .map(|cred| {
+                    let cred_id = cred.cred_id.clone();
+                    ucreds.insert(cred_id, cred);
+                }),
+            None => {
+                let r = self
+                    .wan
+                    .register_credential(reg, rs, |_| Ok(false))
+                    .map(|cred| {
                         let mut t = BTreeMap::new();
                         let credential_id = cred.cred_id.clone();
                         t.insert(credential_id, cred);
                         creds.insert(username, t);
-                    }
-                };
+                    });
                 tide::log::debug!("{:?}", self.creds);
-                ()
-            });
+                r
+            }
+        };
         tide::log::debug!("complete Register -> {:?}", r);
         r
     }
@@ -137,12 +127,14 @@ impl WebauthnActor {
         let st = self
             .auth_chals
             .lock()
-            .unwrap()
+            .await
             .pop(&username)
             .ok_or(WebauthnError::ChallengeNotFound)?;
+
+        let mut creds = self.creds.lock().await;
         let r = self.wan.authenticate_credential(lgn, st).map(|r| {
             r.map(|(cred_id, counter)| {
-                match self.creds.lock().unwrap().get_mut(&username) {
+                match creds.get_mut(&username) {
                     Some(v) => {
                         let mut c = v.remove(&cred_id).unwrap();
                         c.counter = counter;
