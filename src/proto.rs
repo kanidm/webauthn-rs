@@ -236,6 +236,7 @@ pub struct PublicKeyCredentialDescriptor {
     #[serde(rename = "type")]
     type_: String,
     id: Base64UrlSafeData,
+    #[serde(skip_serializing_if = "Option::is_none")]
     transports: Option<Vec<AuthenticatorTransport>>,
 }
 
