@@ -159,14 +159,15 @@ async fn main() -> tide::Result<()> {
             .with_cookie_name("webauthnrs");
     app.with(sessions);
     app.with(tide::log::LogMiddleware::new());
-    app.at("/auth").get(index_view);
-    app.at("/auth/challenge/register/:username")
+    app.at(&prefix).get(index_view);
+    app.at(&format!("{}/challenge/register/:username", prefix))
         .post(challenge_register);
-    app.at("/auth/challenge/login/:username")
+    app.at(&format!("{}/challenge/login/:username", prefix))
         .post(challenge_login);
-    app.at("/auth/register/:username").post(register);
-    app.at("/auth/login/:username").post(login);
-    app.at("/auth/static/").serve_dir("static")?;
+    app.at(&format!("{}/register/:username", prefix))
+        .post(register);
+    app.at(&format!("{}/login/:username", prefix)).post(login);
+    app.at(&format!("{}/static", prefix)).serve_dir("static")?;
 
     if opt.enable_tls {
         let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
