@@ -159,6 +159,11 @@ async fn main() -> tide::Result<()> {
             .with_cookie_name("webauthnrs");
     app.with(sessions);
     app.with(tide::log::LogMiddleware::new());
+    {
+        let prefix_copy = prefix.clone();
+        app.at("/")
+            .get(move |_| async_std::future::ready(Ok(tide::Redirect::new(prefix_copy.clone()))));
+    }
     app.at(&prefix).get(index_view);
     app.at(&format!("{}/challenge/register/:username", prefix))
         .post(challenge_register);
