@@ -17,7 +17,7 @@ docker build -t webauthn-rs-actix:latest -f examples/actix/Dockerfile .
 docker run -p 8080:8080 webauthn-rs-actix:latest
 ```
 
-Then navigate to "http://localhost:8080/auth" as the server prints out.
+Then navigate to "http://localhost:8080/" as the server prints out.
 
 What if that fails?
 -------------------
