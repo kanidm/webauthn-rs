@@ -1,22 +1,14 @@
-FROM opensuse/leap:latest
-MAINTAINER wbrown@suse.de
-
-EXPOSE 8080
-
-RUN mkdir /src
+FROM rust:1.48.0 as builder
 WORKDIR /src
+COPY . .
+RUN cargo build --example actix --release
 
-ADD ./ /src/
-
-RUN zypper in -y gcc libopenssl-devel openssl wget && \
-    wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init && \
-    chmod +x rustup-init && \
-    ./rustup-init -v -y && \
-    source /root/.profile && \
-    cargo build --example actix --release && \
-    zypper rm -y gcc libopenssl-devel && \
-    rm -r rustup-init /root/.rustup
-
-CMD ['/src/target/release/examples/actix']
-
-
+FROM debian:buster-slim
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY examples/actix/.env /app/.env
+COPY static /app/static/
+COPY templates /app/templates/
+COPY --from=builder /src/target/release/examples/actix /app/actix
+EXPOSE 8080
+CMD ["/app/actix"]

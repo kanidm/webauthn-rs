@@ -1,290 +1,191 @@
-extern crate actix;
-extern crate actix_web;
-
-extern crate time;
-
-// #[macro_use]
-extern crate askama;
-// extern crate cookie;
-#[macro_use]
-extern crate log;
-extern crate env_logger;
-extern crate structopt;
-use structopt::StructOpt;
-extern crate openssl;
-
-extern crate webauthn_rs;
-
-use askama::Template;
-
-use actix::prelude::*;
 use actix_files as fs;
-use actix_session::{CookieSession, Session};
-use actix_web::web::{self, Data, HttpResponse, Json, Path};
-use actix_web::{cookie, middleware, App, HttpServer};
-// Bring in the trait for session()
+use actix_web::{error, middleware::Logger, post, web, App, HttpResponse, HttpServer};
+use dotenv::dotenv;
+use std::env;
+use std::sync::Mutex;
+use thiserror::Error;
+use webauthn_rs::{
+    ephemeral::WebauthnEphemeralConfig, error::WebauthnError, proto::PublicKeyCredential,
+    proto::RegisterPublicKeyCredential, Webauthn,
+};
 
-use rand::prelude::*;
+mod webauthn_store;
+use webauthn_store::{
+    AuthChallengeStore, MemCredentialStore, RegisterChallengeStore, WebauthnChallengeStore,
+    WebauthnCredentialStore,
+};
 
-use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
-use webauthn_rs::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
-
-mod actors;
-mod crypto;
-
-use crate::actors::*;
-use crate::crypto::generate_dyn_ssl_params;
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate;
-
-struct AppState {
-    wan: Addr<WebauthnActor>,
+#[derive(Error, Debug)]
+enum AppError {
+    #[error("An Webauthen error has occured: {err}")]
+    WebauthnInternalError {
+        #[from]
+        err: WebauthnError,
+    },
+    #[error("The supplied user is invalid")]
+    InvalidUser,
+    #[error("The challenge is invalid")]
+    InvalidChallenge,
 }
 
-impl AppState {
-    fn new(wan: Addr<WebauthnActor>) -> Self {
-        AppState { wan }
-    }
-}
+impl error::ResponseError for AppError {}
 
-#[derive(Debug, StructOpt)]
-struct CmdOptions {
-    #[structopt(short = "d", long = "debug")]
-    debug: bool,
-    #[structopt(short = "p", long = "prefix", default_value = "/auth")]
-    prefix: String,
-    #[structopt(short = "n", long = "name", default_value = "localhost")]
-    rp_name: String,
-    #[structopt(short = "o", long = "origin", default_value = "http://localhost:8080")]
-    /// Must match your sites domain/port/url
-    rp_origin: String,
-    #[structopt(short = "i", long = "id", default_value = "localhost")]
-    rp_id: String,
-    #[structopt(short = "b", long = "bind", default_value = "localhost:8080")]
-    bind: String,
-    #[structopt(short = "s", long = "tls")]
-    enable_tls: bool,
-}
-
-// fn index_view(session: Session) -> HttpResponse {
-async fn index_view(session: Session) -> HttpResponse {
-    let some_userid = match session.get::<String>("userid") {
-        Ok(v) => v,
-        Err(_e) => {
-            return HttpResponse::InternalServerError().body("Internal Server Error");
-        }
+#[post("/challenge/register/{username}")]
+async fn register_challenge(
+    web::Path(username): web::Path<String>,
+    reg_chall_store: web::Data<Mutex<RegisterChallengeStore>>,
+    creds_store: web::Data<Mutex<MemCredentialStore>>,
+    webauthn: web::Data<Webauthn<WebauthnEphemeralConfig>>,
+) -> Result<HttpResponse, AppError> {
+    // Users may have registered the authenticator already
+    // Give the authenticator a list of credentials which are linked to the user
+    // so the authenticator can decide to not register
+    let creds_store = creds_store.lock().unwrap();
+    let user_creds = match creds_store.for_user(&username.as_bytes().to_vec()) {
+        Some(creds) => Some(creds.iter().map(|c| c.cred_id.clone()).collect()),
+        None => None,
     };
 
-    // println!("{:?}", some_userid);
+    let (client_response, state) = webauthn.generate_challenge_register_options(
+        username.as_bytes().to_vec(),
+        username.clone(),
+        username.clone(),
+        user_creds,
+        Some(webauthn_rs::proto::UserVerificationPolicy::Required),
+    )?;
 
-    if some_userid.is_none() {
-        match session.set("anonymous", true) {
-            Ok(_) => {}
-            Err(_e) => {
-                return HttpResponse::InternalServerError().body("Internal Server Error");
-            }
-        }
-    };
+    // And we need to remember the challenge we send out we can check
+    // if the client solved the challenge
+    let mut reg_chall_store = reg_chall_store.lock().unwrap();
+    reg_chall_store.add(&username.as_bytes().to_vec(), state);
 
-    let s = IndexTemplate {
-            // list: l,
-        }
-    .render()
-    .unwrap();
-    HttpResponse::Ok().content_type("text/html").body(s)
+    Ok(HttpResponse::Ok().json(client_response))
 }
 
-async fn challenge_register((username, state): (Path<String>, Data<AppState>)) -> HttpResponse {
-    let actor_res = state
-        .wan
-        .send(ChallengeRegister {
-            username: username.into_inner(),
-        })
-        .await;
-    match actor_res {
-        Ok(res) => match res {
-            Ok(chal) => HttpResponse::Ok().json(chal),
-            Err(e) => {
-                debug!("challenge_register -> {:?}", e);
-                HttpResponse::InternalServerError().json(())
-            }
-        },
-        Err(e) => {
-            debug!("challenge_register -> {:?}", e);
-            HttpResponse::InternalServerError().json(())
-        }
-    }
+#[post("/challenge/login/{username}")]
+async fn login_challenge(
+    web::Path(username): web::Path<String>,
+    auth_chall_store: web::Data<Mutex<AuthChallengeStore>>,
+    creds_store: web::Data<Mutex<MemCredentialStore>>,
+    webauthn: web::Data<Webauthn<WebauthnEphemeralConfig>>,
+) -> Result<HttpResponse, AppError> {
+    // We don't know which authenticator is present on the clientside
+    // so we give him a list of all knowen credentials and the authenticator
+    // then chooses the one he knows
+    let creds_store = creds_store.lock().unwrap();
+    let user_credentials = creds_store
+        .for_user(&username.as_bytes().to_vec())
+        .ok_or_else(|| AppError::InvalidUser)?;
+
+    let (client_response, state) = webauthn.generate_challenge_authenticate(user_credentials)?;
+
+    // And we need to remember the challenge we send out we can check
+    // if the client solved the challenge
+    let mut auth_chall_store = auth_chall_store.lock().unwrap();
+    auth_chall_store.add(&username.as_bytes().to_vec(), state);
+
+    Ok(HttpResponse::Ok().json(client_response))
 }
 
-async fn challenge_login((username, state): (Path<String>, Data<AppState>)) -> HttpResponse {
-    let actor_res = state
-        .wan
-        .send(ChallengeAuthenticate {
-            username: username.into_inner(),
-        })
-        .await;
-    match actor_res {
-        Ok(res) => match res {
-            Ok(chal) => HttpResponse::Ok().json(chal),
-            Err(e) => {
-                debug!("challenge_login -> {:?}", e);
-                HttpResponse::InternalServerError().json(())
-            }
-        },
-        Err(e) => {
-            debug!("challenge_login -> {:?}", e);
-            HttpResponse::InternalServerError().json(())
-        }
-    }
-}
-
+#[post("/register/{username}")]
 async fn register(
-    (reg, username, state): (
-        Json<RegisterPublicKeyCredential>,
-        Path<String>,
-        Data<AppState>,
-    ),
-) -> HttpResponse {
-    let actor_res = state
-        .wan
-        .send(Register {
-            username: username.into_inner(),
-            reg: reg.into_inner(),
-        })
-        .await;
-    match actor_res {
-        Ok(res) => match res {
-            Ok(_) => HttpResponse::Ok().json(()),
-            Err(e) => {
-                debug!("register -> {:?}", e);
-                HttpResponse::InternalServerError().json(())
-            }
-        },
-        Err(e) => {
-            debug!("register -> {:?}", e);
-            HttpResponse::InternalServerError().json(())
-        }
-    }
-}
+    web::Path(username): web::Path<String>,
+    registration: web::Json<RegisterPublicKeyCredential>,
+    reg_chall_store: web::Data<Mutex<RegisterChallengeStore>>,
+    credential_store: web::Data<Mutex<MemCredentialStore>>,
+    webauthn: web::Data<Webauthn<WebauthnEphemeralConfig>>,
+) -> Result<HttpResponse, AppError> {
+    // User must previously requested a challenge and now tries to send
+    // the solution of the challenge to the server, so lets find out if
+    // we issued this challenge and if so, remove it so it can't be used again
+    let mut reg_chall_store = reg_chall_store.lock().unwrap();
+    let stored_chall = reg_chall_store
+        .pop(&username.as_bytes().to_vec())
+        .ok_or_else(|| AppError::InvalidChallenge)?;
 
-async fn login(
-    (lgn, username, state, session): (
-        Json<PublicKeyCredential>,
-        Path<String>,
-        Data<AppState>,
-        Session,
-    ),
-) -> HttpResponse {
-    let uname = username.into_inner().clone();
-
-    let actor_res = state
-        .wan
-        .send(Authenticate {
-            username: uname.clone(),
-            lgn: lgn.into_inner(),
-        })
-        .await;
-    match actor_res {
-        Ok(res) => {
-            match res {
-                Ok(_) => {
-                    // Clear the anonymous flag
-                    session.remove("anonymous");
-                    // Set the userid
-                    match session.set("userid", uname) {
-                        Ok(_) => HttpResponse::Ok().json(()),
-                        Err(_) => HttpResponse::InternalServerError().body("Internal Server Error"),
-                    }
-                }
-                Err(e) => {
-                    // TODO: Log this error
-                    debug!("login -> {:?}", e);
-                    HttpResponse::InternalServerError().json(())
-                }
-            }
-        }
-        Err(e) => {
-            debug!("login -> {:?}", e);
-            HttpResponse::InternalServerError().json(())
-        }
-    }
-}
-
-fn main() {
-    let opt: CmdOptions = CmdOptions::from_args();
-
-    if opt.debug {
-        std::env::set_var("RUST_LOG", "actix_web=info,webauthn_rs=debug,actix=debug");
-    }
-    env_logger::init();
-
-    debug!("Started logging ...");
-
-    let sys = actix::System::new("webauthn-rs-demo");
-
-    let prefix = opt.prefix.clone();
-    let domain = opt.rp_id.clone();
-
-    let wan_c = WebauthnEphemeralConfig::new(
-        opt.rp_name.as_str(),
-        opt.rp_origin.as_str(),
-        opt.rp_id.as_str(),
-        None,
-        // Some(AuthenticatorAttachment::Platform),
+    // Well we issued the challenge, now lets add it to the list of registered
+    // credentials and associate it with the user
+    let credential = webauthn.register_credential(&registration.0, stored_chall, |_| Ok(false))?;
+    let mut credential_store = credential_store.lock().unwrap();
+    credential_store.add_creds(
+        &username.as_bytes().to_vec(),
+        credential.cred_id.clone(),
+        credential,
     );
 
-    let wan = WebauthnActor::new(wan_c);
-    let wan_addr = wan.start();
+    Ok(HttpResponse::Ok().body("Registration completed"))
+}
 
-    let mut stdrng = StdRng::from_entropy();
-    let cookie_sig: Vec<_> = (0..32).map(|_| stdrng.gen()).collect();
+#[post("/login/{username}")]
+async fn login(
+    web::Path(username): web::Path<String>,
+    login: web::Json<PublicKeyCredential>,
+    auth_chall_store: web::Data<Mutex<AuthChallengeStore>>,
+    credential_store: web::Data<Mutex<MemCredentialStore>>,
+    webauthn: web::Data<Webauthn<WebauthnEphemeralConfig>>,
+) -> Result<HttpResponse, AppError> {
+    // User must previously requested a challenge and now tries to send
+    // the solution of the challenge to the server, so lets find out if
+    // we issued this challenge and if so remove it so it can't be used again
+    let mut auth_chall_store = auth_chall_store.lock().unwrap();
+    let stored_auth_chall = auth_chall_store
+        .pop(&username.as_bytes().to_vec())
+        .ok_or_else(|| AppError::InvalidChallenge)?;
 
-    // Start http server
-    let server = HttpServer::new(move || {
+    // Let's check the solution is valid and if the credential uses a counter,
+    // we need to update the stored counter for the credential
+    let auth_result = webauthn.authenticate_credential(&login.0, stored_auth_chall)?;
+    if auth_result.is_some() {
+        let (credentials_id, counter) = auth_result.unwrap();
+        let mut credential_store = credential_store.lock().unwrap();
+        credential_store.set_counter(&username.as_bytes().to_vec(), credentials_id, counter);
+    }
+
+    Ok(HttpResponse::Ok().body("Login completed"))
+}
+
+async fn index() -> std::io::Result<fs::NamedFile> {
+    let path: std::path::PathBuf = "templates/index.html".parse().unwrap();
+    Ok(fs::NamedFile::open(path)?)
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    dotenv().ok();
+    env_logger::init();
+
+    // For demonstatration purposes we use some in-memory storage for the challenges and credentials
+    // In actix_web you can use app_data which gets shared between all workers
+    let registration_challenge_store = web::Data::new(Mutex::new(RegisterChallengeStore::new()));
+    let authentication_challenge_store = web::Data::new(Mutex::new(AuthChallengeStore::new()));
+    let credentials_store = web::Data::new(Mutex::new(MemCredentialStore::new()));
+
+    HttpServer::new(move || {
+        let webauthn_conf = WebauthnEphemeralConfig::new(
+            &env::var("RP_NAME").unwrap_or("localhost".to_string()),
+            &env::var("RP_ORIGIN").unwrap_or("http://localhost:8080".to_string()),
+            &env::var("RP_ID").unwrap_or("localhost".to_string()),
+            None, // We could specifie if we want external authenticator or one that's integrated into the client
+        );
+
         App::new()
-            .data(AppState::new(wan_addr.clone()))
-            .wrap(middleware::Logger::default())
-            .wrap(
-                CookieSession::signed(&cookie_sig)
-                    .path(prefix.as_str())
-                    .domain(domain.as_str())
-                    .same_site(cookie::SameSite::Strict)
-                    .name("webauthnrs")
-                    // if true, only allow to https
-                    .secure(false), // Valid for 5 minutes
-                                    // .max_age(Duration::minutes(5))
-            )
+            .wrap(Logger::default())
+            .app_data(registration_challenge_store.clone())
+            .app_data(authentication_challenge_store.clone())
+            .app_data(credentials_store.clone())
+            .data(Webauthn::new(webauthn_conf))
             .service(
-                web::scope(prefix.as_str())
-                    .service(fs::Files::new("/static", "./static"))
-                    .route("", web::get().to(index_view))
-                    .route("/", web::get().to(index_view))
-                    .route("/index.html", web::get().to(index_view))
-                    .route(
-                        "/challenge/register/{username}",
-                        web::post().to(challenge_register),
-                    )
-                    .route(
-                        "/challenge/login/{username}",
-                        web::post().to(challenge_login),
-                    )
-                    .route("/register/{username}", web::post().to(register))
-                    .route("/login/{username}", web::post().to(login)),
+                web::scope("/auth")
+                    .service(register_challenge)
+                    .service(login_challenge)
+                    .service(register)
+                    .service(login)
+                    .service(fs::Files::new("/static", "./static")),
             )
-    });
-
-    let server = if opt.enable_tls {
-        // Generate TLS certs as needed.
-        let ssl_params = generate_dyn_ssl_params(opt.rp_id.as_str());
-        server.bind_openssl(opt.bind.as_str(), ssl_params)
-    } else {
-        server.bind(opt.bind.as_str())
-    };
-
-    server.unwrap().run();
-
-    println!("Started http server: {}", opt.rp_name.as_str());
-    let _ = sys.run();
+            .route("/", web::get().to(index))
+            .route("/index.html", web::get().to(index))
+    })
+    .bind(env::var("BIND").unwrap_or("localhost:8080".to_string()))?
+    .run()
+    .await
 }

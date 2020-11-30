@@ -29,22 +29,12 @@ rand = "0.7"
 thiserror = "1.0"
 
 [dev-dependencies]
-askama = "0.10"
-
-# This only supports up to 0.7. See examples/actix/main.rs for more.
-actix = "0.9"
-actix-web = { version = "2.0", features = ["openssl"] }
-actix-session = "0.3"
-actix-files = "0.2"
+actix-web = { version = "3", features = ["rustls"] }
+actix-files = "0.4"
 
 # cookie = "0.11"
 log = "0.4"
 env_logger = "0.7"
-futures = "0.3"
-time = "0.2"
-openssl = "0.10"
-
-lru = "0.6"
-
-structopt = { version = "0.3", default-features = false }
+thiserror = "1.0"
+dotenv = "0.15.0"
 

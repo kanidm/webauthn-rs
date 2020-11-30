@@ -62,6 +62,11 @@ function register() {
       console.log(challenge);
       challenge.publicKey.challenge = fromBase64(challenge.publicKey.challenge);
       challenge.publicKey.user.id = fromBase64(challenge.publicKey.user.id);
+      if (challenge.publicKey.excludeCredentials) {
+        for (var i = 0; i < challenge.publicKey.excludeCredentials.length; i++) {
+          challenge.publicKey.excludeCredentials[i].id = fromBase64(challenge.publicKey.excludeCredentials[i].id);
+        }
+      }
       return navigator.credentials.create(challenge)
         .then(newCredential => {
           console.log("PublicKeyCredential Created");
