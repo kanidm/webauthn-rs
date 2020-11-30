@@ -362,7 +362,7 @@ pub(crate) fn verify_tpm_attestation(
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
         .and_then(COSEContentType::try_from)?;
 
-    eprintln!("alg = {:?}", alg);
+    // eprintln!("alg = {:?}", alg);
 
     // The TPMS_ATTEST structure over which the above signature was computed, as specified in [TPMv2-Part2] section 10.12.8.
     // String("certInfo"): Bytes([]),
@@ -375,7 +375,7 @@ pub(crate) fn verify_tpm_attestation(
 
     let certinfo = TpmsAttest::try_from(certinfo_bytes.as_slice())?;
 
-    eprintln!("certinfo -> {:?}", certinfo);
+    // eprintln!("certinfo -> {:?}", certinfo);
 
     // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
     // String("pubArea"): Bytes([]),
@@ -388,7 +388,7 @@ pub(crate) fn verify_tpm_attestation(
 
     let pubarea = TpmtPublic::try_from(pubarea_bytes.as_slice())?;
 
-    eprintln!("pubarea -> {:?}", pubarea);
+    // eprintln!("pubarea -> {:?}", pubarea);
 
     // The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
     // String("sig"): Bytes([]),
@@ -401,7 +401,7 @@ pub(crate) fn verify_tpm_attestation(
 
     let sig = TpmtSignature::try_from(sig_bytes.as_slice())?;
 
-    eprintln!("sig -> {:?}", sig);
+    // eprintln!("sig -> {:?}", sig);
 
     // x5c -> aik_cert followed by its certificate chain, in X.509 encoding.
     // String("x5c"): Array( // root Bytes([]), // chain Bytes([])])
@@ -540,7 +540,7 @@ pub(crate) fn verify_tpm_attestation(
         }
     };
 
-    eprintln!("sig_valid -> {:?}", sig_valid);
+    // eprintln!("sig_valid -> {:?}", sig_valid);
 
     if !sig_valid {
         return Err(WebauthnError::AttestationStatementSigInvalid);
