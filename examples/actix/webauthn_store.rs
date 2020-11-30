@@ -1,6 +1,9 @@
 use std::collections::BTreeMap;
 
-use webauthn_rs::{AuthenticationState, RegistrationState, proto::{Credential, CredentialID, UserId}};
+use webauthn_rs::{
+    proto::{Credential, CredentialID, UserId},
+    AuthenticationState, RegistrationState,
+};
 
 pub trait WebauthnChallengeStore<ChallengeState> {
     fn add(&mut self, user_id: &UserId, state: ChallengeState);
