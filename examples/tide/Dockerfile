@@ -1,8 +1,6 @@
 ARG BASE_IMAGE=opensuse/leap:latest
 FROM ${BASE_IMAGE} AS builder
-MAINTAINER wbrown@suse.de
-
-EXPOSE 8080
+LABEL maintainer wbrown@suse.de
 
 RUN mkdir /src
 WORKDIR /src
@@ -14,12 +12,22 @@ RUN zypper in -y gcc libopenssl-devel openssl wget && \
     chmod +x rustup-init && \
     ./rustup-init -v -y && \
     source /root/.profile && \
-    cargo build --example tide --release && \
-    zypper rm -y gcc libopenssl-devel && \
-    rm -r rustup-init /root/.rustup
+    cargo build --example tide --release
+
+FROM ${BASE_IMAGE}
+LABEL maintainer wbrown@suse.de
+
+
+RUN zypper ref && \
+    zypper install -y \
+        timezone && \
+    zypper clean -a
 
 COPY --from=builder /src/target/release/examples/tide /sbin/
+COPY --from=builder /src/static /static
 
-CMD ['/sbin/tide']
+EXPOSE 8080
+
+CMD ["/sbin/tide", "-d"]
 
 
