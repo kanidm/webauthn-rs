@@ -28,6 +28,7 @@ COPY --from=builder /src/static /static
 
 EXPOSE 8080
 
-CMD ["/sbin/tide", "-d"]
+WORKDIR /
 
+CMD ["/sbin/tide", "-d", "-b", "0.0.0.0:8080"]
 
