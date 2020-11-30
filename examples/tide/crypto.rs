@@ -1,5 +1,3 @@
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslMethod};
-// use openssl::ec::{EcKey, EcGroup};
 use openssl::asn1::Asn1Time;
 use openssl::bn::{BigNum, MsbOption};
 use openssl::hash::MessageDigest;
@@ -8,12 +6,14 @@ use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use openssl::x509::{X509Name, X509};
 
+use rustls::{internal::pemfile, ServerConfig};
+
 use openssl::x509::extension::{
     AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, SubjectAlternativeName,
     SubjectKeyIdentifier,
 };
 
-pub fn generate_dyn_ssl_params(domain: &str) -> SslAcceptorBuilder {
+pub fn generate_dyn_ssl_config(domain: &str) -> ServerConfig {
     // I think this doesn't work yet 2019-07-26
     // TODO: Is this the correct curve choice?
     /*
@@ -92,23 +92,19 @@ pub fn generate_dyn_ssl_params(domain: &str) -> SslAcceptorBuilder {
 
     let cert: X509 = builder.build();
 
-    let key = &dyn_pkey;
-    // Now setup the builder for them ...
-    // For a file based setup, use this.
-    /*
-    .set_private_key_file(private_key_path, SslFiletype::PEM)
-    .expect("Failed to add private key")
-    .set_certificate_chain_file(cert_chain_path)
-    .expect("Failed to add ca chain")
-    */
+    let mut pkey_bytes: &[u8] = &dyn_pkey.private_key_to_pem_pkcs8().unwrap();
+    let mut cert_bytes: &[u8] = &cert.to_pem().unwrap();
 
-    let mut ssl_builder =
-        SslAcceptor::mozilla_modern(SslMethod::tls()).expect("Failed to setup acceptor");
-    ssl_builder
-        .set_private_key(&key)
-        .expect("Failed to add pkey");
-    ssl_builder
-        .set_certificate(&cert)
-        .expect("Failed to add leaf certificate");
-    ssl_builder
+    let rustls_pkey = pemfile::pkcs8_private_keys(&mut pkey_bytes)
+        .unwrap()
+        .pop()
+        .unwrap();
+    let rustls_certs = pemfile::certs(&mut cert_bytes).unwrap();
+
+    let mut server_config = ServerConfig::new(rustls::NoClientAuth::new());
+    server_config
+        .set_single_cert(rustls_certs, rustls_pkey)
+        .unwrap();
+
+    server_config
 }
