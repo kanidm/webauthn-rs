@@ -66,11 +66,12 @@ pub struct Credential {
 }
 
 impl Credential {
-    pub(crate) fn new(acd: &AttestedCredentialData,
+    pub(crate) fn new(
+        acd: &AttestedCredentialData,
         ck: crypto::COSEKey,
         counter: u32,
         verified: bool,
-        ) -> Self {
+    ) -> Self {
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,

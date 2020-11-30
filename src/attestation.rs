@@ -207,7 +207,7 @@ pub(crate) fn verify_packed_attestation(
                 acd,
                 credential_public_key,
                 counter,
-                user_verified
+                user_verified,
             )))
         }
     }
@@ -318,9 +318,7 @@ pub(crate) fn verify_none_attestation(
 ) -> Result<AttestationType, WebauthnError> {
     // No attestation is performed, simply provide a credential.
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
-    let credential = Credential::new(acd, credential_public_key, counter,
-                user_verified
-    );
+    let credential = Credential::new(acd, credential_public_key, counter, user_verified);
     Ok(AttestationType::None(credential))
 }
 
@@ -558,9 +556,7 @@ pub(crate) fn verify_tpm_attestation(
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
     Ok(AttestationType::AttCa(
-        Credential::new(acd, credential_public_key, counter, 
-                user_verified
-        ),
+        Credential::new(acd, credential_public_key, counter, user_verified),
         aik_cert,
         arr_x509,
     ))

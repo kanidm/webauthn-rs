@@ -117,9 +117,9 @@ impl<T> Webauthn<T> {
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
             // Use a per-thread csprng
-            config: config,
-            pkcp: pkcp,
-            rp_id_hash: rp_id_hash,
+            config,
+            pkcp,
+            rp_id_hash,
         }
     }
 
@@ -450,11 +450,11 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
-            AttestationFormat::None => {
-                verify_none_attestation(acd, data.attestation_object.auth_data.counter,
+            AttestationFormat::None => verify_none_attestation(
+                acd,
+                data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
-                )
-            }
+            ),
             _ => {
                 // No other types are currently implemented
                 Err(WebauthnError::AttestationNotSupported)
@@ -504,7 +504,7 @@ impl<T> Webauthn<T> {
         T: WebauthnConfig,
     {
         if policy == UserVerificationPolicy::Preferred {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy)
+            return Err(WebauthnError::InconsistentUserVerificationPolicy);
         }
 
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
@@ -535,11 +535,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.origin matches the Relying Party's origin.
         if &c.origin != self.config.get_origin() {
-            log::debug!(
-                "{} != {}",
-                c.origin,
-                self.config.get_origin()
-            );
+            log::debug!("{} != {}", c.origin, self.config.get_origin());
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
@@ -664,13 +660,11 @@ impl<T> Webauthn<T> {
     {
         let chal = self.generate_challenge();
 
-        let verified = creds.iter()
-            .all(|cred| cred.verified);
-        let unverified = creds.iter()
-            .all(|cred| !cred.verified);
+        let verified = creds.iter().all(|cred| cred.verified);
+        let unverified = creds.iter().all(|cred| !cred.verified);
 
         if !verified && !unverified {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy)
+            return Err(WebauthnError::InconsistentUserVerificationPolicy);
         }
 
         let policy = if verified {
