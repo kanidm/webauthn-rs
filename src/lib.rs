@@ -177,6 +177,10 @@ impl<T> Webauthn<T> {
             log::warn!("UserVerificationPolicy::Preferred is misleading! You should select Discouraged or Required!");
         }
 
+        if user_id.is_empty() {
+            return Err(WebauthnError::InvalidUsername);
+        }
+
         let challenge = self.generate_challenge();
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
@@ -1563,6 +1567,35 @@ mod tests {
         let result =
             wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal);
         println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    use super::*;
+    fn register_userid(
+        user_name: &str,
+    ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
+        let wan_c = WebauthnEphemeralConfig::new(
+            "https://etools-dev.example.com:8080/auth",
+            "https://etools-dev.example.com:8080",
+            "etools-dev.example.com",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let policy = Some(UserVerificationPolicy::Required);
+
+        wan.generate_challenge_register(user_name, policy)
+    }
+
+    #[test]
+    fn test_registration_empty_userid() {
+        let result = register_userid("");
+        assert!(matches!(result, Err(WebauthnError::InvalidUsername)));
+    }
+
+    #[test]
+    fn test_registration_nonempty_userid() {
+        let result = register_userid("fizzbuzz");
         assert!(result.is_ok());
     }
 }

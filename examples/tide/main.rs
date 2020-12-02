@@ -56,8 +56,13 @@ async fn index_view(mut request: tide::Request<AppState>) -> tide::Result {
     Ok(askama_tide::into_response(&IndexTemplate {}, "html"))
 }
 
+fn username_from_request(request: &tide::Request<AppState>) -> String {
+    request.param("username").unwrap_or("").to_string()
+}
+
 async fn challenge_register(request: tide::Request<AppState>) -> tide::Result {
-    let username = request.param("username")?.parse()?;
+    // let username = request.param("username")?.parse()?;
+    let username = username_from_request(&request);
     let actor_res = request.state().challenge_register(username).await;
     let res = match actor_res {
         Ok(chal) => tide::Response::builder(tide::StatusCode::Ok)
