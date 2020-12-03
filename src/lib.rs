@@ -1570,7 +1570,8 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    use super::*;
+    use super::{CreationChallengeResponse, RegistrationState, WebauthnError};
+
     fn register_userid(
         user_name: &str,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
