@@ -23,6 +23,7 @@ pub(crate) enum AttestationFormat {
     AndroidKey,
     AndroidSafetyNet,
     FIDOU2F,
+    Apple,
     None,
 }
 
@@ -36,6 +37,7 @@ impl TryFrom<&str> for AttestationFormat {
             "android-key" => Ok(AttestationFormat::AndroidKey),
             "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
+            "apple" => Ok(AttestationFormat::Apple),
             "none" => Ok(AttestationFormat::None),
             _ => Err(WebauthnError::AttestationNotSupported),
         }
@@ -560,4 +562,72 @@ pub(crate) fn verify_tpm_attestation(
         aik_cert,
         arr_x509,
     ))
+}
+
+pub(crate) fn verify_apple_attestation(
+    acd: &AttestedCredentialData,
+    counter: u32,
+    user_verified: bool,
+    att_stmt: &serde_cbor::Value,
+    auth_data_bytes: Vec<u8>,
+    client_data_hash: &Vec<u8>,
+) -> Result<AttestationType, WebauthnError> {
+    // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
+
+    let x5c_key = &serde_cbor::Value::Text("x5c".to_string());
+
+    let x5c = att_stmt_map
+        .get(x5c_key)
+        .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
+
+    let att_cert_array =
+        cbor_try_array!(x5c).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+
+    if att_cert_array.len() != 2 {
+        return Err(WebauthnError::AttestationStatementX5CInvalid);
+    }
+
+    // 2. Concatenate authenticatorData and clientDataHash to form nonceToHash.
+    let nonce_to_hash: Vec<u8> = auth_data_bytes
+        .iter()
+        .chain(client_data_hash.iter())
+        .map(|b| *b)
+        .collect();
+
+    // 3. Perform SHA-256 hash of nonceToHash to produce nonce.
+    let nonce = compute_sha256(&nonce_to_hash);
+
+    // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
+    //
+    // Currently not possible to access extensions with openssl rust.
+
+    // 5. Verify credential public key matches the Subject Public Key of credCert.
+    let att_cert_bytes = att_cert_array
+        .first()
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+
+    let att_cert = cbor_try_bytes!(att_cert_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+
+    // TODO: not sure what algorithm should be used in this attestation format, just copying this
+    // from verify_fidou2f_attestation
+    let subject_public_key =
+        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEContentType::ECDSA_SHA256))?;
+
+    let subject_openssl_public_key = subject_public_key.get_openssl_pkey()?;
+
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+
+    let credential_openssl_public_key = credential_public_key.get_openssl_pkey()?;
+
+    if credential_openssl_public_key != subject_openssl_public_key {
+        // TODO: new error variant
+        return Err(WebauthnError::AttestationCertificateAAGUIDMismatch);
+    }
+
+    // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
+
+    Err(WebauthnError::AttestationNotSupported)
 }

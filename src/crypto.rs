@@ -233,6 +233,13 @@ impl X509PublicKey {
     pub(crate) fn get_fido_gen_ce_aaguid(&self) -> Option<Aaguid> {
         None
     }
+
+    pub(crate) fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
+        // TODO: Make a new error variant for this
+        self.pubk
+            .public_key()
+            .map_err(|_| WebauthnError::COSEKeyInvalidType)
+    }
 }
 
 /// An ECDSACurve identifier. You probabably will never need to alter
@@ -616,7 +623,7 @@ impl COSEKey {
         }
     }
 
-    fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
+    pub(crate) fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
         match &self.key {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type
