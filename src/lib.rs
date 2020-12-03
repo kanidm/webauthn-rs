@@ -935,6 +935,7 @@ mod tests {
         Credential, PublicKeyCredential, RegisterPublicKeyCredential, UserVerificationPolicy,
     };
     use crate::Webauthn;
+    use crate::{CreationChallengeResponse, RegistrationState, WebauthnError};
 
     #[test]
     fn test_ephemeral() {}
@@ -1569,8 +1570,6 @@ mod tests {
         println!("{:?}", result);
         assert!(result.is_ok());
     }
-
-    use super::{CreationChallengeResponse, RegistrationState, WebauthnError};
 
     fn register_userid(
         user_name: &str,
