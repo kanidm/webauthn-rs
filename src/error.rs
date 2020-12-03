@@ -191,4 +191,7 @@ pub enum WebauthnError {
 
     #[error("Inconsistent Credential Verification and User Verification Policy")]
     InconsistentUserVerificationPolicy,
+
+    #[error("Invalid UserID supplied for registration")]
+    InvalidUsername,
 }
