@@ -60,6 +60,13 @@ pub enum AttestationType {
         crypto::X509PublicKey,
         Vec<crypto::X509PublicKey>,
     ),
+    /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
+    /// validate to it's root.
+    AnonCa(
+        Credential,
+        crypto::X509PublicKey,
+        Vec<crypto::X509PublicKey>,
+    ),
     /// Unimplemented
     ECDAA,
     /// No Attestation type was provided with this Credential. If in doubt
@@ -578,16 +585,32 @@ pub(crate) fn verify_apple_attestation(
 
     let x5c_key = &serde_cbor::Value::Text("x5c".to_string());
 
-    let x5c = att_stmt_map
+    let x5c_value = att_stmt_map
         .get(x5c_key)
         .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
 
-    let att_cert_array =
-        cbor_try_array!(x5c).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+    let x5c_array_ref =
+        cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
-    if att_cert_array.len() != 2 {
+    let arr_x509: Result<Vec<_>, _> = x5c_array_ref
+        .iter()
+        .map(|values| {
+            cbor_try_bytes!(values)
+                .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                .and_then(|b| {
+                    // ECDSA_SHA256 is just a placeholder, not sure how to get the alg in general
+                    crypto::X509PublicKey::try_from((b.as_slice(), COSEContentType::ECDSA_SHA256))
+                })
+        })
+        .collect();
+
+    let mut arr_x509 = arr_x509?;
+
+    if arr_x509.len() == 0 {
         return Err(WebauthnError::AttestationStatementX5CInvalid);
     }
+
+    let attestn_cert = arr_x509.remove(0);
 
     // 2. Concatenate authenticatorData and clientDataHash to form nonceToHash.
     let nonce_to_hash: Vec<u8> = auth_data_bytes
@@ -597,37 +620,22 @@ pub(crate) fn verify_apple_attestation(
         .collect();
 
     // 3. Perform SHA-256 hash of nonceToHash to produce nonce.
-    let nonce = compute_sha256(&nonce_to_hash);
+    let _nonce = compute_sha256(&nonce_to_hash);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
     //
     // Currently not possible to access extensions with openssl rust.
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
-    let att_cert_bytes = att_cert_array
-        .first()
-        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
-
-    let att_cert = cbor_try_bytes!(att_cert_bytes)
-        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
-
-    // TODO: not sure what algorithm should be used in this attestation format, just copying this
-    // from verify_fidou2f_attestation
-    let subject_public_key =
-        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEContentType::ECDSA_SHA256))?;
-
-    let subject_openssl_public_key = subject_public_key.get_openssl_pkey()?;
-
     let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
 
-    let credential_openssl_public_key = credential_public_key.get_openssl_pkey()?;
-
-    if credential_openssl_public_key != subject_openssl_public_key {
-        // TODO: new error variant
-        return Err(WebauthnError::AttestationCertificateAAGUIDMismatch);
-    }
+    // TODO: verify match
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
 
-    Err(WebauthnError::AttestationNotSupported)
+    Ok(AttestationType::AnonCa(
+        Credential::new(acd, credential_public_key, counter, user_verified),
+        attestn_cert,
+        arr_x509,
+    ))
 }
