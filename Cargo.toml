@@ -40,6 +40,6 @@ openssl = "0.10"
 lru = "0.6"
 
 structopt = { version = "0.3", default-features = false }
-rustls = "0.18.0"
+rustls = "0.19.0"
 env_logger = "0.8.2"
 
