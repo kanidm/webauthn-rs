@@ -99,7 +99,8 @@ impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
                     .curve_name()
                     .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
 
-                if ec_curve != nid::Nid::X9_62_PRIME256V1 {
+                if ec_curve != nid::Nid::X9_62_PRIME256V1 && ec_curve != nid::Nid::SECP384R1 {
+                    println!("curve_name: {:?}", ec_curve);
                     return Err(WebauthnError::CertificatePublicKeyInvalid);
                 }
             }
