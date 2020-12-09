@@ -23,7 +23,7 @@ pub(crate) enum AttestationFormat {
     AndroidKey,
     AndroidSafetyNet,
     FIDOU2F,
-    Apple,
+    AppleAnonymous,
     None,
 }
 
@@ -37,7 +37,7 @@ impl TryFrom<&str> for AttestationFormat {
             "android-key" => Ok(AttestationFormat::AndroidKey),
             "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
-            "apple" => Ok(AttestationFormat::Apple),
+            "apple" => Ok(AttestationFormat::AppleAnonymous),
             "none" => Ok(AttestationFormat::None),
             _ => Err(WebauthnError::AttestationNotSupported),
         }
@@ -571,7 +571,7 @@ pub(crate) fn verify_tpm_attestation(
     ))
 }
 
-pub(crate) fn verify_apple_attestation(
+pub(crate) fn verify_apple_anonymous_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
     user_verified: bool,

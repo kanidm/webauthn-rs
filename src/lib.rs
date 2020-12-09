@@ -37,7 +37,7 @@ use rand::prelude::*;
 use std::convert::TryFrom;
 
 use crate::attestation::{
-    verify_apple_attestation, verify_fidou2f_attestation, verify_none_attestation,
+    verify_apple_anonymous_attestation, verify_fidou2f_attestation, verify_none_attestation,
     verify_packed_attestation, verify_tpm_attestation, AttestationFormat, AttestationType,
 };
 use crate::base64_data::Base64UrlSafeData;
@@ -454,7 +454,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
-            AttestationFormat::Apple => verify_apple_attestation(
+            AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
