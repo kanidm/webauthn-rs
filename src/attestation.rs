@@ -584,10 +584,21 @@ pub(crate) fn verify_apple_anonymous_attestation(
         cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
 
     let x5c_key = &serde_cbor::Value::Text("x5c".to_string());
+    let alg_key = &serde_cbor::Value::Text("alg".to_string());
 
     let x5c_value = att_stmt_map
         .get(x5c_key)
         .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
+
+    // FIXME: this is a bit sketchy because the [spec](https://w3c.github.io/webauthn/#sctn-apple-anonymous-attestation) for the apple anonymous attestation format
+    // doesn't say anything about an ALG parameter, but empirically it's there.
+    let alg_value = att_stmt_map
+        .get(alg_key)
+        .ok_or(WebauthnError::AttestationStatementAlgMissing)?;
+
+    let alg = cbor_try_i128!(alg_value)
+        .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
+        .and_then(COSEContentType::try_from)?;
 
     let x5c_array_ref =
         cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
@@ -598,8 +609,9 @@ pub(crate) fn verify_apple_anonymous_attestation(
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
                 .and_then(|b| {
-                    // ECDSA_SHA256 is just a placeholder, not sure how to get the alg in general
-                    crypto::X509PublicKey::try_from((b.as_slice(), COSEContentType::ECDSA_SHA256))
+                    // See above: the algorithm is not included in the spec but is empirically in
+                    // the attestation object.
+                    crypto::X509PublicKey::try_from((b.as_slice(), alg))
                 })
         })
         .collect();
