@@ -1161,6 +1161,22 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    fn test_credential_registration<T>(
+        wan_c: T,
+        chal: Challenge,
+        rsp_d: &RegisterPublicKeyCredential,
+    ) where
+        T: crate::WebauthnConfig,
+    {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let wan = Webauthn::new(wan_c);
+
+        let result =
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal);
+        println!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
     #[test]
     fn test_win_hello_attest_none() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -1610,7 +1626,6 @@ mod tests {
 
     #[test]
     fn test_touchid_attest_apple_anonymous() {
-        let _ = env_logger::builder().is_test(true).try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://spectral.local:8443/auth",
             "https://spectral.local:8443",
@@ -1618,7 +1633,6 @@ mod tests {
             None,
         );
 
-        let wan = Webauthn::new(wan_c);
         let chal = Challenge(vec![
             37, 54, 228, 239, 39, 164, 32, 163, 153, 67, 12, 29, 25, 110, 205, 120, 50, 31, 198,
             182, 10, 208, 251, 238, 99, 27, 46, 123, 239, 134, 244, 210,
@@ -1719,9 +1733,6 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal);
-        println!("{:?}", result);
-        assert!(result.is_ok());
+        test_credential_registration(wan_c, chal, &rsp_d);
     }
 }
