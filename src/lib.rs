@@ -904,7 +904,7 @@ pub trait WebauthnConfig {
     /// If the attestation statement attStmt successfully verified but is not trustworthy per step
     /// 16 above, the Relying Party SHOULD fail the registration ceremony.
     ///
-    /// The default implementation of this method rejects None and Uncertain attestation, and
+    /// The default implementation of this method rejects Uncertain attestation, and
     /// will "blindly trust" self attestation and the other types as valid.
     /// If you have strict security requirements we strongly recommend you implement this function,
     /// and we may in the future provide a stronger default relying party policy.
@@ -915,11 +915,10 @@ pub trait WebauthnConfig {
             AttestationType::Self_(credential) => Ok(credential),
             AttestationType::AttCa(credential, _attest_cert, _ca_chain) => Ok(credential),
             AttestationType::None(credential) => Ok(credential),
-            _ => {
-                // We don't know how to assert trust in this yet, or we just
-                // don't trust it at all (Uncertain, None).
-                Err(())
-            }
+            // TODO: trust is unimplemented here
+            AttestationType::ECDAA => Err(()),
+            // We don't trust Uncertain attestations
+            AttestationType::Uncertain(_) => Err(()),
         }
     }
 }
