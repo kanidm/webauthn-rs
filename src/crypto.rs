@@ -99,7 +99,7 @@ impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
                     .curve_name()
                     .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
 
-                if ec_curve != nid::Nid::X9_62_PRIME256V1 {
+                if ec_curve != nid::Nid::X9_62_PRIME256V1 && false {
                     return Err(WebauthnError::CertificatePublicKeyInvalid);
                 }
             }
@@ -237,7 +237,7 @@ impl X509PublicKey {
 
 /// An ECDSACurve identifier. You probabably will never need to alter
 /// or use this value, as it is set inside the Credential for you.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ECDSACurve {
     // +---------+-------+----------+------------------------------------+
     // | Name    | Value | Key Type | Description                        |
@@ -272,6 +272,19 @@ impl TryFrom<i128> for ECDSACurve {
     }
 }
 
+impl TryFrom<nid::Nid> for ECDSACurve {
+    type Error = WebauthnError;
+    fn try_from(nid: nid::Nid) -> Result<Self, Self::Error> {
+        match nid {
+            nid::Nid::X9_62_PRIME256V1 => Ok(ECDSACurve::SECP256R1),
+            nid::Nid::SECP384R1 => Ok(ECDSACurve::SECP384R1),
+            nid::Nid::SECP521R1 => Ok(ECDSACurve::SECP521R1),
+            // TODO: get a better error here
+            _ => Err(WebauthnError::COSEKeyECDSAInvalidCurve),
+        }
+    }
+}
+
 impl ECDSACurve {
     fn to_openssl_nid(&self) -> nid::Nid {
         match self {
@@ -285,7 +298,7 @@ impl ECDSACurve {
 /// A COSE Key Content type, indicating the type of key and hash type
 /// that should be used with this key. You shouldn't need to alter or
 /// use this value.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum COSEContentType {
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
     ECDSA_SHA256 = -7, // recommends curve SECP256R1
@@ -368,7 +381,7 @@ impl COSEContentType {
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
@@ -382,7 +395,7 @@ pub struct COSEEC2Key {
 /// authenticator.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSERSAKey {
     /// An RSA modulus
     pub n: Vec<u8>,
@@ -392,7 +405,7 @@ pub struct COSERSAKey {
 
 /// The type of Key contained within a COSE value. You should never need
 /// to alter or change this type.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum COSEKeyType {
     //    +-----------+-------+-----------------------------------------------+
     //    | Name      | Value | Description                                   |
@@ -415,7 +428,7 @@ pub enum COSEKeyType {
 
 /// A COSE Key as provided by the Authenticator. You should never need
 /// to alter or change these values.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEKey {
     /// The type of key that this contains
     pub type_: COSEContentType,
@@ -553,6 +566,58 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 Err(WebauthnError::COSEKeyInvalidType)
             }
         }
+    }
+}
+
+impl TryFrom<&X509PublicKey> for COSEKey {
+    type Error = WebauthnError;
+    fn try_from(cert: &X509PublicKey) -> Result<COSEKey, Self::Error> {
+        let ec_key = cert
+            .pubk
+            .public_key()
+            .and_then(|pk| pk.ec_key())
+            .map_err(WebauthnError::OpenSSLError)?;
+        let ec_group = ec_key.group();
+
+        let key = match cert.t {
+            COSEContentType::ECDSA_SHA256
+            | COSEContentType::ECDSA_SHA384
+            | COSEContentType::ECDSA_SHA512 => {
+                let curve = ec_group
+                    .curve_name()
+                    .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
+                    .and_then(ECDSACurve::try_from)?;
+
+                let mut ctx =
+                    openssl::bn::BigNumContext::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut x = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut y = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+
+                ec_group
+                    .generator()
+                    .affine_coordinates_gfp(ec_group, &mut x, &mut y, &mut ctx)
+                    .map_err(WebauthnError::OpenSSLError)?;
+
+                // TODO: error variant here
+                use std::convert::TryInto;
+                let x: [u8; 32] = x.to_vec().try_into().unwrap();
+                let y: [u8; 32] = y.to_vec().try_into().unwrap();
+
+                Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
+            }
+            COSEContentType::RS256
+            | COSEContentType::RS384
+            | COSEContentType::RS512
+            | COSEContentType::PS256
+            | COSEContentType::PS384
+            | COSEContentType::PS512
+            | COSEContentType::EDDSA
+            | COSEContentType::INSECURE_RS1 => Err(WebauthnError::COSEKeyInvalidType),
+        }?;
+
+        Ok(COSEKey { type_: cert.t, key })
+
+        // Err(WebauthnError::COSEKeyInvalidType)
     }
 }
 

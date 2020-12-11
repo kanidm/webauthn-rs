@@ -592,14 +592,15 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let x5c_array_ref =
         cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let alg = credential_public_key.type_;
+
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
         .iter()
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| {
-                    crypto::X509PublicKey::try_from((b.as_slice(), COSEContentType::ECDSA_SHA384))
-                })
+                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
         })
         .collect();
 
@@ -626,9 +627,15 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // Currently not possible to access extensions with openssl rust.
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
-    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let subject_public_key = crypto::COSEKey::try_from(&attestn_cert)?;
 
-    // TODO: verify match
+    println!("cred pk: {:?}", credential_public_key);
+    println!("subj pk: {:?}", subject_public_key);
+
+    if credential_public_key != subject_public_key {
+        // TODO: better error variant
+        return Err(WebauthnError::AttestationTrustFailure);
+    }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
 
