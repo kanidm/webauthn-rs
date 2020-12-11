@@ -23,6 +23,7 @@ pub(crate) enum AttestationFormat {
     AndroidKey,
     AndroidSafetyNet,
     FIDOU2F,
+    AppleAnonymous,
     None,
 }
 
@@ -36,6 +37,7 @@ impl TryFrom<&str> for AttestationFormat {
             "android-key" => Ok(AttestationFormat::AndroidKey),
             "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
+            "apple" => Ok(AttestationFormat::AppleAnonymous),
             "none" => Ok(AttestationFormat::None),
             _ => Err(WebauthnError::AttestationNotSupported),
         }
@@ -54,6 +56,13 @@ pub enum AttestationType {
     /// The credential is authenticated using a CA, and may provide a
     /// ca chain to validate to it's root.
     AttCa(
+        Credential,
+        crypto::X509PublicKey,
+        Vec<crypto::X509PublicKey>,
+    ),
+    /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
+    /// validate to it's root.
+    AnonCa(
         Credential,
         crypto::X509PublicKey,
         Vec<crypto::X509PublicKey>,
@@ -558,6 +567,74 @@ pub(crate) fn verify_tpm_attestation(
     Ok(AttestationType::AttCa(
         Credential::new(acd, credential_public_key, counter, user_verified),
         aik_cert,
+        arr_x509,
+    ))
+}
+
+pub(crate) fn verify_apple_anonymous_attestation(
+    acd: &AttestedCredentialData,
+    counter: u32,
+    user_verified: bool,
+    att_stmt: &serde_cbor::Value,
+    auth_data_bytes: Vec<u8>,
+    client_data_hash: &Vec<u8>,
+) -> Result<AttestationType, WebauthnError> {
+    // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
+
+    let x5c_key = &serde_cbor::Value::Text("x5c".to_string());
+
+    let x5c_value = att_stmt_map
+        .get(x5c_key)
+        .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
+
+    let x5c_array_ref =
+        cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+
+    let arr_x509: Result<Vec<_>, _> = x5c_array_ref
+        .iter()
+        .map(|values| {
+            cbor_try_bytes!(values)
+                .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                .and_then(|b| {
+                    crypto::X509PublicKey::try_from((b.as_slice(), COSEContentType::ECDSA_SHA384))
+                })
+        })
+        .collect();
+
+    let mut arr_x509 = arr_x509?;
+
+    if arr_x509.len() == 0 {
+        return Err(WebauthnError::AttestationStatementX5CInvalid);
+    }
+
+    let attestn_cert = arr_x509.remove(0);
+
+    // 2. Concatenate authenticatorData and clientDataHash to form nonceToHash.
+    let nonce_to_hash: Vec<u8> = auth_data_bytes
+        .iter()
+        .chain(client_data_hash.iter())
+        .map(|b| *b)
+        .collect();
+
+    // 3. Perform SHA-256 hash of nonceToHash to produce nonce.
+    let _nonce = compute_sha256(&nonce_to_hash);
+
+    // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
+    //
+    // Currently not possible to access extensions with openssl rust.
+
+    // 5. Verify credential public key matches the Subject Public Key of credCert.
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+
+    // TODO: verify match
+
+    // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
+
+    Ok(AttestationType::AnonCa(
+        Credential::new(acd, credential_public_key, counter, user_verified),
+        attestn_cert,
         arr_x509,
     ))
 }
