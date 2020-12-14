@@ -24,6 +24,21 @@ use crate::proto::Aaguid;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
+pub(crate) const APPLE_X509_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
+MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8w
+HQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
+bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MjEzMloXDTQ1MDMx
+NTAwMDAwMFowSzEfMB0GA1UEAwwWQXBwbGUgV2ViQXV0aG4gUm9vdCBDQTETMBEG
+A1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49
+AgEGBSuBBAAiA2IABCJCQ2pTVhzjl4Wo6IhHtMSAzO2cv+H9DQKev3//fG59G11k
+xu9eI0/7o6V5uShBpe1u6l6mS19S1FEh6yGljnZAJ+2GNP1mi/YK2kSXIuTHjxA/
+pcoRf7XkOtO4o1qlcaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJtdk
+2cV4wlpn0afeaxLQG2PxxtcwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2cA
+MGQCMFrZ+9DsJ1PW9hfNdBywZDsWDbWFp28it1d/5w2RPkRX3Bbn/UbDTNLx7Jr3
+jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B
+1bWeT0vT
+-----END CERTIFICATE-----";
+
 fn verify_signature(
     pkey: &pkey::PKeyRef<pkey::Public>,
     stype: COSEContentType,
@@ -99,7 +114,7 @@ impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
                     .curve_name()
                     .ok_or(WebauthnError::OpenSSLErrorNoCurveName)?;
 
-                if ec_curve != nid::Nid::X9_62_PRIME256V1 && false {
+                if ec_curve != nid::Nid::X9_62_PRIME256V1 {
                     return Err(WebauthnError::CertificatePublicKeyInvalid);
                 }
             }
@@ -232,6 +247,39 @@ impl X509PublicKey {
 
     pub(crate) fn get_fido_gen_ce_aaguid(&self) -> Option<Aaguid> {
         None
+    }
+
+    pub(crate) fn verify_against_chain(
+        &self,
+        root: Self,
+        mut chain: Vec<Self>,
+    ) -> Result<bool, WebauthnError> {
+        let trust = x509::store::X509StoreBuilder::new()
+            .and_then(|mut builder| builder.add_cert(root.pubk).map(|_| builder))
+            .map_err(WebauthnError::OpenSSLError)?
+            .build();
+
+        let mut cert_chain = openssl::stack::Stack::new().map_err(WebauthnError::OpenSSLError)?;
+
+        for cert in chain.drain(..) {
+            cert_chain
+                .push(cert.pubk)
+                .map_err(WebauthnError::OpenSSLError)?;
+        }
+
+        let mut store_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
+
+        store_ctx
+            .init(&trust, &self.pubk, &cert_chain, |ctx| ctx.verify_cert())
+            .map_err(WebauthnError::OpenSSLError)
+    }
+
+    pub(crate) fn apple_x509() -> X509PublicKey {
+        Self {
+            pubk: x509::X509::from_pem(APPLE_X509_PEM).unwrap(),
+            // This content type was obtained statically (this certificate is static data)
+            t: COSEContentType::ECDSA_SHA384,
+        }
     }
 }
 
@@ -572,31 +620,34 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 impl TryFrom<&X509PublicKey> for COSEKey {
     type Error = WebauthnError;
     fn try_from(cert: &X509PublicKey) -> Result<COSEKey, Self::Error> {
-        let ec_key = cert
-            .pubk
-            .public_key()
-            .and_then(|pk| pk.ec_key())
-            .map_err(WebauthnError::OpenSSLError)?;
-        let ec_group = ec_key.group();
-
         let key = match cert.t {
             COSEContentType::ECDSA_SHA256
             | COSEContentType::ECDSA_SHA384
             | COSEContentType::ECDSA_SHA512 => {
-                let curve = ec_group
-                    .curve_name()
-                    .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
-                    .and_then(ECDSACurve::try_from)?;
+                let ec_key = cert
+                    .pubk
+                    .public_key()
+                    .and_then(|pk| pk.ec_key())
+                    .map_err(WebauthnError::OpenSSLError)?;
+
+                ec_key.check_key().map_err(WebauthnError::OpenSSLError)?;
+
+                let ec_grpref = ec_key.group();
 
                 let mut ctx =
                     openssl::bn::BigNumContext::new().map_err(WebauthnError::OpenSSLError)?;
                 let mut x = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
                 let mut y = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
 
-                ec_group
-                    .generator()
-                    .affine_coordinates_gfp(ec_group, &mut x, &mut y, &mut ctx)
+                ec_key
+                    .public_key()
+                    .affine_coordinates_gfp(ec_grpref, &mut x, &mut y, &mut ctx)
                     .map_err(WebauthnError::OpenSSLError)?;
+
+                let curve = ec_grpref
+                    .curve_name()
+                    .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
+                    .and_then(ECDSACurve::try_from)?;
 
                 // TODO: error variant here
                 use std::convert::TryInto;
@@ -746,4 +797,16 @@ pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);
     hasher.finish().iter().map(|b| *b).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn nid_to_curve() {
+        assert_eq!(
+            ECDSACurve::try_from(nid::Nid::X9_62_PRIME256V1).unwrap(),
+            ECDSACurve::SECP256R1
+        );
+    }
 }

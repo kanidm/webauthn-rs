@@ -597,7 +597,14 @@ pub(crate) fn verify_apple_anonymous_attestation(
 
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
         .iter()
-        .map(|values| {
+        .enumerate()
+        .map(|(i, values)| {
+            let alg = if i == 0 {
+                alg
+            } else {
+                // FIXME: this is determined empirically, not sure if it's always right.
+                COSEContentType::ECDSA_SHA384
+            };
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
                 .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
@@ -629,19 +636,16 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = crypto::COSEKey::try_from(&attestn_cert)?;
 
-    println!("cred pk: {:?}", credential_public_key);
-    println!("subj pk: {:?}", subject_public_key);
-
     if credential_public_key != subject_public_key {
         // TODO: better error variant
         return Err(WebauthnError::AttestationTrustFailure);
     }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-
+    // ^------ TODO: does this mean we should include attestn_cert in the trust path?
     Ok(AttestationType::AnonCa(
         Credential::new(acd, credential_public_key, counter, user_verified),
-        attestn_cert,
+        crypto::X509PublicKey::apple_x509(),
         arr_x509,
     ))
 }
