@@ -249,31 +249,6 @@ impl X509PublicKey {
         None
     }
 
-    pub(crate) fn verify_against_chain(
-        &self,
-        root: Self,
-        mut chain: Vec<Self>,
-    ) -> Result<bool, WebauthnError> {
-        let trust = x509::store::X509StoreBuilder::new()
-            .and_then(|mut builder| builder.add_cert(root.pubk).map(|_| builder))
-            .map_err(WebauthnError::OpenSSLError)?
-            .build();
-
-        let mut cert_chain = openssl::stack::Stack::new().map_err(WebauthnError::OpenSSLError)?;
-
-        for cert in chain.drain(..) {
-            cert_chain
-                .push(cert.pubk)
-                .map_err(WebauthnError::OpenSSLError)?;
-        }
-
-        let mut store_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
-
-        store_ctx
-            .init(&trust, &self.pubk, &cert_chain, |ctx| ctx.verify_cert())
-            .map_err(WebauthnError::OpenSSLError)
-    }
-
     pub(crate) fn apple_x509() -> X509PublicKey {
         Self {
             pubk: x509::X509::from_pem(APPLE_X509_PEM).unwrap(),
