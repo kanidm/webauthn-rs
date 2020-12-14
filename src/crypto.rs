@@ -327,8 +327,7 @@ impl TryFrom<nid::Nid> for ECDSACurve {
             nid::Nid::X9_62_PRIME256V1 => Ok(ECDSACurve::SECP256R1),
             nid::Nid::SECP384R1 => Ok(ECDSACurve::SECP384R1),
             nid::Nid::SECP521R1 => Ok(ECDSACurve::SECP521R1),
-            // TODO: get a better error here
-            _ => Err(WebauthnError::COSEKeyECDSAInvalidCurve),
+            _ => Err(WebauthnError::ECDSACurveInvalidNid),
         }
     }
 }
@@ -649,10 +648,15 @@ impl TryFrom<&X509PublicKey> for COSEKey {
                     .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
                     .and_then(ECDSACurve::try_from)?;
 
-                // TODO: error variant here
                 use std::convert::TryInto;
-                let x: [u8; 32] = x.to_vec().try_into().unwrap();
-                let y: [u8; 32] = y.to_vec().try_into().unwrap();
+                let x: [u8; 32] = x
+                    .to_vec()
+                    .try_into()
+                    .expect("wrong number of x coordinates in ECDSA curve point (expected 32)");
+                let y: [u8; 32] = y
+                    .to_vec()
+                    .try_into()
+                    .expect("wrong number of x coordinates in ECDSA curve point (expected 32)");
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
             }
@@ -663,12 +667,13 @@ impl TryFrom<&X509PublicKey> for COSEKey {
             | COSEContentType::PS384
             | COSEContentType::PS512
             | COSEContentType::EDDSA
-            | COSEContentType::INSECURE_RS1 => Err(WebauthnError::COSEKeyInvalidType),
+            | COSEContentType::INSECURE_RS1 => {
+                log::error!("unsupported COSE content type {:?}", cert.t);
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }?;
 
         Ok(COSEKey { type_: cert.t, key })
-
-        // Err(WebauthnError::COSEKeyInvalidType)
     }
 }
 

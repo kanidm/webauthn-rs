@@ -611,13 +611,12 @@ pub(crate) fn verify_apple_anonymous_attestation(
         })
         .collect();
 
-    let mut arr_x509 = arr_x509?;
+    let arr_x509 = arr_x509?;
 
-    if arr_x509.len() == 0 {
-        return Err(WebauthnError::AttestationStatementX5CInvalid);
-    }
-
-    let attestn_cert = arr_x509.remove(0);
+    // Must have at least one cert
+    let attestn_cert = arr_x509
+        .first()
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // 2. Concatenate authenticatorData and clientDataHash to form nonceToHash.
     let nonce_to_hash: Vec<u8> = auth_data_bytes
@@ -634,15 +633,14 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // Currently not possible to access extensions with openssl rust.
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
-    let subject_public_key = crypto::COSEKey::try_from(&attestn_cert)?;
+    let subject_public_key = crypto::COSEKey::try_from(attestn_cert)?;
 
     if credential_public_key != subject_public_key {
-        // TODO: better error variant
-        return Err(WebauthnError::AttestationTrustFailure);
+        // TODO: this new variant or AttestationTrustFailure?
+        return Err(WebauthnError::AttestationCredentialSubjectKeyMistmatch);
     }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-    // ^------ TODO: does this mean we should include attestn_cert in the trust path?
     Ok(AttestationType::AnonCa(
         Credential::new(acd, credential_public_key, counter, user_verified),
         crypto::X509PublicKey::apple_x509(),
