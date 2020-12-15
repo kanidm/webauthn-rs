@@ -636,7 +636,6 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let subject_public_key = crypto::COSEKey::try_from(attestn_cert)?;
 
     if credential_public_key != subject_public_key {
-        // TODO: this new variant or AttestationTrustFailure?
         return Err(WebauthnError::AttestationCredentialSubjectKeyMistmatch);
     }
 
