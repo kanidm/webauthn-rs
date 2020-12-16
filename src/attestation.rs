@@ -597,14 +597,11 @@ pub(crate) fn verify_apple_anonymous_attestation(
 
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
         .iter()
-        .enumerate()
-        .map(|(i, values)| {
-            let alg = if i == 0 {
-                alg
-            } else {
-                // FIXME: this is determined empirically, not sure if it's always right.
-                COSEContentType::ECDSA_SHA384
-            };
+        .zip(
+            // FIXME: this is determined empirically, not sure if it's always right.
+            std::iter::once(alg).chain(std::iter::repeat(COSEContentType::ECDSA_SHA384)),
+        )
+        .map(|(values, alg)| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
                 .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))

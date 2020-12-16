@@ -24,6 +24,10 @@ use crate::proto::Aaguid;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
+// Apple makes a webauthn root certificate public at
+// https://www.apple.com/certificateauthority/private/.
+// The certificate data itself (as linked in the cert listing linked above) can be found at
+// https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem.
 pub(crate) const APPLE_X509_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
 MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8w
 HQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
@@ -643,7 +647,10 @@ impl TryFrom<&X509PublicKey> for COSEKey {
             | COSEContentType::PS512
             | COSEContentType::EDDSA
             | COSEContentType::INSECURE_RS1 => {
-                log::error!("unsupported COSE content type {:?}", cert.t);
+                log::error!(
+                    "unsupported X509 to COSE conversion for COSE content type {:?}",
+                    cert.t
+                );
                 Err(WebauthnError::COSEKeyInvalidType)
             }
         }?;
