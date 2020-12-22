@@ -24,6 +24,25 @@ use crate::proto::Aaguid;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
+// Apple makes a webauthn root certificate public at
+// https://www.apple.com/certificateauthority/private/.
+// The certificate data itself (as linked in the cert listing linked above) can be found at
+// https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem.
+pub(crate) const APPLE_X509_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
+MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8w
+HQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
+bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MjEzMloXDTQ1MDMx
+NTAwMDAwMFowSzEfMB0GA1UEAwwWQXBwbGUgV2ViQXV0aG4gUm9vdCBDQTETMBEG
+A1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49
+AgEGBSuBBAAiA2IABCJCQ2pTVhzjl4Wo6IhHtMSAzO2cv+H9DQKev3//fG59G11k
+xu9eI0/7o6V5uShBpe1u6l6mS19S1FEh6yGljnZAJ+2GNP1mi/YK2kSXIuTHjxA/
+pcoRf7XkOtO4o1qlcaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJtdk
+2cV4wlpn0afeaxLQG2PxxtcwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2cA
+MGQCMFrZ+9DsJ1PW9hfNdBywZDsWDbWFp28it1d/5w2RPkRX3Bbn/UbDTNLx7Jr3
+jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B
+1bWeT0vT
+-----END CERTIFICATE-----";
+
 fn verify_signature(
     pkey: &pkey::PKeyRef<pkey::Public>,
     stype: COSEContentType,
@@ -233,11 +252,19 @@ impl X509PublicKey {
     pub(crate) fn get_fido_gen_ce_aaguid(&self) -> Option<Aaguid> {
         None
     }
+
+    pub(crate) fn apple_x509() -> X509PublicKey {
+        Self {
+            pubk: x509::X509::from_pem(APPLE_X509_PEM).unwrap(),
+            // This content type was obtained statically (this certificate is static data)
+            t: COSEContentType::ECDSA_SHA384,
+        }
+    }
 }
 
 /// An ECDSACurve identifier. You probabably will never need to alter
 /// or use this value, as it is set inside the Credential for you.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ECDSACurve {
     // +---------+-------+----------+------------------------------------+
     // | Name    | Value | Key Type | Description                        |
@@ -272,6 +299,18 @@ impl TryFrom<i128> for ECDSACurve {
     }
 }
 
+impl TryFrom<nid::Nid> for ECDSACurve {
+    type Error = WebauthnError;
+    fn try_from(nid: nid::Nid) -> Result<Self, Self::Error> {
+        match nid {
+            nid::Nid::X9_62_PRIME256V1 => Ok(ECDSACurve::SECP256R1),
+            nid::Nid::SECP384R1 => Ok(ECDSACurve::SECP384R1),
+            nid::Nid::SECP521R1 => Ok(ECDSACurve::SECP521R1),
+            _ => Err(WebauthnError::ECDSACurveInvalidNid),
+        }
+    }
+}
+
 impl ECDSACurve {
     fn to_openssl_nid(&self) -> nid::Nid {
         match self {
@@ -285,7 +324,7 @@ impl ECDSACurve {
 /// A COSE Key Content type, indicating the type of key and hash type
 /// that should be used with this key. You shouldn't need to alter or
 /// use this value.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum COSEContentType {
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
     ECDSA_SHA256 = -7, // recommends curve SECP256R1
@@ -368,7 +407,7 @@ impl COSEContentType {
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
@@ -382,7 +421,7 @@ pub struct COSEEC2Key {
 /// authenticator.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSERSAKey {
     /// An RSA modulus
     pub n: Vec<u8>,
@@ -392,7 +431,7 @@ pub struct COSERSAKey {
 
 /// The type of Key contained within a COSE value. You should never need
 /// to alter or change this type.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum COSEKeyType {
     //    +-----------+-------+-----------------------------------------------+
     //    | Name      | Value | Description                                   |
@@ -415,7 +454,7 @@ pub enum COSEKeyType {
 
 /// A COSE Key as provided by the Authenticator. You should never need
 /// to alter or change these values.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEKey {
     /// The type of key that this contains
     pub type_: COSEContentType,
@@ -556,6 +595,70 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
     }
 }
 
+impl TryFrom<&X509PublicKey> for COSEKey {
+    type Error = WebauthnError;
+    fn try_from(cert: &X509PublicKey) -> Result<COSEKey, Self::Error> {
+        let key = match cert.t {
+            COSEContentType::ECDSA_SHA256
+            | COSEContentType::ECDSA_SHA384
+            | COSEContentType::ECDSA_SHA512 => {
+                let ec_key = cert
+                    .pubk
+                    .public_key()
+                    .and_then(|pk| pk.ec_key())
+                    .map_err(WebauthnError::OpenSSLError)?;
+
+                ec_key.check_key().map_err(WebauthnError::OpenSSLError)?;
+
+                let ec_grpref = ec_key.group();
+
+                let mut ctx =
+                    openssl::bn::BigNumContext::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut x = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut y = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+
+                ec_key
+                    .public_key()
+                    .affine_coordinates_gfp(ec_grpref, &mut x, &mut y, &mut ctx)
+                    .map_err(WebauthnError::OpenSSLError)?;
+
+                let curve = ec_grpref
+                    .curve_name()
+                    .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
+                    .and_then(ECDSACurve::try_from)?;
+
+                use std::convert::TryInto;
+                let x: [u8; 32] = x
+                    .to_vec()
+                    .try_into()
+                    .expect("wrong number of x coordinates in ECDSA curve point (expected 32)");
+                let y: [u8; 32] = y
+                    .to_vec()
+                    .try_into()
+                    .expect("wrong number of x coordinates in ECDSA curve point (expected 32)");
+
+                Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
+            }
+            COSEContentType::RS256
+            | COSEContentType::RS384
+            | COSEContentType::RS512
+            | COSEContentType::PS256
+            | COSEContentType::PS384
+            | COSEContentType::PS512
+            | COSEContentType::EDDSA
+            | COSEContentType::INSECURE_RS1 => {
+                log::error!(
+                    "unsupported X509 to COSE conversion for COSE content type {:?}",
+                    cert.t
+                );
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
+        }?;
+
+        Ok(COSEKey { type_: cert.t, key })
+    }
+}
+
 impl COSEKey {
     pub(crate) fn get_alg_key_ecc_x962_raw(&self) -> Result<Vec<u8>, WebauthnError> {
         // Let publicKeyU2F be the concatenation 0x04 || x || y.
@@ -681,4 +784,16 @@ pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);
     hasher.finish().iter().map(|b| *b).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn nid_to_curve() {
+        assert_eq!(
+            ECDSACurve::try_from(nid::Nid::X9_62_PRIME256V1).unwrap(),
+            ECDSACurve::SECP256R1
+        );
+    }
 }

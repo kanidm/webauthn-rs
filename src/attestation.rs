@@ -592,24 +592,28 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let x5c_array_ref =
         cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
+    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let alg = credential_public_key.type_;
+
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
         .iter()
-        .map(|values| {
+        .zip(
+            // FIXME: this is determined empirically, not sure if it's always right.
+            std::iter::once(alg).chain(std::iter::repeat(COSEContentType::ECDSA_SHA384)),
+        )
+        .map(|(values, alg)| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| {
-                    crypto::X509PublicKey::try_from((b.as_slice(), COSEContentType::ECDSA_SHA384))
-                })
+                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
         })
         .collect();
 
-    let mut arr_x509 = arr_x509?;
+    let arr_x509 = arr_x509?;
 
-    if arr_x509.len() == 0 {
-        return Err(WebauthnError::AttestationStatementX5CInvalid);
-    }
-
-    let attestn_cert = arr_x509.remove(0);
+    // Must have at least one cert
+    let attestn_cert = arr_x509
+        .first()
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // 2. Concatenate authenticatorData and clientDataHash to form nonceToHash.
     let nonce_to_hash: Vec<u8> = auth_data_bytes
@@ -626,15 +630,16 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // Currently not possible to access extensions with openssl rust.
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
-    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let subject_public_key = crypto::COSEKey::try_from(attestn_cert)?;
 
-    // TODO: verify match
+    if credential_public_key != subject_public_key {
+        return Err(WebauthnError::AttestationCredentialSubjectKeyMistmatch);
+    }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-
     Ok(AttestationType::AnonCa(
         Credential::new(acd, credential_public_key, counter, user_verified),
-        attestn_cert,
+        crypto::X509PublicKey::apple_x509(),
         arr_x509,
     ))
 }
