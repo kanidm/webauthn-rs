@@ -194,4 +194,10 @@ pub enum WebauthnError {
 
     #[error("Invalid UserID supplied for registration")]
     InvalidUsername,
+
+    #[error("Supplied Nid dones not correspond to a supported ECDSA curve")]
+    ECDSACurveInvalidNid,
+
+    #[error("The attested credential public key and subject public key do not match")]
+    AttestationCredentialSubjectKeyMistmatch,
 }
