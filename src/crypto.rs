@@ -614,12 +614,12 @@ impl TryFrom<&X509PublicKey> for COSEKey {
 
                 let mut ctx =
                     openssl::bn::BigNumContext::new().map_err(WebauthnError::OpenSSLError)?;
-                let mut x = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
-                let mut y = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut xbn = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut ybn = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
 
                 ec_key
                     .public_key()
-                    .affine_coordinates_gfp(ec_grpref, &mut x, &mut y, &mut ctx)
+                    .affine_coordinates_gfp(ec_grpref, &mut xbn, &mut ybn, &mut ctx)
                     .map_err(WebauthnError::OpenSSLError)?;
 
                 let curve = ec_grpref
@@ -628,14 +628,15 @@ impl TryFrom<&X509PublicKey> for COSEKey {
                     .and_then(ECDSACurve::try_from)?;
 
                 use std::convert::TryInto;
-                let x: [u8; 32] = x
+                let mut x = [0; 32];
+                x.copy_from_slice(xbn
                     .to_vec()
-                    .try_into()
-                    .expect("wrong number of x coordinates in ECDSA curve point (expected 32)");
-                let y: [u8; 32] = y
+                    .as_slice());
+
+                let mut y = [0; 32];
+                y.copy_from_slice(ybn
                     .to_vec()
-                    .try_into()
-                    .expect("wrong number of x coordinates in ECDSA curve point (expected 32)");
+                    .as_slice());
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
             }
