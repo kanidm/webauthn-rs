@@ -9,47 +9,11 @@
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
-
-    <script type="text/javascript" src="/auth/static/js/webauthn.js"></script>
-
+    <!-- <script type="text/javascript" src="/auth/static/js/webauthn.js"></script> -->
+    <script src="/pkg/bundle.js" defer></script>
   </head>
+
   <body>
-
-    <div aria-live="polite" aria-atomic="true">
-      <div id="toast_arena" style="position: absolute; top: 20px; right: 20px;">
-      </div>
-    </div>
-
-<div class="container">
-  <div class="row d-flex justify-content-center align-items-center" style="min-height: 100vh;">
-    <div class="col">
-    </div>
-    <div class="col-sm-6">
-        <div class="container">
-            <h2>Webauthn-RS Demo</h2>
-            <p>
-            Webauthn is a modern, passwordless method of securely authenticating to a website. You can
-            test your token here by registering, then logging in. Try also login with a different username
-            and no registration!
-            </p>
-            <p>
-            This site is backed by the rust webauthn library.
-            </p>
-        </div>
-        <div class="container">
-            <div>
-                <input id="username" type="text" class="form-control">
-                <button type="button" class="btn btn-dark" onclick="register()">Register</button>
-                <button type="button" class="btn btn-dark" onclick="login()">Login</button>
-            </div>
-        </div>
-    </div>
-    <div class="col">
-    </div>
-  </div>
-</div>
-
-
   </body>
 </html>
 
