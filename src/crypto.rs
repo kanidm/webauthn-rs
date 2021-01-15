@@ -6,11 +6,11 @@
 #![allow(non_camel_case_types)]
 
 use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
-use std::convert::TryFrom;
+use core::convert::TryFrom;
 
 // use super::constants::*;
 use super::error::*;
-use crate::proto::Aaguid;
+use crate::proto::{Aaguid, COSERSAKey, COSEEC2Key, COSEKeyType, COSEContentType, COSEKey, ECDSACurve};
 // use super::proto::*;
 
 // Why OpenSSL over another rust crate?
@@ -262,43 +262,6 @@ impl X509PublicKey {
     }
 }
 
-/// An ECDSACurve identifier. You probabably will never need to alter
-/// or use this value, as it is set inside the Credential for you.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ECDSACurve {
-    // +---------+-------+----------+------------------------------------+
-    // | Name    | Value | Key Type | Description                        |
-    // +---------+-------+----------+------------------------------------+
-    // | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
-    // | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
-    // | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
-    // | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
-    // | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
-    // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
-    // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
-    // +---------+-------+----------+------------------------------------+
-    /// Identifies this curve as SECP256R1 (X9_62_PRIME256V1 in OpenSSL)
-    SECP256R1 = 1,
-    /// Identifies this curve as SECP384R1
-    SECP384R1 = 2,
-    /// Identifies this curve as SECP521R1
-    SECP521R1 = 3,
-    // /// Identifies this OKP as ED25519
-    // ED25519 = 6,
-}
-
-impl TryFrom<i128> for ECDSACurve {
-    type Error = WebauthnError;
-    fn try_from(u: i128) -> Result<Self, Self::Error> {
-        match u {
-            1 => Ok(ECDSACurve::SECP256R1),
-            2 => Ok(ECDSACurve::SECP384R1),
-            3 => Ok(ECDSACurve::SECP521R1),
-            _ => Err(WebauthnError::COSEKeyECDSAInvalidCurve),
-        }
-    }
-}
-
 impl TryFrom<nid::Nid> for ECDSACurve {
     type Error = WebauthnError;
     fn try_from(nid: nid::Nid) -> Result<Self, Self::Error> {
@@ -321,73 +284,6 @@ impl ECDSACurve {
     }
 }
 
-/// A COSE Key Content type, indicating the type of key and hash type
-/// that should be used with this key. You shouldn't need to alter or
-/// use this value.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum COSEContentType {
-    /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
-    ECDSA_SHA256 = -7, // recommends curve SECP256R1
-    /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
-    ECDSA_SHA384 = -35, // recommends curve SECP384R1
-    /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
-    ECDSA_SHA512 = -36, // recommends curve SECP521R1
-    /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
-    RS256 = -257,
-    /// Identifies this key as RS384 aka RSASSA-PKCS1-v1_5 w/ SHA-384
-    RS384 = -258,
-    /// Identifies this key as RS512 aka RSASSA-PKCS1-v1_5 w/ SHA-512
-    RS512 = -259,
-    /// Identifies this key as PS256 aka RSASSA-PSS w/ SHA-256
-    PS256 = -37,
-    /// Identifies this key as PS384 aka RSASSA-PSS w/ SHA-384
-    PS384 = -38,
-    /// Identifies this key as PS512 aka RSASSA-PSS w/ SHA-512
-    PS512 = -39,
-    /// Identifies this key as EdDSA (likely curve ed25519)
-    EDDSA = -8,
-    /// Identifies this as an INSECURE RS1 aka RSASSA-PKCS1-v1_5 using SHA-1. This is not
-    /// used by validators, but can exist in some windows hello tpm's
-    INSECURE_RS1 = -65535,
-}
-
-impl TryFrom<i128> for COSEContentType {
-    type Error = WebauthnError;
-    fn try_from(i: i128) -> Result<Self, Self::Error> {
-        match i {
-            -7 => Ok(COSEContentType::ECDSA_SHA256),
-            -35 => Ok(COSEContentType::ECDSA_SHA384),
-            -36 => Ok(COSEContentType::ECDSA_SHA512),
-            -257 => Ok(COSEContentType::RS256),
-            -258 => Ok(COSEContentType::RS384),
-            -259 => Ok(COSEContentType::RS512),
-            -37 => Ok(COSEContentType::PS256),
-            -38 => Ok(COSEContentType::PS384),
-            -39 => Ok(COSEContentType::PS512),
-            -8 => Ok(COSEContentType::EDDSA),
-            -65535 => Ok(COSEContentType::INSECURE_RS1),
-            _ => Err(WebauthnError::COSEKeyECDSAContentType),
-        }
-    }
-}
-
-impl From<&COSEContentType> for i64 {
-    fn from(c: &COSEContentType) -> Self {
-        match c {
-            COSEContentType::ECDSA_SHA256 => -7,
-            COSEContentType::ECDSA_SHA384 => -35,
-            COSEContentType::ECDSA_SHA512 => -6,
-            COSEContentType::RS256 => -257,
-            COSEContentType::RS384 => -258,
-            COSEContentType::RS512 => -259,
-            COSEContentType::PS256 => -37,
-            COSEContentType::PS384 => -38,
-            COSEContentType::PS512 => -39,
-            COSEContentType::EDDSA => -8,
-            COSEContentType::INSECURE_RS1 => -65535,
-        }
-    }
-}
 
 impl COSEContentType {
     pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> Result<Vec<u8>, WebauthnError> {
@@ -401,65 +297,6 @@ impl COSEContentType {
             _ => Err(WebauthnError::COSEKeyInvalidType),
         }
     }
-}
-
-/// A COSE Eliptic Curve Public Key. This is generally the provided credential
-/// that an authenticator registers, and is used to authenticate the user.
-/// You will likely never need to interact with this value, as it is part of the Credential
-/// API.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct COSEEC2Key {
-    /// The curve that this key references.
-    pub curve: ECDSACurve,
-    /// The key's public X coordinate.
-    pub x: [u8; 32],
-    /// The key's public Y coordinate.
-    pub y: [u8; 32],
-}
-
-/// A COSE RSA PublicKey. This is a provided credential from a registered
-/// authenticator.
-/// You will likely never need to interact with this value, as it is part of the Credential
-/// API.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct COSERSAKey {
-    /// An RSA modulus
-    pub n: Vec<u8>,
-    /// An RSA exponent
-    pub e: [u8; 3],
-}
-
-/// The type of Key contained within a COSE value. You should never need
-/// to alter or change this type.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum COSEKeyType {
-    //    +-----------+-------+-----------------------------------------------+
-    //    | Name      | Value | Description                                   |
-    //    +-----------+-------+-----------------------------------------------+
-    //    | OKP       | 1     | Octet Key Pair                                |
-    //    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
-    //    |           |       | pair                                          |
-    //    | Symmetric | 4     | Symmetric Keys                                |
-    //    | Reserved  | 0     | This value is reserved                        |
-    //    +-----------+-------+-----------------------------------------------+
-    /// Identifies this as an Eliptic Curve octet key pair
-    EC_OKP,
-    /// Identifies this as an Eliptic Curve EC2 key
-    EC_EC2(COSEEC2Key),
-    // EC_Symmetric,
-    // EC_Reserved, // should always be invalid.
-    /// Identifies this as an RSA key
-    RSA(COSERSAKey),
-}
-
-/// A COSE Key as provided by the Authenticator. You should never need
-/// to alter or change these values.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct COSEKey {
-    /// The type of key that this contains
-    pub type_: COSEContentType,
-    /// The public key
-    pub key: COSEKeyType,
 }
 
 impl TryFrom<&serde_cbor::Value> for COSEKey {
@@ -627,7 +464,6 @@ impl TryFrom<&X509PublicKey> for COSEKey {
                     .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
                     .and_then(ECDSACurve::try_from)?;
 
-                use std::convert::TryInto;
                 let mut x = [0; 32];
                 x.copy_from_slice(xbn
                     .to_vec()

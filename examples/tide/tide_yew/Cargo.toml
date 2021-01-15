@@ -9,5 +9,13 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-wasm-bindgen = "^0.2"
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+wasm-bindgen-futures = { version = "0.4" }
 yew = "0.17"
+web-sys = { version = "0.3", features = ["PublicKeyCredentialUserEntity", "CredentialCreationOptions", "Navigator", "Window", "CredentialsContainer", "PublicKeyCredentialRpEntity", "PublicKeyCredentialCreationOptions"] }
+js-sys = "0.3"
+anyhow = "1"
+# serde = "1.0"
+serde_json = "1.0"
+webauthn-rs = { path = "../../../", default-features = false }
+
