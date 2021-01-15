@@ -10,11 +10,6 @@ use web_sys::window;
 use webauthn_rs::proto::CreationChallengeResponse;
 use js_sys::{Uint8Array, Object, ArrayBuffer};
 
-fn b64_to_object(data: &[u8]) -> ArrayBuffer {
-    let arr = Uint8Array::from(data);
-    arr.buffer()
-}
-
 pub struct App {
     link: ComponentLink<Self>,
     username: String,
@@ -39,36 +34,32 @@ impl App {
                 ConsoleService::log(format!("body -> {:?}", body).as_str());
                 match body {
                     Json(Ok(ccr)) => {
+                        let chal = Uint8Array::from(ccr.public_key.challenge.0.as_slice());
+                        let userid = Uint8Array::from(ccr.public_key.user.id.0.as_slice());
 
-                        let challenge = b64_to_object(&ccr.public_key.challenge.0);
+                        let jsv = JsValue::from_serde(&ccr).unwrap();
+                        ConsoleService::log(format!("jsv -> {:?}", jsv).as_str());
 
-                        // This is an awful hack to get around some issues in websys
-                        // and how it represents this field. JsValues are hard to
-                        // construct, so we can just yolo this.
-                        let pkcp = JsValue::null();
-
-                        let mut rp = web_sys::PublicKeyCredentialRpEntity::new(
-                            &ccr.public_key.rp.name
-                        );
-                        rp.id(&ccr.public_key.rp.id);
-
-                        let user_id = b64_to_object(&ccr.public_key.user.id.0);
-                        let user = web_sys::PublicKeyCredentialUserEntity::new(
-                            &ccr.public_key.user.name,
-                            &ccr.public_key.user.display_name,
-                            &user_id
+                        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
+                        js_sys::Reflect::set(&pkcco,
+                            &JsValue::from("challenge"),
+                            &chal
                         );
 
-                        let mut pkcco = web_sys::PublicKeyCredentialCreationOptions::new(
-                            &challenge,
-                            &pkcp,
-                            &rp,
+                        let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
+                        js_sys::Reflect::set(
                             &user,
+                            &JsValue::from("id"),
+                            &userid
                         );
-                        let mut c_options = web_sys::CredentialCreationOptions::new();
-                        c_options.public_key(&pkcco);
+
+                        ConsoleService::log(format!("jsv -> {:?}", jsv).as_str());
+
+                        let c_options = web_sys::CredentialCreationOptions::from(jsv);
+
                         AppMsg::BeginRegisterChallenge(c_options)
                     }
+
                     Json(Err(_)) => {
                         AppMsg::DoNothing
                     }
