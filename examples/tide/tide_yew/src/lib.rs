@@ -7,8 +7,12 @@ use yew::format::{Json, Nothing};
 use yew::services::ConsoleService;
 use yew::services::fetch::{FetchService, FetchTask, Request, Response};
 use web_sys::window;
-use webauthn_rs::proto::CreationChallengeResponse;
+use webauthn_rs::proto::{CreationChallengeResponse, RegisterPublicKeyCredential, AuthenticatorAttestationResponseRaw};
+use webauthn_rs::base64_data::Base64UrlSafeData;
 use js_sys::{Uint8Array, Object, ArrayBuffer};
+use wasm_bindgen_futures::JsFuture;
+use wasm_bindgen_futures::spawn_local;
+use wasm_bindgen::JsCast;
 
 pub struct App {
     link: ComponentLink<Self>,
@@ -22,11 +26,14 @@ pub enum AppMsg {
     Login,
     Register,
     DoNothing,
-    BeginRegisterChallenge(web_sys::CredentialCreationOptions),
+    BeginRegisterChallenge(web_sys::CredentialCreationOptions, String),
+    CompleteRegisterChallenge(JsValue, String),
+    Toast(String)
 }
 
 impl App {
     fn register_begin(&mut self, username: String) -> FetchTask {
+        let username_copy = username.clone();
         let callback = self.link.callback(
             move |response: Response<Json<Result<CreationChallengeResponse, Error>>>| {
                 let (parts, body) = response.into_parts();
@@ -57,7 +64,7 @@ impl App {
 
                         let c_options = web_sys::CredentialCreationOptions::from(jsv);
 
-                        AppMsg::BeginRegisterChallenge(c_options)
+                        AppMsg::BeginRegisterChallenge(c_options, username_copy.clone())
                     }
 
                     Json(Err(_)) => {
@@ -68,6 +75,67 @@ impl App {
         );
         let request = Request::post(format!("/auth/challenge/register/{}", username))
             .body(Nothing)
+            .unwrap();
+        FetchService::fetch_binary(request, callback).unwrap()
+    }
+
+    fn register_complete(&mut self, data: JsValue, username: String) -> FetchTask {
+        // First, we have to b64 some data here.
+        // data.raw_id
+
+        let data_raw_id=
+            Uint8Array::new(
+                &js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap()
+            ).to_vec();
+
+        let data_response =
+            js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+        let data_response_attestation_object =
+        Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("attestationObject")).unwrap()
+        ).to_vec();
+
+        let data_response_client_data_json =
+        Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap()
+        ).to_vec();
+
+        // ConsoleService::log(format!("data -> {:?}", data).as_str());
+        ConsoleService::log(format!("data_raw_id -> {:?}", data_raw_id).as_str());
+        ConsoleService::log(format!("data_response -> {:?}", data_response).as_str());
+        ConsoleService::log(format!("data_response_attestation_object -> {:?}", data_response_attestation_object).as_str());
+        ConsoleService::log(format!("data_response_client_data_json -> {:?}", data_response_client_data_json).as_str());
+
+        // Now we can convert to the base64 values for json.
+        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
+
+        let data_response_attestation_object_b64 = Base64UrlSafeData(data_response_attestation_object);
+
+        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+        let rpkc = RegisterPublicKeyCredential {
+            id: format!("{}", data_raw_id_b64),
+            raw_id: data_raw_id_b64,
+            type_: "public-key".to_string(),
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: data_response_attestation_object_b64,
+                client_data_json: data_response_client_data_json_b64,
+            }
+        };
+
+        ConsoleService::log(format!("rpkc -> {:?}", rpkc).as_str());
+
+        // Send the fetch task.
+        //    on success trigger the notification.
+
+        let callback = self.link.callback(
+            move |response: Response<Nothing>| {
+                let (parts, _body) = response.into_parts();
+                ConsoleService::log(format!("parts -> {:?}", parts).as_str());
+                AppMsg::Toast("It worked".to_string())
+            });
+
+        let request = Request::post(format!("/auth/register/{}", username))
+            .body(Json(&rpkc))
             .unwrap();
         FetchService::fetch_binary(request, callback).unwrap()
     }
@@ -97,14 +165,37 @@ impl Component for App {
                 ConsoleService::log(format!("register -> {:?}", username).as_str());
                 self.ft = Some(self.register_begin(username));
             }
-            AppMsg::BeginRegisterChallenge(ccr) => {
+            AppMsg::BeginRegisterChallenge(ccr, username) => {
                 if let Some(win) = web_sys::window() {
                     ConsoleService::log(format!("ccr -> {:?}", ccr).as_str());
 
-                    win.navigator().credentials().create_with_options(&ccr);
+                    let promise = win.navigator()
+                        .credentials()
+                        .create_with_options(&ccr)
+                        .expect("Unable to create promise");
+                    let fut = JsFuture::from(promise);
+                    let linkc = self.link.clone();
+
+                    spawn_local(async move {
+                        match fut.await {
+                            Ok(data) => {
+                                linkc.send_message(AppMsg::CompleteRegisterChallenge(data, username));
+                            }
+                            Err(e) => {
+                                ConsoleService::log(format!("error -> {:?}", e).as_str());
+                                linkc.send_message(AppMsg::DoNothing);
+                            }
+                        }
+                    });
                 } else {
                     ConsoleService::log(format!("register failed for -> {:?}", self.username).as_str());
                 }
+            }
+            AppMsg::CompleteRegisterChallenge(jsval, username) => {
+                self.ft = Some(self.register_complete(jsval, username));
+            }
+            AppMsg::Toast(msg) => {
+                ConsoleService::log(format!("toast -> {:?}", msg).as_str());
             }
             AppMsg::Login => {
                 ConsoleService::log(format!("login -> {:?}", self.username).as_str());

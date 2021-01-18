@@ -911,14 +911,14 @@ pub trait WebauthnConfig {
 mod tests {
     use crate::base64_data::Base64UrlSafeData;
     use crate::constants::CHALLENGE_SIZE_BYTES;
-    use crate::proto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
+    use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
     use crate::ephemeral::WebauthnEphemeralConfig;
     use crate::proto::{
         AuthenticatorAssertionResponseRaw, AuthenticatorAttestationResponseRaw, Challenge,
         Credential, PublicKeyCredential, RegisterPublicKeyCredential, UserVerificationPolicy,
     };
+    use crate::proto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
     use crate::Webauthn;
-    use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
 
     #[test]
     fn test_ephemeral() {}

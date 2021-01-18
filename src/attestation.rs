@@ -9,9 +9,8 @@ use crate::crypto;
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::proto::{
-    AttestedCredentialData, Credential, Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic,
-    TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms, COSEContentType, COSEKeyType,
-    COSEKey
+    AttestedCredentialData, COSEContentType, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
+    TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
 };
 use log::debug;
 // use serde_cbor::{ObjectKey, Value};

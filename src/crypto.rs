@@ -5,12 +5,14 @@
 
 #![allow(non_camel_case_types)]
 
-use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 use core::convert::TryFrom;
+use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 
 // use super::constants::*;
 use super::error::*;
-use crate::proto::{Aaguid, COSERSAKey, COSEEC2Key, COSEKeyType, COSEContentType, COSEKey, ECDSACurve};
+use crate::proto::{
+    Aaguid, COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, COSERSAKey, ECDSACurve,
+};
 // use super::proto::*;
 
 // Why OpenSSL over another rust crate?
@@ -284,7 +286,6 @@ impl ECDSACurve {
     }
 }
 
-
 impl COSEContentType {
     pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> Result<Vec<u8>, WebauthnError> {
         match self {
@@ -465,14 +466,10 @@ impl TryFrom<&X509PublicKey> for COSEKey {
                     .and_then(ECDSACurve::try_from)?;
 
                 let mut x = [0; 32];
-                x.copy_from_slice(xbn
-                    .to_vec()
-                    .as_slice());
+                x.copy_from_slice(xbn.to_vec().as_slice());
 
                 let mut y = [0; 32];
-                y.copy_from_slice(ybn
-                    .to_vec()
-                    .as_slice());
+                y.copy_from_slice(ybn.to_vec().as_slice());
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
             }

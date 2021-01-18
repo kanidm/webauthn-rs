@@ -9,9 +9,9 @@
 //! By default this implementation advertises support for all possible authenticators
 //! EVEN if they are NOT supported. This to is aid in test vector collection.
 
-use crate::proto::COSEContentType;
 use crate::proto::AttestationConveyancePreference;
 use crate::proto::AuthenticatorAttachment;
+use crate::proto::COSEContentType;
 use crate::WebauthnConfig;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider

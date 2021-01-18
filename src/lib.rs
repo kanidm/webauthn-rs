@@ -33,14 +33,13 @@ pub mod attestation;
 pub mod base64_data;
 mod constants;
 #[cfg(feature = "core")]
+pub mod core;
+#[cfg(feature = "core")]
 pub mod crypto;
 #[cfg(feature = "core")]
 pub mod ephemeral;
 pub mod error;
 pub mod proto;
-#[cfg(feature = "core")]
-pub mod core;
 
 #[cfg(feature = "core")]
 pub use crate::core::*;
-
