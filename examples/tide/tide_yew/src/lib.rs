@@ -7,9 +7,9 @@ use yew::format::{Json, Nothing};
 use yew::services::ConsoleService;
 use yew::services::fetch::{FetchService, FetchTask, Request, Response};
 use web_sys::window;
-use webauthn_rs::proto::{CreationChallengeResponse, RegisterPublicKeyCredential, AuthenticatorAttestationResponseRaw};
+use webauthn_rs::proto::{CreationChallengeResponse, RegisterPublicKeyCredential, AuthenticatorAttestationResponseRaw, RequestChallengeResponse, PublicKeyCredential, AuthenticatorAssertionResponseRaw};
 use webauthn_rs::base64_data::Base64UrlSafeData;
-use js_sys::{Uint8Array, Object, ArrayBuffer};
+use js_sys::{Uint8Array, Object, ArrayBuffer, Array};
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen::JsCast;
@@ -28,6 +28,8 @@ pub enum AppMsg {
     DoNothing,
     BeginRegisterChallenge(web_sys::CredentialCreationOptions, String),
     CompleteRegisterChallenge(JsValue, String),
+    BeginLoginChallenge(web_sys::CredentialRequestOptions, String),
+    CompleteLoginChallenge(JsValue, String),
     Toast(String)
 }
 
@@ -139,6 +141,152 @@ impl App {
             .unwrap();
         FetchService::fetch_binary(request, callback).unwrap()
     }
+
+    fn login_begin(&mut self, username: String) -> FetchTask {
+        let username_copy = username.clone();
+        let callback = self.link.callback(
+            move |response: Response<Json<Result<RequestChallengeResponse, Error>>>| {
+                let (parts, body) = response.into_parts();
+                ConsoleService::log(format!("parts -> {:?}", parts).as_str());
+                ConsoleService::log(format!("body -> {:?}", body).as_str());
+                match body {
+                    Json(Ok(rcr)) => {
+
+                        let chal = Uint8Array::from(rcr.public_key.challenge.0.as_slice());
+                        let allow_creds: Array = rcr.public_key.allow_credentials.iter()
+                            .map(|ac| {
+                                let obj = Object::new();
+                                js_sys::Reflect::set(
+                                    &obj,
+                                    &JsValue::from("type"),
+                                    &JsValue::from_str(ac.type_.as_str())
+                                );
+
+                                js_sys::Reflect::set(
+                                    &obj,
+                                    &JsValue::from("id"),
+                                    &Uint8Array::from(ac.id.0.as_slice())
+                                );
+
+                                if let Some(transports) = &ac.transports {
+                                    let tarray: Array = transports.iter()
+                                        .map(|s| {
+                                            JsValue::from_str(s.as_str())
+                                        })
+                                        .collect();
+
+                                    js_sys::Reflect::set(
+                                        &obj,
+                                        &JsValue::from("transports"),
+                                        &tarray
+                                    );
+                                }
+
+                                obj
+                            })
+                            .collect();
+
+                        let jsv = JsValue::from_serde(&rcr).unwrap();
+                        ConsoleService::log(format!("jsv -> {:?}", jsv).as_str());
+
+                        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
+                        js_sys::Reflect::set(&pkcco,
+                            &JsValue::from("challenge"),
+                            &chal
+                        );
+
+                        js_sys::Reflect::set(&pkcco,
+                            &JsValue::from("allowCredentials"),
+                            &allow_creds
+                        );
+
+                        let c_options = web_sys::CredentialRequestOptions::from(jsv);
+                        AppMsg::BeginLoginChallenge(c_options, username_copy.clone())
+                    }
+                    Json(Err(_)) => {
+                        AppMsg::DoNothing
+                    }
+                }
+            }
+        );
+        let request = Request::post(format!("/auth/challenge/login/{}", username))
+            .body(Nothing)
+            .unwrap();
+        FetchService::fetch_binary(request, callback).unwrap()
+    }
+
+    fn login_complete(&mut self, data: JsValue, username: String) -> FetchTask {
+
+
+        let data_raw_id=
+            Uint8Array::new(
+                &js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap()
+            ).to_vec();
+
+        let data_response =
+            js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+
+        let data_response_authenticator_data =
+        Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("authenticatorData")).unwrap()
+        ).to_vec();
+
+        let data_response_signature =
+        Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("signature")).unwrap()
+        ).to_vec();
+
+        let data_response_user_handle =
+            &js_sys::Reflect::get(&data_response, &JsValue::from("userHandle")).unwrap();
+        let data_response_user_handle =
+            if data_response_user_handle.is_undefined() {
+                None
+            } else {
+                Some(
+                Uint8Array::new(data_response_user_handle).to_vec()
+                )
+            };
+
+        let data_response_client_data_json =
+        Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap()
+        ).to_vec();
+
+        // Base64 it
+
+        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
+        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+        let data_response_authenticator_data_b64 = Base64UrlSafeData(data_response_authenticator_data);
+        let data_response_signature_b64 = Base64UrlSafeData(data_response_signature);
+
+        let data_response_user_handle_b64 = data_response_user_handle.map(|d|
+            Base64UrlSafeData(d)
+        );
+
+        let pkc = PublicKeyCredential {
+            id: format!("{}", data_raw_id_b64),
+            raw_id: data_raw_id_b64,
+            type_: "public-key".to_string(),
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data: data_response_authenticator_data_b64,
+                client_data_json: data_response_client_data_json_b64,
+                signature: data_response_signature_b64,
+                user_handle: data_response_user_handle_b64
+            }
+        };
+
+        let callback = self.link.callback(
+            move |response: Response<Nothing>| {
+                let (parts, _body) = response.into_parts();
+                ConsoleService::log(format!("parts -> {:?}", parts).as_str());
+                AppMsg::Toast("It authed!".to_string())
+            });
+        let request = Request::post(format!("/auth/login/{}", username))
+            .body(Json(&pkc))
+            .unwrap();
+        FetchService::fetch_binary(request, callback).unwrap()
+    }
+
 }
 
 impl Component for App {
@@ -160,9 +308,13 @@ impl Component for App {
             AppMsg::UserNameInput(mut username) => {
                 std::mem::swap(&mut self.username, &mut username)
             }
+            AppMsg::Toast(msg) => {
+                ConsoleService::log(format!("toast -> {:?}", msg).as_str());
+            }
+            // Rego
             AppMsg::Register => {
+                ConsoleService::log(format!("register -> {:?}", self.username).as_str());
                 let username = self.username.clone();
-                ConsoleService::log(format!("register -> {:?}", username).as_str());
                 self.ft = Some(self.register_begin(username));
             }
             AppMsg::BeginRegisterChallenge(ccr, username) => {
@@ -194,11 +346,39 @@ impl Component for App {
             AppMsg::CompleteRegisterChallenge(jsval, username) => {
                 self.ft = Some(self.register_complete(jsval, username));
             }
-            AppMsg::Toast(msg) => {
-                ConsoleService::log(format!("toast -> {:?}", msg).as_str());
-            }
+            // Loggo
             AppMsg::Login => {
                 ConsoleService::log(format!("login -> {:?}", self.username).as_str());
+                let username = self.username.clone();
+                self.ft = Some(self.login_begin(username));
+            }
+            AppMsg::BeginLoginChallenge(cro, username) => {
+                if let Some(win) = web_sys::window() {
+                    ConsoleService::log(format!("cro -> {:?}", cro).as_str());
+                    let promise = win.navigator()
+                        .credentials()
+                        .get_with_options(&cro)
+                        .expect("Unable to create promise");
+                    let fut = JsFuture::from(promise);
+                    let linkc = self.link.clone();
+
+                    spawn_local(async move {
+                        match fut.await {
+                            Ok(data) => {
+                                linkc.send_message(AppMsg::CompleteLoginChallenge(data, username));
+                            }
+                            Err(e) => {
+                                ConsoleService::log(format!("error -> {:?}", e).as_str());
+                                linkc.send_message(AppMsg::DoNothing);
+                            }
+                        }
+                    });
+                } else {
+                    ConsoleService::log(format!("login failed for -> {:?}", self.username).as_str());
+                }
+            }
+            AppMsg::CompleteLoginChallenge(jsv, username) => {
+                self.ft = Some(self.login_complete(jsv, username));
             }
         };
         true
