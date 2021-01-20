@@ -36,7 +36,8 @@ function toast_o_matic(message) {
   <div class="toast-body">
     ${message}
   </div>
-</div>`
+</div>
+`
 
     $('#error_toast').toast('show')
 }

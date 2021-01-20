@@ -6,16 +6,14 @@ use yew::prelude::*;
 use yew::format::{Json, Nothing};
 use yew::services::ConsoleService;
 use yew::services::fetch::{FetchService, FetchTask, Request, Response};
-use web_sys::window;
-use webauthn_rs::proto::{CreationChallengeResponse, RegisterPublicKeyCredential, AuthenticatorAttestationResponseRaw, RequestChallengeResponse, PublicKeyCredential, AuthenticatorAssertionResponseRaw};
-use webauthn_rs::base64_data::Base64UrlSafeData;
-use js_sys::{Uint8Array, Object, ArrayBuffer, Array};
+use webauthn_rs::proto::{CreationChallengeResponse, RegisterPublicKeyCredential, RequestChallengeResponse, PublicKeyCredential};
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_futures::spawn_local;
 
 pub struct App {
     link: ComponentLink<Self>,
     username: String,
+    toastmsg: Option<String>,
     // An active fetch task/cb cycle.
     ft: Option<FetchTask>,
 }
@@ -69,7 +67,7 @@ impl App {
             move |response: Response<Nothing>| {
                 let (parts, _body) = response.into_parts();
                 ConsoleService::log(format!("parts -> {:?}", parts).as_str());
-                AppMsg::Toast("It worked".to_string())
+                AppMsg::Toast("Registration Success!".to_string())
             });
 
         let request = Request::post(format!("/auth/register/{}", username))
@@ -110,7 +108,7 @@ impl App {
             move |response: Response<Nothing>| {
                 let (parts, _body) = response.into_parts();
                 ConsoleService::log(format!("parts -> {:?}", parts).as_str());
-                AppMsg::Toast("It authed!".to_string())
+                AppMsg::Toast("Authentication Success! 🎉".to_string())
             });
         let request = Request::post(format!("/auth/login/{}", username))
             .body(Json(&pkc))
@@ -126,7 +124,9 @@ impl Component for App {
 
     fn create(_: Self::Properties, link: ComponentLink<Self>) -> Self {
         ConsoleService::log(format!("create").as_str());
-        App { link, username: "".to_string(), ft: None }
+        App { link, username: "".to_string(), ft: None, toastmsg: 
+            None
+        }
     }
 
     fn change(&mut self, _: Self::Properties) -> ShouldRender {
@@ -141,6 +141,7 @@ impl Component for App {
             }
             AppMsg::Toast(msg) => {
                 ConsoleService::log(format!("toast -> {:?}", msg).as_str());
+                self.toastmsg = Some(msg)
             }
             // Rego
             AppMsg::Register => {
@@ -224,6 +225,28 @@ impl Component for App {
             <div>
                 <div aria-live="polite" aria-atomic="true">
                   <div id="toast_arena" style="position: absolute; top: 20px; right: 20px;">
+                  {
+                        if let Some(message) = &self.toastmsg {
+                            html! {
+                                <>
+                                <div id="error_toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="false"  >
+                                  <div class="toast-header">
+                                    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                                    </button>
+                                  </div>
+                                  <div class="toast-body">
+                                    { message }
+                                  </div>
+                                </div>
+                                <script>{" $('#error_toast').toast('show') "}</script>
+                                </>
+                            }
+                        } else {
+                            html!{
+                                <div></div>
+                            }
+                        }
+                  }
                   </div>
                 </div>
 
