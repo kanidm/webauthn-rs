@@ -1,3 +1,5 @@
 /target
 **/*.rs.bk
 Cargo.lock
+static/bundle.js
+examples/tide/tide_yew/pkg

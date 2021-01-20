@@ -27,3 +27,15 @@ TODO:
 * Make it prettier and sparkly.
 * Add cookie handling example.
 
+Building Yew:
+-------------
+
+```
+cargo install wasm-pack
+npm install --global rollup
+cd tide_yew
+./build_wasm.sh
+```
+
+
+

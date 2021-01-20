@@ -1,14 +1,16 @@
 //! JSON Protocol Structs and representations for communication with authenticators
 //! and clients.
 
+use crate::base64_data::Base64UrlSafeData;
+use crate::error::*;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-use crate::base64_data::Base64UrlSafeData;
-use crate::crypto;
-use crate::error::*;
-
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "wasm")]
+use js_sys::{Array, ArrayBuffer, Object, Uint8Array};
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
@@ -36,6 +38,172 @@ impl From<Base64UrlSafeData> for Challenge {
     }
 }
 
+/// An ECDSACurve identifier. You probabably will never need to alter
+/// or use this value, as it is set inside the Credential for you.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ECDSACurve {
+    // +---------+-------+----------+------------------------------------+
+    // | Name    | Value | Key Type | Description                        |
+    // +---------+-------+----------+------------------------------------+
+    // | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
+    // | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
+    // | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
+    // | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
+    // | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
+    // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
+    // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
+    // +---------+-------+----------+------------------------------------+
+    /// Identifies this curve as SECP256R1 (X9_62_PRIME256V1 in OpenSSL)
+    SECP256R1 = 1,
+    /// Identifies this curve as SECP384R1
+    SECP384R1 = 2,
+    /// Identifies this curve as SECP521R1
+    SECP521R1 = 3,
+    // /// Identifies this OKP as ED25519
+    // ED25519 = 6,
+}
+
+impl TryFrom<i128> for ECDSACurve {
+    type Error = WebauthnError;
+    fn try_from(u: i128) -> Result<Self, Self::Error> {
+        match u {
+            1 => Ok(ECDSACurve::SECP256R1),
+            2 => Ok(ECDSACurve::SECP384R1),
+            3 => Ok(ECDSACurve::SECP521R1),
+            _ => Err(WebauthnError::COSEKeyECDSAInvalidCurve),
+        }
+    }
+}
+
+/// A COSE Key Content type, indicating the type of key and hash type
+/// that should be used with this key. You shouldn't need to alter or
+/// use this value.
+#[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum COSEContentType {
+    /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
+    ECDSA_SHA256 = -7, // recommends curve SECP256R1
+    /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
+    ECDSA_SHA384 = -35, // recommends curve SECP384R1
+    /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
+    ECDSA_SHA512 = -36, // recommends curve SECP521R1
+    /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
+    RS256 = -257,
+    /// Identifies this key as RS384 aka RSASSA-PKCS1-v1_5 w/ SHA-384
+    RS384 = -258,
+    /// Identifies this key as RS512 aka RSASSA-PKCS1-v1_5 w/ SHA-512
+    RS512 = -259,
+    /// Identifies this key as PS256 aka RSASSA-PSS w/ SHA-256
+    PS256 = -37,
+    /// Identifies this key as PS384 aka RSASSA-PSS w/ SHA-384
+    PS384 = -38,
+    /// Identifies this key as PS512 aka RSASSA-PSS w/ SHA-512
+    PS512 = -39,
+    /// Identifies this key as EdDSA (likely curve ed25519)
+    EDDSA = -8,
+    /// Identifies this as an INSECURE RS1 aka RSASSA-PKCS1-v1_5 using SHA-1. This is not
+    /// used by validators, but can exist in some windows hello tpm's
+    INSECURE_RS1 = -65535,
+}
+
+impl TryFrom<i128> for COSEContentType {
+    type Error = WebauthnError;
+    fn try_from(i: i128) -> Result<Self, Self::Error> {
+        match i {
+            -7 => Ok(COSEContentType::ECDSA_SHA256),
+            -35 => Ok(COSEContentType::ECDSA_SHA384),
+            -36 => Ok(COSEContentType::ECDSA_SHA512),
+            -257 => Ok(COSEContentType::RS256),
+            -258 => Ok(COSEContentType::RS384),
+            -259 => Ok(COSEContentType::RS512),
+            -37 => Ok(COSEContentType::PS256),
+            -38 => Ok(COSEContentType::PS384),
+            -39 => Ok(COSEContentType::PS512),
+            -8 => Ok(COSEContentType::EDDSA),
+            -65535 => Ok(COSEContentType::INSECURE_RS1),
+            _ => Err(WebauthnError::COSEKeyECDSAContentType),
+        }
+    }
+}
+
+impl From<&COSEContentType> for i64 {
+    fn from(c: &COSEContentType) -> Self {
+        match c {
+            COSEContentType::ECDSA_SHA256 => -7,
+            COSEContentType::ECDSA_SHA384 => -35,
+            COSEContentType::ECDSA_SHA512 => -6,
+            COSEContentType::RS256 => -257,
+            COSEContentType::RS384 => -258,
+            COSEContentType::RS512 => -259,
+            COSEContentType::PS256 => -37,
+            COSEContentType::PS384 => -38,
+            COSEContentType::PS512 => -39,
+            COSEContentType::EDDSA => -8,
+            COSEContentType::INSECURE_RS1 => -65535,
+        }
+    }
+}
+
+/// A COSE Eliptic Curve Public Key. This is generally the provided credential
+/// that an authenticator registers, and is used to authenticate the user.
+/// You will likely never need to interact with this value, as it is part of the Credential
+/// API.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct COSEEC2Key {
+    /// The curve that this key references.
+    pub curve: ECDSACurve,
+    /// The key's public X coordinate.
+    pub x: [u8; 32],
+    /// The key's public Y coordinate.
+    pub y: [u8; 32],
+}
+
+/// A COSE RSA PublicKey. This is a provided credential from a registered
+/// authenticator.
+/// You will likely never need to interact with this value, as it is part of the Credential
+/// API.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct COSERSAKey {
+    /// An RSA modulus
+    pub n: Vec<u8>,
+    /// An RSA exponent
+    pub e: [u8; 3],
+}
+
+/// The type of Key contained within a COSE value. You should never need
+/// to alter or change this type.
+#[allow(non_camel_case_types)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum COSEKeyType {
+    //    +-----------+-------+-----------------------------------------------+
+    //    | Name      | Value | Description                                   |
+    //    +-----------+-------+-----------------------------------------------+
+    //    | OKP       | 1     | Octet Key Pair                                |
+    //    | EC2       | 2     | Elliptic Curve Keys w/ x- and y-coordinate    |
+    //    |           |       | pair                                          |
+    //    | Symmetric | 4     | Symmetric Keys                                |
+    //    | Reserved  | 0     | This value is reserved                        |
+    //    +-----------+-------+-----------------------------------------------+
+    /// Identifies this as an Eliptic Curve octet key pair
+    EC_OKP,
+    /// Identifies this as an Eliptic Curve EC2 key
+    EC_EC2(COSEEC2Key),
+    // EC_Symmetric,
+    // EC_Reserved, // should always be invalid.
+    /// Identifies this as an RSA key
+    RSA(COSERSAKey),
+}
+
+/// A COSE Key as provided by the Authenticator. You should never need
+/// to alter or change these values.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct COSEKey {
+    /// The type of key that this contains
+    pub type_: COSEContentType,
+    /// The public key
+    pub key: COSEKeyType,
+}
+
 /// A credential ID type. At the moment this is a vector of bytes, but
 /// it could also be a future change for this to be base64 string instead.
 ///
@@ -49,7 +217,7 @@ pub struct Credential {
     /// The ID of this credential.
     pub cred_id: CredentialID,
     /// The public key of this credential
-    pub cred: crypto::COSEKey,
+    pub cred: COSEKey,
     /// The counter for this credential
     pub counter: u32,
     /// During registration, if this credential was verified
@@ -68,7 +236,7 @@ pub struct Credential {
 impl Credential {
     pub(crate) fn new(
         acd: &AttestedCredentialData,
-        ck: crypto::COSEKey,
+        ck: COSEKey,
         counter: u32,
         verified: bool,
     ) -> Self {
@@ -275,6 +443,24 @@ pub struct CreationChallengeResponse {
     pub public_key: PublicKeyCredentialCreationOptions,
 }
 
+#[cfg(feature = "wasm")]
+impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
+    fn into(self) -> web_sys::CredentialCreationOptions {
+        let chal = Uint8Array::from(self.public_key.challenge.0.as_slice());
+        let userid = Uint8Array::from(self.public_key.user.id.0.as_slice());
+
+        let jsv = JsValue::from_serde(&self).unwrap();
+
+        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
+        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal);
+
+        let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
+        js_sys::Reflect::set(&user, &JsValue::from("id"), &userid);
+
+        web_sys::CredentialCreationOptions::from(jsv)
+    }
+}
+
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialRequestOptions {
@@ -295,6 +481,52 @@ pub struct PublicKeyCredentialRequestOptions {
 #[serde(rename_all = "camelCase")]
 pub struct RequestChallengeResponse {
     pub public_key: PublicKeyCredentialRequestOptions,
+}
+
+#[cfg(feature = "wasm")]
+impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
+    fn into(self) -> web_sys::CredentialRequestOptions {
+        let chal = Uint8Array::from(self.public_key.challenge.0.as_slice());
+        let allow_creds: Array = self
+            .public_key
+            .allow_credentials
+            .iter()
+            .map(|ac| {
+                let obj = Object::new();
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from("type"),
+                    &JsValue::from_str(ac.type_.as_str()),
+                );
+
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from("id"),
+                    &Uint8Array::from(ac.id.0.as_slice()),
+                );
+
+                if let Some(transports) = &ac.transports {
+                    let tarray: Array = transports
+                        .iter()
+                        .map(|s| JsValue::from_str(s.as_str()))
+                        .collect();
+
+                    js_sys::Reflect::set(&obj, &JsValue::from("transports"), &tarray);
+                }
+
+                obj
+            })
+            .collect();
+
+        let jsv = JsValue::from_serde(&self).unwrap();
+
+        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
+        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal);
+
+        js_sys::Reflect::set(&pkcco, &JsValue::from("allowCredentials"), &allow_creds);
+
+        web_sys::CredentialRequestOptions::from(jsv)
+    }
 }
 
 impl RequestChallengeResponse {
@@ -538,6 +770,45 @@ pub struct RegisterPublicKeyCredential {
     pub type_: String,
 }
 
+#[cfg(feature = "wasm")]
+impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
+    fn from(data: web_sys::PublicKeyCredential) -> RegisterPublicKeyCredential {
+        // First, we have to b64 some data here.
+        // data.raw_id
+        let data_raw_id =
+            Uint8Array::new(&js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap())
+                .to_vec();
+
+        let data_response = js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+        let data_response_attestation_object = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("attestationObject")).unwrap(),
+        )
+        .to_vec();
+
+        let data_response_client_data_json = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap(),
+        )
+        .to_vec();
+
+        // Now we can convert to the base64 values for json.
+        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
+
+        let data_response_attestation_object_b64 =
+            Base64UrlSafeData(data_response_attestation_object);
+
+        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+        RegisterPublicKeyCredential {
+            id: format!("{}", data_raw_id_b64),
+            raw_id: data_raw_id_b64,
+            type_: "public-key".to_string(),
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: data_response_attestation_object_b64,
+                client_data_json: data_response_client_data_json_b64,
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct AuthenticatorAssertionResponse {
     pub(crate) authenticator_data: AuthenticatorData,
@@ -591,6 +862,62 @@ pub struct PublicKeyCredential {
     pub response: AuthenticatorAssertionResponseRaw,
     #[serde(rename = "type")]
     pub type_: String,
+}
+
+#[cfg(feature = "wasm")]
+impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
+    fn from(data: web_sys::PublicKeyCredential) -> PublicKeyCredential {
+        let data_raw_id =
+            Uint8Array::new(&js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap())
+                .to_vec();
+
+        let data_response = js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+
+        let data_response_authenticator_data = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("authenticatorData")).unwrap(),
+        )
+        .to_vec();
+
+        let data_response_signature = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("signature")).unwrap(),
+        )
+        .to_vec();
+
+        let data_response_user_handle =
+            &js_sys::Reflect::get(&data_response, &JsValue::from("userHandle")).unwrap();
+        let data_response_user_handle = if data_response_user_handle.is_undefined() {
+            None
+        } else {
+            Some(Uint8Array::new(data_response_user_handle).to_vec())
+        };
+
+        let data_response_client_data_json = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap(),
+        )
+        .to_vec();
+
+        // Base64 it
+
+        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
+        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+        let data_response_authenticator_data_b64 =
+            Base64UrlSafeData(data_response_authenticator_data);
+        let data_response_signature_b64 = Base64UrlSafeData(data_response_signature);
+
+        let data_response_user_handle_b64 = data_response_user_handle.map(|d| Base64UrlSafeData(d));
+
+        PublicKeyCredential {
+            id: format!("{}", data_raw_id_b64),
+            raw_id: data_raw_id_b64,
+            type_: "public-key".to_string(),
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data: data_response_authenticator_data_b64,
+                client_data_json: data_response_client_data_json_b64,
+                signature: data_response_signature_b64,
+                user_handle: data_response_user_handle_b64,
+            },
+        }
+    }
 }
 
 // ===== tpm shit show begins =====

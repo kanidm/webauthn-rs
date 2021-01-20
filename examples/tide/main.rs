@@ -164,6 +164,7 @@ async fn main() -> tide::Result<()> {
         app.at("/")
             .get(move |_| async_std::future::ready(Ok(tide::Redirect::new(prefix_copy.clone()))));
     }
+    app.at("/pkg").serve_dir("pkg")?;
     app.at(&prefix).get(index_view);
     app.at(&format!("{}/challenge/register/:username", prefix))
         .post(challenge_register);

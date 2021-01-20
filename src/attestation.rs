@@ -6,11 +6,11 @@
 use std::convert::TryFrom;
 
 use crate::crypto;
-use crate::crypto::{compute_sha256, COSEContentType, COSEKeyType};
+use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::proto::{
-    AttestedCredentialData, Credential, Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic,
-    TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
+    AttestedCredentialData, COSEContentType, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
+    TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
 };
 use log::debug;
 // use serde_cbor::{ObjectKey, Value};
@@ -107,7 +107,7 @@ pub(crate) fn verify_packed_attestation(
         att_stmt_map.get(ecdaa_key_id_key),
     ) {
         (Some(x5c), _) => {
-            let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+            let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
 
             // The elements of this array contain attestnCert and its certificate chain, each
@@ -189,7 +189,7 @@ pub(crate) fn verify_packed_attestation(
         }
         (None, None) => {
             // 4. If neither x5c nor ecdaaKeyId is present, self attestation is in use.
-            let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+            let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
 
             // 4.a. Validate that alg matches the algorithm of the credentialPublicKey in authenticatorData.
             if alg != credential_public_key.type_ {
@@ -287,7 +287,7 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to Raw ANSI X9.62 public key format (see ALG_KEY_ECC_X962_RAW in Section 3.6.2 Public Key Representation Formats of [FIDO-Registry]).
 
-    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
 
     let public_key_u2f = credential_public_key.get_alg_key_ecc_x962_raw()?;
 
@@ -326,7 +326,7 @@ pub(crate) fn verify_none_attestation(
     user_verified: bool,
 ) -> Result<AttestationType, WebauthnError> {
     // No attestation is performed, simply provide a credential.
-    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
     let credential = Credential::new(acd, credential_public_key, counter, user_verified);
     Ok(AttestationType::None(credential))
 }
@@ -439,7 +439,7 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that the public key specified by the parameters and unique fields of pubArea is
     // identical to the credentialPublicKey in the attestedCredentialData in authenticatorData.
-    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
 
     // Check the algo is the same
     match (
@@ -592,7 +592,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let x5c_array_ref =
         cbor_try_array!(x5c_value).map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
 
-    let credential_public_key = crypto::COSEKey::try_from(&acd.credential_pk)?;
+    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
     let alg = credential_public_key.type_;
 
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
@@ -630,7 +630,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // Currently not possible to access extensions with openssl rust.
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
-    let subject_public_key = crypto::COSEKey::try_from(attestn_cert)?;
+    let subject_public_key = COSEKey::try_from(attestn_cert)?;
 
     if credential_public_key != subject_public_key {
         return Err(WebauthnError::AttestationCredentialSubjectKeyMistmatch);
