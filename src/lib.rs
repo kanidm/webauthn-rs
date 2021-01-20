@@ -13,6 +13,8 @@
 //! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
 //! interactions.
 
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
 #![warn(missing_docs)]
 
 extern crate base64;

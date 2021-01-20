@@ -12,7 +12,6 @@ use webauthn_rs::base64_data::Base64UrlSafeData;
 use js_sys::{Uint8Array, Object, ArrayBuffer, Array};
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_futures::spawn_local;
-use wasm_bindgen::JsCast;
 
 pub struct App {
     link: ComponentLink<Self>,
@@ -43,32 +42,9 @@ impl App {
                 ConsoleService::log(format!("body -> {:?}", body).as_str());
                 match body {
                     Json(Ok(ccr)) => {
-                        let chal = Uint8Array::from(ccr.public_key.challenge.0.as_slice());
-                        let userid = Uint8Array::from(ccr.public_key.user.id.0.as_slice());
-
-                        let jsv = JsValue::from_serde(&ccr).unwrap();
-                        ConsoleService::log(format!("jsv -> {:?}", jsv).as_str());
-
-                        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
-                        js_sys::Reflect::set(&pkcco,
-                            &JsValue::from("challenge"),
-                            &chal
-                        );
-
-                        let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
-                        js_sys::Reflect::set(
-                            &user,
-                            &JsValue::from("id"),
-                            &userid
-                        );
-
-                        ConsoleService::log(format!("jsv -> {:?}", jsv).as_str());
-
-                        let c_options = web_sys::CredentialCreationOptions::from(jsv);
-
+                        let c_options = ccr.into();
                         AppMsg::BeginRegisterChallenge(c_options, username_copy.clone())
                     }
-
                     Json(Err(_)) => {
                         AppMsg::DoNothing
                     }
@@ -81,48 +57,8 @@ impl App {
         FetchService::fetch_binary(request, callback).unwrap()
     }
 
-    fn register_complete(&mut self, data: JsValue, username: String) -> FetchTask {
-        // First, we have to b64 some data here.
-        // data.raw_id
-
-        let data_raw_id=
-            Uint8Array::new(
-                &js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap()
-            ).to_vec();
-
-        let data_response =
-            js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
-        let data_response_attestation_object =
-        Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("attestationObject")).unwrap()
-        ).to_vec();
-
-        let data_response_client_data_json =
-        Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap()
-        ).to_vec();
-
-        // ConsoleService::log(format!("data -> {:?}", data).as_str());
-        ConsoleService::log(format!("data_raw_id -> {:?}", data_raw_id).as_str());
-        ConsoleService::log(format!("data_response -> {:?}", data_response).as_str());
-        ConsoleService::log(format!("data_response_attestation_object -> {:?}", data_response_attestation_object).as_str());
-        ConsoleService::log(format!("data_response_client_data_json -> {:?}", data_response_client_data_json).as_str());
-
-        // Now we can convert to the base64 values for json.
-        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
-
-        let data_response_attestation_object_b64 = Base64UrlSafeData(data_response_attestation_object);
-
-        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
-        let rpkc = RegisterPublicKeyCredential {
-            id: format!("{}", data_raw_id_b64),
-            raw_id: data_raw_id_b64,
-            type_: "public-key".to_string(),
-            response: AuthenticatorAttestationResponseRaw {
-                attestation_object: data_response_attestation_object_b64,
-                client_data_json: data_response_client_data_json_b64,
-            }
-        };
+    fn register_complete(&mut self, data: web_sys::PublicKeyCredential, username: String) -> FetchTask {
+        let rpkc = RegisterPublicKeyCredential::from(data);
 
         ConsoleService::log(format!("rpkc -> {:?}", rpkc).as_str());
 
@@ -151,56 +87,7 @@ impl App {
                 ConsoleService::log(format!("body -> {:?}", body).as_str());
                 match body {
                     Json(Ok(rcr)) => {
-
-                        let chal = Uint8Array::from(rcr.public_key.challenge.0.as_slice());
-                        let allow_creds: Array = rcr.public_key.allow_credentials.iter()
-                            .map(|ac| {
-                                let obj = Object::new();
-                                js_sys::Reflect::set(
-                                    &obj,
-                                    &JsValue::from("type"),
-                                    &JsValue::from_str(ac.type_.as_str())
-                                );
-
-                                js_sys::Reflect::set(
-                                    &obj,
-                                    &JsValue::from("id"),
-                                    &Uint8Array::from(ac.id.0.as_slice())
-                                );
-
-                                if let Some(transports) = &ac.transports {
-                                    let tarray: Array = transports.iter()
-                                        .map(|s| {
-                                            JsValue::from_str(s.as_str())
-                                        })
-                                        .collect();
-
-                                    js_sys::Reflect::set(
-                                        &obj,
-                                        &JsValue::from("transports"),
-                                        &tarray
-                                    );
-                                }
-
-                                obj
-                            })
-                            .collect();
-
-                        let jsv = JsValue::from_serde(&rcr).unwrap();
-                        ConsoleService::log(format!("jsv -> {:?}", jsv).as_str());
-
-                        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
-                        js_sys::Reflect::set(&pkcco,
-                            &JsValue::from("challenge"),
-                            &chal
-                        );
-
-                        js_sys::Reflect::set(&pkcco,
-                            &JsValue::from("allowCredentials"),
-                            &allow_creds
-                        );
-
-                        let c_options = web_sys::CredentialRequestOptions::from(jsv);
+                        let c_options = rcr.into();
                         AppMsg::BeginLoginChallenge(c_options, username_copy.clone())
                     }
                     Json(Err(_)) => {
@@ -215,65 +102,9 @@ impl App {
         FetchService::fetch_binary(request, callback).unwrap()
     }
 
-    fn login_complete(&mut self, data: JsValue, username: String) -> FetchTask {
+    fn login_complete(&mut self, data: web_sys::PublicKeyCredential, username: String) -> FetchTask {
 
-
-        let data_raw_id=
-            Uint8Array::new(
-                &js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap()
-            ).to_vec();
-
-        let data_response =
-            js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
-
-        let data_response_authenticator_data =
-        Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("authenticatorData")).unwrap()
-        ).to_vec();
-
-        let data_response_signature =
-        Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("signature")).unwrap()
-        ).to_vec();
-
-        let data_response_user_handle =
-            &js_sys::Reflect::get(&data_response, &JsValue::from("userHandle")).unwrap();
-        let data_response_user_handle =
-            if data_response_user_handle.is_undefined() {
-                None
-            } else {
-                Some(
-                Uint8Array::new(data_response_user_handle).to_vec()
-                )
-            };
-
-        let data_response_client_data_json =
-        Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap()
-        ).to_vec();
-
-        // Base64 it
-
-        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
-        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
-        let data_response_authenticator_data_b64 = Base64UrlSafeData(data_response_authenticator_data);
-        let data_response_signature_b64 = Base64UrlSafeData(data_response_signature);
-
-        let data_response_user_handle_b64 = data_response_user_handle.map(|d|
-            Base64UrlSafeData(d)
-        );
-
-        let pkc = PublicKeyCredential {
-            id: format!("{}", data_raw_id_b64),
-            raw_id: data_raw_id_b64,
-            type_: "public-key".to_string(),
-            response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: data_response_authenticator_data_b64,
-                client_data_json: data_response_client_data_json_b64,
-                signature: data_response_signature_b64,
-                user_handle: data_response_user_handle_b64
-            }
-        };
+        let pkc = PublicKeyCredential::from(data);
 
         let callback = self.link.callback(
             move |response: Response<Nothing>| {
@@ -344,7 +175,9 @@ impl Component for App {
                 }
             }
             AppMsg::CompleteRegisterChallenge(jsval, username) => {
-                self.ft = Some(self.register_complete(jsval, username));
+                self.ft = Some(self.register_complete(
+                   web_sys::PublicKeyCredential::from(jsval)
+                    , username));
             }
             // Loggo
             AppMsg::Login => {
@@ -378,7 +211,9 @@ impl Component for App {
                 }
             }
             AppMsg::CompleteLoginChallenge(jsv, username) => {
-                self.ft = Some(self.login_complete(jsv, username));
+                self.ft = Some(self.login_complete(
+                    web_sys::PublicKeyCredential::from(jsv)
+                    , username));
             }
         };
         true

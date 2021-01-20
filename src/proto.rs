@@ -1,14 +1,16 @@
 //! JSON Protocol Structs and representations for communication with authenticators
 //! and clients.
 
+use crate::base64_data::Base64UrlSafeData;
+use crate::error::*;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-use crate::base64_data::Base64UrlSafeData;
-// use crate::crypto;
-use crate::error::*;
-
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "wasm")]
+use js_sys::{Array, ArrayBuffer, Object, Uint8Array};
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
@@ -441,6 +443,24 @@ pub struct CreationChallengeResponse {
     pub public_key: PublicKeyCredentialCreationOptions,
 }
 
+#[cfg(feature = "wasm")]
+impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
+    fn into(self) -> web_sys::CredentialCreationOptions {
+        let chal = Uint8Array::from(self.public_key.challenge.0.as_slice());
+        let userid = Uint8Array::from(self.public_key.user.id.0.as_slice());
+
+        let jsv = JsValue::from_serde(&self).unwrap();
+
+        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
+        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal);
+
+        let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
+        js_sys::Reflect::set(&user, &JsValue::from("id"), &userid);
+
+        web_sys::CredentialCreationOptions::from(jsv)
+    }
+}
+
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialRequestOptions {
@@ -461,6 +481,52 @@ pub struct PublicKeyCredentialRequestOptions {
 #[serde(rename_all = "camelCase")]
 pub struct RequestChallengeResponse {
     pub public_key: PublicKeyCredentialRequestOptions,
+}
+
+#[cfg(feature = "wasm")]
+impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
+    fn into(self) -> web_sys::CredentialRequestOptions {
+        let chal = Uint8Array::from(self.public_key.challenge.0.as_slice());
+        let allow_creds: Array = self
+            .public_key
+            .allow_credentials
+            .iter()
+            .map(|ac| {
+                let obj = Object::new();
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from("type"),
+                    &JsValue::from_str(ac.type_.as_str()),
+                );
+
+                js_sys::Reflect::set(
+                    &obj,
+                    &JsValue::from("id"),
+                    &Uint8Array::from(ac.id.0.as_slice()),
+                );
+
+                if let Some(transports) = &ac.transports {
+                    let tarray: Array = transports
+                        .iter()
+                        .map(|s| JsValue::from_str(s.as_str()))
+                        .collect();
+
+                    js_sys::Reflect::set(&obj, &JsValue::from("transports"), &tarray);
+                }
+
+                obj
+            })
+            .collect();
+
+        let jsv = JsValue::from_serde(&self).unwrap();
+
+        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
+        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal);
+
+        js_sys::Reflect::set(&pkcco, &JsValue::from("allowCredentials"), &allow_creds);
+
+        web_sys::CredentialRequestOptions::from(jsv)
+    }
 }
 
 impl RequestChallengeResponse {
@@ -704,6 +770,45 @@ pub struct RegisterPublicKeyCredential {
     pub type_: String,
 }
 
+#[cfg(feature = "wasm")]
+impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
+    fn from(data: web_sys::PublicKeyCredential) -> RegisterPublicKeyCredential {
+        // First, we have to b64 some data here.
+        // data.raw_id
+        let data_raw_id =
+            Uint8Array::new(&js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap())
+                .to_vec();
+
+        let data_response = js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+        let data_response_attestation_object = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("attestationObject")).unwrap(),
+        )
+        .to_vec();
+
+        let data_response_client_data_json = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap(),
+        )
+        .to_vec();
+
+        // Now we can convert to the base64 values for json.
+        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
+
+        let data_response_attestation_object_b64 =
+            Base64UrlSafeData(data_response_attestation_object);
+
+        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+        RegisterPublicKeyCredential {
+            id: format!("{}", data_raw_id_b64),
+            raw_id: data_raw_id_b64,
+            type_: "public-key".to_string(),
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: data_response_attestation_object_b64,
+                client_data_json: data_response_client_data_json_b64,
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct AuthenticatorAssertionResponse {
     pub(crate) authenticator_data: AuthenticatorData,
@@ -757,6 +862,62 @@ pub struct PublicKeyCredential {
     pub response: AuthenticatorAssertionResponseRaw,
     #[serde(rename = "type")]
     pub type_: String,
+}
+
+#[cfg(feature = "wasm")]
+impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
+    fn from(data: web_sys::PublicKeyCredential) -> PublicKeyCredential {
+        let data_raw_id =
+            Uint8Array::new(&js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap())
+                .to_vec();
+
+        let data_response = js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+
+        let data_response_authenticator_data = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("authenticatorData")).unwrap(),
+        )
+        .to_vec();
+
+        let data_response_signature = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("signature")).unwrap(),
+        )
+        .to_vec();
+
+        let data_response_user_handle =
+            &js_sys::Reflect::get(&data_response, &JsValue::from("userHandle")).unwrap();
+        let data_response_user_handle = if data_response_user_handle.is_undefined() {
+            None
+        } else {
+            Some(Uint8Array::new(data_response_user_handle).to_vec())
+        };
+
+        let data_response_client_data_json = Uint8Array::new(
+            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap(),
+        )
+        .to_vec();
+
+        // Base64 it
+
+        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
+        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+        let data_response_authenticator_data_b64 =
+            Base64UrlSafeData(data_response_authenticator_data);
+        let data_response_signature_b64 = Base64UrlSafeData(data_response_signature);
+
+        let data_response_user_handle_b64 = data_response_user_handle.map(|d| Base64UrlSafeData(d));
+
+        PublicKeyCredential {
+            id: format!("{}", data_raw_id_b64),
+            raw_id: data_raw_id_b64,
+            type_: "public-key".to_string(),
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data: data_response_authenticator_data_b64,
+                client_data_json: data_response_client_data_json_b64,
+                signature: data_response_signature_b64,
+                user_handle: data_response_user_handle_b64,
+            },
+        }
+    }
 }
 
 // ===== tpm shit show begins =====
