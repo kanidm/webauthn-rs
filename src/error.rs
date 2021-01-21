@@ -34,9 +34,6 @@ pub enum WebauthnError {
     #[error("The user verified bit is not set, and required by policy")]
     UserNotVerified,
 
-    #[error("The user verified even through discouragement")]
-    UserVerifiedWhenDiscouraged,
-
     #[error("The extensions are unknown to this server")]
     InvalidExtensions,
 

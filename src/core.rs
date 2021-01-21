@@ -340,12 +340,7 @@ impl<T> Webauthn<T> {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            UserVerificationPolicy::Preferred_DO_NOT_USE => {}
-            UserVerificationPolicy::Discouraged => {
-                if data.attestation_object.auth_data.user_verified {
-                    return Err(WebauthnError::UserVerifiedWhenDiscouraged);
-                }
-            }
+            UserVerificationPolicy::Preferred_DO_NOT_USE | UserVerificationPolicy::Discouraged => {}
         };
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
@@ -543,12 +538,7 @@ impl<T> Webauthn<T> {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            UserVerificationPolicy::Preferred_DO_NOT_USE => {}
-            UserVerificationPolicy::Discouraged => {
-                if data.authenticator_data.user_verified {
-                    return Err(WebauthnError::UserVerifiedWhenDiscouraged);
-                }
-            }
+            UserVerificationPolicy::Preferred_DO_NOT_USE | UserVerificationPolicy::Discouraged => {}
         };
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
