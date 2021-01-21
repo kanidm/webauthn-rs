@@ -41,7 +41,7 @@ impl AsRef<[u8]> for Base64UrlSafeData {
 
 struct Base64UrlSafeDataVisitor;
 
-static ALLOWED_DECODING_FORMATS: &'static [base64::Config] = &[
+static ALLOWED_DECODING_FORMATS: &[base64::Config] = &[
     base64::URL_SAFE_NO_PAD,
     base64::URL_SAFE,
     base64::STANDARD,
@@ -60,10 +60,9 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
     {
         // Forgive alt base64 decoding formats
         for config in ALLOWED_DECODING_FORMATS {
-            match base64::decode_config(v, *config) {
-                Ok(data) => return Ok(Base64UrlSafeData(data)),
-                Err(_) => {}
-            };
+            if let Ok(data) = base64::decode_config(v, *config) {
+                return Ok(Base64UrlSafeData(data));
+            }
         }
 
         Err(serde::de::Error::invalid_value(Unexpected::Str(v), &self))

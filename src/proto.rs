@@ -622,7 +622,7 @@ impl TryFrom<&Vec<u8>> for CollectedClientData {
     type Error = WebauthnError;
     fn try_from(data: &Vec<u8>) -> Result<CollectedClientData, WebauthnError> {
         let ccd: CollectedClientData =
-            serde_json::from_slice(&data).map_err(|e| WebauthnError::ParseJSONFailure(e))?;
+            serde_json::from_slice(&data).map_err(WebauthnError::ParseJSONFailure)?;
 
         Ok(ccd)
     }
@@ -719,12 +719,11 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
         // excess: call!(nom::rest) >>
         (AuthenticatorData {
             rp_id_hash: rp_id_hash.to_vec(),
-            counter: counter,
+            counter,
             user_verified: data_flags.2,
             user_present: data_flags.3,
-            acd: acd,
-            extensions: extensions,
-            // excess: excess.to_vec(),
+            acd,
+            extensions,
         })
     )
 );
@@ -767,8 +766,8 @@ impl TryFrom<&[u8]> for AttestationObject {
 
     fn try_from(data: &[u8]) -> Result<AttestationObject, WebauthnError> {
         let aoi: AttestationObjectInner =
-            serde_cbor::from_slice(&data).map_err(|e| WebauthnError::ParseCBORFailure(e))?;
-        let auth_data_bytes: Vec<u8> = aoi.auth_data.iter().map(|b| *b).collect();
+            serde_cbor::from_slice(&data).map_err(WebauthnError::ParseCBORFailure)?;
+        let auth_data_bytes: Vec<u8> = aoi.auth_data.iter().copied().collect();
 
         let auth_data = AuthenticatorData::try_from(&auth_data_bytes)?;
 
@@ -777,7 +776,7 @@ impl TryFrom<&[u8]> for AttestationObject {
             fmt: aoi.fmt.clone(),
             auth_data,
             auth_data_bytes,
-            att_stmt: aoi.att_stmt.clone(),
+            att_stmt: aoi.att_stmt,
         })
     }
 }

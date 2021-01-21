@@ -85,7 +85,7 @@ pub(crate) fn verify_packed_attestation(
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
-    client_data_hash: &Vec<u8>,
+    client_data_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map =
@@ -129,7 +129,7 @@ pub(crate) fn verify_packed_attestation(
             let mut arr_x509 = arr_x509?;
 
             // Must have at least one x509 cert
-            if arr_x509.len() == 0 {
+            if arr_x509.is_empty() {
                 return Err(WebauthnError::AttestationStatementX5CInvalid);
             }
 
@@ -142,7 +142,7 @@ pub(crate) fn verify_packed_attestation(
             let verification_data: Vec<u8> = auth_data_bytes
                 .iter()
                 .chain(client_data_hash.iter())
-                .map(|b| *b)
+                .copied()
                 .collect();
             let is_valid_signature = att_stmt_map
                 .get(&serde_cbor::Value::Text("sig".to_string()))
@@ -200,7 +200,7 @@ pub(crate) fn verify_packed_attestation(
             let verification_data: Vec<u8> = auth_data_bytes
                 .iter()
                 .chain(client_data_hash.iter())
-                .map(|b| *b)
+                .copied()
                 .collect();
             let is_valid_signature = att_stmt_map
                 .get(&serde_cbor::Value::Text("sig".to_string()))
@@ -229,9 +229,8 @@ pub(crate) fn verify_fidou2f_attestation(
     counter: u32,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
-    // authDataBytes: &Vec<u8>,
-    client_data_hash: &Vec<u8>,
-    rp_id_hash: &Vec<u8>,
+    client_data_hash: &[u8],
+    rp_id_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     //
@@ -299,7 +298,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .chain(client_data_hash.iter())
         .chain(acd.credential_id.iter())
         .chain(public_key_u2f.iter())
-        .map(|b| *b)
+        .copied()
         .collect();
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
@@ -338,7 +337,7 @@ pub(crate) fn verify_tpm_attestation(
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
-    client_data_hash: &Vec<u8>,
+    client_data_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     log::debug!("begin verify_tpm_attest");
 
@@ -431,7 +430,7 @@ pub(crate) fn verify_tpm_attestation(
     let mut arr_x509 = arr_x509?;
 
     // Must have at least one x509 cert
-    if arr_x509.len() == 0 {
+    if arr_x509.is_empty() {
         return Err(WebauthnError::AttestationStatementX5CInvalid);
     }
 
@@ -468,7 +467,7 @@ pub(crate) fn verify_tpm_attestation(
     let verification_data: Vec<u8> = auth_data_bytes
         .iter()
         .chain(client_data_hash.iter())
-        .map(|b| *b)
+        .copied()
         .collect();
 
     // Validate that certInfo is valid:
@@ -577,7 +576,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
-    client_data_hash: &Vec<u8>,
+    client_data_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     let att_stmt_map =
@@ -619,7 +618,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let nonce_to_hash: Vec<u8> = auth_data_bytes
         .iter()
         .chain(client_data_hash.iter())
-        .map(|b| *b)
+        .copied()
         .collect();
 
     // 3. Perform SHA-256 hash of nonceToHash to produce nonce.

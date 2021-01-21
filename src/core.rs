@@ -284,7 +284,7 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if &data.client_data_json.origin != self.config.get_origin() {
+        if data.client_data_json.origin != self.config.get_origin() {
             log::debug!(
                 "{} != {}",
                 data.client_data_json.origin,
@@ -515,7 +515,7 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if &c.origin != self.config.get_origin() {
+        if c.origin != self.config.get_origin() {
             log::debug!("{} != {}", c.origin, self.config.get_origin());
             return Err(WebauthnError::InvalidRPOrigin);
         }
@@ -582,7 +582,7 @@ impl<T> Webauthn<T> {
             .authenticator_data_bytes
             .iter()
             .chain(client_data_json_hash.iter())
-            .map(|b| *b)
+            .copied()
             .collect();
 
         let verified = cred
@@ -754,7 +754,7 @@ impl<T> Webauthn<T> {
                 // greater than the signature counter value stored in conjunction with credential’s id attribute.
                 //       Update the stored signature counter value, associated with credential’s id attribute,
                 //       to be the value of authData.signCount.
-                Ok(Some((cred.cred_id.clone(), counter)))
+                Ok(Some((cred.cred_id, counter)))
             // If all the above steps are successful, continue with the authentication ceremony as
             // appropriate. Otherwise, fail the authentication ceremony.
             } else {

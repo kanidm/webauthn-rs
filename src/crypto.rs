@@ -53,21 +53,21 @@ fn verify_signature(
 ) -> Result<bool, WebauthnError> {
     let mut verifier = match stype {
         COSEContentType::ECDSA_SHA256 => sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-            .map_err(|e| WebauthnError::OpenSSLError(e)),
+            .map_err(WebauthnError::OpenSSLError),
         COSEContentType::RS256 => {
             let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
-                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                .map_err(WebauthnError::OpenSSLError)?;
             verifier
                 .set_rsa_padding(rsa::Padding::PKCS1)
-                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                .map_err(WebauthnError::OpenSSLError)?;
             Ok(verifier)
         }
         COSEContentType::INSECURE_RS1 => {
             let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), &pkey)
-                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                .map_err(WebauthnError::OpenSSLError)?;
             verifier
                 .set_rsa_padding(rsa::Padding::PKCS1)
-                .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                .map_err(WebauthnError::OpenSSLError)?;
             Ok(verifier)
         }
         _ => Err(WebauthnError::COSEKeyInvalidType),
@@ -75,10 +75,10 @@ fn verify_signature(
 
     verifier
         .update(verification_data)
-        .map_err(|e| WebauthnError::OpenSSLError(e))?;
+        .map_err(WebauthnError::OpenSSLError)?;
     verifier
         .verify(signature)
-        .map_err(|e| WebauthnError::OpenSSLError(e))
+        .map_err(WebauthnError::OpenSSLError)
 }
 
 /// An X509PublicKey. This is what is otherwise known as a public certificate
@@ -100,19 +100,16 @@ impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
 
     // Must be DER bytes. If you have PEM, base64decode first!
     fn try_from((d, t): (&[u8], COSEContentType)) -> Result<Self, Self::Error> {
-        let pubk = x509::X509::from_der(d).map_err(|e| WebauthnError::OpenSSLError(e))?;
+        let pubk = x509::X509::from_der(d).map_err(WebauthnError::OpenSSLError)?;
 
+        #[allow(clippy::single_match)]
         match &t {
             COSEContentType::ECDSA_SHA256 => {
-                let pk = pubk
-                    .public_key()
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let pk = pubk.public_key().map_err(WebauthnError::OpenSSLError)?;
 
-                let ec_key = pk.ec_key().map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ec_key = pk.ec_key().map_err(WebauthnError::OpenSSLError)?;
 
-                ec_key
-                    .check_key()
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                ec_key.check_key().map_err(WebauthnError::OpenSSLError)?;
 
                 let ec_grpref = ec_key.group();
 
@@ -134,20 +131,15 @@ impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
 impl X509PublicKey {
     pub(crate) fn verify_signature(
         &self,
-        signature: &Vec<u8>,
-        verification_data: &Vec<u8>,
+        signature: &[u8],
+        verification_data: &[u8],
     ) -> Result<bool, WebauthnError> {
         let pkey = self
             .pubk
             .public_key()
-            .map_err(|e| WebauthnError::OpenSSLError(e))?;
+            .map_err(WebauthnError::OpenSSLError)?;
 
-        verify_signature(
-            &pkey,
-            self.t,
-            signature.as_slice(),
-            verification_data.as_slice(),
-        )
+        verify_signature(&pkey, self.t, signature, verification_data)
     }
 
     pub(crate) fn assert_tpm_attest_req(&self) -> Result<(), WebauthnError> {
@@ -203,22 +195,18 @@ impl X509PublicKey {
 
         let subject_c = subject_name_ref
             .entries_by_nid(nid::Nid::from_raw(14))
-            .into_iter()
             .take(1)
             .next();
         let subject_o = subject_name_ref
             .entries_by_nid(nid::Nid::from_raw(17))
-            .into_iter()
             .take(1)
             .next();
         let subject_ou = subject_name_ref
             .entries_by_nid(nid::Nid::from_raw(18))
-            .into_iter()
             .take(1)
             .next();
         let subject_cn = subject_name_ref
             .entries_by_nid(nid::Nid::from_raw(13))
-            .into_iter()
             .take(1)
             .next();
 
@@ -293,7 +281,7 @@ impl COSEContentType {
                 // sha1
                 hash::hash(hash::MessageDigest::sha1(), input)
                     .map(|dbytes| Vec::from(dbytes.as_ref()))
-                    .map_err(|e| WebauthnError::OpenSSLError(e))
+                    .map_err(WebauthnError::OpenSSLError)
             }
             _ => Err(WebauthnError::COSEKeyInvalidType),
         }
@@ -503,7 +491,7 @@ impl COSEKey {
                 Ok(r.iter()
                     .chain(ecpk.x.iter())
                     .chain(ecpk.y.iter())
-                    .map(|b| *b)
+                    .copied()
                     .collect())
             }
             _ => {
@@ -518,34 +506,28 @@ impl COSEKey {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type
                 let curve = ec2k.curve.to_openssl_nid();
-                let ec_group = ec::EcGroup::from_curve_name(curve)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ec_group =
+                    ec::EcGroup::from_curve_name(curve).map_err(WebauthnError::OpenSSLError)?;
 
-                let xbn =
-                    bn::BigNum::from_slice(&ec2k.x).map_err(|e| WebauthnError::OpenSSLError(e))?;
-                let ybn =
-                    bn::BigNum::from_slice(&ec2k.y).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let xbn = bn::BigNum::from_slice(&ec2k.x).map_err(WebauthnError::OpenSSLError)?;
+                let ybn = bn::BigNum::from_slice(&ec2k.y).map_err(WebauthnError::OpenSSLError)?;
 
                 let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                    .map_err(WebauthnError::OpenSSLError)?;
 
-                ec_key
-                    .check_key()
-                    .map_err(|e| WebauthnError::OpenSSLError(e))
+                ec_key.check_key().map_err(WebauthnError::OpenSSLError)
             }
             COSEKeyType::RSA(rsak) => {
-                let nbn =
-                    bn::BigNum::from_slice(&rsak.n).map_err(|e| WebauthnError::OpenSSLError(e))?;
-                let ebn =
-                    bn::BigNum::from_slice(&rsak.e).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let nbn = bn::BigNum::from_slice(&rsak.n).map_err(WebauthnError::OpenSSLError)?;
+                let ebn = bn::BigNum::from_slice(&rsak.e).map_err(WebauthnError::OpenSSLError)?;
 
                 let _rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                    .map_err(WebauthnError::OpenSSLError)?;
                 /*
                 // Only applies to keys with private components!
                 rsa_key
                     .check_key()
-                    .map_err(|e| WebauthnError::OpenSSLError(e))
+                    .map_err(WebauthnError::OpenSSLError)
                 */
                 Ok(())
             }
@@ -558,38 +540,30 @@ impl COSEKey {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type
                 let curve = ec2k.curve.to_openssl_nid();
-                let ec_group = ec::EcGroup::from_curve_name(curve)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let ec_group =
+                    ec::EcGroup::from_curve_name(curve).map_err(WebauthnError::OpenSSLError)?;
 
-                let xbn =
-                    bn::BigNum::from_slice(&ec2k.x).map_err(|e| WebauthnError::OpenSSLError(e))?;
-                let ybn =
-                    bn::BigNum::from_slice(&ec2k.y).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let xbn = bn::BigNum::from_slice(&ec2k.x).map_err(WebauthnError::OpenSSLError)?;
+                let ybn = bn::BigNum::from_slice(&ec2k.y).map_err(WebauthnError::OpenSSLError)?;
 
                 let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                    .map_err(WebauthnError::OpenSSLError)?;
 
                 // Validate the key is sound. IIRC this actually checks the values
                 // are correctly on the curve as specified
-                ec_key
-                    .check_key()
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                ec_key.check_key().map_err(WebauthnError::OpenSSLError)?;
 
-                let p =
-                    pkey::PKey::from_ec_key(ec_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let p = pkey::PKey::from_ec_key(ec_key).map_err(WebauthnError::OpenSSLError)?;
                 Ok(p)
             }
             COSEKeyType::RSA(rsak) => {
-                let nbn =
-                    bn::BigNum::from_slice(&rsak.n).map_err(|e| WebauthnError::OpenSSLError(e))?;
-                let ebn =
-                    bn::BigNum::from_slice(&rsak.e).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let nbn = bn::BigNum::from_slice(&rsak.n).map_err(WebauthnError::OpenSSLError)?;
+                let ebn = bn::BigNum::from_slice(&rsak.e).map_err(WebauthnError::OpenSSLError)?;
 
                 let rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
-                    .map_err(|e| WebauthnError::OpenSSLError(e))?;
+                    .map_err(WebauthnError::OpenSSLError)?;
 
-                let p =
-                    pkey::PKey::from_rsa(rsa_key).map_err(|e| WebauthnError::OpenSSLError(e))?;
+                let p = pkey::PKey::from_rsa(rsa_key).map_err(WebauthnError::OpenSSLError)?;
                 Ok(p)
             }
             _ => {
@@ -601,16 +575,11 @@ impl COSEKey {
 
     pub(crate) fn verify_signature(
         &self,
-        signature: &Vec<u8>,
-        verification_data: &Vec<u8>,
+        signature: &[u8],
+        verification_data: &[u8],
     ) -> Result<bool, WebauthnError> {
         let pkey = self.get_openssl_pkey()?;
-        verify_signature(
-            &pkey,
-            self.type_,
-            signature.as_slice(),
-            verification_data.as_slice(),
-        )
+        verify_signature(&pkey, self.type_, signature, verification_data)
     }
 }
 
@@ -618,7 +587,7 @@ impl COSEKey {
 pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);
-    hasher.finish().iter().map(|b| *b).collect()
+    hasher.finish().iter().copied().collect()
 }
 
 #[cfg(test)]
