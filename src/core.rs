@@ -132,9 +132,6 @@ impl<T> Webauthn<T> {
     /// It also returns a RegistratationState, that you *must*
     /// persist. It is strongly advised you associate this RegistrationState with the
     /// UserId of the requestor.
-    ///
-    /// At this time we deviate from the standard and base64 some fields, but we are
-    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn generate_challenge_register_options(
         &self,
         user_id: UserId,
@@ -146,10 +143,10 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
+        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred_DO_NOT_USE);
 
-        if policy == UserVerificationPolicy::Preferred {
-            log::warn!("UserVerificationPolicy::Preferred is misleading! You should select Discouraged or Required!");
+        if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
+            log::warn!("UserVerificationPolicy::Preferred_DO_NOT_USE is misleading! You should select Discouraged or Required!");
         }
 
         if user_id.is_empty() {
@@ -215,9 +212,6 @@ impl<T> Webauthn<T> {
     ///
     /// Optionally, you may provide a closure that is able to check if any credential of the
     /// same id has already been persisted by your server.
-    ///
-    /// At this time we deviate from the standard and base64 some fields, but we are
-    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn register_credential(
         &self,
         reg: &RegisterPublicKeyCredential,
@@ -346,7 +340,7 @@ impl<T> Webauthn<T> {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            UserVerificationPolicy::Preferred => {}
+            UserVerificationPolicy::Preferred_DO_NOT_USE => {}
             UserVerificationPolicy::Discouraged => {
                 if data.attestation_object.auth_data.user_verified {
                     return Err(WebauthnError::UserVerifiedWhenDiscouraged);
@@ -490,7 +484,7 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        if policy == UserVerificationPolicy::Preferred {
+        if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
             return Err(WebauthnError::InconsistentUserVerificationPolicy);
         }
 
@@ -549,7 +543,7 @@ impl<T> Webauthn<T> {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            UserVerificationPolicy::Preferred => {}
+            UserVerificationPolicy::Preferred_DO_NOT_USE => {}
             UserVerificationPolicy::Discouraged => {
                 if data.authenticator_data.user_verified {
                     return Err(WebauthnError::UserVerifiedWhenDiscouraged);
@@ -613,9 +607,6 @@ impl<T> Webauthn<T> {
     /// UserId. The AuthenticationState is required for the authenticate_credential function to
     /// operate correctly.
     ///
-    /// At this time we deviate from the standard and base64 some fields, but we are
-    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
-    ///
     /// NOTE: `WebauthnError::InconsistentUserVerificationPolicy`
     ///
     /// This error is returning when the set of credentials has a mix of verified
@@ -636,7 +627,8 @@ impl<T> Webauthn<T> {
     ///
     /// An alternate suggestion is that the policy is *always* preferred and then the
     /// authenticate_credential yields the verification bit to the caller, but this
-    /// still causes issues with ctap1 / ctap2 interop.
+    /// still causes issues with ctap1 / ctap2 interop, and credentials becoming verified
+    /// when they should not be.
     pub fn generate_challenge_authenticate(
         &self,
         creds: Vec<Credential>,
@@ -698,9 +690,6 @@ impl<T> Webauthn<T> {
     /// On successful authentication, an Ok result is returned. The Ok may contain the credentialid
     /// and associated counter, which you *should* update for security purposes. If the Ok returns
     /// `None` then the credential does not have a counter.
-    ///
-    /// At this time we deviate from the standard and base64 some fields, but we are
-    /// investigating how to avoid this (https://github.com/Firstyear/webauthn-rs/issues/5)
     pub fn authenticate_credential(
         &self,
         rsp: &PublicKeyCredential,
@@ -832,8 +821,11 @@ pub trait WebauthnConfig {
     /// Returns the default attestation type. Options are `None`, `Direct` and `Indirect`.
     /// Defaults to `None`.
     ///
-    /// IMPORTANT: You *must* also implement policy_verify_trust if you change this from
-    /// `None`.
+    /// DANGER: The client *may* alter this value, causing the registration to not contain
+    /// an attestation. This is *not* a verified property.
+    ///
+    /// You *must* also implement policy_verify_trust if you change this from `None` else
+    /// this can be BYPASSED.
     fn get_attestation_preference(&self) -> AttestationConveyancePreference {
         AttestationConveyancePreference::None
     }
@@ -841,11 +833,11 @@ pub trait WebauthnConfig {
     /// Get the preferred policy on authenticator attachement hint. Defaults to None (use
     /// any attachment method).
     ///
+    /// Default of None allows any attachment method.
+    ///
     /// WARNING: This is not enforced, as the client may modify the registration request to
     /// disregard this, and no part of the registration response indicates attachement. This
     /// is purely a hint, and is NOT a security enforcment.
-    ///
-    /// Default of None allows any attachment method.
     fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
         None
     }
@@ -854,12 +846,12 @@ pub trait WebauthnConfig {
     /// username and other details can be embedded into the authenticator
     /// to allow bypassing that part of the interaction flow.
     ///
+    /// Defaults to "false" aka non-resident keys.
+    /// See also: https://www.w3.org/TR/webauthn/#resident-credential
+    ///
     /// WARNING: This is not enforced as the client may modify the registration request
     /// to disregard this, and no part of the registration process indicates residence of
     /// the credentials. This is not a security enforcement.
-    ///
-    /// Defaults to "false" aka non-resident keys.
-    /// See also: https://www.w3.org/TR/webauthn/#resident-credential
     fn get_require_resident_key(&self) -> bool {
         false
     }
@@ -958,8 +950,11 @@ mod tests {
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
         // Now register, providing our fake challenge.
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, zero_chal);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            zero_chal,
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -990,8 +985,11 @@ mod tests {
         }
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, chal);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            chal,
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1022,8 +1020,11 @@ mod tests {
                       }
         "#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, chal);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            chal,
+        );
         assert!(result.is_ok());
     }
 
@@ -1129,8 +1130,11 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Preferred, chal);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            chal,
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }

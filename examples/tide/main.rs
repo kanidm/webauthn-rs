@@ -164,6 +164,7 @@ async fn main() -> tide::Result<()> {
         app.at("/")
             .get(move |_| async_std::future::ready(Ok(tide::Redirect::new(prefix_copy.clone()))));
     }
+    // Serve our wasm content
     app.at("/pkg").serve_dir("pkg")?;
     app.at(&prefix).get(index_view);
     app.at(&format!("{}/challenge/register/:username", prefix))
@@ -173,9 +174,9 @@ async fn main() -> tide::Result<()> {
     app.at(&format!("{}/register/:username", prefix))
         .post(register);
     app.at(&format!("{}/login/:username", prefix)).post(login);
-    app.at(&format!("{}/static", prefix)).serve_dir("static")?;
 
     if opt.enable_tls {
+        tide::log::debug!("Starting with TLS ...");
         let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
         app.listen(
             tide_rustls::TlsListener::build()
@@ -184,6 +185,7 @@ async fn main() -> tide::Result<()> {
         )
         .await?;
     } else {
+        tide::log::debug!("Starting without TLS ...");
         app.listen(opt.bind).await?;
     };
 

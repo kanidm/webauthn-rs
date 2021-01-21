@@ -1,8 +1,14 @@
+//! Base64 data that encodes to Base64 UrlSafe, but can decode from multiple
+//! base64 implementations to account for various clients and libraries. Compatible
+//! with serde.
+
 use serde::de::{Error, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// A container for binary that should be base64 encoded in serialisation. In reverse
+/// when deserialising, will decode from many different types of base64 possible.
 pub struct Base64UrlSafeData(pub Vec<u8>);
 
 impl fmt::Display for Base64UrlSafeData {

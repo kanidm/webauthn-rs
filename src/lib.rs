@@ -13,33 +13,29 @@
 //! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
 //! interactions.
 
-// #![deny(warnings)]
+#![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![warn(missing_docs)]
 
-extern crate base64;
-
 #[macro_use]
 extern crate serde_derive;
-// extern crate byteorder;
-#[cfg(feature = "core")]
-extern crate openssl;
-
 #[macro_use]
 extern crate nom;
 
 #[macro_use]
 mod macros;
+mod constants;
+
 #[cfg(feature = "core")]
 pub mod attestation;
-pub mod base64_data;
-mod constants;
 #[cfg(feature = "core")]
 pub mod core;
 #[cfg(feature = "core")]
 pub mod crypto;
 #[cfg(feature = "core")]
 pub mod ephemeral;
+
+pub mod base64_data;
 pub mod error;
 pub mod proto;
 

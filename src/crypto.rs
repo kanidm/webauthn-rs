@@ -614,6 +614,7 @@ impl COSEKey {
     }
 }
 
+/// Compute the sha256 of a slice of data.
 pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);

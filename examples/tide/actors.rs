@@ -38,7 +38,7 @@ impl WebauthnActor {
         tide::log::debug!("handle ChallengeRegister -> {:?}", username);
         let (ccr, rs) = self
             .wan
-            .generate_challenge_register(&username, Some(UserVerificationPolicy::Required))?;
+            .generate_challenge_register(&username, Some(UserVerificationPolicy::Discouraged))?;
         self.reg_chals.lock().await.put(username.into_bytes(), rs);
         tide::log::debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
