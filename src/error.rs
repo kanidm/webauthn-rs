@@ -173,6 +173,12 @@ pub enum WebauthnError {
     #[error("The credential requested could not be found")]
     CredentialNotFound,
 
+    #[error("A credential alg that was not allowed in the request was attempted.")]
+    CredentialAlteredAlgFromRequest,
+
+    #[error("A credential that was excluded in the request attempted to register.")]
+    CredentialExcludedFromRequest,
+
     #[error("The credential may have be compromised and should be inspected")]
     CredentialPossibleCompromise,
 

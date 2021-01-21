@@ -33,6 +33,7 @@ use crate::proto::*;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistrationState {
     policy: UserVerificationPolicy,
+    exclude_credentials: Vec<CredentialID>,
     challenge: Base64UrlSafeData,
 }
 
@@ -177,9 +178,10 @@ impl<T> Webauthn<T> {
                     .collect(),
                 timeout: Some(self.config.get_authenticator_timeout()),
                 attestation: Some(self.config.get_attestation_preference()),
-                exclude_credentials: exclude_credentials.map(|creds| {
+                exclude_credentials: exclude_credentials.as_ref().map(|creds| {
                     creds
-                        .into_iter()
+                        .iter()
+                        .cloned()
                         .map(PublicKeyCredentialDescriptor::from_bytes)
                         .collect()
                 }),
@@ -194,6 +196,7 @@ impl<T> Webauthn<T> {
 
         let wr = RegistrationState {
             policy,
+            exclude_credentials: exclude_credentials.unwrap_or_else(|| Vec::with_capacity(0)),
             challenge: challenge.into(),
         };
 
@@ -225,13 +228,18 @@ impl<T> Webauthn<T> {
         // get the challenge (it's username associated)
         // Policy should also come from the chal
 
-        let RegistrationState { policy, challenge } = state;
+        let RegistrationState {
+            policy,
+            exclude_credentials,
+            challenge,
+        } = state;
 
         // TODO: check the req username matches? I think it's not possible, the caller needs to
         // create the linkage between the username and the state.
 
         // send to register_credential_internal
-        let credential = self.register_credential_internal(reg, policy, challenge.into())?;
+        let credential =
+            self.register_credential_internal(reg, policy, challenge.into(), exclude_credentials)?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -253,6 +261,7 @@ impl<T> Webauthn<T> {
         reg: &RegisterPublicKeyCredential,
         policy: UserVerificationPolicy,
         chal: Challenge,
+        exclude_credentials: Vec<CredentialID>,
     ) -> Result<Credential, WebauthnError>
     where
         T: WebauthnConfig,
@@ -342,6 +351,12 @@ impl<T> Webauthn<T> {
             }
             UserVerificationPolicy::Preferred_DO_NOT_USE | UserVerificationPolicy::Discouraged => {}
         };
+
+        // Verify that the "alg" parameter in the credential public key in authData matches the alg
+        // attribute of one of the items in options.pubKeyCredParams.
+        //
+        // WARNING: This is actually done after attestation as the credential public key
+        // is NOT available yet!
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
         // authenticator extension outputs in the extensions in authData are as expected,
@@ -454,6 +469,26 @@ impl<T> Webauthn<T> {
             .config
             .policy_verify_trust(attest_result)
             .map_err(|_e| WebauthnError::AttestationTrustFailure)?;
+
+        // Verify that the credential public key alg is one of the allowed algorithms.
+        let alg_valid = self
+            .config
+            .get_credential_algorithms()
+            .into_iter()
+            .any(|alg| alg == credential.cred.type_);
+
+        if !alg_valid {
+            return Err(WebauthnError::CredentialAlteredAlgFromRequest);
+        }
+
+        // OUT OF SPEC - exclude any credential that is in our exclude list.
+        let excluded = exclude_credentials
+            .iter()
+            .any(|credid| credid.as_slice() == credential.cred_id.as_slice());
+
+        if excluded {
+            return Err(WebauthnError::CredentialAlteredAlgFromRequest);
+        }
 
         //  If the attestation statement attStmt verified successfully and is found to be trustworthy,
         // then register the new credential with the account that was denoted in the options.user
@@ -944,6 +979,7 @@ mod tests {
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
             zero_chal,
+            vec![],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -979,6 +1015,7 @@ mod tests {
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
             chal,
+            vec![],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1014,6 +1051,7 @@ mod tests {
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
             chal,
+            vec![],
         );
         assert!(result.is_ok());
     }
@@ -1124,6 +1162,7 @@ mod tests {
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
             chal,
+            vec![],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1140,7 +1179,7 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal);
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal, vec![]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1208,8 +1247,12 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            chal,
+            vec![],
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
@@ -1558,8 +1601,12 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            chal,
+            vec![],
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }
