@@ -792,21 +792,21 @@ impl<T> Webauthn<T> {
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
         // conjunction with credential’s id attribute is nonzero, then run the following sub-step:
-        let check_counter = counter > 0 || cred.counter > 0;
+        if counter > 0 || cred.counter > 0 {
+            // greater than the signature counter value stored in conjunction with credential’s id attribute.
+            //       Update the stored signature counter value, associated with credential’s id attribute,
+            //       to be the value of authData.signCount.
+            // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
+            //      This is a signal that the authenticator may be cloned, i.e. at least two copies
+            //      of the credential private key may exist and are being used in parallel. Relying
+            //      Parties should incorporate this information into their risk scoring. Whether the
+            //      Relying Party updates the stored signature counter value in this case, or not,
+            //      or fails the authentication ceremony or not, is Relying Party-specific.
+            let counter_shows_compromise = auth_data.counter <= cred.counter;
 
-        // greater than the signature counter value stored in conjunction with credential’s id attribute.
-        //       Update the stored signature counter value, associated with credential’s id attribute,
-        //       to be the value of authData.signCount.
-        // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
-        //      This is a signal that the authenticator may be cloned, i.e. at least two copies
-        //      of the credential private key may exist and are being used in parallel. Relying
-        //      Parties should incorporate this information into their risk scoring. Whether the
-        //      Relying Party updates the stored signature counter value in this case, or not,
-        //      or fails the authentication ceremony or not, is Relying Party-specific.
-        let counter_shows_compromise = auth_data.counter <= cred.counter;
-
-        if self.config.require_valid_counter_value() && check_counter && counter_shows_compromise {
-            return Err(WebauthnError::CredentialPossibleCompromise);
+            if self.config.require_valid_counter_value() && counter_shows_compromise {
+                return Err(WebauthnError::CredentialPossibleCompromise);
+            }
         }
 
         Ok((cred.cred_id, auth_data))
