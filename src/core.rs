@@ -520,10 +520,6 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy);
-        }
-
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
@@ -631,11 +627,12 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate(
         &self,
         creds: Vec<Credential>,
+        policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
         where
             T: WebauthnConfig,
     {
-        self.generate_challenge_authenticate_extensions(creds, None)
+        self.generate_challenge_authenticate_extensions(creds, policy, None)
     }
 
     /// Generate a challenge for an authenticate request for a user. You must supply the set of
@@ -674,6 +671,7 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate_extensions(
         &self,
         creds: Vec<Credential>,
+        policy: Option<UserVerificationPolicy>,
         extensions: Option<JSONExtensions>
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
@@ -681,18 +679,14 @@ impl<T> Webauthn<T> {
     {
         let chal = self.generate_challenge();
 
-        let verified = creds.iter().all(|cred| cred.verified);
-        let unverified = creds.iter().all(|cred| !cred.verified);
+        let mut policy = policy.unwrap_or(UserVerificationPolicy::Preferred_DO_NOT_USE);
 
-        if !verified && !unverified {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy);
+        let any_creds_are_verified = creds.iter().fold(false, |cur, next| cur || next.verified );
+
+        // if a credential is verified and we require that UV creds are always verified, overwrite the policy
+        if self.config.require_user_verification_for_verified_credentials() && any_creds_are_verified {
+            policy = UserVerificationPolicy::Required;
         }
-
-        let policy = if verified {
-            UserVerificationPolicy::Required
-        } else {
-            UserVerificationPolicy::Discouraged
-        };
 
         // Get the user's existing creds if any.
         let ac = creds
@@ -899,8 +893,14 @@ pub trait WebauthnConfig {
     fn ignore_unsupported_attestation_formats(&self) -> bool {
         false
     }
+
     /// Decides the verifier must error on invalid counter values
     fn require_valid_counter_value(&self) -> bool {
+        true
+    }
+
+    /// If a credential is user-verified, then require user verification for future authentications
+    fn require_user_verification_for_verified_credentials(&self) -> bool {
         true
     }
 

@@ -56,7 +56,7 @@ impl WebauthnActor {
         }
         .ok_or(WebauthnError::CredentialRetrievalError)?;
 
-        let (acr, st) = self.wan.generate_challenge_authenticate(creds)?;
+        let (acr, st) = self.wan.generate_challenge_authenticate(creds, None)?;
         self.auth_chals
             .lock()
             .await
