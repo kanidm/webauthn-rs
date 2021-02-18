@@ -8,10 +8,7 @@ use std::convert::TryFrom;
 use crate::crypto;
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
-use crate::proto::{
-    AttestedCredentialData, COSEContentType, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
-    TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
-};
+use crate::proto::{AttestedCredentialData, COSEContentType, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms, UserVerificationPolicy};
 use log::debug;
 
 #[derive(Debug)]
@@ -80,6 +77,7 @@ pub enum AttestationType {
 pub(crate) fn verify_packed_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    policy: UserVerificationPolicy,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
@@ -175,7 +173,7 @@ pub(crate) fn verify_packed_attestation(
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
             Ok(AttestationType::Basic(
-                Credential::new(acd, credential_public_key, counter, user_verified),
+                Credential::new(acd, credential_public_key, counter, policy, user_verified),
                 attestn_cert,
             ))
         }
@@ -214,6 +212,7 @@ pub(crate) fn verify_packed_attestation(
                 acd,
                 credential_public_key,
                 counter,
+                policy,
                 user_verified,
             )))
         }
@@ -225,6 +224,7 @@ pub(crate) fn verify_packed_attestation(
 pub(crate) fn verify_fidou2f_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    policy: UserVerificationPolicy,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     client_data_hash: &[u8],
@@ -307,7 +307,7 @@ pub(crate) fn verify_fidou2f_attestation(
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
-    let credential = Credential::new(acd, credential_public_key, counter, user_verified);
+    let credential = Credential::new(acd, credential_public_key, counter, policy, user_verified);
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
@@ -320,11 +320,12 @@ pub(crate) fn verify_fidou2f_attestation(
 pub(crate) fn verify_none_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    policy: UserVerificationPolicy,
     user_verified: bool,
 ) -> Result<AttestationType, WebauthnError> {
     // No attestation is performed, simply provide a credential.
     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-    let credential = Credential::new(acd, credential_public_key, counter, user_verified);
+    let credential = Credential::new(acd, credential_public_key, counter, policy, user_verified);
     Ok(AttestationType::None(credential))
 }
 
@@ -332,6 +333,7 @@ pub(crate) fn verify_none_attestation(
 pub(crate) fn verify_tpm_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    policy: UserVerificationPolicy,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
@@ -562,7 +564,7 @@ pub(crate) fn verify_tpm_attestation(
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
     Ok(AttestationType::AttCa(
-        Credential::new(acd, credential_public_key, counter, user_verified),
+        Credential::new(acd, credential_public_key, counter, policy, user_verified),
         aik_cert,
         arr_x509,
     ))
@@ -571,6 +573,7 @@ pub(crate) fn verify_tpm_attestation(
 pub(crate) fn verify_apple_anonymous_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
+    policy: UserVerificationPolicy,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: Vec<u8>,
@@ -635,7 +638,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
     Ok(AttestationType::AnonCa(
-        Credential::new(acd, credential_public_key, counter, user_verified),
+        Credential::new(acd, credential_public_key, counter, policy, user_verified),
         crypto::X509PublicKey::apple_x509(),
         arr_x509,
     ))

@@ -220,6 +220,11 @@ pub struct Credential {
     pub cred: COSEKey,
     /// The counter for this credential
     pub counter: u32,
+
+    /// An indicator on what UV policy was asked of this credential at registration time
+    #[serde(rename = "requested_uv")]
+    pub requested_user_verification: bool,
+
     /// During registration, if this credential was verified
     /// then this is true. If not it is false. This is based on
     /// the policy at the time of registration of the credential.
@@ -230,7 +235,8 @@ pub struct Credential {
     /// ceremony attribute. For example it can be surprising to register
     /// a credential as un-verified but then to use verification with it
     /// in the future.
-    pub verified: bool,
+    #[serde(rename = "uv")]
+    pub user_verified: bool,
 }
 
 impl Credential {
@@ -238,13 +244,15 @@ impl Credential {
         acd: &AttestedCredentialData,
         ck: COSEKey,
         counter: u32,
+        policy: UserVerificationPolicy,
         verified: bool,
     ) -> Self {
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
             counter,
-            verified,
+            requested_user_verification: policy == UserVerificationPolicy::Required,
+            user_verified: verified,
         }
     }
 }
@@ -579,7 +587,7 @@ impl RequestChallengeResponse {
         relaying_party: String,
         allow_credentials: Vec<AllowCredentials>,
         user_verification_policy: UserVerificationPolicy,
-        extensions: Option<JSONExtensions>
+        extensions: Option<JSONExtensions>,
     ) -> Self {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
@@ -758,7 +766,6 @@ pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) fmt: String,
     pub(crate) att_stmt: serde_cbor::Value,
 }
-
 
 /// Attestation Object
 #[derive(Debug)]

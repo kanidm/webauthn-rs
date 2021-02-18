@@ -53,7 +53,6 @@ impl AuthenticationState {
     }
 }
 
-
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
 /// * generate_challenge_response
@@ -413,6 +412,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                policy,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 &client_data_json_hash,
@@ -421,6 +421,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::Packed => verify_packed_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                policy,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 data.attestation_object.auth_data_bytes,
@@ -429,6 +430,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::TPM => verify_tpm_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                policy,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 data.attestation_object.auth_data_bytes,
@@ -437,6 +439,7 @@ impl<T> Webauthn<T> {
             AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                policy,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
                 data.attestation_object.auth_data_bytes,
@@ -445,12 +448,19 @@ impl<T> Webauthn<T> {
             AttestationFormat::None => verify_none_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
+                policy,
                 data.attestation_object.auth_data.user_verified,
             ),
             _ => {
                 if self.config.ignore_unsupported_attestation_formats() {
                     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-                    Ok(AttestationType::None(Credential::new(acd, credential_public_key, data.attestation_object.auth_data.counter, false)))
+                    Ok(AttestationType::None(Credential::new(
+                        acd,
+                        credential_public_key,
+                        data.attestation_object.auth_data.counter,
+                        policy,
+                        data.attestation_object.auth_data.user_verified,
+                    )))
                 } else {
                     // No other types are currently implemented
                     Err(WebauthnError::AttestationNotSupported)
@@ -629,8 +639,8 @@ impl<T> Webauthn<T> {
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         self.generate_challenge_authenticate_extensions(creds, policy, None)
     }
@@ -672,21 +682,34 @@ impl<T> Webauthn<T> {
         &self,
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
-        extensions: Option<JSONExtensions>
+        extensions: Option<JSONExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
     {
         let chal = self.generate_challenge();
 
-        let mut policy = policy.unwrap_or(UserVerificationPolicy::Preferred_DO_NOT_USE);
+        // the credential is verified and was registered with verification required
+        let need_user_verification = creds.iter().fold(false, |cur, next| {
+            cur || (next.requested_user_verification && next.user_verified)
+        });
 
-        let any_creds_are_verified = creds.iter().fold(false, |cur, next| cur || next.verified );
+        // the credential is verified but wasn't necessarily required to verify at registration time
+        let want_user_verification = creds
+            .iter()
+            .fold(false, |cur, next| cur || next.user_verified);
 
-        // if a credential is verified and we require that UV creds are always verified, overwrite the policy
-        if self.config.require_user_verification_for_verified_credentials() && any_creds_are_verified {
-            policy = UserVerificationPolicy::Required;
-        }
+        let policy = if need_user_verification {
+            UserVerificationPolicy::Required
+        } else if want_user_verification
+            && self
+                .config
+                .require_user_verification_for_verified_credentials()
+        {
+            UserVerificationPolicy::Required
+        } else {
+            policy.unwrap_or(UserVerificationPolicy::Preferred_DO_NOT_USE)
+        };
 
         // Get the user's existing creds if any.
         let ac = creds
@@ -1111,7 +1134,8 @@ mod tests {
                     ],
                 }),
             },
-            verified: false,
+            requested_user_verification: false,
+            user_verified: false,
         };
 
         // Persist it to our fake db.
