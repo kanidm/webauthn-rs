@@ -53,7 +53,6 @@ impl AuthenticationState {
     }
 }
 
-
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
 /// * generate_challenge_response
@@ -450,7 +449,12 @@ impl<T> Webauthn<T> {
             _ => {
                 if self.config.ignore_unsupported_attestation_formats() {
                     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-                    Ok(AttestationType::None(Credential::new(acd, credential_public_key, data.attestation_object.auth_data.counter, false)))
+                    Ok(AttestationType::None(Credential::new(
+                        acd,
+                        credential_public_key,
+                        data.attestation_object.auth_data.counter,
+                        false,
+                    )))
                 } else {
                     // No other types are currently implemented
                     Err(WebauthnError::AttestationNotSupported)
@@ -520,10 +524,6 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy);
-        }
-
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
@@ -632,8 +632,8 @@ impl<T> Webauthn<T> {
         &self,
         creds: Vec<Credential>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         self.generate_challenge_authenticate_extensions(creds, None)
     }
@@ -674,7 +674,7 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate_extensions(
         &self,
         creds: Vec<Credential>,
-        extensions: Option<JSONExtensions>
+        extensions: Option<JSONExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -684,11 +684,13 @@ impl<T> Webauthn<T> {
         let verified = creds.iter().all(|cred| cred.verified);
         let unverified = creds.iter().all(|cred| !cred.verified);
 
-        if !verified && !unverified {
+        if !verified && !unverified && creds.len() > 0 {
             return Err(WebauthnError::InconsistentUserVerificationPolicy);
         }
 
-        let policy = if verified {
+        let policy = if creds.is_empty() {
+            UserVerificationPolicy::Preferred_DO_NOT_USE
+        } else if verified {
             UserVerificationPolicy::Required
         } else {
             UserVerificationPolicy::Discouraged
