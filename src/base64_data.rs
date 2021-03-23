@@ -54,6 +54,7 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         write!(formatter, "a base64 url encoded string")
     }
+
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: Error,

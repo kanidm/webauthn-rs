@@ -16,7 +16,7 @@ use crate::proto::{
 // use super::proto::*;
 
 // Why OpenSSL over another rust crate?
-// - Well, the openssl crate allows us to reconstruct a public key from the
+// - The openssl crate allows us to reconstruct a public key from the
 //   x/y group coords, where most others want a pkcs formatted structure. As
 //   a result, it's easiest to use openssl as it gives us exactly what we need
 //   for these operations, and despite it's many challenges as a library, it
@@ -350,9 +350,9 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 
                 // Set the x and y, we know they are proper sizes.
                 let mut x_temp = [0; 32];
-                x_temp.copy_from_slice(x.as_slice());
+                x_temp.copy_from_slice(x);
                 let mut y_temp = [0; 32];
-                y_temp.copy_from_slice(y.as_slice());
+                y_temp.copy_from_slice(y);
 
                 // Right, now build the struct.
                 let cose_key = COSEKey {

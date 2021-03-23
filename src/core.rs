@@ -41,12 +41,18 @@ pub struct RegistrationState {
 /// requesting the registration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthenticationState {
-    // Allowed credentials?
-    // username: UserId,
     credentials: Vec<Credential>,
     policy: UserVerificationPolicy,
     challenge: Base64UrlSafeData,
 }
+
+impl AuthenticationState {
+    /// set which credentials the user is allowed to authenticate with
+    pub fn set_allowed_credentials(&mut self, credentials: Vec<Credential>) {
+        self.credentials = credentials;
+    }
+}
+
 
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
@@ -266,11 +272,6 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        // println!("reg: {:?}", reg);
-
-        // Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
-        //  ^-- this is done in the actix extractors.
-
         // Let C, the client data claimed as collected during the credential creation, be the result
         // of running an implementation-specific JSON parser on JSONtext.
         //
@@ -447,8 +448,13 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.user_verified,
             ),
             _ => {
-                // No other types are currently implemented
-                Err(WebauthnError::AttestationNotSupported)
+                if self.config.ignore_unsupported_attestation_formats() {
+                    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
+                    Ok(AttestationType::None(Credential::new(acd, credential_public_key, data.attestation_object.auth_data.counter, false)))
+                } else {
+                    // No other types are currently implemented
+                    Err(WebauthnError::AttestationNotSupported)
+                }
             }
         }?;
 
@@ -510,7 +516,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: Challenge,
         cred: &Credential,
-    ) -> Result<u32, WebauthnError>
+    ) -> Result<AuthenticatorData, WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -589,8 +595,8 @@ impl<T> Webauthn<T> {
         // Relying Party MUST be prepared to handle cases where none or not all of the requested
         // extensions were acted upon.
         match &data.authenticator_data.extensions {
-            Some(_ex) => {
-                // pass
+            Some(_) => {
+                // we do not need to do any processing here
             }
             None => {}
         }
@@ -618,7 +624,18 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::AuthenticationFailure);
         }
 
-        Ok(data.authenticator_data.counter)
+        Ok(data.authenticator_data)
+    }
+
+    /// Convenience function for `generate_challenge_authenticate_extensions` without extensions
+    pub fn generate_challenge_authenticate(
+        &self,
+        creds: Vec<Credential>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
+        where
+            T: WebauthnConfig,
+    {
+        self.generate_challenge_authenticate_extensions(creds, None)
     }
 
     /// Generate a challenge for an authenticate request for a user. You must supply the set of
@@ -654,10 +671,10 @@ impl<T> Webauthn<T> {
     /// authenticate_credential yields the verification bit to the caller, but this
     /// still causes issues with ctap1 / ctap2 interop, and credentials becoming verified
     /// when they should not be.
-    pub fn generate_challenge_authenticate(
+    pub fn generate_challenge_authenticate_extensions(
         &self,
         creds: Vec<Credential>,
-        // policy: Option<UserVerificationPolicy>,
+        extensions: Option<JSONExtensions>
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -695,6 +712,7 @@ impl<T> Webauthn<T> {
             self.config.get_relying_party_id(),
             ac,
             policy.clone(),
+            extensions,
         );
         let st = AuthenticationState {
             // username: username.clone(),
@@ -719,7 +737,7 @@ impl<T> Webauthn<T> {
         &self,
         rsp: &PublicKeyCredential,
         state: AuthenticationState,
-    ) -> Result<Option<(CredentialID, Counter)>, WebauthnError>
+    ) -> Result<(CredentialID, AuthenticatorData), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -753,8 +771,8 @@ impl<T> Webauthn<T> {
             //      verify that credential.response.userHandle is present, and that the user identified
             //      by this value is the owner of credentialSource.
             //
-            // TODO: support webauthn in user-less mode -- i.e. the authenticator tells us the userhandle
-            // TODO: and we must see if this userhandle is allowed entry
+            //      Note: User-less mode is handled by calling `AuthenticationState::set_allowed_credentials`
+            //      after the caller extracts the userHandle and verifies the credential Source
 
             // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
             // inappropriate for your use case), look up the corresponding credential public key.
@@ -769,33 +787,29 @@ impl<T> Webauthn<T> {
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let counter = self.verify_credential_internal(rsp, policy, chal.into(), &cred)?;
+        let auth_data = self.verify_credential_internal(rsp, policy, chal.into(), &cred)?;
+        let counter = auth_data.counter;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
         // conjunction with credential’s id attribute is nonzero, then run the following sub-step:
-        if counter > 0 {
-            // If the signature counter value authData.signCount is
-            if counter > cred.counter {
-                // greater than the signature counter value stored in conjunction with credential’s id attribute.
-                //       Update the stored signature counter value, associated with credential’s id attribute,
-                //       to be the value of authData.signCount.
-                Ok(Some((cred.cred_id, counter)))
-            // If all the above steps are successful, continue with the authentication ceremony as
-            // appropriate. Otherwise, fail the authentication ceremony.
-            } else {
-                // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
-                //      This is a signal that the authenticator may be cloned, i.e. at least two copies
-                //      of the credential private key may exist and are being used in parallel. Relying
-                //      Parties should incorporate this information into their risk scoring. Whether the
-                //      Relying Party updates the stored signature counter value in this case, or not,
-                //      or fails the authentication ceremony or not, is Relying Party-specific.
-                Err(WebauthnError::CredentialPossibleCompromise)
+        if counter > 0 || cred.counter > 0 {
+            // greater than the signature counter value stored in conjunction with credential’s id attribute.
+            //       Update the stored signature counter value, associated with credential’s id attribute,
+            //       to be the value of authData.signCount.
+            // less than or equal to the signature counter value stored in conjunction with credential’s id attribute.
+            //      This is a signal that the authenticator may be cloned, i.e. at least two copies
+            //      of the credential private key may exist and are being used in parallel. Relying
+            //      Parties should incorporate this information into their risk scoring. Whether the
+            //      Relying Party updates the stored signature counter value in this case, or not,
+            //      or fails the authentication ceremony or not, is Relying Party-specific.
+            let counter_shows_compromise = auth_data.counter <= cred.counter;
+
+            if self.config.require_valid_counter_value() && counter_shows_compromise {
+                return Err(WebauthnError::CredentialPossibleCompromise);
             }
-        } else {
-            // If all the above steps are successful, continue with the authentication ceremony as
-            // appropriate. Otherwise, fail the authentication ceremony.
-            Ok(None)
         }
+
+        Ok((cred.cred_id, auth_data))
     }
 }
 
@@ -855,7 +869,7 @@ pub trait WebauthnConfig {
         AttestationConveyancePreference::None
     }
 
-    /// Get the preferred policy on authenticator attachement hint. Defaults to None (use
+    /// Get the preferred policy on authenticator attachment hint. Defaults to None (use
     /// any attachment method).
     ///
     /// Default of None allows any attachment method.
@@ -881,12 +895,13 @@ pub trait WebauthnConfig {
         false
     }
 
-    /// Return a list of site-requested extensions to be sent to Authenticators during
-    /// registration and authentication. Currently this is not implemented. Please see:
-    /// https://github.com/Firstyear/webauthn-rs/issues/8
-    /// https://w3c.github.io/webauthn/#extensions
-    fn get_extensions(&self) -> Option<JSONExtensions> {
-        None
+    /// If the attestation format is not supported, should we ignore verifying the attestation
+    fn ignore_unsupported_attestation_formats(&self) -> bool {
+        false
+    }
+    /// Decides the verifier must error on invalid counter values
+    fn require_valid_counter_value(&self) -> bool {
+        true
     }
 
     /// A callback to allow trust decisions to be made over the attestation of the

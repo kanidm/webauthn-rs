@@ -1,0 +1,27 @@
+on: [push]
+
+name: CI
+
+jobs:
+  build_and_test_stable:
+    name: WebAuthn Rust Frameworks (Build and Test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo build --release
+      - run: cargo test --all
+
+  build_and_test_1_45:
+    name: (1.45) WebAuthn Rust Frameworks (Build and Test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.45.0
+      - run: cargo build --release
+      - run: cargo test --all
+

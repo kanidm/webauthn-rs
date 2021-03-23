@@ -37,6 +37,9 @@ pub enum WebauthnError {
     #[error("The extensions are unknown to this server")]
     InvalidExtensions,
 
+    #[error("An extension for this identifier was not in the authenticator data")]
+    AuthenticatorDataMissingExtension,
+
     #[error("The required attestation data is not present in the response")]
     MissingAttestationCredentialData,
 

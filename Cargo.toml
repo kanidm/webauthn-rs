@@ -25,13 +25,11 @@ nom = "4"
 base64 = "0.13"
 serde_derive = "1.0"
 thiserror = "1.0"
-
 log = "0.4"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
 serde_json = "1.0"
 # We could consider replacing this with openssl rand.
-
 openssl = { version = "0.10", optional = true }
 rand = { version = "0.8", optional = true }
 
@@ -46,12 +44,10 @@ tide = "0.15"
 tide-rustls = "0.1"
 askama_tide = "0.12"
 async-std = { version = "1.6", features = ["attributes"] }
-
 openssl = "0.10"
-
 lru = "0.6"
-
 structopt = { version = "0.3", default-features = false }
 rustls = "0.19.0"
 env_logger = "0.8.2"
-
+# Workaround for compilation bug: https://github.com/Geal/nom/issues/1284
+funty="=1.1.0"
