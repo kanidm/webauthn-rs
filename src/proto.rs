@@ -340,6 +340,48 @@ pub struct AllowCredentials {
     pub transports: Option<Vec<String>>,
 }
 
+/// Valid credential protection policies
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CredentialProtectionPolicy {
+    /// This reflects "FIDO_2_0" semantics. In this configuration, performing some form of user verification is optional with or without credentialID list. This is the default state of the credential if the extension is not specified.
+    UserVerificationOptional,
+    /// In this configuration, credential is discovered only when its credentialID is provided by the platform or when some form of user verification is performed.
+    UserVerificationOptionalWithCredentialIDList,
+    /// This reflects that discovery and usage of the credential MUST be preceded by some form of user verification.
+    UserVerificationRequired,
+}
+
+impl ToString for CredentialProtectionPolicy {
+    fn to_string(&self) -> String {
+        use CredentialProtectionPolicy::*;
+        match self {
+            UserVerificationOptional => "userVerificationOptional",
+            UserVerificationOptionalWithCredentialIDList => "userVerificationOptionalWithCredentialIDList",
+            UserVerificationRequired => "userVerificationRequired",
+        }.to_string()
+    }
+}
+
+/// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialProtectExtensionOptions {
+    /// The credential protection policy
+    pub credential_protection_policy: CredentialProtectionPolicy,
+    /// Whether to enforce the policy (defaults to false)
+    pub enforce_credential_protection_policy: bool,
+}
+
+impl From<CredentialProtectExtensionOptions> for BTreeMap<String, String> {
+    fn from(cred_protect: CredentialProtectExtensionOptions) -> Self {
+        let mut map = BTreeMap::new();
+        map.insert(String::from("credentialProtectionPolicy"), cred_protect.credential_protection_policy.to_string());
+        map.insert(String::from("enforceCredentialProtectionPolicy"), cred_protect.enforce_credential_protection_policy.to_string());
+        map
+    }
+}
+
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -579,7 +621,7 @@ impl RequestChallengeResponse {
         relaying_party: String,
         allow_credentials: Vec<AllowCredentials>,
         user_verification_policy: UserVerificationPolicy,
-        extensions: Option<JSONExtensions>
+        extensions: Option<JSONExtensions>,
     ) -> Self {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
@@ -758,7 +800,6 @@ pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) fmt: String,
     pub(crate) att_stmt: serde_cbor::Value,
 }
-
 
 /// Attestation Object
 #[derive(Debug)]

@@ -53,7 +53,6 @@ impl AuthenticationState {
     }
 }
 
-
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
 /// * generate_challenge_response
@@ -126,6 +125,7 @@ impl<T> Webauthn<T> {
             user_name.to_string(),
             None,
             policy,
+            None,
         )
     }
 
@@ -146,6 +146,7 @@ impl<T> Webauthn<T> {
         user_display_name: String,
         exclude_credentials: Option<Vec<CredentialID>>,
         policy: Option<UserVerificationPolicy>,
+        cred_protect: Option<CredentialProtectExtensionOptions>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -161,6 +162,7 @@ impl<T> Webauthn<T> {
         }
 
         let challenge = self.generate_challenge();
+
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
@@ -196,7 +198,7 @@ impl<T> Webauthn<T> {
                     require_resident_key: self.config.get_require_resident_key(),
                     user_verification: policy.clone(),
                 }),
-                extensions: None,
+                extensions: cred_protect.map(JSONExtensions::from),
             },
         };
 
@@ -450,7 +452,12 @@ impl<T> Webauthn<T> {
             _ => {
                 if self.config.ignore_unsupported_attestation_formats() {
                     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-                    Ok(AttestationType::None(Credential::new(acd, credential_public_key, data.attestation_object.auth_data.counter, false)))
+                    Ok(AttestationType::None(Credential::new(
+                        acd,
+                        credential_public_key,
+                        data.attestation_object.auth_data.counter,
+                        false,
+                    )))
                 } else {
                     // No other types are currently implemented
                     Err(WebauthnError::AttestationNotSupported)
@@ -632,8 +639,8 @@ impl<T> Webauthn<T> {
         &self,
         creds: Vec<Credential>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
-        where
-            T: WebauthnConfig,
+    where
+        T: WebauthnConfig,
     {
         self.generate_challenge_authenticate_extensions(creds, None)
     }
@@ -674,7 +681,7 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate_extensions(
         &self,
         creds: Vec<Credential>,
-        extensions: Option<JSONExtensions>
+        extensions: Option<JSONExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -936,6 +943,23 @@ pub trait WebauthnConfig {
             // We don't trust Uncertain attestations
             AttestationType::Uncertain(_) => Err(()),
         }
+    }
+
+    /// Decides the verifier must reject client responses containing extensions
+    /// not explicitly listed in challenge.
+    ///
+    /// See the w3c standard, specifically:
+    ///
+    /// 17: Verify that the values of the client extension outputs in
+    /// clientExtensionResults and the authenticator extension outputs in the
+    /// extensions in authData are as expected, considering the client extension
+    /// input values that were given in options.extensions and any specific
+    /// policy of the Relying Party regarding unsolicited extensions, i.e.,
+    /// those that were not specified as part of options.extensions. In the
+    /// general case, the meaning of "are as expected" is specific to the
+    /// Relying Party and which extensions are in use.
+    fn reject_unsolicited_extensions() -> bool {
+        false
     }
 }
 

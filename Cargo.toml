@@ -40,9 +40,9 @@ js-sys = { version = "0.3", optional = true }
 
 [dev-dependencies]
 askama = "0.10"
-tide = "0.15"
-tide-rustls = "0.1"
-askama_tide = "0.12"
+tide = "0.16"
+tide-rustls = "0.2"
+askama_tide = "0.13"
 async-std = { version = "1.6", features = ["attributes"] }
 openssl = "0.10"
 lru = "0.6"
