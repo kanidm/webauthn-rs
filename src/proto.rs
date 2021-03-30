@@ -292,7 +292,7 @@ pub enum UserVerificationPolicy {
 }
 
 // These are the primary communication structures you will need to handle.
-pub(crate) type JSONExtensions = BTreeMap<String, String>;
+pub(crate) type JSONExtensions = BTreeMap<String, WebauthnExtensionInput>;
 
 /// Relying Party Entity
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -363,6 +363,24 @@ impl ToString for CredentialProtectionPolicy {
     }
 }
 
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(untagged)]
+/// Input for a webauthn extension
+pub enum WebauthnExtensionInput {
+    /// The credential protection extension
+    CredProtect(CredentialProtectionPolicy)
+}
+
+
+impl WebauthnExtensionInput {
+    /// The identifier of the particular extension
+    pub fn extension_identifier(&self) -> &'static str {
+        match self {
+            Self::CredProtect(_) => "credProtect"
+        }
+    }
+}
+
 /// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -370,16 +388,8 @@ pub struct CredentialProtectExtensionOptions {
     /// The credential protection policy
     pub credential_protection_policy: CredentialProtectionPolicy,
     /// Whether to enforce the policy (defaults to false)
-    pub enforce_credential_protection_policy: bool,
-}
-
-impl From<CredentialProtectExtensionOptions> for BTreeMap<String, String> {
-    fn from(cred_protect: CredentialProtectExtensionOptions) -> Self {
-        let mut map = BTreeMap::new();
-        map.insert(String::from("credentialProtectionPolicy"), cred_protect.credential_protection_policy.to_string());
-        map.insert(String::from("enforceCredentialProtectionPolicy"), cred_protect.enforce_credential_protection_policy.to_string());
-        map
-    }
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enforce_credential_protection_policy: Option<bool>,
 }
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
@@ -767,7 +777,7 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
     do_parse!(
         rp_id_hash: take!(32) >>
         data_flags: authenticator_data_flags >>
-        counter: u32!(nom::Endianness::Big) >>
+            counter: u32!(nom::Endianness::Big) >>
         acd: cond!(data_flags.1, acd_parser) >>
         extensions: cond!(data_flags.0, extensions_parser) >>
         (AuthenticatorData {

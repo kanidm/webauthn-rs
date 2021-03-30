@@ -17,6 +17,7 @@
 
 use rand::prelude::*;
 use std::convert::TryFrom;
+use std::collections::BTreeMap;
 
 use crate::attestation::{
     verify_apple_anonymous_attestation, verify_fidou2f_attestation, verify_none_attestation,
@@ -125,7 +126,14 @@ impl<T> Webauthn<T> {
             user_name.to_string(),
             None,
             policy,
-            None,
+            // None,
+            // TODO: change back to `None`
+            Some(
+                CredentialProtectExtensionOptions {
+                    credential_protection_policy: CredentialProtectionPolicy::UserVerificationOptional,
+                    enforce_credential_protection_policy: None,
+                }
+            ),
         )
     }
 
@@ -163,6 +171,13 @@ impl<T> Webauthn<T> {
 
         let challenge = self.generate_challenge();
 
+        let extensions = cred_protect.map(|cred_protect| {
+            let extension = WebauthnExtensionInput::CredProtect(cred_protect.credential_protection_policy);
+            let mut extensions = BTreeMap::new();
+            extensions.insert(String::from(extension.extension_identifier()), extension);
+            extensions
+        });
+
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
@@ -198,7 +213,7 @@ impl<T> Webauthn<T> {
                     require_resident_key: self.config.get_require_resident_key(),
                     user_verification: policy.clone(),
                 }),
-                extensions: cred_protect.map(JSONExtensions::from),
+                extensions,
             },
         };
 
@@ -899,7 +914,8 @@ pub trait WebauthnConfig {
     /// to disregard this, and no part of the registration process indicates residence of
     /// the credentials. This is not a security enforcement.
     fn get_require_resident_key(&self) -> bool {
-        false
+        // TODO: change back to false
+        true
     }
 
     /// If the attestation format is not supported, should we ignore verifying the attestation
