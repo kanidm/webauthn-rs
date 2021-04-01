@@ -17,13 +17,18 @@
 #![warn(unused_extern_crates)]
 #![warn(missing_docs)]
 
+#[cfg(feature = "core")]
 #[macro_use]
 extern crate serde_derive;
+
 #[macro_use]
 extern crate nom;
 
+#[cfg(feature = "core")]
 #[macro_use]
 mod macros;
+
+#[cfg(feature = "core")]
 mod constants;
 
 #[cfg(feature = "core")]

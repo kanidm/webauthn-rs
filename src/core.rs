@@ -17,7 +17,6 @@
 
 use rand::prelude::*;
 use std::convert::TryFrom;
-use std::collections::BTreeMap;
 
 use crate::attestation::{
     verify_apple_anonymous_attestation, verify_fidou2f_attestation, verify_none_attestation,
@@ -128,12 +127,13 @@ impl<T> Webauthn<T> {
             policy,
             // None,
             // TODO: change back to `None`
-            Some(
-                CredentialProtectExtensionOptions {
-                    credential_protection_policy: CredentialProtectionPolicy::UserVerificationOptional,
-                    enforce_credential_protection_policy: None,
-                }
-            ),
+            Some(AuthenticatorExtensionsClientInputs {
+                cred_protect: Some(CredProtectExtensionClientInput {
+                    credential_protection_policy:
+                        CredentialProtectionPolicy::UserVerificationOptional,
+                    enforce_credential_protection_policy: Some(false),
+                }),
+            }),
         )
     }
 
@@ -154,7 +154,7 @@ impl<T> Webauthn<T> {
         user_display_name: String,
         exclude_credentials: Option<Vec<CredentialID>>,
         policy: Option<UserVerificationPolicy>,
-        cred_protect: Option<CredentialProtectExtensionOptions>,
+        extensions: Option<AuthenticatorExtensionsClientInputs>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -170,13 +170,6 @@ impl<T> Webauthn<T> {
         }
 
         let challenge = self.generate_challenge();
-
-        let extensions = cred_protect.map(|cred_protect| {
-            let extension = WebauthnExtensionInput::CredProtect(cred_protect.credential_protection_policy);
-            let mut extensions = BTreeMap::new();
-            extensions.insert(String::from(extension.extension_identifier()), extension);
-            extensions
-        });
 
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
@@ -388,10 +381,12 @@ impl<T> Webauthn<T> {
         // TODO: Today we send NO EXTENSIONS, so we'll never have a case where the extensions
         // are present! But because extensions are possible from the config we WILL need to manage
         // this situation eventually!!!
+
         match &data.attestation_object.auth_data.extensions {
             Some(_ex) => {
                 // We don't know how to handle client extensions yet!!!
-                return Err(WebauthnError::InvalidExtensions);
+                println!("ext: {:?}", _ex);
+                // return Err(WebauthnError::InvalidExtensions);
             }
             None => {}
         }
@@ -915,7 +910,7 @@ pub trait WebauthnConfig {
     /// the credentials. This is not a security enforcement.
     fn get_require_resident_key(&self) -> bool {
         // TODO: change back to false
-        true
+        false
     }
 
     /// If the attestation format is not supported, should we ignore verifying the attestation
@@ -934,7 +929,7 @@ pub trait WebauthnConfig {
     /// 15. If validation is successful, obtain a list of acceptable trust anchors (attestation
     /// root certificates or ECDAA-Issuer public keys) for that attestation type and attestation
     /// statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata
-    /// Service [FIDOMetadataService] provides one way to obtain such information, using the
+    /// Service \[FIDOMetadataService\] provides one way to obtain such information, using the
     /// aaguid in the attestedCredentialData in authData.
     ///
     /// 16: Assess the attestation trustworthiness using the outputs of the verification procedure

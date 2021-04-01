@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 #[cfg(feature = "wasm")]
-use js_sys::{Array, ArrayBuffer, Object, Uint8Array};
+use js_sys::{Array, Object, Uint8Array};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
@@ -234,6 +234,7 @@ pub struct Credential {
 }
 
 impl Credential {
+    #[cfg(feature = "core")]
     pub(crate) fn new(
         acd: &AttestedCredentialData,
         ck: COSEKey,
@@ -292,7 +293,7 @@ pub enum UserVerificationPolicy {
 }
 
 // These are the primary communication structures you will need to handle.
-pub(crate) type JSONExtensions = BTreeMap<String, WebauthnExtensionInput>;
+pub(crate) type JSONExtensions = BTreeMap<String, String>;
 
 /// Relying Party Entity
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -343,53 +344,89 @@ pub struct AllowCredentials {
 /// Valid credential protection policies
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
 pub enum CredentialProtectionPolicy {
-    /// This reflects "FIDO_2_0" semantics. In this configuration, performing some form of user verification is optional with or without credentialID list. This is the default state of the credential if the extension is not specified.
-    UserVerificationOptional,
-    /// In this configuration, credential is discovered only when its credentialID is provided by the platform or when some form of user verification is performed.
-    UserVerificationOptionalWithCredentialIDList,
-    /// This reflects that discovery and usage of the credential MUST be preceded by some form of user verification.
-    UserVerificationRequired,
+    /// This reflects "FIDO_2_0" semantics. In this configuration, performing
+    /// some form of user verification is optional with or without credentialID
+    /// list. This is the default state of the credential if the extension is
+    /// not specified.
+    UserVerificationOptional = 0x1,
+    /// In this configuration, credential is discovered only when its
+    /// credentialID is provided by the platform or when some form of user
+    /// verification is performed.
+    UserVerificationOptionalWithCredentialIDList = 0x2,
+    /// This reflects that discovery and usage of the credential MUST be
+    /// preceded by some form of user verification.
+    UserVerificationRequired = 0x3,
 }
 
-impl ToString for CredentialProtectionPolicy {
-    fn to_string(&self) -> String {
+impl TryFrom<u8> for CredentialProtectionPolicy {
+    type Error = &'static str;
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
         use CredentialProtectionPolicy::*;
-        match self {
-            UserVerificationOptional => "userVerificationOptional",
-            UserVerificationOptionalWithCredentialIDList => "userVerificationOptionalWithCredentialIDList",
-            UserVerificationRequired => "userVerificationRequired",
-        }.to_string()
-    }
-}
-
-#[derive(Debug, Serialize, Clone, Deserialize)]
-#[serde(untagged)]
-/// Input for a webauthn extension
-pub enum WebauthnExtensionInput {
-    /// The credential protection extension
-    CredProtect(CredentialProtectionPolicy)
-}
-
-
-impl WebauthnExtensionInput {
-    /// The identifier of the particular extension
-    pub fn extension_identifier(&self) -> &'static str {
-        match self {
-            Self::CredProtect(_) => "credProtect"
+        match v {
+            0x1 => Ok(UserVerificationOptional),
+            0x2 => Ok(UserVerificationOptionalWithCredentialIDList),
+            0x3 => Ok(UserVerificationRequired),
+            _ => Err("Invalid policy number"),
         }
     }
 }
 
+impl From<CredentialProtectionPolicy> for u8 {
+    fn from(policy: CredentialProtectionPolicy) -> Self {
+        policy as u8
+    }
+}
+
+impl TryFrom<u8> for CredProtectExtensionClientOutput {
+    type Error = <CredentialProtectionPolicy as TryFrom<u8>>::Error;
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        CredentialProtectionPolicy::try_from(v).map(|policy| CredProtectExtensionClientOutput(policy))
+    }
+}
+
+impl From<CredProtectExtensionClientOutput> for u8 {
+    fn from(policy: CredProtectExtensionClientOutput) -> Self {
+        u8::from(policy.0)
+    }
+}
+
+/// Wrapper struct to (de)serialize [CredentialProtectionPolicy] as a number
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct CredProtectExtensionClientOutput(CredentialProtectionPolicy);
+
+/// The input for the credProtect webauthn extension
 /// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CredentialProtectExtensionOptions {
-    /// The credential protection policy
+pub struct CredProtectExtensionClientInput {
+    /// The credential policy to enact
     pub credential_protection_policy: CredentialProtectionPolicy,
-    /// Whether to enforce the policy (defaults to false)
+    /// Whether it is better for the authenticator to fail to create a
+    /// credential rather than ignore the protection policy
+    /// If no value is provided, the client treats it as `false`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enforce_credential_protection_policy: Option<bool>,
+}
+
+/// Extension option inputs for [PublicKeyCredentialCreationOptions]
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct AuthenticatorExtensionsClientInputs {
+    /// The credProtect extension
+    #[serde(flatten)]
+    pub cred_protect: Option<CredProtectExtensionClientInput>,
+}
+
+/// The output for public key credential creation extensions
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticatorExtensionsClientOutputs {
+    /// The credProtect extension
+    pub cred_protect: Option<CredProtectExtensionClientOutput>,
 }
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
@@ -423,7 +460,7 @@ pub struct PublicKeyCredentialCreationOptions {
 
     /// Non-standard extensions that may be used by the browser/authenticator.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<JSONExtensions>,
+    pub extensions: Option<AuthenticatorExtensionsClientInputs>,
 }
 
 /// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
@@ -539,10 +576,10 @@ impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
         let jsv = JsValue::from_serde(&self).unwrap();
 
         let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
-        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal);
+        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal).unwrap();
 
         let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
-        js_sys::Reflect::set(&user, &JsValue::from("id"), &userid);
+        js_sys::Reflect::set(&user, &JsValue::from("id"), &userid).unwrap();
 
         web_sys::CredentialCreationOptions::from(jsv)
     }
@@ -592,13 +629,13 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
                     &obj,
                     &JsValue::from("type"),
                     &JsValue::from_str(ac.type_.as_str()),
-                );
+                ).unwrap();
 
                 js_sys::Reflect::set(
                     &obj,
                     &JsValue::from("id"),
                     &Uint8Array::from(ac.id.0.as_slice()),
-                );
+                ).unwrap();
 
                 if let Some(transports) = &ac.transports {
                     let tarray: Array = transports
@@ -606,7 +643,7 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
                         .map(|s| JsValue::from_str(s.as_str()))
                         .collect();
 
-                    js_sys::Reflect::set(&obj, &JsValue::from("transports"), &tarray);
+                    js_sys::Reflect::set(&obj, &JsValue::from("transports"), &tarray).unwrap();
                 }
 
                 obj
@@ -616,15 +653,16 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
         let jsv = JsValue::from_serde(&self).unwrap();
 
         let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
-        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal);
+        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal).unwrap();
 
-        js_sys::Reflect::set(&pkcco, &JsValue::from("allowCredentials"), &allow_creds);
+        js_sys::Reflect::set(&pkcco, &JsValue::from("allowCredentials"), &allow_creds).unwrap();
 
         web_sys::CredentialRequestOptions::from(jsv)
     }
 }
 
 impl RequestChallengeResponse {
+    #[cfg(feature = "core")]
     pub(crate) fn new(
         challenge: Challenge,
         timeout: u32,
@@ -704,43 +742,43 @@ pub struct AuthenticatorData {
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
-    pub(crate) extensions: Option<serde_cbor::Value>,
+    pub(crate) extensions: Option<AuthenticatorExtensionsClientOutputs>,
+    // pub(crate) extensions: Option<serde_cbor::Value>,
 }
 
-impl AuthenticatorData {
-    /// get an extension value for an identifier
-    pub fn get_extension_for_identifier(&self, id: String) -> Option<&[u8]> {
-        self.extensions
-            .as_ref()
-            .map(|v| cbor_try_map!(v).ok())
-            .flatten()
-            .map(|map| map.get(&serde_cbor::Value::Text(id)))
-            .flatten()
-            .map(|v| cbor_try_bytes!(v).ok())
-            .flatten()
-            .map(|v| v.as_slice())
-    }
-}
+// impl AuthenticatorData {
+//     /// get an extension value for an identifier
+//     pub fn get_extension_for_identifier(&self, id: String) -> Option<&[u8]> {
+//         self.extensions
+//             .as_ref()
+//             .map(|v| cbor_try_map!(v).ok())
+//             .flatten()
+//             .map(|map| map.get(&serde_cbor::Value::Text(id)))
+//             .flatten()
+//             .map(|v| cbor_try_bytes!(v).ok())
+//             .flatten()
+//             .map(|v| v.as_slice())
+//     }
+// }
 
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
-    let v: serde_cbor::Value = serde_cbor::from_slice(&i[0..])
+    let mut deserializer = serde_cbor::Deserializer::from_slice(i);
+    let v = serde::de::Deserialize::deserialize(&mut deserializer)
         .map_err(|_| nom::Err::Failure(nom::Context::Code(i, nom::ErrorKind::Custom(1))))?;
 
-    // Now re-encode it to find the length ... yuk.
-    let encoded = serde_cbor::to_vec(&v)
-        .map_err(|_| nom::Err::Failure(nom::Context::Code(i, nom::ErrorKind::Custom(2))))?;
-    // Finally we know the cred len
-    let cred_len = encoded.len();
+    let len = deserializer.byte_offset();
 
-    Ok((&i[cred_len..], v))
+    Ok((&i[len..], v))
 }
 
-named!( extensions_parser<&[u8], serde_cbor::Value>,
-    // Just throw the bytes into cbor?
-    do_parse!(
-        extensions: cbor_parser >>
-        (extensions)
-    )
+// named!( extensions_parser<&[u8], serde_cbor::Value>,
+named!( extensions_parser<&[u8], AuthenticatorExtensionsClientOutputs>,
+    map_res!(cbor_parser, serde_cbor::value::from_value::<AuthenticatorExtensionsClientOutputs>)
+    // // Just throw the bytes into cbor?
+    // do_parse!(
+    //     extensions: cbor_parser >>
+    //     (serde_cbor)
+    // )
 );
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
@@ -857,12 +895,14 @@ pub struct AuthenticatorAttestationResponseRaw {
 }
 
 /// Parsed AuthenticatorResponse
+#[cfg(feature = "core")]
 pub(crate) struct AuthenticatorAttestationResponse {
     pub(crate) attestation_object: AttestationObject,
     pub(crate) client_data_json: CollectedClientData,
     pub(crate) client_data_json_bytes: Vec<u8>,
 }
 
+#[cfg(feature = "core")]
 impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse {
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
