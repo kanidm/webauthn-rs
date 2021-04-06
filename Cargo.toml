@@ -37,7 +37,6 @@ rand = { version = "0.8", optional = true }
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
 web-sys = { version = "0.3", features = ["CredentialCreationOptions", "CredentialRequestOptions", "PublicKeyCredential"], optional = true }
 js-sys = { version = "0.3", optional = true }
-erased-serde = "0.3.13"
 
 [dev-dependencies]
 askama = "0.10"

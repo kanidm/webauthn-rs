@@ -125,15 +125,7 @@ impl<T> Webauthn<T> {
             user_name.to_string(),
             None,
             policy,
-            // None,
-            // TODO: change back to `None`
-            Some(AuthenticatorExtensionsClientInputs {
-                cred_protect: Some(CredProtectExtensionClientInput {
-                    credential_protection_policy:
-                        CredentialProtectionPolicy::UserVerificationOptional,
-                    enforce_credential_protection_policy: Some(false),
-                }),
-            }),
+            None,
         )
     }
 
@@ -909,7 +901,6 @@ pub trait WebauthnConfig {
     /// to disregard this, and no part of the registration process indicates residence of
     /// the credentials. This is not a security enforcement.
     fn get_require_resident_key(&self) -> bool {
-        // TODO: change back to false
         false
     }
 

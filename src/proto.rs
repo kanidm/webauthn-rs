@@ -384,7 +384,8 @@ impl TryFrom<u8> for CredProtectExtensionClientOutput {
     type Error = <CredentialProtectionPolicy as TryFrom<u8>>::Error;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        CredentialProtectionPolicy::try_from(v).map(|policy| CredProtectExtensionClientOutput(policy))
+        CredentialProtectionPolicy::try_from(v)
+            .map(|policy| CredProtectExtensionClientOutput(policy))
     }
 }
 
@@ -746,21 +747,6 @@ pub struct AuthenticatorData {
     // pub(crate) extensions: Option<serde_cbor::Value>,
 }
 
-// impl AuthenticatorData {
-//     /// get an extension value for an identifier
-//     pub fn get_extension_for_identifier(&self, id: String) -> Option<&[u8]> {
-//         self.extensions
-//             .as_ref()
-//             .map(|v| cbor_try_map!(v).ok())
-//             .flatten()
-//             .map(|map| map.get(&serde_cbor::Value::Text(id)))
-//             .flatten()
-//             .map(|v| cbor_try_bytes!(v).ok())
-//             .flatten()
-//             .map(|v| v.as_slice())
-//     }
-// }
-
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     let mut deserializer = serde_cbor::Deserializer::from_slice(i);
     let v = serde::de::Deserialize::deserialize(&mut deserializer)
@@ -771,14 +757,8 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     Ok((&i[len..], v))
 }
 
-// named!( extensions_parser<&[u8], serde_cbor::Value>,
 named!( extensions_parser<&[u8], AuthenticatorExtensionsClientOutputs>,
     map_res!(cbor_parser, serde_cbor::value::from_value::<AuthenticatorExtensionsClientOutputs>)
-    // // Just throw the bytes into cbor?
-    // do_parse!(
-    //     extensions: cbor_parser >>
-    //     (serde_cbor)
-    // )
 );
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
@@ -815,7 +795,7 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
     do_parse!(
         rp_id_hash: take!(32) >>
         data_flags: authenticator_data_flags >>
-            counter: u32!(nom::Endianness::Big) >>
+        counter: u32!(nom::Endianness::Big) >>
         acd: cond!(data_flags.1, acd_parser) >>
         extensions: cond!(data_flags.0, extensions_parser) >>
         (AuthenticatorData {
@@ -1721,5 +1701,21 @@ mod tests {
         ];
         let tpmt_sig = TpmtSignature::try_from(data.as_slice()).unwrap();
         println!("{:?}", tpmt_sig);
+    }
+
+    #[test]
+    fn deserialize_extensions() {
+        let data: Vec<u8> = vec![
+            161, 107, 99, 114, 101, 100, 80, 114, 111, 116, 101, 99, 116, 3,
+        ];
+
+        let extensions: AuthenticatorExtensionsClientOutputs =
+            serde_cbor::from_slice(&data).unwrap();
+
+        let cred_protect = extensions
+            .cred_protect
+            .expect("should have cred protect extension");
+        println!("{:?}", cred_protect);
+        assert_eq!(cred_protect.0, CredentialProtectionPolicy::UserVerificationRequired);
     }
 }
