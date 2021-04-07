@@ -342,7 +342,7 @@ pub struct AllowCredentials {
 }
 
 /// Valid credential protection policies
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 pub enum CredentialProtectionPolicy {
@@ -402,7 +402,7 @@ pub struct CredProtectExtensionClientOutput(CredentialProtectionPolicy);
 
 /// The input for the credProtect webauthn extension
 /// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CredProtectExtensionClientInput {
     /// The credential policy to enact
@@ -414,12 +414,67 @@ pub struct CredProtectExtensionClientInput {
     pub enforce_credential_protection_policy: Option<bool>,
 }
 
+impl CredProtectExtensionClientInput {
+    /// Create a [CredProtectExtensionClientInput] object
+    pub fn new(
+        credential_protection_policy: CredentialProtectionPolicy,
+        enforce_credential_protection_policy: Option<bool>,
+    ) -> Self {
+        CredProtectExtensionClientInput {
+            credential_protection_policy,
+            enforce_credential_protection_policy,
+        }
+    }
+}
+
 /// Extension option inputs for [PublicKeyCredentialCreationOptions]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticatorExtensionsClientInputs {
     /// The credProtect extension
     #[serde(flatten)]
     pub cred_protect: Option<CredProtectExtensionClientInput>,
+}
+
+impl AuthenticatorExtensionsClientInputs {
+    /// Get a builder for the [AuthenticatorExtensionsClientInputs] object
+    #[must_use]
+    pub fn builder() -> AuthenticatorExtensionsClientInputsBuilder {
+        AuthenticatorExtensionsClientInputsBuilder::new()
+    }
+}
+
+/// Builder for [AuthenticatorExtensionsClientInputs] objects.
+pub struct AuthenticatorExtensionsClientInputsBuilder(AuthenticatorExtensionsClientInputs);
+
+impl AuthenticatorExtensionsClientInputsBuilder {
+    pub(crate) fn new() -> Self {
+        Self(AuthenticatorExtensionsClientInputs { cred_protect: None })
+    }
+
+    /// Returns the inner extensions struct
+    pub fn build(self) -> AuthenticatorExtensionsClientInputs {
+        self.0
+    }
+
+    /// Set the credential protection extension
+    ///
+    /// # Example
+    /// ```
+    /// # use webauthn_rs::proto::{AuthenticatorExtensionsClientInputs, AuthenticatorExtensionsClientInputsBuilder, CredentialProtectionPolicy, CredProtectExtensionClientInput};
+    /// let cred_protect = CredProtectExtensionClientInput::new(
+    ///     CredentialProtectionPolicy::UserVerificationRequired,
+    ///     None,
+    /// );
+    /// let extensions = AuthenticatorExtensionsClientInputs::builder()
+    ///     .cred_protect(cred_protect.clone())
+    ///     .build();
+    ///
+    /// assert_eq!(extensions.cred_protect, Some(cred_protect));
+    /// ```
+    pub fn cred_protect(mut self, cred_protect: CredProtectExtensionClientInput) -> Self {
+        self.0.cred_protect = Some(cred_protect);
+        self
+    }
 }
 
 /// The output for public key credential creation extensions
@@ -630,13 +685,15 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
                     &obj,
                     &JsValue::from("type"),
                     &JsValue::from_str(ac.type_.as_str()),
-                ).unwrap();
+                )
+                .unwrap();
 
                 js_sys::Reflect::set(
                     &obj,
                     &JsValue::from("id"),
                     &Uint8Array::from(ac.id.0.as_slice()),
-                ).unwrap();
+                )
+                .unwrap();
 
                 if let Some(transports) = &ac.transports {
                     let tarray: Array = transports
@@ -1595,8 +1652,8 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AttestationObject, RegisterPublicKeyCredential, TpmsAttest, TpmtPublic, TpmtSignature,
-        TPM_GENERATED_VALUE,
+        AttestationObject, AuthenticatorExtensionsClientOutputs, CredentialProtectionPolicy,
+        RegisterPublicKeyCredential, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;
@@ -1716,6 +1773,29 @@ mod tests {
             .cred_protect
             .expect("should have cred protect extension");
         println!("{:?}", cred_protect);
-        assert_eq!(cred_protect.0, CredentialProtectionPolicy::UserVerificationRequired);
+        assert_eq!(
+            cred_protect.0,
+            CredentialProtectionPolicy::UserVerificationRequired
+        );
+    }
+
+    #[test]
+    fn credential_protection_policy_conversions() {
+        use CredentialProtectionPolicy::*;
+        assert_eq!(
+            UserVerificationOptional,
+            CredentialProtectionPolicy::try_from(UserVerificationOptional as u8).unwrap()
+        );
+        assert_eq!(
+            UserVerificationOptionalWithCredentialIDList,
+            CredentialProtectionPolicy::try_from(
+                UserVerificationOptionalWithCredentialIDList as u8
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            UserVerificationRequired,
+            CredentialProtectionPolicy::try_from(UserVerificationRequired as u8).unwrap()
+        );
     }
 }

@@ -946,23 +946,6 @@ pub trait WebauthnConfig {
             AttestationType::Uncertain(_) => Err(()),
         }
     }
-
-    /// Decides the verifier must reject client responses containing extensions
-    /// not explicitly listed in challenge.
-    ///
-    /// See the w3c standard, specifically:
-    ///
-    /// 17: Verify that the values of the client extension outputs in
-    /// clientExtensionResults and the authenticator extension outputs in the
-    /// extensions in authData are as expected, considering the client extension
-    /// input values that were given in options.extensions and any specific
-    /// policy of the Relying Party regarding unsolicited extensions, i.e.,
-    /// those that were not specified as part of options.extensions. In the
-    /// general case, the meaning of "are as expected" is specific to the
-    /// Relying Party and which extensions are in use.
-    fn reject_unsolicited_extensions() -> bool {
-        false
-    }
 }
 
 #[cfg(test)]
