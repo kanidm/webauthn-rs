@@ -132,21 +132,24 @@ impl WebauthnActor {
             .ok_or(WebauthnError::ChallengeNotFound)?;
 
         let mut creds = self.creds.lock().await;
-        let r = self.wan.authenticate_credential(lgn, st).map(|(cred_id, auth_data)| {
-           let _ =  match creds.get_mut(&username) {
-                Some(v) => {
-                    let mut c = v.remove(&cred_id).unwrap();
-                    c.counter = auth_data.counter;
-                    v.insert(cred_id.clone(), c);
-                    Ok(())
-                }
-                None => {
-                    // Invalid state but not end of world ...
-                    Err(())
-                }
-            };
-            ()
-        });
+        let r = self
+            .wan
+            .authenticate_credential(lgn, st)
+            .map(|(cred_id, auth_data)| {
+                let _ = match creds.get_mut(&username) {
+                    Some(v) => {
+                        let mut c = v.remove(&cred_id).unwrap();
+                        c.counter = auth_data.counter;
+                        v.insert(cred_id.clone(), c);
+                        Ok(())
+                    }
+                    None => {
+                        // Invalid state but not end of world ...
+                        Err(())
+                    }
+                };
+                ()
+            });
         tide::log::debug!("complete Authenticate -> {:?}", r);
         r
     }
