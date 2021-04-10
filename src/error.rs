@@ -7,7 +7,7 @@ use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
 // use nom::Err as NOMError;
 
-/// Possible errors that may occur during Webauthn Operation proessing.
+/// Possible errors that may occur during Webauthn Operation processing.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum WebauthnError {
@@ -46,7 +46,7 @@ pub enum WebauthnError {
     #[error("The attestation format requested is not able to be processed by this server - please report an issue to add the attestation format")]
     AttestationNotSupported,
 
-    #[error("A failure occured in persisting the Challenge data")]
+    #[error("A failure occurred in persisting the Challenge data")]
     ChallengePersistenceError,
 
     #[error("The attestation statement map is not valid")]
@@ -73,7 +73,7 @@ pub enum WebauthnError {
     #[error("The attestation statement x5c (trust root) is not valid")]
     AttestationStatementX5CInvalid,
 
-    #[error("The attestation statement algorithmm is not present")]
+    #[error("The attestation statement algorithm is not present")]
     AttestationStatementAlgMissing,
 
     #[error("The attestation statement certinfo is not present")]
@@ -100,10 +100,10 @@ pub enum WebauthnError {
     #[error("The tpm attestation and key algorithms do not match")]
     AttestationTpmPubareaMismatch,
 
-    #[error("The tpm attestation extradata is missing or invalid")]
+    #[error("The tpm attestation extra data is missing or invalid")]
     AttestationTpmExtraDataInvalid,
 
-    #[error("The tpm attestation extradata does not match the hash of the verification data")]
+    #[error("The tpm attestation extra data does not match the hash of the verification data")]
     AttestationTpmExtraDataMismatch,
 
     #[error("The tpm requested hash over pubarea is unknown")]
@@ -203,7 +203,7 @@ pub enum WebauthnError {
     #[error("Invalid UserID supplied for registration")]
     InvalidUsername,
 
-    #[error("Supplied Nid dones not correspond to a supported ECDSA curve")]
+    #[error("Supplied Nid does not correspond to a supported ECDSA curve")]
     ECDSACurveInvalidNid,
 
     #[error("The attested credential public key and subject public key do not match")]
