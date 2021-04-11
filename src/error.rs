@@ -76,10 +76,10 @@ pub enum WebauthnError {
     #[error("The attestation statement algorithm is not present")]
     AttestationStatementAlgMissing,
 
-    #[error("The attestation statement certinfo is not present")]
+    #[error("The attestation statement certInfo is not present")]
     AttestationStatementCertInfoMissing,
 
-    #[error("The attestation statement pubarea is not present")]
+    #[error("The attestation statement pubArea is not present")]
     AttestationStatementPubAreaMissing,
 
     #[error("The attestation statement alg does not match algorithm of the credentialPublicKey in authenticatorData")]
@@ -94,25 +94,25 @@ pub enum WebauthnError {
     #[error("The attestation Certificates OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not match the aaguid of the token")]
     AttestationCertificateAAGUIDMismatch,
 
-    #[error("The attestation created by the tpm is not correct")]
+    #[error("The attestation created by the TPM is not correct")]
     AttestationTpmStInvalid,
 
-    #[error("The tpm attestation and key algorithms do not match")]
-    AttestationTpmPubareaMismatch,
+    #[error("The TPM attestation and key algorithms do not match")]
+    AttestationTpmPubAreaMismatch,
 
-    #[error("The tpm attestation extra data is missing or invalid")]
+    #[error("The TPM attestation extra data is missing or invalid")]
     AttestationTpmExtraDataInvalid,
 
-    #[error("The tpm attestation extra data does not match the hash of the verification data")]
+    #[error("The TPM attestation extra data does not match the hash of the verification data")]
     AttestationTpmExtraDataMismatch,
 
-    #[error("The tpm requested hash over pubarea is unknown")]
-    AttestationTpmPubareaHashUnknown,
+    #[error("The TPM requested hash over pubArea is unknown")]
+    AttestationTpmPubAreaHashUnknown,
 
-    #[error("The tpm requested hash over pubarea is invalid")]
-    AttestationTpmPubareaHashInvalid,
+    #[error("The TPM requested hash over pubArea is invalid")]
+    AttestationTpmPubAreaHashInvalid,
 
-    #[error("The tpm attest certify structure is invalid")]
+    #[error("The TPM attest certify structure is invalid")]
     AttestationTpmAttestCertifyInvalid,
 
     #[error("The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements are not met by this attestation certificate")]

@@ -455,10 +455,10 @@ pub(crate) fn verify_tpm_attestation(
 
             // check the pkey is the same.
             if &cose_rsa.n != tpm_modulus {
-                return Err(WebauthnError::AttestationTpmPubareaMismatch);
+                return Err(WebauthnError::AttestationTpmPubAreaMismatch);
             }
         }
-        _ => return Err(WebauthnError::AttestationTpmPubareaMismatch),
+        _ => return Err(WebauthnError::AttestationTpmPubAreaMismatch),
     }
 
     // Concatenate authenticatorData and clientDataHash to form attToBeSigned.
@@ -503,7 +503,7 @@ pub(crate) fn verify_tpm_attestation(
         TpmuAttest::AttestCertify(name, _qname) => {
             let name = match name {
                 Tpm2bName::Digest(name) => name,
-                _ => return Err(WebauthnError::AttestationTpmPubareaHashInvalid),
+                _ => return Err(WebauthnError::AttestationTpmPubAreaHashInvalid),
             };
             // Name contains two bytes at the start for what algo is used. The spec
             // says nothing about validating them, so instead we prepend the bytes into the hash
@@ -515,10 +515,10 @@ pub(crate) fn verify_tpm_attestation(
                     v.append(&mut r);
                     v
                 }
-                _ => return Err(WebauthnError::AttestationTpmPubareaHashUnknown),
+                _ => return Err(WebauthnError::AttestationTpmPubAreaHashUnknown),
             };
             if hname != name {
-                return Err(WebauthnError::AttestationTpmPubareaHashInvalid);
+                return Err(WebauthnError::AttestationTpmPubAreaHashInvalid);
             }
         }
         _ => return Err(WebauthnError::AttestationTpmAttestCertifyInvalid),
