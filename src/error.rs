@@ -100,10 +100,10 @@ pub enum WebauthnError {
     #[error("The TPM attestation and key algorithms do not match")]
     AttestationTpmPubAreaMismatch,
 
-    #[error("The TPM attestation extra data is missing or invalid")]
+    #[error("The TPM attestation extraData is missing or invalid")]
     AttestationTpmExtraDataInvalid,
 
-    #[error("The TPM attestation extra data does not match the hash of the verification data")]
+    #[error("The TPM attestation extraData does not match the hash of the verification data")]
     AttestationTpmExtraDataMismatch,
 
     #[error("The TPM requested hash over pubArea is unknown")]
