@@ -112,7 +112,7 @@ pub enum WebauthnError {
     #[error("The tpm requested hash over pubarea is invalid")]
     AttestationTpmPubareaHashInvalid,
 
-    #[error("The tpms attest certify structure is invalid")]
+    #[error("The tpm attest certify structure is invalid")]
     AttestationTpmAttestCertifyInvalid,
 
     #[error("The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements are not met by this attestation certificate")]
@@ -137,7 +137,7 @@ pub enum WebauthnError {
     ParseInsufficientBytesAvailable,
 
     #[cfg(feature = "core")]
-    #[error("An openSSL Error has occurred")]
+    #[error("An OpenSSL Error has occurred")]
     OpenSSLError(#[from] OpenSSLErrorStack),
 
     #[error("The requested OpenSSL curve is not supported by OpenSSL")]
