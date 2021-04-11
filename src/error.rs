@@ -134,10 +134,10 @@ pub enum WebauthnError {
     ParseNOMFailure,
 
     #[error("In parsing the attestation object, there was insufficient data")]
-    ParseInsufficentBytesAvailable,
+    ParseInsufficientBytesAvailable,
 
     #[cfg(feature = "core")]
-    #[error("An openSSL Error has occured")]
+    #[error("An openSSL Error has occurred")]
     OpenSSLError(#[from] OpenSSLErrorStack),
 
     #[error("The requested OpenSSL curve is not supported by OpenSSL")]
@@ -207,5 +207,5 @@ pub enum WebauthnError {
     ECDSACurveInvalidNid,
 
     #[error("The attested credential public key and subject public key do not match")]
-    AttestationCredentialSubjectKeyMistmatch,
+    AttestationCredentialSubjectKeyMismatch,
 }

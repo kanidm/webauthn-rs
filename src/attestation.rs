@@ -630,7 +630,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let subject_public_key = COSEKey::try_from(attestn_cert)?;
 
     if credential_public_key != subject_public_key {
-        return Err(WebauthnError::AttestationCredentialSubjectKeyMistmatch);
+        return Err(WebauthnError::AttestationCredentialSubjectKeyMismatch);
     }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
