@@ -146,7 +146,7 @@ impl<T> Webauthn<T> {
         user_display_name: String,
         exclude_credentials: Option<Vec<CredentialID>>,
         policy: Option<UserVerificationPolicy>,
-        extensions: Option<AuthenticatorExtensionsClientInputs>,
+        extensions: Option<RegistrationExtensionInputs>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -370,17 +370,8 @@ impl<T> Webauthn<T> {
         // present that were not requested. In the general case, the meaning of "are as expected" is
         // specific to the Relying Party and which extensions are in use.
 
-        // TODO: Today we send NO EXTENSIONS, so we'll never have a case where the extensions
-        // are present! But because extensions are possible from the config we WILL need to manage
-        // this situation eventually!!!
-
-        match &data.attestation_object.auth_data.extensions {
-            Some(_ex) => {
-                // We don't know how to handle client extensions yet!!!
-                println!("ext: {:?}", _ex);
-                // return Err(WebauthnError::InvalidExtensions);
-            }
-            None => {}
+        if let Some(ext) = &data.attestation_object.auth_data.extensions {
+            log::debug!("ext: {:?}", ext);
         }
 
         // Determine the attestation statement format by performing a USASCII case-sensitive match on
@@ -683,7 +674,7 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate_extensions(
         &self,
         creds: Vec<Credential>,
-        extensions: Option<JSONExtensions>,
+        extensions: Option<AuthenticationExtensionInputs>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -1077,6 +1068,44 @@ mod tests {
             chal,
             vec![],
         );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_registration_packed_attestaion_fails_with_bad_cred_protect() {
+        let wan_c = WebauthnEphemeralConfig::new(
+            "localhost:8080/auth",
+            "http://localhost:8080",
+            "localhost",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let chal = Challenge(vec![
+            125, 119, 194, 67, 227, 22, 152, 134, 220, 143, 75, 119, 197, 165, 115, 149, 187, 153,
+            211, 51, 215, 128, 225, 56, 110, 80, 52, 235, 149, 146, 101, 202,
+        ]);
+
+        let rsp = r#"{
+            "id":"9KJylaUgVoWF2cF2qX5an7ZtPBFeRMXy-jMSGgNWCogxiyctVFtIcDKmkVmfKOgllffKJMyl4gFeDm8KaltrDw",
+            "rawId":"9KJylaUgVoWF2cF2qX5an7ZtPBFeRMXy-jMSGgNWCogxiyctVFtIcDKmkVmfKOgllffKJMyl4gFeDm8KaltrDw",
+            "response":{
+                "attestationObject":"o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEYwRAIgZEq9euYGkqTP4VMBs-5fruhwAPSyKjOlr2THNZGvZ3gCIHww2gAgZXvZcIwcSiUF3fHhaNL0uj8V5rOLHyGRJz81Y3g1Y4FZAsEwggK9MIIBpaADAgECAgQej4c0MA0GCSqGSIb3DQEBCwUAMC4xLDAqBgNVBAMTI1l1YmljbyBVMkYgUm9vdCBDQSBTZXJpYWwgNDU3MjAwNjMxMCAXDTE0MDgwMTAwMDAwMFoYDzIwNTAwOTA0MDAwMDAwWjBuMQswCQYDVQQGEwJTRTESMBAGA1UECgwJWXViaWNvIEFCMSIwIAYDVQQLDBlBdXRoZW50aWNhdG9yIEF0dGVzdGF0aW9uMScwJQYDVQQDDB5ZdWJpY28gVTJGIEVFIFNlcmlhbCA1MTI3MjI3NDAwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAASoefgjOO0UlLrAcEvMf8Zj0bJxcVl2JDEBx2BRFdfBUp4oHBxnMi04S1zVXdPpgY1f2FwirzJuDGT8IK_jPyNmo2wwajAiBgkrBgEEAYLECgIEFTEuMy42LjEuNC4xLjQxNDgyLjEuNzATBgsrBgEEAYLlHAIBAQQEAwIEMDAhBgsrBgEEAYLlHAEBBAQSBBAvwFefgRNH6rEWu1qNuSAqMAwGA1UdEwEB_wQCMAAwDQYJKoZIhvcNAQELBQADggEBAIaT_2LfDVd51HSNf8jRAicxio5YDmo6V8EI6U4Dw4Vos2aJT85WJL5KPv1_NBGLPZk3Q_eSoZiRYMj8muCwTj357hXj6IwE_IKo3L9YGOEI3MKWhXeuef9mK5RzTj3sRZcwXXPm5V7ivrnNlnjKCTXlM-tjj44m-ruBfNpEH76YMYMq5fbirZkvnrvbTGIji4-NerSB1tMmO82_nkpXVQNwmIrVgTRA-gMsrbZyPK3Y-Ne6gJ91tDz_oKW5rdFCMu-dnhSBJjgjPEykqHO5-KyY4yuhkWdgbhWQn83bSi3_va5GICSfmmZGrIHkgy0RGf6_qnMaiC2iWneCfUbRkBdoYXV0aERhdGFY0kmWDeWIDoxodDQXD2R2YFuP5K65ooYyx5lc87qDHZdjxQAAAAEvwFefgRNH6rEWu1qNuSAqAED0onKVpSBWhYXZwXapflqftm08EV5ExfL6MxIaA1YKiDGLJy1UW0hwMqaRWZ8o6CWV98okzKXiAV4ObwpqW2sPpQECAyYgASFYIB_nQH-kBm4OmDfqezjFDr_t0Psz6JrylkEPWHFs2UB-Ilgg7xkwKc-IHHIwPI8EJ5ycM1zvWDnm4bCarn1LAWAU3Dqha2NyZWRQcm90ZWN0Aw",
+                "clientDataJSON":"eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiZlhmQ1EtTVdtSWJjajB0M3hhVnpsYnVaMHpQWGdPRTRibEEwNjVXU1pjbyIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODA4MCIsImNyb3NzT3JpZ2luIjpmYWxzZSwib3RoZXJfa2V5c19jYW5fYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCJ9"
+            },
+            "type":"public-key"
+        }"#;
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        println!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            chal,
+            vec![],
+        );
+        println!("{:?}", result);
         assert!(result.is_ok());
     }
 
