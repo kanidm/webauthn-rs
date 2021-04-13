@@ -579,7 +579,7 @@ impl RequestChallengeResponse {
         relaying_party: String,
         allow_credentials: Vec<AllowCredentials>,
         user_verification_policy: UserVerificationPolicy,
-        extensions: Option<JSONExtensions>
+        extensions: Option<JSONExtensions>,
     ) -> Self {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
@@ -758,7 +758,6 @@ pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) fmt: String,
     pub(crate) att_stmt: serde_cbor::Value,
 }
-
 
 /// Attestation Object
 #[derive(Debug)]
