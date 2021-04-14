@@ -146,7 +146,7 @@ impl<T> Webauthn<T> {
         user_display_name: String,
         exclude_credentials: Option<Vec<CredentialID>>,
         policy: Option<UserVerificationPolicy>,
-        extensions: Option<RegistrationExtensionInputs>,
+        extensions: Option<RequestRegistrationExtensions>,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
         T: WebauthnConfig,

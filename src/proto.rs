@@ -380,17 +380,17 @@ impl From<CredentialProtectionPolicy> for u8 {
     }
 }
 
-impl TryFrom<u8> for CredProtectExtensionClientOutput {
+impl TryFrom<u8> for SignedCredProtectExtension {
     type Error = <CredentialProtectionPolicy as TryFrom<u8>>::Error;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
         CredentialProtectionPolicy::try_from(v)
-            .map(|policy| CredProtectExtensionClientOutput(policy))
+            .map(|policy| SignedCredProtectExtension(policy))
     }
 }
 
-impl From<CredProtectExtensionClientOutput> for u8 {
-    fn from(policy: CredProtectExtensionClientOutput) -> Self {
+impl From<SignedCredProtectExtension> for u8 {
+    fn from(policy: SignedCredProtectExtension) -> Self {
         u8::from(policy.0)
     }
 }
@@ -398,13 +398,13 @@ impl From<CredProtectExtensionClientOutput> for u8 {
 /// Wrapper struct to (de)serialize [CredentialProtectionPolicy] as a number
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(try_from = "u8", into = "u8")]
-pub struct CredProtectExtensionClientOutput(CredentialProtectionPolicy);
+pub struct SignedCredProtectExtension(CredentialProtectionPolicy);
 
 /// The input for the credProtect webauthn extension
 /// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct CredProtectExtensionClientInput {
+pub struct RequestCredProtectExtension {
     /// The credential policy to enact
     pub credential_protection_policy: CredentialProtectionPolicy,
     /// Whether it is better for the authenticator to fail to create a
@@ -414,45 +414,47 @@ pub struct CredProtectExtensionClientInput {
     pub enforce_credential_protection_policy: Option<bool>,
 }
 
-impl CredProtectExtensionClientInput {
-    /// Create a [CredProtectExtensionClientInput] object
+impl RequestCredProtectExtension {
+    /// Create a [RequestCredProtectExtension] object
     pub fn new(
         credential_protection_policy: CredentialProtectionPolicy,
         enforce_credential_protection_policy: Option<bool>,
     ) -> Self {
-        CredProtectExtensionClientInput {
+        RequestCredProtectExtension {
             credential_protection_policy,
             enforce_credential_protection_policy,
         }
     }
 }
 
-/// Extension option inputs for [PublicKeyCredentialCreationOptions]
+/// Extension option inputs for [PublicKeyCredentialCreationOptions].
+///
+/// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
 #[derive(Debug, Serialize, Clone, Deserialize)]
-pub struct RegistrationExtensionInputs {
+pub struct RequestRegistrationExtensions {
     /// The credProtect extension
     #[serde(flatten)]
-    pub cred_protect: Option<CredProtectExtensionClientInput>,
+    pub cred_protect: Option<RequestCredProtectExtension>,
 }
 
-impl RegistrationExtensionInputs {
-    /// Get a builder for the [AuthenticatorExtensionsClientInputs] object
+impl RequestRegistrationExtensions {
+    /// Get a builder for the [RequestRegistrationExtensions] struct
     #[must_use]
-    pub fn builder() -> RegistrationExtensionInputsBuilder {
-        RegistrationExtensionInputsBuilder::new()
+    pub fn builder() -> RequestRegistrationExtensionsBuilder {
+        RequestRegistrationExtensionsBuilder::new()
     }
 }
 
-/// Builder for [AuthenticatorExtensionsClientInputs] objects.
-pub struct RegistrationExtensionInputsBuilder(RegistrationExtensionInputs);
+/// Builder for [RequestRegistrationExtensions] objects.
+pub struct RequestRegistrationExtensionsBuilder(RequestRegistrationExtensions);
 
-impl RegistrationExtensionInputsBuilder {
+impl RequestRegistrationExtensionsBuilder {
     pub(crate) fn new() -> Self {
-        Self(RegistrationExtensionInputs { cred_protect: None })
+        Self(RequestRegistrationExtensions { cred_protect: None })
     }
 
     /// Returns the inner extensions struct
-    pub fn build(self) -> RegistrationExtensionInputs {
+    pub fn build(self) -> RequestRegistrationExtensions {
         self.0
     }
 
@@ -460,29 +462,31 @@ impl RegistrationExtensionInputsBuilder {
     ///
     /// # Example
     /// ```
-    /// # use webauthn_rs::proto::{AuthenticatorExtensionsClientInputs, AuthenticatorExtensionsClientInputsBuilder, CredentialProtectionPolicy, CredProtectExtensionClientInput};
-    /// let cred_protect = CredProtectExtensionClientInput::new(
+    /// # use webauthn_rs::proto::{RequestRegistrationExtensions, CredentialProtectionPolicy, RequestCredProtectExtension};
+    /// let cred_protect = RequestCredProtectExtension::new(
     ///     CredentialProtectionPolicy::UserVerificationRequired,
     ///     None,
     /// );
-    /// let extensions = AuthenticatorExtensionsClientInputs::builder()
+    /// let extensions = RequestRegistrationExtensions::builder()
     ///     .cred_protect(cred_protect.clone())
     ///     .build();
     ///
     /// assert_eq!(extensions.cred_protect, Some(cred_protect));
     /// ```
-    pub fn cred_protect(mut self, cred_protect: CredProtectExtensionClientInput) -> Self {
+    pub fn cred_protect(mut self, cred_protect: RequestCredProtectExtension) -> Self {
         self.0.cred_protect = Some(cred_protect);
         self
     }
 }
 
-/// The output for public key credential creation extensions
+/// The output for public key credential creation extensions.
+///
+/// Implements \[AuthenticatorExtensionsClientOutputs\] from the spec
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RegistrationExtensionOutputs {
+pub struct SignedRegistrationExtensions {
     /// The credProtect extension
-    pub cred_protect: Option<CredProtectExtensionClientOutput>,
+    pub cred_protect: Option<SignedCredProtectExtension>,
 }
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
@@ -516,7 +520,7 @@ pub struct PublicKeyCredentialCreationOptions {
 
     /// Non-standard extensions that may be used by the browser/authenticator.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub extensions: Option<RegistrationExtensionInputs>,
+    pub extensions: Option<RequestRegistrationExtensions>,
 }
 
 /// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
@@ -800,7 +804,7 @@ pub struct AuthenticatorData {
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
-    pub(crate) extensions: Option<RegistrationExtensionOutputs>,
+    pub(crate) extensions: Option<SignedRegistrationExtensions>,
     // pub(crate) extensions: Option<serde_cbor::Value>,
 }
 
@@ -814,8 +818,8 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     Ok((&i[len..], v))
 }
 
-named!( extensions_parser<&[u8], RegistrationExtensionOutputs>,
-    map_res!(cbor_parser, serde_cbor::value::from_value::<RegistrationExtensionOutputs>)
+named!( extensions_parser<&[u8], SignedRegistrationExtensions>,
+    map_res!(cbor_parser, serde_cbor::value::from_value::<SignedRegistrationExtensions>)
 );
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
@@ -1652,8 +1656,8 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AttestationObject, RegistrationExtensionOutputs, CredentialProtectionPolicy,
-        RegisterPublicKeyCredential, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
+        AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential,
+        SignedRegistrationExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;
@@ -1766,8 +1770,7 @@ mod tests {
             161, 107, 99, 114, 101, 100, 80, 114, 111, 116, 101, 99, 116, 3,
         ];
 
-        let extensions: RegistrationExtensionOutputs =
-            serde_cbor::from_slice(&data).unwrap();
+        let extensions: SignedRegistrationExtensions = serde_cbor::from_slice(&data).unwrap();
 
         let cred_protect = extensions
             .cred_protect
