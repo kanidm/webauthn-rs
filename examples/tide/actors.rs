@@ -90,8 +90,8 @@ impl WebauthnActor {
                 .wan
                 .register_credential(reg, rs, |cred_id| Ok(ucreds.contains_key(cred_id)))
                 .map(|cred| {
-                    let cred_id = cred.cred_id.clone();
-                    ucreds.insert(cred_id, cred);
+                    let cred_id = cred.0.cred_id.clone();
+                    ucreds.insert(cred_id, cred.0);
                 }),
             None => {
                 let r = self
@@ -99,8 +99,8 @@ impl WebauthnActor {
                     .register_credential(reg, rs, |_| Ok(false))
                     .map(|cred| {
                         let mut t = BTreeMap::new();
-                        let credential_id = cred.cred_id.clone();
-                        t.insert(credential_id, cred);
+                        let credential_id = cred.0.cred_id.clone();
+                        t.insert(credential_id, cred.0);
                         creds.insert(username, t);
                     });
                 tide::log::debug!("{:?}", self.creds);
