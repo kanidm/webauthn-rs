@@ -1,6 +1,7 @@
-## Author
+## Authors / Maintainers
 
 * William Brown (Firstyear): wbrown@suse.de
+* Alex Grinman (agrinman)
 
 ## Contributors
 
