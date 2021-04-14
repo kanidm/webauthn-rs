@@ -228,7 +228,7 @@ impl<T> Webauthn<T> {
         reg: &RegisterPublicKeyCredential,
         state: RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
-    ) -> Result<Credential, WebauthnError>
+    ) -> Result<(Credential, AuthenticatorData), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -254,7 +254,7 @@ impl<T> Webauthn<T> {
         // Party SHOULD fail this registration ceremony, or it MAY decide to accept the registration,
         // e.g. while deleting the older registration.
 
-        let cred_exist_result = does_exist_fn(&credential.cred_id)
+        let cred_exist_result = does_exist_fn(&credential.0.cred_id)
             .map_err(|_| WebauthnError::CredentialExistCheckError)?;
 
         if cred_exist_result {
@@ -270,7 +270,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: Challenge,
         exclude_credentials: Vec<CredentialID>,
-    ) -> Result<Credential, WebauthnError>
+    ) -> Result<(Credential, AuthenticatorData), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -392,10 +392,11 @@ impl<T> Webauthn<T> {
         // signature, by using the attestation statement format fmt’s verification procedure given
         // attStmt, authData and the hash of the serialized client data computed in step 7.
 
-        let acd = &data
+        let acd = data
             .attestation_object
             .auth_data
             .acd
+            .as_ref()
             .ok_or(WebauthnError::MissingAttestationCredentialData)?;
 
         // Now, match based on the attest_format
@@ -506,7 +507,7 @@ impl<T> Webauthn<T> {
         // So we return the credential here, and the caller persists it.
         // We turn this into a "helper" and serialisable credential structure that
         // people can use a bit nicer.
-        Ok(credential)
+        Ok((credential, data.attestation_object.auth_data))
     }
 
     // https://w3c.github.io/webauthn/#verifying-assertion
@@ -635,7 +636,7 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        self.generate_challenge_authenticate_extensions(creds, None)
+        self.generate_challenge_authenticate_options(creds, None)
     }
 
     /// Generate a challenge for an authenticate request for a user. You must supply the set of
@@ -671,10 +672,10 @@ impl<T> Webauthn<T> {
     /// authenticate_credential yields the verification bit to the caller, but this
     /// still causes issues with ctap1 / ctap2 interop, and credentials becoming verified
     /// when they should not be.
-    pub fn generate_challenge_authenticate_extensions(
+    pub fn generate_challenge_authenticate_options(
         &self,
         creds: Vec<Credential>,
-        extensions: Option<AuthenticationExtensionInputs>,
+        extensions: Option<RequestAuthenticationExtesions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
@@ -1362,7 +1363,7 @@ mod tests {
         };
 
         let r =
-            wan.verify_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal, &cred);
+            wan.verify_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal, &cred.0);
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }

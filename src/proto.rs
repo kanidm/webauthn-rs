@@ -4,7 +4,6 @@
 use crate::base64_data::Base64UrlSafeData;
 use crate::error::*;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 #[cfg(feature = "wasm")]
@@ -292,9 +291,6 @@ pub enum UserVerificationPolicy {
     Discouraged,
 }
 
-// These are the primary communication structures you will need to handle.
-pub(crate) type AuthenticationExtensionInputs = BTreeMap<String, String>;
-
 /// Relying Party Entity
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -384,8 +380,7 @@ impl TryFrom<u8> for SignedCredProtectExtension {
     type Error = <CredentialProtectionPolicy as TryFrom<u8>>::Error;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        CredentialProtectionPolicy::try_from(v)
-            .map(|policy| SignedCredProtectExtension(policy))
+        CredentialProtectionPolicy::try_from(v).map(|policy| SignedCredProtectExtension(policy))
     }
 }
 
@@ -424,6 +419,37 @@ impl RequestCredProtectExtension {
             credential_protection_policy,
             enforce_credential_protection_policy,
         }
+    }
+}
+
+/// Extension option inputs for [PublicKeyCredentialRequestOptions].
+///
+/// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct RequestAuthenticationExtesions {
+    // #[serde(flatten)]
+// none yet.
+}
+
+impl RequestAuthenticationExtesions {
+    /// Get a builder for the [RequestRegistrationExtensions] struct
+    #[must_use]
+    pub fn builder() -> RequestAuthenticationExtesionsBuilder {
+        RequestAuthenticationExtesionsBuilder::new()
+    }
+}
+
+/// Builder for [RequestAuthenticationExtesions] objects.
+pub struct RequestAuthenticationExtesionsBuilder(RequestAuthenticationExtesions);
+
+impl RequestAuthenticationExtesionsBuilder {
+    pub(crate) fn new() -> Self {
+        Self(RequestAuthenticationExtesions {})
+    }
+
+    /// Returns the inner extensions struct
+    pub fn build(self) -> RequestAuthenticationExtesions {
+        self.0
     }
 }
 
@@ -484,7 +510,7 @@ impl RequestRegistrationExtensionsBuilder {
 /// Implements \[AuthenticatorExtensionsClientOutputs\] from the spec
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SignedRegistrationExtensions {
+pub struct SignedExtensions {
     /// The credProtect extension
     pub cred_protect: Option<SignedCredProtectExtension>,
 }
@@ -661,7 +687,7 @@ pub struct PublicKeyCredentialRequestOptions {
     /// The verification policy the browser will request.
     pub user_verification: UserVerificationPolicy,
     /// extensions.
-    pub extensions: Option<AuthenticationExtensionInputs>,
+    pub extensions: Option<RequestAuthenticationExtesions>,
 }
 
 /// A JSON serialisable challenge which is issued to the user's webbrowser
@@ -731,7 +757,7 @@ impl RequestChallengeResponse {
         relaying_party: String,
         allow_credentials: Vec<AllowCredentials>,
         user_verification_policy: UserVerificationPolicy,
-        extensions: Option<AuthenticationExtensionInputs>,
+        extensions: Option<RequestAuthenticationExtesions>,
     ) -> Self {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
@@ -804,7 +830,7 @@ pub struct AuthenticatorData {
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
-    pub(crate) extensions: Option<SignedRegistrationExtensions>,
+    pub(crate) extensions: Option<SignedExtensions>,
     // pub(crate) extensions: Option<serde_cbor::Value>,
 }
 
@@ -818,8 +844,8 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     Ok((&i[len..], v))
 }
 
-named!( extensions_parser<&[u8], SignedRegistrationExtensions>,
-    map_res!(cbor_parser, serde_cbor::value::from_value::<SignedRegistrationExtensions>)
+named!( extensions_parser<&[u8], SignedExtensions>,
+    map_res!(cbor_parser, serde_cbor::value::from_value::<SignedExtensions>)
 );
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
@@ -1657,7 +1683,7 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 mod tests {
     use super::{
         AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential,
-        SignedRegistrationExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
+        SignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;
@@ -1770,7 +1796,7 @@ mod tests {
             161, 107, 99, 114, 101, 100, 80, 114, 111, 116, 101, 99, 116, 3,
         ];
 
-        let extensions: SignedRegistrationExtensions = serde_cbor::from_slice(&data).unwrap();
+        let extensions: SignedExtensions = serde_cbor::from_slice(&data).unwrap();
 
         let cred_protect = extensions
             .cred_protect
