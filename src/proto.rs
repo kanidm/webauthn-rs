@@ -426,29 +426,29 @@ impl RequestCredProtectExtension {
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
 #[derive(Debug, Serialize, Clone, Deserialize)]
-pub struct RequestAuthenticationExtesions {
+pub struct RequestAuthenticationExtensions {
     // #[serde(flatten)]
 // none yet.
 }
 
-impl RequestAuthenticationExtesions {
+impl RequestAuthenticationExtensions {
     /// Get a builder for the [RequestRegistrationExtensions] struct
     #[must_use]
-    pub fn builder() -> RequestAuthenticationExtesionsBuilder {
-        RequestAuthenticationExtesionsBuilder::new()
+    pub fn builder() -> RequestAuthenticationExtensionsBuilder {
+        RequestAuthenticationExtensionsBuilder::new()
     }
 }
 
-/// Builder for [RequestAuthenticationExtesions] objects.
-pub struct RequestAuthenticationExtesionsBuilder(RequestAuthenticationExtesions);
+/// Builder for [RequestAuthenticationExtensions] objects.
+pub struct RequestAuthenticationExtensionsBuilder(RequestAuthenticationExtensions);
 
-impl RequestAuthenticationExtesionsBuilder {
+impl RequestAuthenticationExtensionsBuilder {
     pub(crate) fn new() -> Self {
-        Self(RequestAuthenticationExtesions {})
+        Self(RequestAuthenticationExtensions {})
     }
 
     /// Returns the inner extensions struct
-    pub fn build(self) -> RequestAuthenticationExtesions {
+    pub fn build(self) -> RequestAuthenticationExtensions {
         self.0
     }
 }
@@ -687,7 +687,7 @@ pub struct PublicKeyCredentialRequestOptions {
     /// The verification policy the browser will request.
     pub user_verification: UserVerificationPolicy,
     /// extensions.
-    pub extensions: Option<RequestAuthenticationExtesions>,
+    pub extensions: Option<RequestAuthenticationExtensions>,
 }
 
 /// A JSON serialisable challenge which is issued to the user's webbrowser
@@ -757,7 +757,7 @@ impl RequestChallengeResponse {
         relaying_party: String,
         allow_credentials: Vec<AllowCredentials>,
         user_verification_policy: UserVerificationPolicy,
-        extensions: Option<RequestAuthenticationExtesions>,
+        extensions: Option<RequestAuthenticationExtensions>,
     ) -> Self {
         RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {

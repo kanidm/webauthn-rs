@@ -675,7 +675,7 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate_options(
         &self,
         creds: Vec<Credential>,
-        extensions: Option<RequestAuthenticationExtesions>,
+        extensions: Option<RequestAuthenticationExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
