@@ -11,6 +11,7 @@ use crate::error::WebauthnError;
 use crate::proto::{
     AttestedCredentialData, COSEContentType, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
     TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
+    UserVerificationPolicy,
 };
 use log::debug;
 
@@ -84,6 +85,7 @@ pub(crate) fn verify_packed_attestation(
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: &[u8],
     client_data_hash: &[u8],
+    registration_policy: UserVerificationPolicy,
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map =
@@ -175,7 +177,13 @@ pub(crate) fn verify_packed_attestation(
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
             Ok(AttestationType::Basic(
-                Credential::new(acd, credential_public_key, counter, user_verified),
+                Credential::new(
+                    acd,
+                    credential_public_key,
+                    counter,
+                    user_verified,
+                    registration_policy,
+                ),
                 attestn_cert,
             ))
         }
@@ -215,6 +223,7 @@ pub(crate) fn verify_packed_attestation(
                 credential_public_key,
                 counter,
                 user_verified,
+                registration_policy,
             )))
         }
     }
@@ -229,6 +238,7 @@ pub(crate) fn verify_fidou2f_attestation(
     att_stmt: &serde_cbor::Value,
     client_data_hash: &[u8],
     rp_id_hash: &[u8],
+    registration_policy: UserVerificationPolicy,
 ) -> Result<AttestationType, WebauthnError> {
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     //
@@ -307,7 +317,13 @@ pub(crate) fn verify_fidou2f_attestation(
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
-    let credential = Credential::new(acd, credential_public_key, counter, user_verified);
+    let credential = Credential::new(
+        acd,
+        credential_public_key,
+        counter,
+        user_verified,
+        registration_policy,
+    );
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
@@ -321,10 +337,17 @@ pub(crate) fn verify_none_attestation(
     acd: &AttestedCredentialData,
     counter: u32,
     user_verified: bool,
+    registration_policy: UserVerificationPolicy,
 ) -> Result<AttestationType, WebauthnError> {
     // No attestation is performed, simply provide a credential.
     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-    let credential = Credential::new(acd, credential_public_key, counter, user_verified);
+    let credential = Credential::new(
+        acd,
+        credential_public_key,
+        counter,
+        user_verified,
+        registration_policy,
+    );
     Ok(AttestationType::None(credential))
 }
 
@@ -336,6 +359,7 @@ pub(crate) fn verify_tpm_attestation(
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: &[u8],
     client_data_hash: &[u8],
+    registration_policy: UserVerificationPolicy,
 ) -> Result<AttestationType, WebauthnError> {
     log::debug!("begin verify_tpm_attest");
 
@@ -562,7 +586,13 @@ pub(crate) fn verify_tpm_attestation(
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
     Ok(AttestationType::AttCa(
-        Credential::new(acd, credential_public_key, counter, user_verified),
+        Credential::new(
+            acd,
+            credential_public_key,
+            counter,
+            user_verified,
+            registration_policy,
+        ),
         aik_cert,
         arr_x509,
     ))
@@ -575,6 +605,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     att_stmt: &serde_cbor::Value,
     auth_data_bytes: &[u8],
     client_data_hash: &[u8],
+    registration_policy: UserVerificationPolicy,
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     let att_stmt_map =
@@ -635,7 +666,13 @@ pub(crate) fn verify_apple_anonymous_attestation(
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
     Ok(AttestationType::AnonCa(
-        Credential::new(acd, credential_public_key, counter, user_verified),
+        Credential::new(
+            acd,
+            credential_public_key,
+            counter,
+            user_verified,
+            registration_policy,
+        ),
         crypto::X509PublicKey::apple_x509(),
         arr_x509,
     ))

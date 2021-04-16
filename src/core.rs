@@ -114,11 +114,16 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_register(
         &self,
         user_name: &str,
-        policy: Option<UserVerificationPolicy>,
+        user_verification_required: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError>
     where
         T: WebauthnConfig,
     {
+        let policy = if user_verification_required {
+            Some(UserVerificationPolicy::Required)
+        } else {
+            Some(UserVerificationPolicy::Discouraged)
+        };
         self.generate_challenge_register_options(
             user_name.as_bytes().to_vec(),
             user_name.to_string(),
@@ -151,7 +156,9 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred_DO_NOT_USE);
+        // Technically this goes against the standard. But it's the correct
+        // thing to do if no policy was requested.
+        let policy = policy.unwrap_or(UserVerificationPolicy::Discouraged);
 
         if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
             log::warn!("UserVerificationPolicy::Preferred_DO_NOT_USE is misleading! You should select Discouraged or Required!");
@@ -416,6 +423,7 @@ impl<T> Webauthn<T> {
                 &data.attestation_object.att_stmt,
                 &client_data_json_hash,
                 &data.attestation_object.auth_data.rp_id_hash,
+                policy,
             ),
             AttestationFormat::Packed => verify_packed_attestation(
                 acd,
@@ -424,6 +432,7 @@ impl<T> Webauthn<T> {
                 &data.attestation_object.att_stmt,
                 &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
+                policy,
             ),
             AttestationFormat::TPM => verify_tpm_attestation(
                 acd,
@@ -432,6 +441,7 @@ impl<T> Webauthn<T> {
                 &data.attestation_object.att_stmt,
                 &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
+                policy,
             ),
             AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
                 acd,
@@ -440,11 +450,13 @@ impl<T> Webauthn<T> {
                 &data.attestation_object.att_stmt,
                 &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
+                policy,
             ),
             AttestationFormat::None => verify_none_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
+                policy,
             ),
             _ => {
                 if self.config.ignore_unsupported_attestation_formats() {
@@ -454,6 +466,7 @@ impl<T> Webauthn<T> {
                         credential_public_key,
                         data.attestation_object.auth_data.counter,
                         false,
+                        policy,
                     )))
                 } else {
                     // No other types are currently implemented
@@ -524,10 +537,6 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy);
-        }
-
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
@@ -579,14 +588,30 @@ impl<T> Webauthn<T> {
 
         // If user verification is required for this assertion, verify that the User Verified bit of
         // the flags in authData is set.
-        match policy {
-            UserVerificationPolicy::Required => {
+        //
+        // We also check the historical policy too. See designs/authentication-use-cases.md
+
+        match (&policy, &cred.registration_policy) {
+            (UserVerificationPolicy::Required, _) => {
+                // If we requested required, enforce that.
                 if !data.authenticator_data.user_verified {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            UserVerificationPolicy::Preferred_DO_NOT_USE | UserVerificationPolicy::Discouraged => {}
-        };
+            (UserVerificationPolicy::Discouraged, UserVerificationPolicy::Discouraged) => {
+                // If this token always verifies, even under discouraged, we can enforce that.
+                if cred.verified {
+                    // This token always sends UV, so we enforce that.
+                    if !data.authenticator_data.user_verified {
+                        log::debug!("Token registered UV=true with DC, enforcing UV policy.");
+                        return Err(WebauthnError::UserNotVerified);
+                    }
+                }
+            }
+            // Pass, can not know if historical verification was requested. We must allow
+            // unverified tokens now.
+            _ => {}
+        }
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
         // authenticator extension outputs in the extensions in authData are as expected, considering
@@ -644,6 +669,26 @@ impl<T> Webauthn<T> {
         self.generate_challenge_authenticate_options(creds, None)
     }
 
+    /// Authenticate a single credential, with the ability to override the userVerification
+    /// policy requested, or extensions in use.
+    ///
+    /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
+    /// understand how this interacts with the single credential in use, and how that may impact
+    /// your system security.
+    ///
+    /// If in doubt, do NOT use this function!
+    pub fn generate_challenge_authenticate_credential(
+        &self,
+        cred: Credential,
+        policy: UserVerificationPolicy,
+        extensions: Option<RequestAuthenticationExtensions>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
+    where
+        T: WebauthnConfig,
+    {
+        self.generate_challenge_authenticate_inner(vec![cred], policy, extensions)
+    }
+
     /// Generate a challenge for an authenticate request for a user. You must supply the set of
     /// credentials that exist for the user that *may* be used in this authentication request. If
     /// an empty credential set is supplied, the authentication *will* fail.
@@ -685,8 +730,6 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        let chal = self.generate_challenge();
-
         let verified = creds.iter().all(|cred| cred.verified);
         let unverified = creds.iter().all(|cred| !cred.verified);
 
@@ -699,6 +742,20 @@ impl<T> Webauthn<T> {
         } else {
             UserVerificationPolicy::Discouraged
         };
+
+        self.generate_challenge_authenticate_inner(creds, policy, extensions)
+    }
+
+    fn generate_challenge_authenticate_inner(
+        &self,
+        creds: Vec<Credential>,
+        policy: UserVerificationPolicy,
+        extensions: Option<RequestAuthenticationExtensions>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
+    where
+        T: WebauthnConfig,
+    {
+        let chal = self.generate_challenge();
 
         // Get the user's existing creds if any.
         let ac = creds
@@ -1153,6 +1210,7 @@ mod tests {
                 }),
             },
             verified: false,
+            registration_policy: UserVerificationPolicy::Discouraged,
         };
 
         // Persist it to our fake db.
@@ -1674,7 +1732,7 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let policy = Some(UserVerificationPolicy::Required);
+        let policy = true;
 
         wan.generate_challenge_register(user_name, policy)
     }

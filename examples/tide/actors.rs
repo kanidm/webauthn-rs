@@ -1,7 +1,7 @@
 use webauthn_rs::error::WebauthnError;
 use webauthn_rs::proto::{
     CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
-    RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy,
+    RegisterPublicKeyCredential, RequestChallengeResponse, UserId,
 };
 use webauthn_rs::{
     ephemeral::WebauthnEphemeralConfig,
@@ -52,7 +52,8 @@ impl WebauthnActor {
             Some(UserVerificationPolicy::Discouraged),
             Some(exts),
         )?;
-        // .generate_challenge_register(&username, Some(UserVerificationPolicy::Discouraged))?;
+
+        // let (ccr, rs) = self.wan.generate_challenge_register(&username, false)?;
         self.reg_chals.lock().await.put(username.into_bytes(), rs);
         tide::log::debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
