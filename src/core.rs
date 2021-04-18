@@ -600,7 +600,7 @@ impl<T> Webauthn<T> {
             }
             (UserVerificationPolicy::Discouraged, UserVerificationPolicy::Discouraged) => {
                 // If this token always verifies, even under discouraged, we can enforce that.
-                if cred.verified {
+                if cred.verified && self.get_require_uv_consistency() {
                     // This token always sends UV, so we enforce that.
                     if !data.authenticator_data.user_verified {
                         log::debug!("Token registered UV=true with DC, enforcing UV policy.");
@@ -608,7 +608,7 @@ impl<T> Webauthn<T> {
                     }
                 }
             }
-            // Pass, can not know if historical verification was requested. We must allow
+            // Pass - we can not know if historical verification was requested. We must allow
             // unverified tokens now.
             _ => {}
         }
@@ -957,6 +957,22 @@ pub trait WebauthnConfig {
     /// the credentials. This is not a security enforcement.
     fn get_require_resident_key(&self) -> bool {
         false
+    }
+
+    /// Enforce that the UV bit as set at registration is the same during authentication.
+    /// This applies to certain classes of authenticators that if registered with
+    /// userVerification::Discouraged, will still perform and enforce that userVerification
+    /// is true.
+    ///
+    /// For these authenticators, since they *always* enforce userVerification, we can use this
+    /// as an extra security check, and continue to enforce that they provide user verification
+    /// in all subsequent authentication operations.
+    ///
+    /// Defaults to true.
+    ///
+    /// If in doubt, you should leave this as the default (true).
+    fn get_require_uv_consistency(&self) -> bool {
+        true
     }
 
     /// If the attestation format is not supported, should we ignore verifying the attestation
