@@ -43,13 +43,13 @@ impl std::fmt::Debug for WebauthnEphemeralConfig {
 
 impl WebauthnConfig for WebauthnEphemeralConfig {
     /// Returns the relying party name. See the trait documentation for more.
-    fn get_relying_party_name(&self) -> String {
-        self.rp_name.clone()
+    fn get_relying_party_name(&self) -> &str {
+        &self.rp_name
     }
 
     /// Returns the relying party id. See the trait documentation for more.
-    fn get_relying_party_id(&self) -> String {
-        self.rp_id.clone()
+    fn get_relying_party_id(&self) -> &str {
+        &self.rp_id
     }
 
     /// Retrieve the relying party origin. See the trait documentation for more.

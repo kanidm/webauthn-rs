@@ -8,7 +8,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// A container for binary that should be base64 encoded in serialisation. In reverse
-/// when deserialising, will decode from many different types of base64 possible.
+/// when deserializing, will decode from many different types of base64 possible.
 pub struct Base64UrlSafeData(pub Vec<u8>);
 
 impl fmt::Display for Base64UrlSafeData {
@@ -24,12 +24,6 @@ impl fmt::Display for Base64UrlSafeData {
 impl Into<Vec<u8>> for Base64UrlSafeData {
     fn into(self) -> Vec<u8> {
         self.0
-    }
-}
-
-impl AsRef<Vec<u8>> for Base64UrlSafeData {
-    fn as_ref(&self) -> &Vec<u8> {
-        &self.0
     }
 }
 

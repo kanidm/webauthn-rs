@@ -10,6 +10,8 @@ use std::convert::TryFrom;
 use js_sys::{Array, Object, Uint8Array};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
+use std::borrow::Borrow;
+use std::ops::Deref;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
@@ -22,7 +24,7 @@ pub type Counter = u32;
 pub type Aaguid = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Challenge(pub Vec<u8>);
 
 impl Into<Base64UrlSafeData> for Challenge {
@@ -34,6 +36,58 @@ impl Into<Base64UrlSafeData> for Challenge {
 impl From<Base64UrlSafeData> for Challenge {
     fn from(d: Base64UrlSafeData) -> Self {
         Challenge(d.0)
+    }
+}
+
+/// A reference to the challenge issued by the server.
+/// This contains a set of random bytes.
+///
+/// ChallengeRef is the ?Sized Type that corresponds to Challenge
+/// in the same way that &[u8] corresponds to Vec<u8>.
+/// Vec<T> : &[T] :: Challenge : &ChallengeRef
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(transparent)]
+pub struct ChallengeRef(pub [u8]);
+
+impl ChallengeRef {
+    /// Creates a new ChallengeRef from an array
+    pub fn new(challenge: &[u8]) -> &ChallengeRef {
+        // SAFETY
+        // Because of #[repr(transparent)], [u8] is guaranteed to have the same representation as ChallengeRef.
+        // This allows safe casting between *const pointers of these types.
+        unsafe { &*(challenge as *const [u8] as *const ChallengeRef)}
+    }
+}
+
+
+impl <'a> From< &'a Base64UrlSafeData> for &'a ChallengeRef {
+    fn from(d: &'a Base64UrlSafeData) -> Self {
+        ChallengeRef::new(d.0.as_slice())
+    }
+}
+
+impl ToOwned for ChallengeRef {
+    type Owned = Challenge;
+
+    fn to_owned(&self) -> Self::Owned {
+        Challenge(self.0.to_vec())
+    }
+}
+impl Borrow<ChallengeRef> for Challenge {
+    fn borrow(&self) -> &ChallengeRef {
+        ChallengeRef::new(&self.0)
+    }
+}
+impl AsRef<ChallengeRef> for Challenge {
+    fn as_ref(&self) -> &ChallengeRef {
+        ChallengeRef::new(&self.0)
+    }
+}
+impl Deref for Challenge {
+    type Target = ChallengeRef;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
     }
 }
 
@@ -796,11 +850,11 @@ pub struct TokenBinding {
     pub id: Option<String>,
 }
 
-impl TryFrom<&Vec<u8>> for CollectedClientData {
+impl TryFrom<&[u8]> for CollectedClientData {
     type Error = WebauthnError;
-    fn try_from(data: &Vec<u8>) -> Result<CollectedClientData, WebauthnError> {
+    fn try_from(data: &[u8]) -> Result<CollectedClientData, WebauthnError> {
         let ccd: CollectedClientData =
-            serde_json::from_slice(&data).map_err(WebauthnError::ParseJSONFailure)?;
+            serde_json::from_slice(data).map_err(WebauthnError::ParseJSONFailure)?;
         Ok(ccd)
     }
 }
@@ -896,10 +950,10 @@ named!( authenticator_data_parser<&[u8], AuthenticatorData>,
     )
 );
 
-impl TryFrom<&Vec<u8>> for AuthenticatorData {
+impl TryFrom<&[u8]> for AuthenticatorData {
     type Error = WebauthnError;
-    fn try_from(auth_data_bytes: &Vec<u8>) -> Result<Self, Self::Error> {
-        authenticator_data_parser(auth_data_bytes.as_slice())
+    fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
+        authenticator_data_parser(auth_data_bytes)
             .map_err(|e| {
                 log::debug!("nom -> {:?}", e);
                 WebauthnError::ParseNOMFailure
@@ -912,7 +966,7 @@ impl TryFrom<&Vec<u8>> for AuthenticatorData {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) auth_data: &'a [u8],
-    pub(crate) fmt: String,
+    pub(crate) fmt: &'a str,
     pub(crate) att_stmt: serde_cbor::Value,
 }
 
@@ -935,15 +989,14 @@ impl TryFrom<&[u8]> for AttestationObject {
     fn try_from(data: &[u8]) -> Result<AttestationObject, WebauthnError> {
         let aoi: AttestationObjectInner =
             serde_cbor::from_slice(&data).map_err(WebauthnError::ParseCBORFailure)?;
-        let auth_data_bytes: Vec<u8> = aoi.auth_data.iter().copied().collect();
-
-        let auth_data = AuthenticatorData::try_from(&auth_data_bytes)?;
+        let auth_data_bytes: &[u8] = aoi.auth_data;
+        let auth_data = AuthenticatorData::try_from(auth_data_bytes)?;
 
         // Yay! Now we can assemble a reasonably sane structure.
         Ok(AttestationObject {
-            fmt: aoi.fmt.clone(),
+            fmt: aoi.fmt.to_owned(),
             auth_data,
-            auth_data_bytes,
+            auth_data_bytes: auth_data_bytes.to_owned(),
             att_stmt: aoi.att_stmt,
         })
     }
@@ -1067,6 +1120,20 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
             client_data_bytes: aarr.client_data_json.clone().into(),
             signature: aarr.signature.clone().into(),
             user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
+        })
+    }
+}
+
+impl TryFrom<AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
+    type Error = WebauthnError;
+    fn try_from(aarr: AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
+        Ok(AuthenticatorAssertionResponse {
+            authenticator_data: AuthenticatorData::try_from(aarr.authenticator_data.as_ref())?,
+            authenticator_data_bytes: aarr.authenticator_data.into(),
+            client_data: CollectedClientData::try_from(aarr.client_data_json.as_ref())?,
+            client_data_bytes: aarr.client_data_json.into(),
+            signature: aarr.signature.into(),
+            user_handle: aarr.user_handle.map(|uh| uh.into()),
         })
     }
 }
