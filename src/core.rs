@@ -600,7 +600,7 @@ impl<T> Webauthn<T> {
             }
             (UserVerificationPolicy::Discouraged, UserVerificationPolicy::Discouraged) => {
                 // If this token always verifies, even under discouraged, we can enforce that.
-                if cred.verified && self.get_require_uv_consistency() {
+                if cred.verified && self.config.get_require_uv_consistency() {
                     // This token always sends UV, so we enforce that.
                     if !data.authenticator_data.user_verified {
                         log::debug!("Token registered UV=true with DC, enforcing UV policy.");
