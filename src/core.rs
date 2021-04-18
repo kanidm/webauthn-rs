@@ -62,7 +62,7 @@ impl AuthenticationState {
 ///
 /// Each of these is described in turn, but they will all map to routes in your application.
 /// The generate functions return Json challenges that are intended to be processed by the client
-/// browser, and the register and authenticate will recieve Json that is processed and verified.
+/// browser, and the register and authenticate will receive Json that is processed and verified.
 ///
 /// These functions return state that you must store and handle correctly for the authentication
 /// or registration to proceed correctly.
@@ -78,7 +78,7 @@ pub struct Webauthn<T> {
 
 impl<T> Webauthn<T> {
     /// Create a new Webauthn instance with the supplied configuration. The config type
-    /// will recieve and interact with various callbacks to allow the lifecycle and
+    /// will receive and interact with various callbacks to allow the lifecycle and
     /// application handling of Credentials to be customised for your application.
     ///
     /// You should see the Documentation for WebauthnConfig, which is the main part of
@@ -133,12 +133,12 @@ impl<T> Webauthn<T> {
     /// the lifecycle of a credential. This function will return the
     /// CreationChallengeResponse which is suitable for Serde JSON serialisation
     /// to be sent to the client.
-    /// The client (generally a webbrowser) will pass this JSON
+    /// The client (generally a web browser) will pass this JSON
     /// structure to the `navigator.credentials.create()` javascript function for registration.
     ///
-    /// It also returns a RegistratationState, that you *must*
+    /// It also returns a RegistrationState, that you *must*
     /// persist. It is strongly advised you associate this RegistrationState with the
-    /// UserId of the requestor.
+    /// UserId of the requester.
     pub fn generate_challenge_register_options(
         &self,
         user_id: UserId,
@@ -166,8 +166,8 @@ impl<T> Webauthn<T> {
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
-                    name: self.config.get_relying_party_name(),
-                    id: self.config.get_relying_party_id(),
+                    name: self.config.get_relying_party_name().to_owned(),
+                    id: self.config.get_relying_party_id().to_owned(),
                 },
                 user: User {
                     id: Base64UrlSafeData(user_id),
@@ -226,7 +226,7 @@ impl<T> Webauthn<T> {
     pub fn register_credential(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: RegistrationState,
+        state: &RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<(Credential, AuthenticatorData), WebauthnError>
     where
@@ -241,13 +241,14 @@ impl<T> Webauthn<T> {
             exclude_credentials,
             challenge,
         } = state;
+        let chal: &ChallengeRef = challenge.into();
 
         // TODO: check the req username matches? I think it's not possible, the caller needs to
         // create the linkage between the username and the state.
 
         // send to register_credential_internal
         let credential =
-            self.register_credential_internal(reg, policy, challenge.into(), exclude_credentials)?;
+            self.register_credential_internal(reg, policy.clone(), chal, &exclude_credentials)?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -268,8 +269,8 @@ impl<T> Webauthn<T> {
         &self,
         reg: &RegisterPublicKeyCredential,
         policy: UserVerificationPolicy,
-        chal: Challenge,
-        exclude_credentials: Vec<CredentialID>,
+        chal: &ChallengeRef,
+        exclude_credentials: &[CredentialID],
     ) -> Result<(Credential, AuthenticatorData), WebauthnError>
     where
         T: WebauthnConfig,
@@ -419,7 +420,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
-                data.attestation_object.auth_data_bytes,
+                &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::TPM => verify_tpm_attestation(
@@ -427,7 +428,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
-                data.attestation_object.auth_data_bytes,
+                &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
@@ -435,7 +436,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
-                data.attestation_object.auth_data_bytes,
+                &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::None => verify_none_attestation(
@@ -515,7 +516,7 @@ impl<T> Webauthn<T> {
         &self,
         rsp: &PublicKeyCredential,
         policy: UserVerificationPolicy,
-        chal: Challenge,
+        chal: &ChallengeRef,
         cred: &Credential,
     ) -> Result<AuthenticatorData, WebauthnError>
     where
@@ -710,7 +711,7 @@ impl<T> Webauthn<T> {
         let r = RequestChallengeResponse::new(
             chal.clone(),
             self.config.get_authenticator_timeout(),
-            self.config.get_relying_party_id(),
+            self.config.get_relying_party_id().to_owned(),
             ac,
             policy.clone(),
             extensions,
@@ -728,17 +729,17 @@ impl<T> Webauthn<T> {
     /// is the output of `navigator.credentials.get()`, which is processed by this
     /// function. If the authentication fails, appropriate errors will be returned.
     ///
-    /// This requireds the associated AuthenticationState that was created by
+    /// This requires the associated AuthenticationState that was created by
     /// generate_challenge_authenticate
     ///
-    /// On successful authentication, an Ok result is returned. The Ok may contain the credentialid
+    /// On successful authentication, an Ok result is returned. The Ok may contain the CredentialID
     /// and associated counter, which you *should* update for security purposes. If the Ok returns
     /// `None` then the credential does not have a counter.
-    pub fn authenticate_credential(
+    pub fn authenticate_credential<'a>(
         &self,
         rsp: &PublicKeyCredential,
-        state: AuthenticationState,
-    ) -> Result<(CredentialID, AuthenticatorData), WebauthnError>
+        state: &'a AuthenticationState,
+    ) -> Result<(&'a CredentialID, AuthenticatorData), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -750,6 +751,7 @@ impl<T> Webauthn<T> {
             policy,
             challenge: chal,
         } = state;
+        let chal: &ChallengeRef = chal.into();
 
         // If the allowCredentials option was given when this authentication ceremony was initiated,
         // verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
@@ -777,7 +779,7 @@ impl<T> Webauthn<T> {
 
             // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
             // inappropriate for your use case), look up the corresponding credential public key.
-            let mut found_cred: Option<Credential> = None;
+            let mut found_cred: Option<&Credential> = None;
             for cred in creds {
                 if cred.cred_id == rsp.raw_id.0 {
                     found_cred = Some(cred);
@@ -788,7 +790,7 @@ impl<T> Webauthn<T> {
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let auth_data = self.verify_credential_internal(rsp, policy, chal.into(), &cred)?;
+        let auth_data = self.verify_credential_internal(rsp, policy.clone(), chal, &cred)?;
         let counter = auth_data.counter;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
@@ -810,7 +812,7 @@ impl<T> Webauthn<T> {
             }
         }
 
-        Ok((cred.cred_id, auth_data))
+        Ok((&cred.cred_id, auth_data))
     }
 }
 
@@ -823,7 +825,7 @@ pub trait WebauthnConfig {
     /// confuse authenticators and will cause their credentials to be lost.
     ///
     /// Examples of names could be "My Awesome Site", "https://my-awesome-site.com.au"
-    fn get_relying_party_name(&self) -> String;
+    fn get_relying_party_name(&self) -> &str;
 
     /// Returns a reference to your sites origin. The origin is the URL to your site with
     /// protocol and port. This should rarely, if ever change. In production usage this
@@ -842,7 +844,7 @@ pub trait WebauthnConfig {
     /// If changed, all associated credentials will be lost in all authenticators.
     ///
     /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
-    fn get_relying_party_id(&self) -> String;
+    fn get_relying_party_id(&self) -> &str;
 
     /// Get the list of valid credential algorthims that this service can accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
@@ -994,8 +996,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            zero_chal,
-            vec![],
+            &zero_chal,
+            &[],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1030,8 +1032,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            chal,
-            vec![],
+            chal.as_ref(),
+            &[],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1066,8 +1068,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            chal,
-            vec![],
+            &chal,
+            &[],
         );
         assert!(result.is_ok());
     }
@@ -1100,12 +1102,8 @@ mod tests {
 
         println!("{:?}", rsp_d);
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            chal,
-            vec![],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1176,7 +1174,7 @@ mod tests {
         let r = wan.verify_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Discouraged,
-            zero_chal,
+            &zero_chal,
             &cred,
         );
         println!("RESULT: {:?}", r);
@@ -1215,8 +1213,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            chal,
-            vec![],
+            &chal,
+            &[],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1233,7 +1231,7 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal, vec![]);
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1301,12 +1299,8 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            chal,
-            vec![],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
@@ -1362,8 +1356,12 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let r =
-            wan.verify_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal, &cred.0);
+        let r = wan.verify_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &cred.0,
+        );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
@@ -1655,12 +1653,8 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            chal,
-            vec![],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }

@@ -88,7 +88,7 @@ impl WebauthnActor {
         let r = match creds.get_mut(&username) {
             Some(ucreds) => self
                 .wan
-                .register_credential(reg, rs, |cred_id| Ok(ucreds.contains_key(cred_id)))
+                .register_credential(reg, &rs, |cred_id| Ok(ucreds.contains_key(cred_id)))
                 .map(|cred| {
                     let cred_id = cred.0.cred_id.clone();
                     ucreds.insert(cred_id, cred.0);
@@ -96,7 +96,7 @@ impl WebauthnActor {
             None => {
                 let r = self
                     .wan
-                    .register_credential(reg, rs, |_| Ok(false))
+                    .register_credential(reg, &rs, |_| Ok(false))
                     .map(|cred| {
                         let mut t = BTreeMap::new();
                         let credential_id = cred.0.cred_id.clone();
@@ -134,11 +134,11 @@ impl WebauthnActor {
         let mut creds = self.creds.lock().await;
         let r = self
             .wan
-            .authenticate_credential(lgn, st)
+            .authenticate_credential(lgn, &st)
             .map(|(cred_id, auth_data)| {
                 let _ = match creds.get_mut(&username) {
                     Some(v) => {
-                        let mut c = v.remove(&cred_id).unwrap();
+                        let mut c = v.remove(cred_id).unwrap();
                         c.counter = auth_data.counter;
                         v.insert(cred_id.clone(), c);
                         Ok(())

@@ -82,7 +82,7 @@ pub(crate) fn verify_packed_attestation(
     counter: u32,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
-    auth_data_bytes: Vec<u8>,
+    auth_data_bytes: &[u8],
     client_data_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
@@ -334,7 +334,7 @@ pub(crate) fn verify_tpm_attestation(
     counter: u32,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
-    auth_data_bytes: Vec<u8>,
+    auth_data_bytes: &[u8],
     client_data_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     log::debug!("begin verify_tpm_attest");
@@ -573,7 +573,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     counter: u32,
     user_verified: bool,
     att_stmt: &serde_cbor::Value,
-    auth_data_bytes: Vec<u8>,
+    auth_data_bytes: &[u8],
     client_data_hash: &[u8],
 ) -> Result<AttestationType, WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
