@@ -1102,12 +1102,8 @@ mod tests {
 
         println!("{:?}", rsp_d);
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            &chal,
-            &[],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1303,12 +1299,8 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            &chal,
-            &[],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
@@ -1364,8 +1356,12 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let r =
-            wan.verify_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &cred.0);
+        let r = wan.verify_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &cred.0,
+        );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
@@ -1657,12 +1653,8 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            &chal,
-            &[],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
