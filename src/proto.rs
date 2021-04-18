@@ -23,13 +23,19 @@ pub type Counter = u32;
 /// https://www.w3.org/TR/webauthn/#aaguid
 pub type Aaguid = Vec<u8>;
 
-/// A challenge issued by the server. This contains a set of random bytes
+/// A challenge issued by the server. This contains a set of random bytes.
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Challenge(pub(crate) Vec<u8>);
+pub struct Challenge(Vec<u8>);
+
 impl Challenge {
-    /// Creates a new Challenge from a `Vec<u8>`
+    /// Creates a new Challenge from a vector of bytes.
     pub fn new(challenge: Vec<u8>) -> Self {
         Challenge(challenge)
+    }
+
+    /// Consumes the Challenge to produce the inner vector of bytes.
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
     }
 }
 
@@ -45,15 +51,33 @@ impl From<Base64UrlSafeData> for Challenge {
     }
 }
 
+impl Borrow<ChallengeRef> for Challenge {
+    fn borrow(&self) -> &ChallengeRef {
+        ChallengeRef::new(&self.0)
+    }
+}
+impl AsRef<ChallengeRef> for Challenge {
+    fn as_ref(&self) -> &ChallengeRef {
+        ChallengeRef::new(&self.0)
+    }
+}
+impl Deref for Challenge {
+    type Target = ChallengeRef;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
 /// A reference to the challenge issued by the server.
 /// This contains a set of random bytes.
 ///
 /// ChallengeRef is the ?Sized Type that corresponds to Challenge
 /// in the same way that &[u8] corresponds to Vec<u8>.
-/// Vec<T> : &[T] :: Challenge : &ChallengeRef
+/// Vec<u8> : &[u8] :: Challenge : &ChallengeRef
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
-pub struct ChallengeRef(pub(crate) [u8]);
+pub struct ChallengeRef([u8]);
 
 impl ChallengeRef {
     /// Creates a new ChallengeRef from a slice
@@ -78,25 +102,22 @@ impl ToOwned for ChallengeRef {
         Challenge(self.0.to_vec())
     }
 }
-impl Borrow<ChallengeRef> for Challenge {
-    fn borrow(&self) -> &ChallengeRef {
-        ChallengeRef::new(&self.0)
+
+impl AsRef<[u8]> for ChallengeRef {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
-impl AsRef<ChallengeRef> for Challenge {
-    fn as_ref(&self) -> &ChallengeRef {
-        ChallengeRef::new(&self.0)
-    }
-}
-impl Deref for Challenge {
-    type Target = ChallengeRef;
+
+impl Deref for ChallengeRef {
+    type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         self.as_ref()
     }
 }
 
-/// An ECDSACurve identifier. You probabably will never need to alter
+/// An ECDSACurve identifier. You probably will never need to alter
 /// or use this value, as it is set inside the Credential for you.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ECDSACurve {
@@ -202,7 +223,7 @@ impl From<&COSEContentType> for i64 {
     }
 }
 
-/// A COSE Eliptic Curve Public Key. This is generally the provided credential
+/// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
@@ -319,7 +340,7 @@ impl PartialEq<Credential> for Credential {
 /// variant lists it's effects.
 ///
 /// To be clear, Verification means that the Authenticator perform extra or supplementary
-/// interfaction with the user to verify who they are. An example of this is Apple Touch Id
+/// interaction with the user to verify who they are. An example of this is Apple Touch Id
 /// required a fingerprint to be verified, or a yubico device requiring a pin in addition to
 /// a touch event.
 ///
@@ -701,7 +722,7 @@ pub enum AuthenticatorTransport {
     Internal,
 }
 
-/// A JSON serialisable challenge which is issued to the user's webbrowser
+/// A JSON serializable challenge which is issued to the user's webbrowser
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
@@ -749,7 +770,7 @@ pub struct PublicKeyCredentialRequestOptions {
     pub extensions: Option<RequestAuthenticationExtensions>,
 }
 
-/// A JSON serialisable challenge which is issued to the user's webbrowser
+/// A JSON serializable challenge which is issued to the user's webbrowser
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
@@ -1129,7 +1150,6 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
     }
 }
 
-
 /// https://w3c.github.io/webauthn/#authenticatorassertionresponse
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AuthenticatorAssertionResponseRaw {
@@ -1312,7 +1332,7 @@ impl TpmSt {
 }
 
 #[derive(Debug)]
-/// Information about the TPM's clock. May be obsfucated.
+/// Information about the TPM's clock. May be obfuscated.
 pub struct TpmsClockInfo {
     clock: u64,
     reset_count: u32,
@@ -1593,7 +1613,7 @@ pub struct TpmsEccParms {
 */
 
 #[derive(Debug)]
-/// Asymetric Public Parameters
+/// Asymmetric Public Parameters
 pub enum TpmuPublicParms {
     // KeyedHash
     // Symcipher
@@ -1617,7 +1637,7 @@ fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], Tpm
 }
 
 #[derive(Debug)]
-/// Asymetric Public Key
+/// Asymmetric Public Key
 pub enum TpmuPublicId {
     // KeyedHash
     // Symcipher
