@@ -8,10 +8,10 @@ use std::convert::TryFrom;
 
 #[cfg(feature = "wasm")]
 use js_sys::{Array, Object, Uint8Array};
-#[cfg(feature = "wasm")]
-use wasm_bindgen::prelude::*;
 use std::borrow::Borrow;
 use std::ops::Deref;
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
@@ -55,12 +55,11 @@ impl ChallengeRef {
         // SAFETY
         // Because of #[repr(transparent)], [u8] is guaranteed to have the same representation as ChallengeRef.
         // This allows safe casting between *const pointers of these types.
-        unsafe { &*(challenge as *const [u8] as *const ChallengeRef)}
+        unsafe { &*(challenge as *const [u8] as *const ChallengeRef) }
     }
 }
 
-
-impl <'a> From< &'a Base64UrlSafeData> for &'a ChallengeRef {
+impl<'a> From<&'a Base64UrlSafeData> for &'a ChallengeRef {
     fn from(d: &'a Base64UrlSafeData) -> Self {
         ChallengeRef::new(d.0.as_slice())
     }
