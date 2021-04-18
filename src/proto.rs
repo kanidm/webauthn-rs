@@ -8,10 +8,10 @@ use std::convert::TryFrom;
 
 #[cfg(feature = "wasm")]
 use js_sys::{Array, Object, Uint8Array};
-use std::borrow::Borrow;
-use std::ops::Deref;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
+use std::borrow::Borrow;
+use std::ops::Deref;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
@@ -25,13 +25,7 @@ pub type Aaguid = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Challenge(pub(crate) Vec<u8>);
-impl Challenge {
-    /// Creates a new Challenge from a `Vec<u8>`
-    pub fn new(challenge: Vec<u8>) -> Self {
-        Challenge(challenge)
-    }
-}
+pub struct Challenge(pub Vec<u8>);
 
 impl Into<Base64UrlSafeData> for Challenge {
     fn into(self) -> Base64UrlSafeData {
@@ -53,19 +47,20 @@ impl From<Base64UrlSafeData> for Challenge {
 /// Vec<T> : &[T] :: Challenge : &ChallengeRef
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
-pub struct ChallengeRef(pub(crate) [u8]);
+pub struct ChallengeRef(pub [u8]);
 
 impl ChallengeRef {
-    /// Creates a new ChallengeRef from a slice
+    /// Creates a new ChallengeRef from an array
     pub fn new(challenge: &[u8]) -> &ChallengeRef {
         // SAFETY
         // Because of #[repr(transparent)], [u8] is guaranteed to have the same representation as ChallengeRef.
         // This allows safe casting between *const pointers of these types.
-        unsafe { &*(challenge as *const [u8] as *const ChallengeRef) }
+        unsafe { &*(challenge as *const [u8] as *const ChallengeRef)}
     }
 }
 
-impl<'a> From<&'a Base64UrlSafeData> for &'a ChallengeRef {
+
+impl <'a> From< &'a Base64UrlSafeData> for &'a ChallengeRef {
     fn from(d: &'a Base64UrlSafeData) -> Self {
         ChallengeRef::new(d.0.as_slice())
     }
@@ -1129,6 +1124,19 @@ impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionRespo
     }
 }
 
+impl TryFrom<AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
+    type Error = WebauthnError;
+    fn try_from(aarr: AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
+        Ok(AuthenticatorAssertionResponse {
+            authenticator_data: AuthenticatorData::try_from(aarr.authenticator_data.as_ref())?,
+            authenticator_data_bytes: aarr.authenticator_data.into(),
+            client_data: CollectedClientData::try_from(aarr.client_data_json.as_ref())?,
+            client_data_bytes: aarr.client_data_json.into(),
+            signature: aarr.signature.into(),
+            user_handle: aarr.user_handle.map(|uh| uh.into()),
+        })
+    }
+}
 
 /// https://w3c.github.io/webauthn/#authenticatorassertionresponse
 #[derive(Debug, Deserialize, Serialize)]
