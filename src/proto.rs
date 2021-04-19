@@ -29,13 +29,8 @@ pub struct Challenge(Vec<u8>);
 
 impl Challenge {
     /// Creates a new Challenge from a vector of bytes.
-    pub fn new(challenge: Vec<u8>) -> Self {
+    pub(crate) fn new(challenge: Vec<u8>) -> Self {
         Challenge(challenge)
-    }
-
-    /// Consumes the Challenge to produce the inner vector of bytes.
-    pub fn into_inner(self) -> Vec<u8> {
-        self.0
     }
 }
 
@@ -56,11 +51,13 @@ impl Borrow<ChallengeRef> for Challenge {
         ChallengeRef::new(&self.0)
     }
 }
+
 impl AsRef<ChallengeRef> for Challenge {
     fn as_ref(&self) -> &ChallengeRef {
         ChallengeRef::new(&self.0)
     }
 }
+
 impl Deref for Challenge {
     type Target = ChallengeRef;
 

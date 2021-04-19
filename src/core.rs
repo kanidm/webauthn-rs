@@ -292,7 +292,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the create() call.
-        if data.client_data_json.challenge.0 != &**chal {
+        if data.client_data_json.challenge.0 != chal.as_ref() {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -548,7 +548,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
-        if c.challenge.0 != &**chal {
+        if c.challenge.0 != chal.as_ref() {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
