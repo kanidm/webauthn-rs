@@ -726,10 +726,9 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        let (verified, unverified): (Vec<Credential>, Vec<Credential>) =
-            creds.into_iter().partition(|cred| {
-                cred.registration_policy == UserVerificationPolicy::Required
-            });
+        let (verified, unverified): (Vec<Credential>, Vec<Credential>) = creds
+            .into_iter()
+            .partition(|cred| cred.registration_policy == UserVerificationPolicy::Required);
 
         match (verified.len(), unverified.len()) {
             (_, 0) => self.generate_challenge_authenticate_inner(
@@ -1943,7 +1942,8 @@ mod tests {
         // Ensure we get a bad result.
 
         assert!(
-            wan.generate_challenge_authenticate(creds.clone()).unwrap_err()
+            wan.generate_challenge_authenticate(creds.clone())
+                .unwrap_err()
                 == WebauthnError::InconsistentUserVerificationPolicy
         );
 
@@ -1951,52 +1951,52 @@ mod tests {
         // cred 0 verified + uv::req
         // cred 1 verified + uv::req
         {
-        creds.get_mut(0)
-            .map(|cred| {
-                cred.verified = true;
-                cred.registration_policy = UserVerificationPolicy::Required;
-                ()
-            })
-            .unwrap();
-        creds.get_mut(1)
-            .map(|cred| {
-                cred.verified = true;
-                cred.registration_policy = UserVerificationPolicy::Required;
-                ()
-            })
-            .unwrap();
+            creds
+                .get_mut(0)
+                .map(|cred| {
+                    cred.verified = true;
+                    cred.registration_policy = UserVerificationPolicy::Required;
+                    ()
+                })
+                .unwrap();
+            creds
+                .get_mut(1)
+                .map(|cred| {
+                    cred.verified = true;
+                    cred.registration_policy = UserVerificationPolicy::Required;
+                    ()
+                })
+                .unwrap();
         }
 
         let r = wan.generate_challenge_authenticate(creds.clone());
         eprintln!("{:?}", r);
-        assert!(
-            r.is_ok()
-        );
+        assert!(r.is_ok());
 
         // now mutate to different states to check.
         // cred 0 verified + uv::dc
         // cred 1 verified + uv::dc
         {
-        creds.get_mut(0)
-            .map(|cred| {
-                cred.verified = true;
-                cred.registration_policy = UserVerificationPolicy::Discouraged;
-                ()
-            })
-            .unwrap();
-        creds.get_mut(1)
-            .map(|cred| {
-                cred.verified = false;
-                cred.registration_policy = UserVerificationPolicy::Discouraged;
-                ()
-            })
-            .unwrap();
+            creds
+                .get_mut(0)
+                .map(|cred| {
+                    cred.verified = true;
+                    cred.registration_policy = UserVerificationPolicy::Discouraged;
+                    ()
+                })
+                .unwrap();
+            creds
+                .get_mut(1)
+                .map(|cred| {
+                    cred.verified = false;
+                    cred.registration_policy = UserVerificationPolicy::Discouraged;
+                    ()
+                })
+                .unwrap();
         }
 
         let r = wan.generate_challenge_authenticate(creds.clone());
         eprintln!("{:?}", r);
-        assert!(
-            r.is_ok()
-        );
+        assert!(r.is_ok());
     }
 }
