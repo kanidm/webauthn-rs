@@ -702,8 +702,9 @@ impl<T> Webauthn<T> {
     ///
     /// NOTE: `WebauthnError::InconsistentUserVerificationPolicy`
     ///
-    /// This error is returning when the set of credentials has a mix of verified
-    /// and unverified credentials. This is due to an issue with the webauthn standard
+    /// This error is returning when the set of credentials has a mix of registration
+    /// user verification policies.
+    /// This is due to an issue with the webauthn standard
     /// as noted at https://github.com/w3c/webauthn/issues/1510. What can occur is that
     /// when you *register* a credential, you set an expectation as to the verification
     /// policy of that credential, and if that credential can soley be a MFA on it's own
@@ -717,11 +718,6 @@ impl<T> Webauthn<T> {
     /// the credentials given. This means you *must* consider a UX to allow the user to
     /// choose if they wish to use a verified token or not as webauthn as a standard can
     /// not make this distinction.
-    ///
-    /// An alternate suggestion is that the policy is *always* preferred and then the
-    /// authenticate_credential yields the verification bit to the caller, but this
-    /// still causes issues with ctap1 / ctap2 interop, and credentials becoming verified
-    /// when they should not be.
     pub fn generate_challenge_authenticate_options(
         &self,
         creds: Vec<Credential>,
@@ -730,20 +726,24 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        let verified = creds.iter().all(|cred| cred.verified);
-        let unverified = creds.iter().all(|cred| !cred.verified);
+        let (verified, unverified): (Vec<Credential>, Vec<Credential>) =
+            creds.into_iter().partition(|cred| {
+                cred.registration_policy == UserVerificationPolicy::Required
+            });
 
-        if !verified && !unverified {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy);
+        match (verified.len(), unverified.len()) {
+            (_, 0) => self.generate_challenge_authenticate_inner(
+                verified,
+                UserVerificationPolicy::Required,
+                extensions,
+            ),
+            (0, _) => self.generate_challenge_authenticate_inner(
+                unverified,
+                UserVerificationPolicy::Discouraged,
+                extensions,
+            ),
+            (_, _) => Err(WebauthnError::InconsistentUserVerificationPolicy),
         }
-
-        let policy = if verified {
-            UserVerificationPolicy::Required
-        } else {
-            UserVerificationPolicy::Discouraged
-        };
-
-        self.generate_challenge_authenticate_inner(creds, policy, extensions)
     }
 
     fn generate_challenge_authenticate_inner(
@@ -1031,9 +1031,6 @@ mod tests {
     };
     use crate::proto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
     use crate::Webauthn;
-
-    #[test]
-    fn test_ephemeral() {}
 
     // Test the crypto operations of the webauthn impl
 
@@ -1875,5 +1872,131 @@ mod tests {
         };
 
         test_credential_registration(wan_c, chal, &rsp_d);
+    }
+
+    #[test]
+    fn test_uv_consistency() {
+        let wan_c = WebauthnEphemeralConfig::new(
+            "http://127.0.0.1:8080/auth",
+            "http://127.0.0.1:8080",
+            "127.0.0.1",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        // Given two credentials with differening policy
+        let mut creds = vec![
+            Credential {
+                cred_id: vec![
+                    205, 198, 18, 130, 133, 220, 73, 23, 199, 211, 240, 143, 220, 154, 172, 117,
+                    91, 18, 164, 211, 24, 147, 16, 203, 118, 76, 33, 65, 31, 92, 236, 211, 79, 67,
+                    240, 30, 65, 247, 46, 134, 19, 136, 170, 209, 11, 115, 37, 12, 88, 244, 244,
+                    240, 148, 132, 191, 165, 150, 166, 252, 39, 97, 137, 21, 186,
+                ],
+                cred: COSEKey {
+                    type_: COSEContentType::ECDSA_SHA256,
+                    key: COSEKeyType::EC_EC2(COSEEC2Key {
+                        curve: ECDSACurve::SECP256R1,
+                        x: [
+                            131, 160, 173, 103, 102, 41, 186, 183, 60, 175, 136, 103, 167, 145,
+                            239, 235, 216, 80, 109, 26, 218, 187, 146, 77, 5, 173, 143, 33, 126,
+                            119, 197, 116,
+                        ],
+                        y: [
+                            59, 202, 240, 192, 92, 25, 186, 100, 135, 111, 53, 194, 234, 134, 249,
+                            249, 30, 22, 70, 58, 81, 250, 141, 38, 217, 9, 44, 121, 162, 230, 197,
+                            87,
+                        ],
+                    }),
+                },
+                counter: 0,
+                verified: false,
+                registration_policy: UserVerificationPolicy::Discouraged,
+            },
+            Credential {
+                cred_id: vec![
+                    211, 204, 163, 253, 101, 149, 83, 136, 242, 175, 211, 104, 215, 131, 122, 175,
+                    187, 84, 13, 3, 21, 24, 11, 138, 50, 137, 55, 225, 180, 109, 49, 28, 98, 8, 28,
+                    181, 149, 241, 106, 124, 110, 149, 154, 198, 23, 8, 8, 4, 41, 69, 236, 203,
+                    122, 120, 204, 174, 28, 58, 171, 43, 218, 81, 195, 177,
+                ],
+                cred: COSEKey {
+                    type_: COSEContentType::ECDSA_SHA256,
+                    key: COSEKeyType::EC_EC2(COSEEC2Key {
+                        curve: ECDSACurve::SECP256R1,
+                        x: [
+                            87, 236, 127, 24, 222, 164, 79, 139, 67, 77, 159, 33, 76, 155, 161,
+                            155, 234, 151, 203, 142, 136, 87, 77, 177, 27, 67, 248, 104, 233, 156,
+                            15, 51,
+                        ],
+                        y: [
+                            21, 29, 94, 187, 68, 148, 156, 253, 117, 226, 40, 88, 53, 61, 209, 227,
+                            12, 164, 136, 185, 148, 125, 86, 21, 22, 52, 195, 192, 6, 6, 176, 179,
+                        ],
+                    }),
+                },
+                counter: 1,
+                verified: true,
+                registration_policy: UserVerificationPolicy::Required,
+            },
+        ];
+        // Ensure we get a bad result.
+
+        assert!(
+            wan.generate_challenge_authenticate(creds.clone()).unwrap_err()
+                == WebauthnError::InconsistentUserVerificationPolicy
+        );
+
+        // now mutate to different states to check.
+        // cred 0 verified + uv::req
+        // cred 1 verified + uv::req
+        {
+        creds.get_mut(0)
+            .map(|cred| {
+                cred.verified = true;
+                cred.registration_policy = UserVerificationPolicy::Required;
+                ()
+            })
+            .unwrap();
+        creds.get_mut(1)
+            .map(|cred| {
+                cred.verified = true;
+                cred.registration_policy = UserVerificationPolicy::Required;
+                ()
+            })
+            .unwrap();
+        }
+
+        let r = wan.generate_challenge_authenticate(creds.clone());
+        eprintln!("{:?}", r);
+        assert!(
+            r.is_ok()
+        );
+
+        // now mutate to different states to check.
+        // cred 0 verified + uv::dc
+        // cred 1 verified + uv::dc
+        {
+        creds.get_mut(0)
+            .map(|cred| {
+                cred.verified = true;
+                cred.registration_policy = UserVerificationPolicy::Discouraged;
+                ()
+            })
+            .unwrap();
+        creds.get_mut(1)
+            .map(|cred| {
+                cred.verified = false;
+                cred.registration_policy = UserVerificationPolicy::Discouraged;
+                ()
+            })
+            .unwrap();
+        }
+
+        let r = wan.generate_challenge_authenticate(creds.clone());
+        eprintln!("{:?}", r);
+        assert!(
+            r.is_ok()
+        );
     }
 }
