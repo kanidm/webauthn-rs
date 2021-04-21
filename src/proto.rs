@@ -8,6 +8,8 @@ use std::convert::TryFrom;
 
 #[cfg(feature = "wasm")]
 use js_sys::{Array, Object, Uint8Array};
+use std::borrow::Borrow;
+use std::ops::Deref;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
@@ -21,9 +23,16 @@ pub type Counter = u32;
 /// https://www.w3.org/TR/webauthn/#aaguid
 pub type Aaguid = Vec<u8>;
 
-/// A challenge issued by the server. This contains a set of random bytes
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Challenge(pub Vec<u8>);
+/// A challenge issued by the server. This contains a set of random bytes.
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Challenge(Vec<u8>);
+
+impl Challenge {
+    /// Creates a new Challenge from a vector of bytes.
+    pub(crate) fn new(challenge: Vec<u8>) -> Self {
+        Challenge(challenge)
+    }
+}
 
 impl Into<Base64UrlSafeData> for Challenge {
     fn into(self) -> Base64UrlSafeData {
@@ -37,7 +46,75 @@ impl From<Base64UrlSafeData> for Challenge {
     }
 }
 
-/// An ECDSACurve identifier. You probabably will never need to alter
+impl Borrow<ChallengeRef> for Challenge {
+    fn borrow(&self) -> &ChallengeRef {
+        ChallengeRef::new(&self.0)
+    }
+}
+
+impl AsRef<ChallengeRef> for Challenge {
+    fn as_ref(&self) -> &ChallengeRef {
+        ChallengeRef::new(&self.0)
+    }
+}
+
+impl Deref for Challenge {
+    type Target = ChallengeRef;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+/// A reference to the challenge issued by the server.
+/// This contains a set of random bytes.
+///
+/// ChallengeRef is the ?Sized Type that corresponds to Challenge
+/// in the same way that &[u8] corresponds to Vec<u8>.
+/// Vec<u8> : &[u8] :: Challenge : &ChallengeRef
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(transparent)]
+pub struct ChallengeRef([u8]);
+
+impl ChallengeRef {
+    /// Creates a new ChallengeRef from a slice
+    pub fn new(challenge: &[u8]) -> &ChallengeRef {
+        // SAFETY
+        // Because of #[repr(transparent)], [u8] is guaranteed to have the same representation as ChallengeRef.
+        // This allows safe casting between *const pointers of these types.
+        unsafe { &*(challenge as *const [u8] as *const ChallengeRef) }
+    }
+}
+
+impl<'a> From<&'a Base64UrlSafeData> for &'a ChallengeRef {
+    fn from(d: &'a Base64UrlSafeData) -> Self {
+        ChallengeRef::new(d.0.as_slice())
+    }
+}
+
+impl ToOwned for ChallengeRef {
+    type Owned = Challenge;
+
+    fn to_owned(&self) -> Self::Owned {
+        Challenge(self.0.to_vec())
+    }
+}
+
+impl AsRef<[u8]> for ChallengeRef {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl Deref for ChallengeRef {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+/// An ECDSACurve identifier. You probably will never need to alter
 /// or use this value, as it is set inside the Credential for you.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ECDSACurve {
@@ -143,7 +220,7 @@ impl From<&COSEContentType> for i64 {
     }
 }
 
-/// A COSE Eliptic Curve Public Key. This is generally the provided credential
+/// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
@@ -260,7 +337,7 @@ impl PartialEq<Credential> for Credential {
 /// variant lists it's effects.
 ///
 /// To be clear, Verification means that the Authenticator perform extra or supplementary
-/// interfaction with the user to verify who they are. An example of this is Apple Touch Id
+/// interaction with the user to verify who they are. An example of this is Apple Touch Id
 /// required a fingerprint to be verified, or a yubico device requiring a pin in addition to
 /// a touch event.
 ///
@@ -745,7 +822,7 @@ pub enum AuthenticatorTransport {
     Internal,
 }
 
-/// A JSON serialisable challenge which is issued to the user's webbrowser
+/// A JSON serializable challenge which is issued to the user's webbrowser
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
@@ -793,7 +870,7 @@ pub struct PublicKeyCredentialRequestOptions {
     pub extensions: Option<RequestAuthenticationExtensions>,
 }
 
-/// A JSON serialisable challenge which is issued to the user's webbrowser
+/// A JSON serializable challenge which is issued to the user's webbrowser
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
@@ -899,11 +976,11 @@ pub struct TokenBinding {
     pub id: Option<String>,
 }
 
-impl TryFrom<&Vec<u8>> for CollectedClientData {
+impl TryFrom<&[u8]> for CollectedClientData {
     type Error = WebauthnError;
-    fn try_from(data: &Vec<u8>) -> Result<CollectedClientData, WebauthnError> {
+    fn try_from(data: &[u8]) -> Result<CollectedClientData, WebauthnError> {
         let ccd: CollectedClientData =
-            serde_json::from_slice(&data).map_err(WebauthnError::ParseJSONFailure)?;
+            serde_json::from_slice(data).map_err(WebauthnError::ParseJSONFailure)?;
         Ok(ccd)
     }
 }
@@ -1013,10 +1090,10 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
     )
 }
 
-impl<T: Ceremony> TryFrom<&Vec<u8>> for AuthenticatorData<T> {
+impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     type Error = WebauthnError;
-    fn try_from(auth_data_bytes: &Vec<u8>) -> Result<Self, Self::Error> {
-        authenticator_data_parser(auth_data_bytes.as_slice())
+    fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
+        authenticator_data_parser(auth_data_bytes)
             .map_err(|e| {
                 log::debug!("nom -> {:?}", e);
                 WebauthnError::ParseNOMFailure
@@ -1029,7 +1106,7 @@ impl<T: Ceremony> TryFrom<&Vec<u8>> for AuthenticatorData<T> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) auth_data: &'a [u8],
-    pub(crate) fmt: String,
+    pub(crate) fmt: &'a str,
     pub(crate) att_stmt: serde_cbor::Value,
 }
 
@@ -1052,15 +1129,14 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
     fn try_from(data: &[u8]) -> Result<AttestationObject<T>, WebauthnError> {
         let aoi: AttestationObjectInner =
             serde_cbor::from_slice(&data).map_err(WebauthnError::ParseCBORFailure)?;
-        let auth_data_bytes: Vec<u8> = aoi.auth_data.iter().copied().collect();
-
-        let auth_data = AuthenticatorData::try_from(&auth_data_bytes)?;
+        let auth_data_bytes: &[u8] = aoi.auth_data;
+        let auth_data = AuthenticatorData::try_from(auth_data_bytes)?;
 
         // Yay! Now we can assemble a reasonably sane structure.
         Ok(AttestationObject {
-            fmt: aoi.fmt.clone(),
+            fmt: aoi.fmt.to_owned(),
             auth_data,
-            auth_data_bytes,
+            auth_data_bytes: auth_data_bytes.to_owned(),
             att_stmt: aoi.att_stmt,
         })
     }
@@ -1370,7 +1446,7 @@ impl TpmSt {
 }
 
 #[derive(Debug)]
-/// Information about the TPM's clock. May be obsfucated.
+/// Information about the TPM's clock. May be obfuscated.
 pub struct TpmsClockInfo {
     clock: u64,
     reset_count: u32,
@@ -1651,7 +1727,7 @@ pub struct TpmsEccParms {
 */
 
 #[derive(Debug)]
-/// Asymetric Public Parameters
+/// Asymmetric Public Parameters
 pub enum TpmuPublicParms {
     // KeyedHash
     // Symcipher
@@ -1675,7 +1751,7 @@ fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], Tpm
 }
 
 #[derive(Debug)]
-/// Asymetric Public Key
+/// Asymmetric Public Key
 pub enum TpmuPublicId {
     // KeyedHash
     // Symcipher

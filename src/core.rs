@@ -62,7 +62,7 @@ impl AuthenticationState {
 ///
 /// Each of these is described in turn, but they will all map to routes in your application.
 /// The generate functions return Json challenges that are intended to be processed by the client
-/// browser, and the register and authenticate will recieve Json that is processed and verified.
+/// browser, and the register and authenticate will receive Json that is processed and verified.
 ///
 /// These functions return state that you must store and handle correctly for the authentication
 /// or registration to proceed correctly.
@@ -78,7 +78,7 @@ pub struct Webauthn<T> {
 
 impl<T> Webauthn<T> {
     /// Create a new Webauthn instance with the supplied configuration. The config type
-    /// will recieve and interact with various callbacks to allow the lifecycle and
+    /// will receive and interact with various callbacks to allow the lifecycle and
     /// application handling of Credentials to be customised for your application.
     ///
     /// You should see the Documentation for WebauthnConfig, which is the main part of
@@ -106,7 +106,7 @@ impl<T> Webauthn<T> {
 
     fn generate_challenge(&self) -> Challenge {
         let mut rng = rand::thread_rng();
-        Challenge(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
+        Challenge::new(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
     }
 
     /// Generate a new challenge for client registration.
@@ -133,12 +133,12 @@ impl<T> Webauthn<T> {
     /// the lifecycle of a credential. This function will return the
     /// creationchallengeresponse which is suitable for serde json serialisation
     /// to be sent to the client.
-    /// The client (generally a webbrowser) will pass this JSON
+    /// The client (generally a web browser) will pass this JSON
     /// structure to the `navigator.credentials.create()` javascript function for registration.
     ///
-    /// It also returns a RegistratationState, that you *must*
+    /// It also returns a RegistrationState, that you *must*
     /// persist. It is strongly advised you associate this RegistrationState with the
-    /// UserId of the requestor.
+    /// UserId of the requester.
     pub fn generate_challenge_register_options(
         &self,
         user_id: UserId,
@@ -166,8 +166,8 @@ impl<T> Webauthn<T> {
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
-                    name: self.config.get_relying_party_name(),
-                    id: self.config.get_relying_party_id(),
+                    name: self.config.get_relying_party_name().to_owned(),
+                    id: self.config.get_relying_party_id().to_owned(),
                 },
                 user: User {
                     id: Base64UrlSafeData(user_id),
@@ -226,7 +226,7 @@ impl<T> Webauthn<T> {
     pub fn register_credential(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: RegistrationState,
+        state: &RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<(Credential, AuthenticatorData<Registration>), WebauthnError>
     where
@@ -241,13 +241,14 @@ impl<T> Webauthn<T> {
             exclude_credentials,
             challenge,
         } = state;
+        let chal: &ChallengeRef = challenge.into();
 
         // TODO: check the req username matches? I think it's not possible, the caller needs to
         // create the linkage between the username and the state.
 
         // send to register_credential_internal
         let credential =
-            self.register_credential_internal(reg, policy, challenge.into(), exclude_credentials)?;
+            self.register_credential_internal(reg, policy.clone(), chal, &exclude_credentials)?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -268,9 +269,9 @@ impl<T> Webauthn<T> {
         &self,
         reg: &RegisterPublicKeyCredential,
         policy: UserVerificationPolicy,
-        chal: Challenge,
-        exclude_credentials: Vec<CredentialID>,
-    ) -> Result<(Credential, AuthenticatorData<Registration>), WebauthnError>
+        chal: &ChallengeRef,
+        exclude_credentials: &[CredentialID],
+    ) -> Result<(Credential, AuthenticatorData), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -291,7 +292,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the create() call.
-        if data.client_data_json.challenge.0 != chal.0 {
+        if data.client_data_json.challenge.0 != chal.as_ref() {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -421,7 +422,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
-                data.attestation_object.auth_data_bytes,
+                &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::TPM => verify_tpm_attestation(
@@ -429,7 +430,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
-                data.attestation_object.auth_data_bytes,
+                &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
@@ -437,7 +438,7 @@ impl<T> Webauthn<T> {
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
                 &data.attestation_object.att_stmt,
-                data.attestation_object.auth_data_bytes,
+                &data.attestation_object.auth_data_bytes,
                 &client_data_json_hash,
             ),
             AttestationFormat::None => verify_none_attestation(
@@ -517,7 +518,7 @@ impl<T> Webauthn<T> {
         &self,
         rsp: &PublicKeyCredential,
         policy: UserVerificationPolicy,
-        chal: Challenge,
+        chal: &ChallengeRef,
         cred: &Credential,
     ) -> Result<AuthenticatorData<Authentication>, WebauthnError>
     where
@@ -551,7 +552,7 @@ impl<T> Webauthn<T> {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
-        if c.challenge.0 != chal.0 {
+        if c.challenge.0 != chal.as_ref() {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -714,7 +715,7 @@ impl<T> Webauthn<T> {
         let r = RequestChallengeResponse::new(
             chal.clone(),
             self.config.get_authenticator_timeout(),
-            self.config.get_relying_party_id(),
+            self.config.get_relying_party_id().to_owned(),
             ac,
             policy.clone(),
             extensions,
@@ -732,17 +733,17 @@ impl<T> Webauthn<T> {
     /// is the output of `navigator.credentials.get()`, which is processed by this
     /// function. If the authentication fails, appropriate errors will be returned.
     ///
-    /// This requireds the associated AuthenticationState that was created by
+    /// This requires the associated AuthenticationState that was created by
     /// generate_challenge_authenticate
     ///
-    /// On successful authentication, an Ok result is returned. The Ok may contain the credentialid
+    /// On successful authentication, an Ok result is returned. The Ok may contain the CredentialID
     /// and associated counter, which you *should* update for security purposes. If the Ok returns
     /// `None` then the credential does not have a counter.
-    pub fn authenticate_credential(
+    pub fn authenticate_credential<'a>(
         &self,
         rsp: &PublicKeyCredential,
-        state: AuthenticationState,
-    ) -> Result<(CredentialID, AuthenticatorData<Authentication>), WebauthnError>
+        state: &'a AuthenticationState,
+    ) -> Result<(&'a CredentialID, AuthenticatorData<Authentication>), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -754,6 +755,7 @@ impl<T> Webauthn<T> {
             policy,
             challenge: chal,
         } = state;
+        let chal: &ChallengeRef = chal.into();
 
         // If the allowCredentials option was given when this authentication ceremony was initiated,
         // verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
@@ -781,7 +783,7 @@ impl<T> Webauthn<T> {
 
             // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
             // inappropriate for your use case), look up the corresponding credential public key.
-            let mut found_cred: Option<Credential> = None;
+            let mut found_cred: Option<&Credential> = None;
             for cred in creds {
                 if cred.cred_id == rsp.raw_id.0 {
                     found_cred = Some(cred);
@@ -792,7 +794,7 @@ impl<T> Webauthn<T> {
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let auth_data = self.verify_credential_internal(rsp, policy, chal.into(), &cred)?;
+        let auth_data = self.verify_credential_internal(rsp, policy.clone(), chal, &cred)?;
         let counter = auth_data.counter;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
@@ -814,7 +816,7 @@ impl<T> Webauthn<T> {
             }
         }
 
-        Ok((cred.cred_id, auth_data))
+        Ok((&cred.cred_id, auth_data))
     }
 }
 
@@ -827,7 +829,7 @@ pub trait WebauthnConfig {
     /// confuse authenticators and will cause their credentials to be lost.
     ///
     /// Examples of names could be "My Awesome Site", "https://my-awesome-site.com.au"
-    fn get_relying_party_name(&self) -> String;
+    fn get_relying_party_name(&self) -> &str;
 
     /// Returns a reference to your sites origin. The origin is the URL to your site with
     /// protocol and port. This should rarely, if ever change. In production usage this
@@ -846,7 +848,7 @@ pub trait WebauthnConfig {
     /// If changed, all associated credentials will be lost in all authenticators.
     ///
     /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
-    fn get_relying_party_id(&self) -> String;
+    fn get_relying_party_id(&self) -> &str;
 
     /// Get the list of valid credential algorthims that this service can accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
@@ -974,7 +976,7 @@ mod tests {
         // Generated by a yubico 5
         // Make a "fake" challenge, where we know what the values should be ....
 
-        let zero_chal = Challenge((0..CHALLENGE_SIZE_BYTES).map(|_| 0).collect::<Vec<u8>>());
+        let zero_chal = Challenge::new((0..CHALLENGE_SIZE_BYTES).map(|_| 0).collect::<Vec<u8>>());
 
         // This is the json challenge this would generate in this case, with the rp etc.
         // {"publicKey":{"rp":{"name":"http://127.0.0.1:8080/auth"},"user":{"id":"xxx","name":"xxx","displayName":"xxx"},"challenge":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=","pubKeyCredParams":[{"type":"public-key","alg":-7}],"timeout":6000,"attestation":"direct"}}
@@ -998,8 +1000,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            zero_chal,
-            vec![],
+            &zero_chal,
+            &[],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1017,7 +1019,7 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let chal =
-            Challenge(base64::decode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc").unwrap());
+            Challenge::new(base64::decode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc").unwrap());
 
         let rsp = r#"
         {
@@ -1034,8 +1036,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            chal,
-            vec![],
+            chal.as_ref(),
+            &[],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1052,7 +1054,7 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let chal =
-            Challenge(base64::decode("lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=").unwrap());
+            Challenge::new(base64::decode("lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=").unwrap());
 
         // Example generated using navigator.credentials.create on Chrome Version 77.0.3865.120
         // using Touch ID on MacBook running MacOS 10.15
@@ -1070,8 +1072,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            chal,
-            vec![],
+            &chal,
+            &[],
         );
         assert!(result.is_ok());
     }
@@ -1086,7 +1088,7 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(vec![
+        let chal = Challenge::new(vec![
             125, 119, 194, 67, 227, 22, 152, 134, 220, 143, 75, 119, 197, 165, 115, 149, 187, 153,
             211, 51, 215, 128, 225, 56, 110, 80, 52, 235, 149, 146, 101, 202,
         ]);
@@ -1104,12 +1106,8 @@ mod tests {
 
         println!("{:?}", rsp_d);
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            chal,
-            vec![],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1126,7 +1124,7 @@ mod tests {
         // Generated by a yubico 5
         // Make a "fake" challenge, where we know what the values should be ....
 
-        let zero_chal = Challenge(vec![
+        let zero_chal = Challenge::new(vec![
             90, 5, 243, 254, 68, 239, 221, 101, 20, 214, 76, 60, 134, 111, 142, 26, 129, 146, 225,
             144, 135, 95, 253, 219, 18, 161, 199, 216, 251, 213, 167, 195,
         ]);
@@ -1180,7 +1178,7 @@ mod tests {
         let r = wan.verify_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Discouraged,
-            zero_chal,
+            &zero_chal,
             &cred,
         );
         println!("RESULT: {:?}", r);
@@ -1198,7 +1196,7 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let chal =
-            Challenge(base64::decode("tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=").unwrap());
+            Challenge::new(base64::decode("tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=").unwrap());
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),
@@ -1219,8 +1217,8 @@ mod tests {
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred_DO_NOT_USE,
-            chal,
-            vec![],
+            &chal,
+            &[],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1237,7 +1235,7 @@ mod tests {
         let wan = Webauthn::new(wan_c);
 
         let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, chal, vec![]);
+            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1253,7 +1251,7 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(vec![
+        let chal = Challenge::new(vec![
             21, 9, 50, 208, 90, 167, 153, 94, 74, 98, 161, 84, 247, 161, 61, 104, 10, 82, 33, 27,
             99, 94, 34, 156, 84, 85, 31, 240, 9, 188, 136, 52,
         ]);
@@ -1305,17 +1303,13 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            chal,
-            vec![],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
 
-        let chal = Challenge(vec![
+        let chal = Challenge::new(vec![
             189, 116, 126, 107, 74, 29, 210, 181, 99, 178, 173, 214, 166, 212, 124, 219, 29, 169,
             9, 58, 26, 27, 120, 246, 87, 173, 169, 210, 241, 153, 150, 189,
         ]);
@@ -1366,8 +1360,12 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let r =
-            wan.verify_credential_internal(&rsp_d, UserVerificationPolicy::Required, chal, &cred.0);
+        let r = wan.verify_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &cred.0,
+        );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
@@ -1383,7 +1381,7 @@ mod tests {
         );
         let wan = Webauthn::new(wan_c);
 
-        let chal = Challenge(vec![
+        let chal = Challenge::new(vec![
             34, 92, 189, 180, 54, 92, 96, 184, 1, 200, 155, 91, 42, 168, 156, 94, 254, 223, 49,
             169, 171, 179, 2, 71, 90, 123, 180, 244, 37, 182, 17, 52,
         ]);
@@ -1659,12 +1657,8 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result = wan.register_credential_internal(
-            &rsp_d,
-            UserVerificationPolicy::Required,
-            chal,
-            vec![],
-        );
+        let result =
+            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1706,7 +1700,7 @@ mod tests {
             None,
         );
 
-        let chal = Challenge(vec![
+        let chal = Challenge::new(vec![
             37, 54, 228, 239, 39, 164, 32, 163, 153, 67, 12, 29, 25, 110, 205, 120, 50, 31, 198,
             182, 10, 208, 251, 238, 99, 27, 46, 123, 239, 134, 244, 210,
         ]);
