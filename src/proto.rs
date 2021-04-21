@@ -27,6 +27,7 @@ pub type Aaguid = Vec<u8>;
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Challenge(Vec<u8>);
 
+#[cfg(feature = "core")]
 impl Challenge {
     /// Creates a new Challenge from a vector of bytes.
     pub(crate) fn new(challenge: Vec<u8>) -> Self {
@@ -541,7 +542,7 @@ pub struct GetCredBlobResponse(Base64UrlSafeData);
 #[serde(rename_all = "camelCase")]
 pub struct RequestAuthenticationExtensions {
     /// The `credBlob` extension options
-    #[serde(rename = "credBlob", skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub get_cred_blob: Option<CredBlobGet>,
 }
 
@@ -847,6 +848,13 @@ impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
         let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
         js_sys::Reflect::set(&user, &JsValue::from("id"), &userid).unwrap();
 
+        if let Some(extensions) = self.public_key.extensions {
+            if let Some(cred_blob) = extensions.cred_blob {
+                let exts = js_sys::Reflect::get(&pkcco, &JsValue::from("extensions")).unwrap();
+                let cred_blob = Uint8Array::from(cred_blob.0.as_ref());
+                js_sys::Reflect::set(&exts, &JsValue::from("credBlob"), &cred_blob).unwrap();
+            }
+        }
         web_sys::CredentialCreationOptions::from(jsv)
     }
 }
