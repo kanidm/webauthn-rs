@@ -74,7 +74,6 @@ impl WebauthnActor {
             .get_cred_blob(true)
             .build();
 
-        // let (acr, st) = self.wan.generate_challenge_authenticate(creds)?;
         let (acr, st) = self
             .wan
             .generate_challenge_authenticate_options(creds, Some(exts))?;

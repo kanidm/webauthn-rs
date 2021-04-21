@@ -271,7 +271,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: &ChallengeRef,
         exclude_credentials: &[CredentialID],
-    ) -> Result<(Credential, AuthenticatorData), WebauthnError>
+    ) -> Result<(Credential, AuthenticatorData<Registration>), WebauthnError>
     where
         T: WebauthnConfig,
     {
