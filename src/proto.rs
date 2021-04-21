@@ -447,36 +447,40 @@ impl TryFrom<u8> for CredentialProtectionPolicy {
     }
 }
 
+/// The client's response to the request that it use the `credProtect` extension
+///
+/// Implemented as wrapper struct to (de)serialize
+/// [CredentialProtectionPolicy] as a number
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct CredProtectResponse(CredentialProtectionPolicy);
+
 impl From<CredentialProtectionPolicy> for u8 {
     fn from(policy: CredentialProtectionPolicy) -> Self {
         policy as u8
     }
 }
 
-impl TryFrom<u8> for SignedCredProtectExtension {
+impl TryFrom<u8> for CredProtectResponse {
     type Error = <CredentialProtectionPolicy as TryFrom<u8>>::Error;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        CredentialProtectionPolicy::try_from(v).map(|policy| SignedCredProtectExtension(policy))
+        CredentialProtectionPolicy::try_from(v).map(|policy| CredProtectResponse(policy))
     }
 }
 
-impl From<SignedCredProtectExtension> for u8 {
-    fn from(policy: SignedCredProtectExtension) -> Self {
+impl From<CredProtectResponse> for u8 {
+    fn from(policy: CredProtectResponse) -> Self {
         u8::from(policy.0)
     }
 }
 
-/// Wrapper struct to (de)serialize [CredentialProtectionPolicy] as a number
-#[derive(Debug, Serialize, Clone, Deserialize)]
-#[serde(try_from = "u8", into = "u8")]
-pub struct SignedCredProtectExtension(CredentialProtectionPolicy);
-
-/// The input for the credProtect webauthn extension
+/// The desired options for the client's use of the `credProtect` extension
+///
 /// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RequestCredProtectExtension {
+pub struct CredProtect {
     /// The credential policy to enact
     pub credential_protection_policy: CredentialProtectionPolicy,
     /// Whether it is better for the authenticator to fail to create a
@@ -486,26 +490,59 @@ pub struct RequestCredProtectExtension {
     pub enforce_credential_protection_policy: Option<bool>,
 }
 
-impl RequestCredProtectExtension {
-    /// Create a [RequestCredProtectExtension] object
+impl CredProtect {
+    /// Create a [CredProtect] object
     pub fn new(
         credential_protection_policy: CredentialProtectionPolicy,
         enforce_credential_protection_policy: Option<bool>,
     ) -> Self {
-        RequestCredProtectExtension {
+        CredProtect {
             credential_protection_policy,
             enforce_credential_protection_policy,
         }
     }
 }
 
-/// Extension option inputs for [PublicKeyCredentialRequestOptions].
+/// Wrapper for a boolean value to indicate that this extension is requested by
+/// the Relying Party.
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+pub struct CredBlobGet(pub bool);
+
+/// Wrapper for an ArrayBuffer containing opaque data in an RP-specific format.
+/// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credBlob-extension
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+pub struct CredBlobSet(pub Base64UrlSafeData);
+
+impl From<Vec<u8>> for CredBlobSet {
+    fn from(bytes: Vec<u8>) -> Self {
+        CredBlobSet(Base64UrlSafeData(bytes))
+    }
+}
+
+/// The response from the client regarding setting the `credBlob` extension
 ///
-/// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
+/// This is just a wrapper around a [bool] indicating whether the authenticator
+/// was able to set the desired `credBlob` data.
 #[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct SetCredBlobResponse(bool);
+
+/// The response from the client regarding querying the `credBlob` extension
+///
+/// This is just a wrapper around a byte array containing the `credBlob`
+/// data.
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct GetCredBlobResponse(Base64UrlSafeData);
+
+
+/// Extension option inputs for [PublicKeyCredentialRequestOptions]
+///
+/// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestAuthenticationExtensions {
-    // #[serde(flatten)]
-// none yet.
+    /// The `credBlob` extension options
+    #[serde(rename = "credBlob", skip_serializing_if = "Option::is_none")]
+    pub get_cred_blob: Option<CredBlobGet>,
 }
 
 impl RequestAuthenticationExtensions {
@@ -521,12 +558,30 @@ pub struct RequestAuthenticationExtensionsBuilder(RequestAuthenticationExtension
 
 impl RequestAuthenticationExtensionsBuilder {
     pub(crate) fn new() -> Self {
-        Self(RequestAuthenticationExtensions {})
+        Self(RequestAuthenticationExtensions {
+            get_cred_blob: Some(CredBlobGet(false)),
+        })
     }
 
     /// Returns the inner extensions struct
     pub fn build(self) -> RequestAuthenticationExtensions {
         self.0
+    }
+
+    /// Set whether you want to get the credential blob extension
+    ///
+    /// # Example
+    /// ```
+    /// # use webauthn_rs::proto::{RequestAuthenticationExtensions, CredBlobGet};
+    /// let extensions = RequestAuthenticationExtensions::builder()
+    ///     .get_cred_blob(true)
+    ///     .build();
+    ///
+    /// assert_eq!(extensions.get_cred_blob, Some(CredBlobGet(true)));
+    /// ```
+    pub fn get_cred_blob(mut self, get_cred_blob: bool) -> Self {
+        self.0.get_cred_blob = Some(CredBlobGet(get_cred_blob));
+        self
     }
 }
 
@@ -534,10 +589,15 @@ impl RequestAuthenticationExtensionsBuilder {
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
 #[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestRegistrationExtensions {
-    /// The credProtect extension
-    #[serde(flatten)]
-    pub cred_protect: Option<RequestCredProtectExtension>,
+    /// The `credProtect` extension options
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub cred_protect: Option<CredProtect>,
+
+    /// The `credBlob` extension options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cred_blob: Option<CredBlobSet>,
 }
 
 impl RequestRegistrationExtensions {
@@ -553,7 +613,10 @@ pub struct RequestRegistrationExtensionsBuilder(RequestRegistrationExtensions);
 
 impl RequestRegistrationExtensionsBuilder {
     pub(crate) fn new() -> Self {
-        Self(RequestRegistrationExtensions { cred_protect: None })
+        Self(RequestRegistrationExtensions {
+            cred_protect: None,
+            cred_blob: None,
+        })
     }
 
     /// Returns the inner extensions struct
@@ -561,12 +624,12 @@ impl RequestRegistrationExtensionsBuilder {
         self.0
     }
 
-    /// Set the credential protection extension
+    /// Set the credential protection extension options
     ///
     /// # Example
     /// ```
-    /// # use webauthn_rs::proto::{RequestRegistrationExtensions, CredentialProtectionPolicy, RequestCredProtectExtension};
-    /// let cred_protect = RequestCredProtectExtension::new(
+    /// # use webauthn_rs::proto::{RequestRegistrationExtensions, CredentialProtectionPolicy, CredProtect};
+    /// let cred_protect = CredProtect::new(
     ///     CredentialProtectionPolicy::UserVerificationRequired,
     ///     None,
     /// );
@@ -576,21 +639,61 @@ impl RequestRegistrationExtensionsBuilder {
     ///
     /// assert_eq!(extensions.cred_protect, Some(cred_protect));
     /// ```
-    pub fn cred_protect(mut self, cred_protect: RequestCredProtectExtension) -> Self {
+    pub fn cred_protect(mut self, cred_protect: CredProtect) -> Self {
         self.0.cred_protect = Some(cred_protect);
+        self
+    }
+
+    /// Set the credential blob extension options
+    ///
+    /// # Example
+    /// ```
+    /// # use webauthn_rs::proto::{RequestRegistrationExtensions, CredBlobSet};
+    /// let cred_blob = vec![0xde, 0xad, 0xbe, 0xef];
+    /// let extensions = RequestRegistrationExtensions::builder()
+    ///     .cred_blob(cred_blob.clone())
+    ///     .build();
+    ///
+    /// assert_eq!(extensions.cred_blob, Some(CredBlobSet::from(cred_blob)));
+    /// ```
+    pub fn cred_blob(mut self, cred_blob: Vec<u8>) -> Self {
+        self.0.cred_blob = Some(CredBlobSet(Base64UrlSafeData(cred_blob)));
         self
     }
 }
 
-/// The output for public key credential creation extensions.
+/// The output for registration ceremony extensions.
 ///
-/// Implements \[AuthenticatorExtensionsClientOutputs\] from the spec
+/// Implements the registration bits of \[AuthenticatorExtensionsClientOutputs\]
+/// from the spec
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SignedExtensions {
-    /// The credProtect extension
-    pub cred_protect: Option<SignedCredProtectExtension>,
+pub struct RegistrationSignedExtensions {
+    /// The `credProtect` extension
+    pub cred_protect: Option<CredProtectResponse>,
+    /// The `credBlob` extension
+    pub cred_blob: Option<SetCredBlobResponse>
 }
+
+/// The output for authentication cermeony extensions.
+///
+/// Implements the authentication bits of
+/// \[AuthenticationExtensionsClientOutputs] from the spec
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthenticationSignedExtensions {
+    /// The credBlob extension
+    pub cred_blob: Option<GetCredBlobResponse>
+}
+
+impl Ceremony for Registration {
+    type SignedExtensions = RegistrationSignedExtensions;
+}
+
+impl Ceremony for Authentication {
+    type SignedExtensions = AuthenticationSignedExtensions;
+}
+
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -893,9 +996,23 @@ pub(crate) struct AttestedCredentialData {
     pub(crate) credential_pk: serde_cbor::Value,
 }
 
+/// Marker type parameter for data related to registration ceremony
+#[derive(Debug)]
+pub struct Registration;
+
+/// Marker type parameter for data related to authentication ceremony
+#[derive(Debug)]
+pub struct Authentication;
+
+/// Trait for ceremony marker structs
+pub trait Ceremony {
+    /// The type of the extension outputs of the ceremony
+    type SignedExtensions: serde::de::DeserializeOwned + std::fmt::Debug;
+}
+
 /// https://w3c.github.io/webauthn/#sctn-attestation
 #[derive(Debug, Clone)]
-pub struct AuthenticatorData {
+pub struct AuthenticatorData<T: Ceremony> {
     /// Hash of the relying party id.
     pub(crate) rp_id_hash: Vec<u8>,
     /// The counter of this credentials activations.
@@ -907,8 +1024,7 @@ pub struct AuthenticatorData {
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
-    pub(crate) extensions: Option<SignedExtensions>,
-    // pub(crate) extensions: Option<serde_cbor::Value>,
+    pub(crate) extensions: Option<T::SignedExtensions>,
 }
 
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
@@ -921,9 +1037,9 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     Ok((&i[len..], v))
 }
 
-named!( extensions_parser<&[u8], SignedExtensions>,
-    map_res!(cbor_parser, serde_cbor::value::from_value::<SignedExtensions>)
-);
+fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExtensions> {
+    map_res!(i, cbor_parser, serde_cbor::value::from_value::<T::SignedExtensions>)
+}
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
     do_parse!(
@@ -955,25 +1071,26 @@ named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
     )
 );
 
-named!( authenticator_data_parser<&[u8], AuthenticatorData>,
+fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], AuthenticatorData<T>> {
     do_parse!(
+        i,
         rp_id_hash: take!(32) >>
-        data_flags: authenticator_data_flags >>
-        counter: u32!(nom::Endianness::Big) >>
-        acd: cond!(data_flags.1, acd_parser) >>
-        extensions: cond!(data_flags.0, extensions_parser) >>
-        (AuthenticatorData {
-            rp_id_hash: rp_id_hash.to_vec(),
-            counter,
-            user_verified: data_flags.2,
-            user_present: data_flags.3,
-            acd,
-            extensions,
-        })
+            data_flags: authenticator_data_flags >>
+            counter: u32!(nom::Endianness::Big) >>
+            acd: cond!(data_flags.1, acd_parser) >>
+            extensions: cond!(data_flags.0, extensions_parser::<T>) >>
+            (AuthenticatorData {
+                rp_id_hash: rp_id_hash.to_vec(),
+                counter,
+                user_verified: data_flags.2,
+                user_present: data_flags.3,
+                acd,
+                extensions,
+            })
     )
-);
+}
 
-impl TryFrom<&[u8]> for AuthenticatorData {
+impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     type Error = WebauthnError;
     fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
         authenticator_data_parser(auth_data_bytes)
@@ -995,9 +1112,9 @@ pub(crate) struct AttestationObjectInner<'a> {
 
 /// Attestation Object
 #[derive(Debug)]
-pub struct AttestationObject {
+pub struct AttestationObject<T: Ceremony> {
     /// auth_data.
-    pub(crate) auth_data: AuthenticatorData,
+    pub(crate) auth_data: AuthenticatorData<T>,
     /// auth_data_bytes.
     pub(crate) auth_data_bytes: Vec<u8>,
     /// format.
@@ -1006,10 +1123,10 @@ pub struct AttestationObject {
     pub(crate) att_stmt: serde_cbor::Value,
 }
 
-impl TryFrom<&[u8]> for AttestationObject {
+impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
     type Error = WebauthnError;
 
-    fn try_from(data: &[u8]) -> Result<AttestationObject, WebauthnError> {
+    fn try_from(data: &[u8]) -> Result<AttestationObject<T>, WebauthnError> {
         let aoi: AttestationObjectInner =
             serde_cbor::from_slice(&data).map_err(WebauthnError::ParseCBORFailure)?;
         let auth_data_bytes: &[u8] = aoi.auth_data;
@@ -1039,14 +1156,14 @@ pub struct AuthenticatorAttestationResponseRaw {
 
 /// Parsed AuthenticatorResponse
 #[cfg(feature = "core")]
-pub(crate) struct AuthenticatorAttestationResponse {
-    pub(crate) attestation_object: AttestationObject,
+pub(crate) struct AuthenticatorAttestationResponse<T: Ceremony> {
+    pub(crate) attestation_object: AttestationObject<T>,
     pub(crate) client_data_json: CollectedClientData,
     pub(crate) client_data_json_bytes: Vec<u8>,
 }
 
 #[cfg(feature = "core")]
-impl TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse {
+impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse<T> {
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
         let ccdj = CollectedClientData::try_from(aarr.client_data_json.as_ref())?;
@@ -1124,8 +1241,8 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
 }
 
 #[derive(Debug)]
-pub(crate) struct AuthenticatorAssertionResponse {
-    pub(crate) authenticator_data: AuthenticatorData,
+pub(crate) struct AuthenticatorAssertionResponse<T: Ceremony> {
+    pub(crate) authenticator_data: AuthenticatorData<T>,
     pub(crate) authenticator_data_bytes: Vec<u8>,
     pub(crate) client_data: CollectedClientData,
     pub(crate) client_data_bytes: Vec<u8>,
@@ -1133,7 +1250,7 @@ pub(crate) struct AuthenticatorAssertionResponse {
     pub(crate) user_handle: Option<Vec<u8>>,
 }
 
-impl TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse {
+impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse<T> {
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
         Ok(AuthenticatorAssertionResponse {
@@ -1759,7 +1876,7 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 mod tests {
     use super::{
         AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential,
-        SignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
+        Registration, RegistrationSignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;
@@ -1785,7 +1902,7 @@ mod tests {
             "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg=="
         ).unwrap();
 
-        let _ao = AttestationObject::try_from(raw_ao.as_slice()).unwrap();
+        let _ao = AttestationObject::<Registration>::try_from(raw_ao.as_slice()).unwrap();
     }
     // Add tests for when the objects are too short.
     //
@@ -1872,7 +1989,7 @@ mod tests {
             161, 107, 99, 114, 101, 100, 80, 114, 111, 116, 101, 99, 116, 3,
         ];
 
-        let extensions: SignedExtensions = serde_cbor::from_slice(&data).unwrap();
+        let extensions: RegistrationSignedExtensions = serde_cbor::from_slice(&data).unwrap();
 
         let cred_protect = extensions
             .cred_protect

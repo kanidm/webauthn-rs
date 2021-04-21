@@ -131,7 +131,7 @@ impl<T> Webauthn<T> {
 
     /// Generate a new challenge for client registration. This is the first step in
     /// the lifecycle of a credential. This function will return the
-    /// CreationChallengeResponse which is suitable for Serde JSON serialisation
+    /// creationchallengeresponse which is suitable for serde json serialisation
     /// to be sent to the client.
     /// The client (generally a web browser) will pass this JSON
     /// structure to the `navigator.credentials.create()` javascript function for registration.
@@ -228,7 +228,7 @@ impl<T> Webauthn<T> {
         reg: &RegisterPublicKeyCredential,
         state: &RegistrationState,
         does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
-    ) -> Result<(Credential, AuthenticatorData), WebauthnError>
+    ) -> Result<(Credential, AuthenticatorData<Registration>), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -373,6 +373,8 @@ impl<T> Webauthn<T> {
 
         if let Some(ext) = &data.attestation_object.auth_data.extensions {
             log::debug!("ext: {:?}", ext);
+        } else {
+            log::debug!("no extensions");
         }
 
         // Determine the attestation statement format by performing a USASCII case-sensitive match on
@@ -518,7 +520,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: &ChallengeRef,
         cred: &Credential,
-    ) -> Result<AuthenticatorData, WebauthnError>
+    ) -> Result<AuthenticatorData<Authentication>, WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -536,10 +538,12 @@ impl<T> Webauthn<T> {
 
         let c = &data.client_data;
 
-        // Let C, the client data claimed as used for the signature, be the result of running an
-        // implementation-specific JSON parser on JSONtext.
-        //     Note: C may be any implementation-specific data structure representation, as long as
-        //     C’s components are referenceable, as required by this algorithm.
+        /*
+        Let C, the client data claimed as used for the signature, be the result of running an
+        implementation-specific JSON parser on JSONtext.
+            Note: C may be any implementation-specific data structure representation, as long as
+            C’s components are referenceable, as required by this algorithm.
+        */
 
         // Verify that the value of C.type is the string webauthn.get.
         if c.type_ != "webauthn.get" {
@@ -596,11 +600,11 @@ impl<T> Webauthn<T> {
         // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the
         // Relying Party MUST be prepared to handle cases where none or not all of the requested
         // extensions were acted upon.
-        match &data.authenticator_data.extensions {
-            Some(_) => {
-                // we do not need to do any processing here
-            }
-            None => {}
+        if let Some(ext) = &data.authenticator_data.extensions {
+            log::debug!("ext: {:?}", ext);
+            // we do not need to do any processing here
+        } else {
+            log::debug!("no extensions");
         }
 
         // Let hash be the result of computing a hash over the cData using SHA-256.
@@ -739,7 +743,7 @@ impl<T> Webauthn<T> {
         &self,
         rsp: &PublicKeyCredential,
         state: &'a AuthenticationState,
-    ) -> Result<(&'a CredentialID, AuthenticatorData), WebauthnError>
+    ) -> Result<(&'a CredentialID, AuthenticatorData<Authentication>), WebauthnError>
     where
         T: WebauthnConfig,
     {

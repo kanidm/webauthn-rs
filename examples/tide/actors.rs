@@ -1,8 +1,11 @@
-use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::error::WebauthnError;
 use webauthn_rs::proto::{
     CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
     RegisterPublicKeyCredential, RequestChallengeResponse, UserId, UserVerificationPolicy,
+};
+use webauthn_rs::{
+    ephemeral::WebauthnEphemeralConfig,
+    proto::{RequestAuthenticationExtensions, RequestRegistrationExtensions},
 };
 use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
 
@@ -36,9 +39,20 @@ impl WebauthnActor {
         username: String,
     ) -> WebauthnResult<CreationChallengeResponse> {
         tide::log::debug!("handle ChallengeRegister -> {:?}", username);
-        let (ccr, rs) = self
-            .wan
-            .generate_challenge_register(&username, Some(UserVerificationPolicy::Discouraged))?;
+
+        let exts = RequestRegistrationExtensions::builder()
+            .cred_blob(vec![0xde, 0xad, 0xbe, 0xef])
+            .build();
+
+        let (ccr, rs) = self.wan.generate_challenge_register_options(
+            username.as_bytes().to_vec(),
+            username.to_string(),
+            username.to_string(),
+            None,
+            Some(UserVerificationPolicy::Discouraged),
+            Some(exts),
+        )?;
+        // .generate_challenge_register(&username, Some(UserVerificationPolicy::Discouraged))?;
         self.reg_chals.lock().await.put(username.into_bytes(), rs);
         tide::log::debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
@@ -56,7 +70,14 @@ impl WebauthnActor {
         }
         .ok_or(WebauthnError::CredentialRetrievalError)?;
 
-        let (acr, st) = self.wan.generate_challenge_authenticate(creds)?;
+        let exts = RequestAuthenticationExtensions::builder()
+            .get_cred_blob(true)
+            .build();
+
+        // let (acr, st) = self.wan.generate_challenge_authenticate(creds)?;
+        let (acr, st) = self
+            .wan
+            .generate_challenge_authenticate_options(creds, Some(exts))?;
         self.auth_chals
             .lock()
             .await
