@@ -278,7 +278,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: &ChallengeRef,
         exclude_credentials: &[CredentialID],
-    ) -> Result<(Credential, AuthenticatorData), WebauthnError>
+    ) -> Result<(Credential, AuthenticatorData<Registration>), WebauthnError>
     where
         T: WebauthnConfig,
     {
@@ -598,8 +598,9 @@ impl<T> Webauthn<T> {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            (UserVerificationPolicy::Discouraged, UserVerificationPolicy::Discouraged) => {
-                // If this token always verifies, even under discouraged, we can enforce that.
+            (_, UserVerificationPolicy::Discouraged) => {
+                // If this token always verifies, even under discouraged, we can enforce that behaviour
+                // from registration.
                 if cred.verified && self.config.get_require_uv_consistency() {
                     // This token always sends UV, so we enforce that.
                     if !data.authenticator_data.user_verified {
@@ -608,8 +609,9 @@ impl<T> Webauthn<T> {
                     }
                 }
             }
-            // Pass - we can not know if historical verification was requested. We must allow
-            // unverified tokens now.
+            // Pass - we can not know if verification was requested to the client in the past correctly.
+            // This means we can't know what it's behaviour is at the moment.
+            // We must allow unverified tokens now.
             _ => {}
         }
 
