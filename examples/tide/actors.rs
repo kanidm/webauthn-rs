@@ -49,7 +49,7 @@ impl WebauthnActor {
             username.to_string(),
             username.to_string(),
             None,
-            Some(UserVerificationPolicy::Discouraged),
+            Some(webauthn_rs::proto::UserVerificationPolicy::Discouraged),
             Some(exts),
         )?;
 
