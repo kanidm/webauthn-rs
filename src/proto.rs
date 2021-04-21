@@ -548,7 +548,7 @@ pub struct GetCredBlobResponse(Base64UrlSafeData);
 #[serde(rename_all = "camelCase")]
 pub struct RequestAuthenticationExtensions {
     /// The `credBlob` extension options
-    #[serde(rename = "getCredBlob", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "credBlob", skip_serializing_if = "Option::is_none")]
     pub get_cred_blob: Option<CredBlobGet>,
 }
 
