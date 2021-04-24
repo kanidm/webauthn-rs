@@ -308,6 +308,11 @@ pub struct Credential {
     /// a credential as un-verified but then to use verification with it
     /// in the future.
     pub verified: bool,
+    /// During registration, the policy that was requested from this
+    /// credential. This is used to understand if the how the verified
+    /// component interacts with the device, IE an always verified authenticator
+    /// vs one that can dynamically request it.
+    pub registration_policy: UserVerificationPolicy,
 }
 
 impl Credential {
@@ -317,12 +322,14 @@ impl Credential {
         ck: COSEKey,
         counter: u32,
         verified: bool,
+        registration_policy: UserVerificationPolicy,
     ) -> Self {
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
             counter,
             verified,
+            registration_policy,
         }
     }
 }

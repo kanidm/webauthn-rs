@@ -209,3 +209,9 @@ pub enum WebauthnError {
     #[error("The attested credential public key and subject public key do not match")]
     AttestationCredentialSubjectKeyMismatch,
 }
+
+impl PartialEq for WebauthnError {
+    fn eq(&self, other: &Self) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}
