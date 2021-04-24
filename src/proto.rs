@@ -534,7 +534,6 @@ pub struct SetCredBlobResponse(bool);
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct GetCredBlobResponse(Base64UrlSafeData);
 
-
 /// Extension option inputs for [PublicKeyCredentialRequestOptions]
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
@@ -673,7 +672,7 @@ pub struct RegistrationSignedExtensions {
     /// The `credProtect` extension
     pub cred_protect: Option<CredProtectResponse>,
     /// The `credBlob` extension
-    pub cred_blob: Option<SetCredBlobResponse>
+    pub cred_blob: Option<SetCredBlobResponse>,
 }
 
 /// The output for authentication cermeony extensions.
@@ -684,7 +683,7 @@ pub struct RegistrationSignedExtensions {
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticationSignedExtensions {
     /// The credBlob extension
-    pub cred_blob: Option<GetCredBlobResponse>
+    pub cred_blob: Option<GetCredBlobResponse>,
 }
 
 impl Ceremony for Registration {
@@ -694,7 +693,6 @@ impl Ceremony for Registration {
 impl Ceremony for Authentication {
     type SignedExtensions = AuthenticationSignedExtensions;
 }
-
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -1046,7 +1044,11 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
 }
 
 fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExtensions> {
-    map_res!(i, cbor_parser, serde_cbor::value::from_value::<T::SignedExtensions>)
+    map_res!(
+        i,
+        cbor_parser,
+        serde_cbor::value::from_value::<T::SignedExtensions>
+    )
 }
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
@@ -1082,12 +1084,12 @@ named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
 fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], AuthenticatorData<T>> {
     do_parse!(
         i,
-        rp_id_hash: take!(32) >>
-            data_flags: authenticator_data_flags >>
-            counter: u32!(nom::Endianness::Big) >>
-            acd: cond!(data_flags.1, acd_parser) >>
-            extensions: cond!(data_flags.0, extensions_parser::<T>) >>
-            (AuthenticatorData {
+        rp_id_hash: take!(32)
+            >> data_flags: authenticator_data_flags
+            >> counter: u32!(nom::Endianness::Big)
+            >> acd: cond!(data_flags.1, acd_parser)
+            >> extensions: cond!(data_flags.0, extensions_parser::<T>)
+            >> (AuthenticatorData {
                 rp_id_hash: rp_id_hash.to_vec(),
                 counter,
                 user_verified: data_flags.2,
@@ -1171,7 +1173,9 @@ pub(crate) struct AuthenticatorAttestationResponse<T: Ceremony> {
 }
 
 #[cfg(feature = "core")]
-impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse<T> {
+impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
+    for AuthenticatorAttestationResponse<T>
+{
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
         let ccdj = CollectedClientData::try_from(aarr.client_data_json.as_ref())?;
@@ -1258,7 +1262,9 @@ pub(crate) struct AuthenticatorAssertionResponse<T: Ceremony> {
     pub(crate) user_handle: Option<Vec<u8>>,
 }
 
-impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse<T> {
+impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
+    for AuthenticatorAssertionResponse<T>
+{
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
         Ok(AuthenticatorAssertionResponse {
@@ -1883,8 +1889,8 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential,
-        Registration, RegistrationSignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
+        AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential, Registration,
+        RegistrationSignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;

@@ -829,7 +829,7 @@ pub trait WebauthnConfig {
     /// confuse authenticators and will cause their credentials to be lost.
     ///
     /// Examples of names could be "My Awesome Site", "https://my-awesome-site.com.au"
-    fn get_relying_party_name(&self) -> &str;
+    fn get_relying_party_name(&self) -> String;
 
     /// Returns a reference to your sites origin. The origin is the URL to your site with
     /// protocol and port. This should rarely, if ever change. In production usage this
@@ -838,7 +838,7 @@ pub trait WebauthnConfig {
     /// may cause associated authenticators to lose credentials.
     ///
     /// Examples of this value could be. "https://my-site.com.au", "https://my-site.com.au:8443"
-    fn get_origin(&self) -> &str;
+    fn get_origin(&self) -> String;
 
     /// Returns the relying party id. This should never change, and is used as an id
     /// in cryptographic operations and credential scoping. This is defined as the domain name
@@ -848,7 +848,7 @@ pub trait WebauthnConfig {
     /// If changed, all associated credentials will be lost in all authenticators.
     ///
     /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
-    fn get_relying_party_id(&self) -> &str;
+    fn get_relying_party_id(&self) -> String;
 
     /// Get the list of valid credential algorthims that this service can accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
