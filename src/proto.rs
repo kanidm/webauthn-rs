@@ -963,8 +963,8 @@ pub struct CollectedClientData {
     pub origin: String,
     // /// The inverse of the sameOriginWithAncestors argument value that was
     // /// passed into the internal method.
-    // #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]
-    // pub cross_origin: Option<bool>,
+    #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]
+    pub cross_origin: Option<bool>,
     /// tokenBinding.
     #[serde(rename = "tokenBinding")]
     pub token_binding: Option<TokenBinding>,
