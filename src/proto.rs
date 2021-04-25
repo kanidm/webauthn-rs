@@ -4,7 +4,7 @@
 use crate::base64_data::Base64UrlSafeData;
 use crate::error::*;
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use std::{collections::BTreeMap, convert::TryFrom};
 
 #[cfg(feature = "wasm")]
 use js_sys::{Array, Object, Uint8Array};
@@ -534,7 +534,6 @@ pub struct SetCredBlobResponse(bool);
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct GetCredBlobResponse(Base64UrlSafeData);
 
-
 /// Extension option inputs for [PublicKeyCredentialRequestOptions]
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
@@ -673,7 +672,7 @@ pub struct RegistrationSignedExtensions {
     /// The `credProtect` extension
     pub cred_protect: Option<CredProtectResponse>,
     /// The `credBlob` extension
-    pub cred_blob: Option<SetCredBlobResponse>
+    pub cred_blob: Option<SetCredBlobResponse>,
 }
 
 /// The output for authentication cermeony extensions.
@@ -684,7 +683,7 @@ pub struct RegistrationSignedExtensions {
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticationSignedExtensions {
     /// The credBlob extension
-    pub cred_blob: Option<GetCredBlobResponse>
+    pub cred_blob: Option<GetCredBlobResponse>,
 }
 
 impl Ceremony for Registration {
@@ -694,7 +693,6 @@ impl Ceremony for Registration {
 impl Ceremony for Authentication {
     type SignedExtensions = AuthenticationSignedExtensions;
 }
-
 
 /// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -842,17 +840,17 @@ impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
 
         let jsv = JsValue::from_serde(&self).unwrap();
 
-        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
-        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal).unwrap();
+        let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
+        js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
 
-        let user = js_sys::Reflect::get(&pkcco, &JsValue::from("user")).unwrap();
-        js_sys::Reflect::set(&user, &JsValue::from("id"), &userid).unwrap();
+        let user = js_sys::Reflect::get(&pkcco, &"user".into()).unwrap();
+        js_sys::Reflect::set(&user, &"id".into(), &userid).unwrap();
 
         if let Some(extensions) = self.public_key.extensions {
             if let Some(cred_blob) = extensions.cred_blob {
-                let exts = js_sys::Reflect::get(&pkcco, &JsValue::from("extensions")).unwrap();
+                let exts = js_sys::Reflect::get(&pkcco, &"extensions".into()).unwrap();
                 let cred_blob = Uint8Array::from(cred_blob.0.as_ref());
-                js_sys::Reflect::set(&exts, &JsValue::from("credBlob"), &cred_blob).unwrap();
+                js_sys::Reflect::set(&exts, &"credBlob".into(), &cred_blob).unwrap();
             }
         }
         web_sys::CredentialCreationOptions::from(jsv)
@@ -899,19 +897,11 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
             .iter()
             .map(|ac| {
                 let obj = Object::new();
-                js_sys::Reflect::set(
-                    &obj,
-                    &JsValue::from("type"),
-                    &JsValue::from_str(ac.type_.as_str()),
-                )
-                .unwrap();
+                js_sys::Reflect::set(&obj, &"type".into(), &JsValue::from_str(ac.type_.as_str()))
+                    .unwrap();
 
-                js_sys::Reflect::set(
-                    &obj,
-                    &JsValue::from("id"),
-                    &Uint8Array::from(ac.id.0.as_slice()),
-                )
-                .unwrap();
+                js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.0.as_slice()))
+                    .unwrap();
 
                 if let Some(transports) = &ac.transports {
                     let tarray: Array = transports
@@ -919,7 +909,7 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
                         .map(|s| JsValue::from_str(s.as_str()))
                         .collect();
 
-                    js_sys::Reflect::set(&obj, &JsValue::from("transports"), &tarray).unwrap();
+                    js_sys::Reflect::set(&obj, &"transports".into(), &tarray).unwrap();
                 }
 
                 obj
@@ -928,10 +918,10 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
 
         let jsv = JsValue::from_serde(&self).unwrap();
 
-        let pkcco = js_sys::Reflect::get(&jsv, &JsValue::from("publicKey")).unwrap();
-        js_sys::Reflect::set(&pkcco, &JsValue::from("challenge"), &chal).unwrap();
+        let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
+        js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
 
-        js_sys::Reflect::set(&pkcco, &JsValue::from("allowCredentials"), &allow_creds).unwrap();
+        js_sys::Reflect::set(&pkcco, &"allowCredentials".into(), &allow_creds).unwrap();
 
         web_sys::CredentialRequestOptions::from(jsv)
     }
@@ -961,6 +951,7 @@ impl RequestChallengeResponse {
 }
 
 /// The data collected and hashed in the operation.
+/// https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct CollectedClientData {
     /// The credential type
@@ -970,9 +961,17 @@ pub struct CollectedClientData {
     pub challenge: Base64UrlSafeData,
     /// The rp origin as the browser understood it.
     pub origin: String,
+    // /// The inverse of the sameOriginWithAncestors argument value that was
+    // /// passed into the internal method.
+    // #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]
+    // pub cross_origin: Option<bool>,
     /// tokenBinding.
     #[serde(rename = "tokenBinding")]
     pub token_binding: Option<TokenBinding>,
+    /// This struct be extended, so it's important to be tolerant of unknown
+    /// keys.
+    #[serde(flatten)]
+    pub unknown_keys: BTreeMap<String, serde_json::value::Value>,
 }
 
 /// Token binding
@@ -1046,7 +1045,11 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
 }
 
 fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExtensions> {
-    map_res!(i, cbor_parser, serde_cbor::value::from_value::<T::SignedExtensions>)
+    map_res!(
+        i,
+        cbor_parser,
+        serde_cbor::value::from_value::<T::SignedExtensions>
+    )
 }
 
 named!( acd_parser<&[u8], AttestedCredentialData>,
@@ -1082,12 +1085,12 @@ named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
 fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], AuthenticatorData<T>> {
     do_parse!(
         i,
-        rp_id_hash: take!(32) >>
-            data_flags: authenticator_data_flags >>
-            counter: u32!(nom::Endianness::Big) >>
-            acd: cond!(data_flags.1, acd_parser) >>
-            extensions: cond!(data_flags.0, extensions_parser::<T>) >>
-            (AuthenticatorData {
+        rp_id_hash: take!(32)
+            >> data_flags: authenticator_data_flags
+            >> counter: u32!(nom::Endianness::Big)
+            >> acd: cond!(data_flags.1, acd_parser)
+            >> extensions: cond!(data_flags.0, extensions_parser::<T>)
+            >> (AuthenticatorData {
                 rp_id_hash: rp_id_hash.to_vec(),
                 counter,
                 user_verified: data_flags.2,
@@ -1171,10 +1174,13 @@ pub(crate) struct AuthenticatorAttestationResponse<T: Ceremony> {
 }
 
 #[cfg(feature = "core")]
-impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw> for AuthenticatorAttestationResponse<T> {
+impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
+    for AuthenticatorAttestationResponse<T>
+{
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
         let ccdj = CollectedClientData::try_from(aarr.client_data_json.as_ref())?;
+        log::debug!("ccdj: {:?}", ccdj);
         let ao = AttestationObject::try_from(aarr.attestation_object.as_ref())?;
 
         Ok(AuthenticatorAttestationResponse {
@@ -1215,17 +1221,16 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
         // First, we have to b64 some data here.
         // data.raw_id
         let data_raw_id =
-            Uint8Array::new(&js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap())
-                .to_vec();
+            Uint8Array::new(&js_sys::Reflect::get(&data, &"rawId".into()).unwrap()).to_vec();
 
-        let data_response = js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+        let data_response = js_sys::Reflect::get(&data, &"response".into()).unwrap();
         let data_response_attestation_object = Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("attestationObject")).unwrap(),
+            &js_sys::Reflect::get(&data_response, &"attestationObject".into()).unwrap(),
         )
         .to_vec();
 
         let data_response_client_data_json = Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap(),
+            &js_sys::Reflect::get(&data_response, &"clientDataJSON".into()).unwrap(),
         )
         .to_vec();
 
@@ -1258,7 +1263,9 @@ pub(crate) struct AuthenticatorAssertionResponse<T: Ceremony> {
     pub(crate) user_handle: Option<Vec<u8>>,
 }
 
-impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw> for AuthenticatorAssertionResponse<T> {
+impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
+    for AuthenticatorAssertionResponse<T>
+{
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
         Ok(AuthenticatorAssertionResponse {
@@ -1322,23 +1329,21 @@ impl PublicKeyCredential {
 impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
     fn from(data: web_sys::PublicKeyCredential) -> PublicKeyCredential {
         let data_raw_id =
-            Uint8Array::new(&js_sys::Reflect::get(&data, &JsValue::from("rawId")).unwrap())
-                .to_vec();
+            Uint8Array::new(&js_sys::Reflect::get(&data, &"rawId".into()).unwrap()).to_vec();
 
-        let data_response = js_sys::Reflect::get(&data, &JsValue::from("response")).unwrap();
+        let data_response = js_sys::Reflect::get(&data, &"response".into()).unwrap();
 
         let data_response_authenticator_data = Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("authenticatorData")).unwrap(),
+            &js_sys::Reflect::get(&data_response, &"authenticatorData".into()).unwrap(),
         )
         .to_vec();
 
-        let data_response_signature = Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("signature")).unwrap(),
-        )
-        .to_vec();
+        let data_response_signature =
+            Uint8Array::new(&js_sys::Reflect::get(&data_response, &"signature".into()).unwrap())
+                .to_vec();
 
         let data_response_user_handle =
-            &js_sys::Reflect::get(&data_response, &JsValue::from("userHandle")).unwrap();
+            &js_sys::Reflect::get(&data_response, &"userHandle".into()).unwrap();
         let data_response_user_handle = if data_response_user_handle.is_undefined() {
             None
         } else {
@@ -1346,7 +1351,7 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         };
 
         let data_response_client_data_json = Uint8Array::new(
-            &js_sys::Reflect::get(&data_response, &JsValue::from("clientDataJSON")).unwrap(),
+            &js_sys::Reflect::get(&data_response, &"clientDataJSON".into()).unwrap(),
         )
         .to_vec();
 
@@ -1883,8 +1888,8 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential,
-        Registration, RegistrationSignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
+        AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential, Registration,
+        RegistrationSignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;
