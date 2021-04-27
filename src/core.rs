@@ -297,7 +297,10 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if data.client_data_json.origin != self.config.get_origin() {
+        if !self.config.allow_cross_origin()
+            && (data.client_data_json.cross_origin.unwrap_or(false)
+                || data.client_data_json.origin != self.config.get_origin())
+        {
             log::debug!(
                 "{} != {}",
                 data.client_data_json.origin,
@@ -906,6 +909,7 @@ pub trait WebauthnConfig {
     fn ignore_unsupported_attestation_formats(&self) -> bool {
         false
     }
+
     /// Decides the verifier must error on invalid counter values
     fn require_valid_counter_value(&self) -> bool {
         true
@@ -943,6 +947,15 @@ pub trait WebauthnConfig {
             // We don't trust Uncertain attestations
             AttestationType::Uncertain(_) => Err(()),
         }
+    }
+
+    /// Get the site policy on whether cross origin credentials are allowed.
+    ///
+    /// A credential is cross origin if the ECMAScript context in which the
+    /// credential creation functions were invoked belonged to a different
+    /// origin than that of the RP the credential is being created for.
+    fn allow_cross_origin(&self) -> bool {
+        false
     }
 }
 
@@ -1012,7 +1025,7 @@ mod tests {
     fn test_registration_duo_go() {
         let wan_c = WebauthnEphemeralConfig::new(
             "webauthn.io",         // name, whatever you want
-            "https://webauthn.io", //must be url origin
+            "https://webauthn.io", // must be url origin
             "webauthn.io",         // must be url minus proto + port
             None,
         );
