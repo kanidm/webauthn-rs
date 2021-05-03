@@ -297,16 +297,21 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if !self.config.allow_cross_origin()
-            && (data.client_data_json.cross_origin.unwrap_or(false)
-                || data.client_data_json.origin != self.config.get_origin())
-        {
+        if data.client_data_json.origin != self.config.get_origin() {
             log::debug!(
                 "{} != {}",
                 data.client_data_json.origin,
                 self.config.get_origin()
             );
             return Err(WebauthnError::InvalidRPOrigin);
+        }
+
+        // ATM most browsers do not send this value, so we must default to
+        // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
+        // more.
+        if !self.config.allow_cross_origin() && data.client_data_json.cross_origin.unwrap_or(false)
+        {
+            return Err(WebauthnError::CredentialCrossOrigin);
         }
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
@@ -954,6 +959,10 @@ pub trait WebauthnConfig {
     /// A credential is cross origin if the ECMAScript context in which the
     /// credential creation functions were invoked belonged to a different
     /// origin than that of the RP the credential is being created for.
+    ///
+    /// WARNING: Most browsers do not currently send the `crossOrigin` value so
+    /// we assume where the key is absent that the credential was not created in
+    /// a cross-origin context.
     fn allow_cross_origin(&self) -> bool {
         false
     }
