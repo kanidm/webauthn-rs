@@ -3,3 +3,4 @@
 Cargo.lock
 static/bundle.js
 examples/tide/tide_yew/pkg
+examples/tide/tide_yew/target

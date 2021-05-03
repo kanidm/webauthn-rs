@@ -313,6 +313,14 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
+        // ATM most browsers do not send this value, so we must default to
+        // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
+        // more.
+        if !self.config.allow_cross_origin() && data.client_data_json.cross_origin.unwrap_or(false)
+        {
+            return Err(WebauthnError::CredentialCrossOrigin);
+        }
+
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
         // TLS connection over which the assertion was obtained. If Token Binding was used on that
         // TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the
@@ -980,6 +988,7 @@ pub trait WebauthnConfig {
     fn ignore_unsupported_attestation_formats(&self) -> bool {
         false
     }
+
     /// Decides the verifier must error on invalid counter values
     fn require_valid_counter_value(&self) -> bool {
         true
@@ -1017,6 +1026,19 @@ pub trait WebauthnConfig {
             // We don't trust Uncertain attestations
             AttestationType::Uncertain(_) => Err(()),
         }
+    }
+
+    /// Get the site policy on whether cross origin credentials are allowed.
+    ///
+    /// A credential is cross origin if the ECMAScript context in which the
+    /// credential creation functions were invoked belonged to a different
+    /// origin than that of the RP the credential is being created for.
+    ///
+    /// WARNING: Most browsers do not currently send the `crossOrigin` value so
+    /// we assume where the key is absent that the credential was not created in
+    /// a cross-origin context.
+    fn allow_cross_origin(&self) -> bool {
+        false
     }
 }
 
@@ -1083,7 +1105,7 @@ mod tests {
     fn test_registration_duo_go() {
         let wan_c = WebauthnEphemeralConfig::new(
             "webauthn.io",         // name, whatever you want
-            "https://webauthn.io", //must be url origin
+            "https://webauthn.io", // must be url origin
             "webauthn.io",         // must be url minus proto + port
             None,
         );

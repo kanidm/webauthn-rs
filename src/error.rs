@@ -208,6 +208,11 @@ pub enum WebauthnError {
 
     #[error("The attested credential public key and subject public key do not match")]
     AttestationCredentialSubjectKeyMismatch,
+
+    #[error(
+        "The credential was created in a cross-origin context (while cross-origin was disallowed)"
+    )]
+    CredentialCrossOrigin,
 }
 
 impl PartialEq for WebauthnError {
