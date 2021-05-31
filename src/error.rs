@@ -159,7 +159,7 @@ pub enum WebauthnError {
     COSEKeyECDSAInvalidCurve,
 
     #[error("The COSEKey contains invalid cryptographic algorithm request")]
-    COSEKeyECDSAContentType,
+    COSEKeyInvalidAlgorithm,
 
     #[error("The credential exist check failed")]
     CredentialExistCheckError,

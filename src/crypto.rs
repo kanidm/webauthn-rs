@@ -11,7 +11,7 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 // use super::constants::*;
 use super::error::*;
 use crate::proto::{
-    Aaguid, COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, COSERSAKey, ECDSACurve,
+    Aaguid, COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSERSAKey, ECDSACurve,
 };
 // use super::proto::*;
 
@@ -47,14 +47,14 @@ jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B
 
 fn verify_signature(
     pkey: &pkey::PKeyRef<pkey::Public>,
-    stype: COSEContentType,
+    stype: COSEAlgorithm,
     signature: &[u8],
     verification_data: &[u8],
 ) -> Result<bool, WebauthnError> {
     let mut verifier = match stype {
-        COSEContentType::ECDSA_SHA256 => sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+        COSEAlgorithm::ES256 => sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
             .map_err(WebauthnError::OpenSSLError),
-        COSEContentType::RS256 => {
+        COSEAlgorithm::RS256 => {
             let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
                 .map_err(WebauthnError::OpenSSLError)?;
             verifier
@@ -62,7 +62,7 @@ fn verify_signature(
                 .map_err(WebauthnError::OpenSSLError)?;
             Ok(verifier)
         }
-        COSEContentType::INSECURE_RS1 => {
+        COSEAlgorithm::INSECURE_RS1 => {
             let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), &pkey)
                 .map_err(WebauthnError::OpenSSLError)?;
             verifier
@@ -86,7 +86,7 @@ fn verify_signature(
 /// of the key.
 pub struct X509PublicKey {
     pubk: x509::X509,
-    t: COSEContentType,
+    t: COSEAlgorithm,
 }
 
 impl std::fmt::Debug for X509PublicKey {
@@ -95,16 +95,16 @@ impl std::fmt::Debug for X509PublicKey {
     }
 }
 
-impl TryFrom<(&[u8], COSEContentType)> for X509PublicKey {
+impl TryFrom<(&[u8], COSEAlgorithm)> for X509PublicKey {
     type Error = WebauthnError;
 
     // Must be DER bytes. If you have PEM, base64decode first!
-    fn try_from((d, t): (&[u8], COSEContentType)) -> Result<Self, Self::Error> {
+    fn try_from((d, t): (&[u8], COSEAlgorithm)) -> Result<Self, Self::Error> {
         let pubk = x509::X509::from_der(d).map_err(WebauthnError::OpenSSLError)?;
 
         #[allow(clippy::single_match)]
         match &t {
-            COSEContentType::ECDSA_SHA256 => {
+            COSEAlgorithm::ES256 => {
                 let pk = pubk.public_key().map_err(WebauthnError::OpenSSLError)?;
 
                 let ec_key = pk.ec_key().map_err(WebauthnError::OpenSSLError)?;
@@ -247,7 +247,7 @@ impl X509PublicKey {
         Self {
             pubk: x509::X509::from_pem(APPLE_X509_PEM).unwrap(),
             // This content type was obtained statically (this certificate is static data)
-            t: COSEContentType::ECDSA_SHA384,
+            t: COSEAlgorithm::ES384,
         }
     }
 }
@@ -274,10 +274,10 @@ impl ECDSACurve {
     }
 }
 
-impl COSEContentType {
+impl COSEAlgorithm {
     pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> Result<Vec<u8>, WebauthnError> {
         match self {
-            COSEContentType::INSECURE_RS1 => {
+            COSEAlgorithm::INSECURE_RS1 => {
                 // sha1
                 hash::hash(hash::MessageDigest::sha1(), input)
                     .map(|dbytes| Vec::from(dbytes.as_ref()))
@@ -356,7 +356,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 
                 // Right, now build the struct.
                 let cose_key = COSEKey {
-                    type_: COSEContentType::try_from(content_type)?,
+                    type_: COSEAlgorithm::try_from(content_type)?,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {
                         curve: ECDSACurve::try_from(curve_type)?,
                         x: x_temp,
@@ -402,7 +402,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 
                 // Right, now build the struct.
                 let cose_key = COSEKey {
-                    type_: COSEContentType::try_from(content_type)?,
+                    type_: COSEAlgorithm::try_from(content_type)?,
                     key: COSEKeyType::RSA(COSERSAKey {
                         n: n.to_vec(),
                         e: e_temp,
@@ -425,9 +425,9 @@ impl TryFrom<&X509PublicKey> for COSEKey {
     type Error = WebauthnError;
     fn try_from(cert: &X509PublicKey) -> Result<COSEKey, Self::Error> {
         let key = match cert.t {
-            COSEContentType::ECDSA_SHA256
-            | COSEContentType::ECDSA_SHA384
-            | COSEContentType::ECDSA_SHA512 => {
+            COSEAlgorithm::ES256
+            | COSEAlgorithm::ES384
+            | COSEAlgorithm::ES512 => {
                 let ec_key = cert
                     .pubk
                     .public_key()
@@ -461,16 +461,16 @@ impl TryFrom<&X509PublicKey> for COSEKey {
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
             }
-            COSEContentType::RS256
-            | COSEContentType::RS384
-            | COSEContentType::RS512
-            | COSEContentType::PS256
-            | COSEContentType::PS384
-            | COSEContentType::PS512
-            | COSEContentType::EDDSA
-            | COSEContentType::INSECURE_RS1 => {
+            COSEAlgorithm::RS256
+            | COSEAlgorithm::RS384
+            | COSEAlgorithm::RS512
+            | COSEAlgorithm::PS256
+            | COSEAlgorithm::PS384
+            | COSEAlgorithm::PS512
+            | COSEAlgorithm::EDDSA
+            | COSEAlgorithm::INSECURE_RS1 => {
                 log::error!(
-                    "unsupported X509 to COSE conversion for COSE content type {:?}",
+                    "unsupported X509 to COSE conversion for COSE algorithm type {:?}",
                     cert.t
                 );
                 Err(WebauthnError::COSEKeyInvalidType)

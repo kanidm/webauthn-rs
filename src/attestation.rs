@@ -9,7 +9,7 @@ use crate::crypto;
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::proto::{
-    AttestedCredentialData, COSEContentType, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
+    AttestedCredentialData, COSEAlgorithm, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
     TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
     UserVerificationPolicy,
 };
@@ -100,7 +100,7 @@ pub(crate) fn verify_packed_attestation(
 
     let alg = cbor_try_i128!(alg_value)
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
-        .and_then(COSEContentType::try_from)?;
+        .and_then(COSEAlgorithm::try_from)?;
 
     match (
         att_stmt_map.get(x5c_key),
@@ -286,7 +286,7 @@ pub(crate) fn verify_fidou2f_attestation(
     //
     // // try from asserts this condition given the alg.
     let cerificate_public_key =
-        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEContentType::ECDSA_SHA256))?;
+        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEAlgorithm::ES256))?;
 
     // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
     //
@@ -388,7 +388,7 @@ pub(crate) fn verify_tpm_attestation(
 
     let alg = cbor_try_i128!(alg_value)
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
-        .and_then(COSEContentType::try_from)?;
+        .and_then(COSEAlgorithm::try_from)?;
 
     // eprintln!("alg = {:?}", alg);
 
@@ -627,7 +627,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .iter()
         .zip(
             // FIXME: this is determined empirically, not sure if it's always right.
-            std::iter::once(alg).chain(std::iter::repeat(COSEContentType::ECDSA_SHA384)),
+            std::iter::once(alg).chain(std::iter::repeat(COSEAlgorithm::ES384)),
         )
         .map(|(values, alg)| {
             cbor_try_bytes!(values)

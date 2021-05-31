@@ -152,18 +152,17 @@ impl TryFrom<i128> for ECDSACurve {
     }
 }
 
-/// A COSE Key Content type, indicating the type of key and hash type
-/// that should be used with this key. You shouldn't need to alter or
-/// use this value.
+/// A COSE signature algorithm, indicating the type of key and hash type
+/// that should be used. You shouldn't need to alter or use this value.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum COSEContentType {
+pub enum COSEAlgorithm {
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
-    ECDSA_SHA256 = -7, // recommends curve SECP256R1
+    ES256 = -7, // recommends curve SECP256R1
     /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
-    ECDSA_SHA384 = -35, // recommends curve SECP384R1
+    ES384 = -35, // recommends curve SECP384R1
     /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
-    ECDSA_SHA512 = -36, // recommends curve SECP521R1
+    ES512 = -36, // recommends curve SECP521R1
     /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
     RS256 = -257,
     /// Identifies this key as RS384 aka RSASSA-PKCS1-v1_5 w/ SHA-384
@@ -183,40 +182,40 @@ pub enum COSEContentType {
     INSECURE_RS1 = -65535,
 }
 
-impl TryFrom<i128> for COSEContentType {
+impl TryFrom<i128> for COSEAlgorithm {
     type Error = WebauthnError;
     fn try_from(i: i128) -> Result<Self, Self::Error> {
         match i {
-            -7 => Ok(COSEContentType::ECDSA_SHA256),
-            -35 => Ok(COSEContentType::ECDSA_SHA384),
-            -36 => Ok(COSEContentType::ECDSA_SHA512),
-            -257 => Ok(COSEContentType::RS256),
-            -258 => Ok(COSEContentType::RS384),
-            -259 => Ok(COSEContentType::RS512),
-            -37 => Ok(COSEContentType::PS256),
-            -38 => Ok(COSEContentType::PS384),
-            -39 => Ok(COSEContentType::PS512),
-            -8 => Ok(COSEContentType::EDDSA),
-            -65535 => Ok(COSEContentType::INSECURE_RS1),
-            _ => Err(WebauthnError::COSEKeyECDSAContentType),
+            -7 => Ok(COSEAlgorithm::ES256),
+            -35 => Ok(COSEAlgorithm::ES384),
+            -36 => Ok(COSEAlgorithm::ES512),
+            -257 => Ok(COSEAlgorithm::RS256),
+            -258 => Ok(COSEAlgorithm::RS384),
+            -259 => Ok(COSEAlgorithm::RS512),
+            -37 => Ok(COSEAlgorithm::PS256),
+            -38 => Ok(COSEAlgorithm::PS384),
+            -39 => Ok(COSEAlgorithm::PS512),
+            -8 => Ok(COSEAlgorithm::EDDSA),
+            -65535 => Ok(COSEAlgorithm::INSECURE_RS1),
+            _ => Err(WebauthnError::COSEKeyInvalidAlgorithm),
         }
     }
 }
 
-impl From<&COSEContentType> for i64 {
-    fn from(c: &COSEContentType) -> Self {
+impl From<&COSEAlgorithm> for i64 {
+    fn from(c: &COSEAlgorithm) -> Self {
         match c {
-            COSEContentType::ECDSA_SHA256 => -7,
-            COSEContentType::ECDSA_SHA384 => -35,
-            COSEContentType::ECDSA_SHA512 => -6,
-            COSEContentType::RS256 => -257,
-            COSEContentType::RS384 => -258,
-            COSEContentType::RS512 => -259,
-            COSEContentType::PS256 => -37,
-            COSEContentType::PS384 => -38,
-            COSEContentType::PS512 => -39,
-            COSEContentType::EDDSA => -8,
-            COSEContentType::INSECURE_RS1 => -65535,
+            COSEAlgorithm::ES256 => -7,
+            COSEAlgorithm::ES384 => -35,
+            COSEAlgorithm::ES512 => -6,
+            COSEAlgorithm::RS256 => -257,
+            COSEAlgorithm::RS384 => -258,
+            COSEAlgorithm::RS512 => -259,
+            COSEAlgorithm::PS256 => -37,
+            COSEAlgorithm::PS384 => -38,
+            COSEAlgorithm::PS512 => -39,
+            COSEAlgorithm::EDDSA => -8,
+            COSEAlgorithm::INSECURE_RS1 => -65535,
         }
     }
 }
@@ -276,7 +275,7 @@ pub enum COSEKeyType {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEKey {
     /// The type of key that this contains
-    pub type_: COSEContentType,
+    pub type_: COSEAlgorithm,
     /// The public key
     pub key: COSEKeyType,
 }
