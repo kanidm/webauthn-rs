@@ -919,8 +919,8 @@ pub trait WebauthnConfig {
     /// Get the list of valid credential algorthims that this service can accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
     /// implementation.
-    fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
-        vec![COSEContentType::ECDSA_SHA256, COSEContentType::RS256]
+    fn get_credential_algorithms(&self) -> Vec<COSEAlgorithm> {
+        vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]
     }
 
     /// Return a timeout on how long the authenticator has to respond to a challenge. This value
@@ -1052,7 +1052,7 @@ mod tests {
         AuthenticatorAssertionResponseRaw, AuthenticatorAttestationResponseRaw, Challenge,
         Credential, PublicKeyCredential, RegisterPublicKeyCredential, UserVerificationPolicy,
     };
-    use crate::proto::{COSEContentType, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
+    use crate::proto::{COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
     use crate::Webauthn;
 
     // Test the crypto operations of the webauthn impl
@@ -1232,7 +1232,7 @@ mod tests {
                 238, 21, 13, 27, 145, 140, 27, 208, 101, 166, 81,
             ],
             cred: COSEKey {
-                type_: COSEContentType::ECDSA_SHA256,
+                type_: COSEAlgorithm::ES256,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
                     curve: ECDSACurve::SECP256R1,
                     x: [
@@ -1917,7 +1917,7 @@ mod tests {
                     240, 148, 132, 191, 165, 150, 166, 252, 39, 97, 137, 21, 186,
                 ],
                 cred: COSEKey {
-                    type_: COSEContentType::ECDSA_SHA256,
+                    type_: COSEAlgorithm::ES256,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {
                         curve: ECDSACurve::SECP256R1,
                         x: [
@@ -1944,7 +1944,7 @@ mod tests {
                     122, 120, 204, 174, 28, 58, 171, 43, 218, 81, 195, 177,
                 ],
                 cred: COSEKey {
-                    type_: COSEContentType::ECDSA_SHA256,
+                    type_: COSEAlgorithm::ES256,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {
                         curve: ECDSACurve::SECP256R1,
                         x: [

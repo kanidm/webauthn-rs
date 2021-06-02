@@ -11,7 +11,7 @@
 
 use crate::proto::AttestationConveyancePreference;
 use crate::proto::AuthenticatorAttachment;
-use crate::proto::COSEContentType;
+use crate::proto::COSEAlgorithm;
 use crate::WebauthnConfig;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider
@@ -71,18 +71,18 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     ///
     /// WARNING: This returns *all* possible algorithms, not just SUPPORTED ones. This
     /// is so that
-    fn get_credential_algorithms(&self) -> Vec<COSEContentType> {
+    fn get_credential_algorithms(&self) -> Vec<COSEAlgorithm> {
         vec![
-            COSEContentType::ECDSA_SHA256,
-            COSEContentType::ECDSA_SHA384,
-            COSEContentType::ECDSA_SHA512,
-            COSEContentType::RS256,
-            COSEContentType::RS384,
-            COSEContentType::RS512,
-            COSEContentType::PS256,
-            COSEContentType::PS384,
-            COSEContentType::PS512,
-            COSEContentType::EDDSA,
+            COSEAlgorithm::ES256,
+            COSEAlgorithm::ES384,
+            COSEAlgorithm::ES512,
+            COSEAlgorithm::RS256,
+            COSEAlgorithm::RS384,
+            COSEAlgorithm::RS512,
+            COSEAlgorithm::PS256,
+            COSEAlgorithm::PS384,
+            COSEAlgorithm::PS512,
+            COSEAlgorithm::EDDSA,
         ]
     }
 }
