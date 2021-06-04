@@ -549,6 +549,10 @@ pub struct RequestAuthenticationExtensions {
     /// The `credBlob` extension options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub get_cred_blob: Option<CredBlobGet>,
+
+    /// The `appid` extension options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub appid: Option<String>,
 }
 
 impl RequestAuthenticationExtensions {
@@ -566,6 +570,7 @@ impl RequestAuthenticationExtensionsBuilder {
     pub(crate) fn new() -> Self {
         Self(RequestAuthenticationExtensions {
             get_cred_blob: Some(CredBlobGet(false)),
+            appid: None,
         })
     }
 
@@ -587,6 +592,22 @@ impl RequestAuthenticationExtensionsBuilder {
     /// ```
     pub fn get_cred_blob(mut self, get_cred_blob: bool) -> Self {
         self.0.get_cred_blob = Some(CredBlobGet(get_cred_blob));
+        self
+    }
+
+    /// Set the AppId extension, for backwards compatibility with FIDO U2F credentials
+    ///
+    /// # Example
+    /// ```
+    /// # use webauthn_rs::proto::RequestAuthenticationExtensions;
+    /// let extensions = RequestAuthenticationExtensions::builder()
+    ///     .appid(String::from("https://domain.tld/app-id.json"))
+    ///     .build();
+    ///
+    /// assert_eq!(extensions.appid, Some(String::from("https://domain.tld/app-id.json")));
+    /// ```
+    pub fn appid(mut self, appid: String) -> Self {
+        self.0.appid = Some(appid);
         self
     }
 }
