@@ -500,6 +500,9 @@ impl<T> Webauthn<T> {
         // Service [FIDOMetadataService] provides one way to obtain such information, using the
         // aaguid in the attestedCredentialData in authData.
 
+        // ⚠️  This is done through the policy verify trust callback that the user of this library
+        // implements and provides.
+
         // Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
         //
         // * If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
@@ -1014,16 +1017,13 @@ pub trait WebauthnConfig {
     /// credential. It's important for your implementation of this callback to follow
     /// the advice of the w3c standard, notably:
     ///
-    /// 15. If validation is successful, obtain a list of acceptable trust anchors (attestation
-    /// root certificates or ECDAA-Issuer public keys) for that attestation type and attestation
-    /// statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata
-    /// Service \[FIDOMetadataService\] provides one way to obtain such information, using the
-    /// aaguid in the attestedCredentialData in authData.
-    ///
-    /// 16: Assess the attestation trustworthiness using the outputs of the verification procedure
-    /// in step 14, as follows: (SEE RFC)
-    /// If the attestation statement attStmt successfully verified but is not trustworthy per step
-    /// 16 above, the Relying Party SHOULD fail the registration ceremony.
+    /// Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
+    /// * If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
+    /// * If self attestation was used, verify that self attestation is acceptable under Relying Party policy.
+    /// * Otherwise, use the X.509 certificates returned as the attestation trust path from the verification
+    ///   procedure to verify that the attestation public key either correctly chains up to an acceptable
+    ///   root certificate, or is itself an acceptable certificate (i.e., it and the root certificate
+    ///   obtained previously may be the same).
     ///
     /// The default implementation of this method rejects Uncertain attestation, and
     /// will "blindly trust" self attestation and the other types as valid.
