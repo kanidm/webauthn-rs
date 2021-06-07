@@ -239,9 +239,7 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        // From the rfc https://w3c.github.io/webauthn/#registering-a-new-credential
-        // get the challenge (it's username associated)
-        // Policy should also come from the chal
+        // Decompose our registration state which contains everything we need to proceed.
 
         let RegistrationState {
             policy,
@@ -282,6 +280,16 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
+        // ======================================================================
+        // References:
+        // Level 2: https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential
+
+        // Steps 1 through 4 are performed by the Client, not the RP.
+
+        // Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
+        //
+        //   This is done by the calling webserver to give us reg aka JSONText in this case.
+        //
         // Let C, the client data claimed as collected during the credential creation, be the result
         // of running an implementation-specific JSON parser on JSONtext.
         //
@@ -331,8 +339,10 @@ impl<T> Webauthn<T> {
         // suggestions on this topic!
         //
 
-        // 7. Compute the hash of response.clientDataJSON using SHA-256.
-        //    This will be used in step 14.
+        // Let hash be the result of computing a hash over response.clientDataJSON using SHA-256
+        //
+        //   clarifying point - this is the hash of bytes.
+        //
         // First you have to decode this from base64!!! This really could just be implementation
         // specific though ...
         let client_data_json_hash = compute_sha256(data.client_data_json_bytes.as_slice());
@@ -406,9 +416,9 @@ impl<T> Webauthn<T> {
         //  https://w3c.github.io/webauthn/#none-attestation
         let attest_format = AttestationFormat::try_from(data.attestation_object.fmt.as_str())?;
 
-        // 14. Verify that attStmt is a correct attestation statement, conveying a valid attestation
+        // Verify that attStmt is a correct attestation statement, conveying a valid attestation
         // signature, by using the attestation statement format fmt’s verification procedure given
-        // attStmt, authData and the hash of the serialized client data computed in step 7.
+        // attStmt, authData and the hash of the serialized client data.
 
         let acd = data
             .attestation_object
@@ -419,7 +429,6 @@ impl<T> Webauthn<T> {
 
         // Now, match based on the attest_format
         // This returns an AttestationType, containing all the metadata needed for
-        // step 15.
 
         log::debug!("attestation is: {:?}", &attest_format);
 
@@ -485,16 +494,20 @@ impl<T> Webauthn<T> {
 
         // Now based on result ...
 
-        // 15. If validation is successful, obtain a list of acceptable trust anchors (attestation
+        // If validation is successful, obtain a list of acceptable trust anchors (attestation
         // root certificates or ECDAA-Issuer public keys) for that attestation type and attestation
         // statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata
         // Service [FIDOMetadataService] provides one way to obtain such information, using the
         // aaguid in the attestedCredentialData in authData.
 
-        // 16: Assess the attestation trustworthiness using the outputs of the verification procedure
-        // in step 14, as follows: (SEE RFC)
-        // If the attestation statement attStmt successfully verified but is not trustworthy per step
-        // 16 above, the Relying Party SHOULD fail the registration ceremony.
+        // Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
+        //
+        // * If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
+        // * If self attestation was used, verify that self attestation is acceptable under Relying Party policy.
+        // * Otherwise, use the X.509 certificates returned as the attestation trust path from the verification
+        //     procedure to verify that the attestation public key either correctly chains up to an acceptable
+        //     root certificate, or is itself an acceptable certificate (i.e., it and the root certificate
+        //     obtained in Step 20 may be the same).
 
         let credential = self
             .config
@@ -521,16 +534,18 @@ impl<T> Webauthn<T> {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
         }
 
-        //  If the attestation statement attStmt verified successfully and is found to be trustworthy,
-        // then register the new credential with the account that was denoted in the options.user
-        // passed to create(), by associating it with the credentialId and credentialPublicKey in
-        // the attestedCredentialData in authData, as appropriate for the Relying Party's system.
+        // If the attestation statement attStmt verified successfully and is found to be trustworthy,
+        // then register the new credential with the account that was denoted in options.user:
+        //
+        // For us, we return the credential for the caller to persist.
+        // If trust failed, we have already returned an Err before this point.
 
-        // Already returned above if trust failed.
+        // TODO: Associate the credentialId with the transport hints returned by calling
+        // credential.response.getTransports(). This value SHOULD NOT be modified before or after
+        // storing it. It is RECOMMENDED to use this value to populate the transports of the
+        // allowCredentials option in future get() calls to help the client know how to find a
+        // suitable authenticator.
 
-        // So we return the credential here, and the caller persists it.
-        // We turn this into a "helper" and serialisable credential structure that
-        // people can use a bit nicer.
         Ok((credential, data.attestation_object.auth_data))
     }
 
@@ -547,6 +562,7 @@ impl<T> Webauthn<T> {
     {
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
+        //
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
         let data = AuthenticatorAssertionResponse::try_from(&rsp.response).map_err(|e| {
             log::debug!("AuthenticatorAssertionResponse::try_from -> {:?}", e);
@@ -645,7 +661,7 @@ impl<T> Webauthn<T> {
         // Let hash be the result of computing a hash over the cData using SHA-256.
         let client_data_json_hash = compute_sha256(data.client_data_bytes.as_slice());
 
-        // Using the credential public key looked up in step 3, verify that sig is a valid signature
+        // Using the credential public key, verify that sig is a valid signature
         // over the binary concatenation of authData and hash.
         // Note: This verification step is compatible with signatures generated by FIDO U2F
         // authenticators. See §6.1.2 FIDO U2F Signature Format Compatibility.
