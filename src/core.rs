@@ -44,6 +44,7 @@ pub struct AuthenticationState {
     credentials: Vec<Credential>,
     policy: UserVerificationPolicy,
     challenge: Base64UrlSafeData,
+    appid: Option<String>,
 }
 
 impl AuthenticationState {
@@ -559,6 +560,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: &ChallengeRef,
         cred: &Credential,
+        appid: &Option<String>
     ) -> Result<AuthenticatorData<Authentication>, WebauthnError>
     where
         T: WebauthnConfig,
@@ -604,8 +606,17 @@ impl<T> Webauthn<T> {
         // Token Binding ID for the connection.
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
-        if data.authenticator_data.rp_id_hash != self.rp_id_hash {
-            return Err(WebauthnError::InvalidRPIDHash);
+        // Note that if we have an appid stored in the state and the client indicates it has used the appid extension,
+        // we check the hash against this appid instead of the Relying Party
+        let has_appid_enabled = rsp.extensions.as_ref().map(|e| e.appid).unwrap_or(false);
+        if has_appid_enabled && appid.is_some() {
+            if data.authenticator_data.rp_id_hash != compute_sha256(appid.as_ref().unwrap().as_bytes()) {
+                return Err(WebauthnError::InvalidRPIDHash);
+            }
+        } else {
+            if data.authenticator_data.rp_id_hash != self.rp_id_hash {
+                return Err(WebauthnError::InvalidRPIDHash);
+            }
         }
 
         // Verify that the User Present bit of the flags in authData is set.
@@ -795,6 +806,9 @@ impl<T> Webauthn<T> {
             })
             .collect();
 
+        // Extract the appid from the extensions to store it in the AuthenticationState
+        let appid = extensions.as_ref().and_then(|e| e.appid.clone());
+
         // Store the chal associated to the user.
         // Now put that into the correct challenge format
         let r = RequestChallengeResponse::new(
@@ -810,6 +824,7 @@ impl<T> Webauthn<T> {
             credentials: creds,
             policy,
             challenge: chal.into(),
+            appid
         };
         Ok((r, st))
     }
@@ -839,6 +854,7 @@ impl<T> Webauthn<T> {
             credentials: creds,
             policy,
             challenge: chal,
+            appid
         } = state;
         let chal: &ChallengeRef = chal.into();
 
@@ -879,7 +895,7 @@ impl<T> Webauthn<T> {
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let auth_data = self.verify_credential_internal(rsp, policy.clone(), chal, &cred)?;
+        let auth_data = self.verify_credential_internal(rsp, policy.clone(), chal, &cred, appid)?;
         let counter = auth_data.counter;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
@@ -1290,6 +1306,7 @@ mod tests {
             UserVerificationPolicy::Discouraged,
             &zero_chal,
             &cred,
+            &None
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -1467,6 +1484,7 @@ mod tests {
                 ]),
                 user_handle: Some(Base64UrlSafeData(vec![109, 99, 104, 97, 110])),
             },
+            extensions: None,
             type_: "public-key".to_string(),
         };
 
@@ -1475,6 +1493,7 @@ mod tests {
             UserVerificationPolicy::Required,
             &chal,
             &cred.0,
+            &None
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());

@@ -1325,6 +1325,14 @@ pub struct AuthenticatorAssertionResponseRaw {
     pub user_handle: Option<Base64UrlSafeData>,
 }
 
+/// https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AuthenticationExtensionsClientOutputs {
+    /// Indicates whether the client used the provided appid extension
+    #[serde(default)]
+    pub appid: bool
+}
+
 /// A client response to an authentication challenge. This contains all required
 /// information to asses and assert trust in a credentials legitimacy, followed
 /// by authentication to a user.
@@ -1340,6 +1348,8 @@ pub struct PublicKeyCredential {
     pub raw_id: Base64UrlSafeData,
     /// The authenticator response.
     pub response: AuthenticatorAssertionResponseRaw,
+    /// The extensions sent by the client
+    pub extensions: Option<AuthenticationExtensionsClientOutputs>,
     /// The authenticator type.
     #[serde(rename = "type")]
     pub type_: String,
