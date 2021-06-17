@@ -607,13 +607,18 @@ impl<T> Webauthn<T> {
 
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
         // Note that if we have an appid stored in the state and the client indicates it has used the appid extension,
-        // we check the hash against this appid instead of the Relying Party
-        let has_appid_enabled = rsp.extensions.as_ref().map(|e| e.appid);
-        if let (Some(true), Some(appid)) = (has_appid_enabled, appid) {
-            if data.authenticator_data.rp_id_hash != compute_sha256(appid.as_bytes()) {
-                return Err(WebauthnError::InvalidRPIDHash);
-            }
-        } else if data.authenticator_data.rp_id_hash != self.rp_id_hash {
+        // we also check the hash against this appid in addition to the Relying Party
+        let has_appid_enabled = rsp.extensions.as_ref().map(|e| e.appid).unwrap_or(false);
+        
+        let appid_hash = if has_appid_enabled {
+            appid.as_ref().map(|id| compute_sha256(id.as_bytes()))
+        } else {
+            None
+        };
+
+        if !(&data.authenticator_data.rp_id_hash == &self.rp_id_hash
+            || Some(&data.authenticator_data.rp_id_hash) == appid_hash.as_ref())
+        {
             return Err(WebauthnError::InvalidRPIDHash);
         }
 
@@ -1308,6 +1313,36 @@ mod tests {
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
+
+        // Captured authentication attempt, this mentions the appid extension has been used, but we still provide a valid RPID
+        let rsp = r#"
+        {
+            "id":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ",
+            "rawId":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ",
+            "extensions": {
+                "appid": true
+            }, 
+            "response":{
+                "authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MBAAAAFA",
+                "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJXZ1h6X2tUdjNXVVUxa3c4aG0tT0dvR1M0WkNIWF8zYkVxSEgyUHZWcDhNIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9",
+                "signature":"MEYCIQDmLVOqv85cdRup4Fr8Pf9zC4AWO-XKBJqa8xPwYFCCMAIhAOiExLoyes0xipmUmq0BVlqJaCKLn_MFKG9GIDsCGq_-",
+                "userHandle":null
+            },
+            "type":"public-key"
+        }
+        "#;
+        let rsp_d: PublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        // Now verify it, as the RPID is valid, the appid should be ignored
+        let r = wan.verify_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged,
+            &zero_chal,
+            &cred,
+            &Some(String::from("https://unused.local"))
+        );
+        println!("RESULT: {:?}", r);
+        assert!(r.is_ok());
     }
 
     #[test]
@@ -1355,7 +1390,7 @@ mod tests {
         // Persist it to our fake db.
         let wan = Webauthn::new(wan_c);
 
-        // Captured authentication attempt
+        // Captured authentication attempt, this client has used the appid extension
         let rsp = r#"
         {
             "id": "z077A6SzdvA3rDRG6tfnTf9TMFVtfLYe1mh27mRXgBZU6TXA_nCJAi6WnLLq1p3d0yj3n62_4yJMu80o4O8kkw",
@@ -1383,6 +1418,35 @@ mod tests {
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
+
+        // Captured authentication attempt, this client has NOT used the appid extension, but is providing the appid anyway
+        let rsp = r#"
+        {
+            "id": "z077A6SzdvA3rDRG6tfnTf9TMFVtfLYe1mh27mRXgBZU6TXA_nCJAi6WnLLq1p3d0yj3n62_4yJMu80o4O8kkw",
+            "rawId": "z077A6SzdvA3rDRG6tfnTf9TMFVtfLYe1mh27mRXgBZU6TXA_nCJAi6WnLLq1p3d0yj3n62_4yJMu80o4O8kkw",
+            "type": "public-key",
+            "extensions": {
+                "appid": false
+            },
+            "response": {
+                "authenticatorData": "UN6WJxNDzSGdqrQoPbqYbsZdIxtC9vfU9iGe5i1pCTYBAAAAuQ",
+                "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJvSF9WcnBZazVMNHBQZGdPcTc5THkyTTdCUHd4V3VzazNLV2Z5VHJoLUk0IiwiY2xpZW50RXh0ZW5zaW9ucyI6eyJhcHBpZCI6Imh0dHBzOi8vdGVzdGluZy5sb2NhbC9hcHAtaWQuanNvbiJ9LCJoYXNoQWxnb3JpdGhtIjoiU0hBLTI1NiIsIm9yaWdpbiI6Imh0dHBzOi8vdGVzdGluZy5sb2NhbCIsInR5cGUiOiJ3ZWJhdXRobi5nZXQifQ",
+                "signature": "MEUCIEw2O8LYZj6IKbjP6FuvdcL2MoDBY6LqJWuhteje3H7eAiEAvzRLSg70tkrGnZqpQIZyv-zaizNpCtyr4U3SZ-E2-f4"
+            }
+        }
+        "#;
+        let rsp_d: PublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        // This will verify against the RPID while the client provided an appid, so it should fail
+        let r = wan.verify_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged,
+            &zero_chal,
+            &cred,
+            &None,
+        );
+        println!("RESULT: {:?}", r);
+        assert!(r.is_err());
     }
 
     #[test]
