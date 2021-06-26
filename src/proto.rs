@@ -819,6 +819,7 @@ pub struct PublicKeyCredentialDescriptor {
     id: Base64UrlSafeData,
     /// The allowed transports for this credential. Note this is a hint, and is not
     /// enforced.
+    #[serde(skip_serializing_if = "Option::is_none")]
     transports: Option<Vec<AuthenticatorTransport>>,
 }
 
