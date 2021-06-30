@@ -9,9 +9,9 @@ use crate::crypto;
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::proto::{
-    AttestedCredentialData, COSEAlgorithm, COSEKey, COSEKeyType, Credential, Tpm2bName, TpmAlgId,
-    TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId, TpmuPublicParms,
-    UserVerificationPolicy,
+    AttestedCredentialData, COSEAlgorithm, COSEKey, COSEKeyType, Credential, ParsedAttestationData,
+    Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId,
+    TpmuPublicParms, UserVerificationPolicy,
 };
 use log::debug;
 
@@ -43,39 +43,6 @@ impl TryFrom<&str> for AttestationFormat {
     }
 }
 
-/// The type of Attestation that the Authenticator is providing.
-#[derive(Debug)]
-pub enum AttestationType {
-    /// The credential is authenticated by a signing X509 Certificate
-    /// from a vendor or provider.
-    Basic(Credential, crypto::X509PublicKey),
-    /// The credential is authenticated using surrogate basic attestation
-    /// it uses the credential private key to create the attestation signature
-    Self_(Credential),
-    /// The credential is authenticated using a CA, and may provide a
-    /// ca chain to validate to it's root.
-    AttCa(
-        Credential,
-        crypto::X509PublicKey,
-        Vec<crypto::X509PublicKey>,
-    ),
-    /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
-    /// validate to it's root.
-    AnonCa(
-        Credential,
-        crypto::X509PublicKey,
-        Vec<crypto::X509PublicKey>,
-    ),
-    /// Unimplemented
-    ECDAA,
-    /// No Attestation type was provided with this Credential. If in doubt
-    /// reject this Credential.
-    None(Credential),
-    /// Uncertain Attestation was provided with this Credential, which may not
-    /// be trustworthy in all cases. If in doubt, reject this type.
-    Uncertain(Credential),
-}
-
 // Perform the Verification procedure for 8.2. Packed Attestation Statement Format
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
 pub(crate) fn verify_packed_attestation(
@@ -86,7 +53,7 @@ pub(crate) fn verify_packed_attestation(
     auth_data_bytes: &[u8],
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<AttestationType, WebauthnError> {
+) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map =
         cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
@@ -176,7 +143,8 @@ pub(crate) fn verify_packed_attestation(
             // If successful, return implementation-specific values representing attestation type
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-            Ok(AttestationType::Basic(
+            Ok((
+                ParsedAttestationData::Basic(attestn_cert),
                 Credential::new(
                     acd,
                     credential_public_key,
@@ -184,7 +152,6 @@ pub(crate) fn verify_packed_attestation(
                     user_verified,
                     registration_policy,
                 ),
-                attestn_cert,
             ))
         }
         (None, Some(_ecdaa_key_id)) => {
@@ -218,13 +185,16 @@ pub(crate) fn verify_packed_attestation(
             }
 
             // 4.c. If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
-            Ok(AttestationType::Self_(Credential::new(
-                acd,
-                credential_public_key,
-                counter,
-                user_verified,
-                registration_policy,
-            )))
+            Ok((
+                ParsedAttestationData::Self_,
+                Credential::new(
+                    acd,
+                    credential_public_key,
+                    counter,
+                    user_verified,
+                    registration_policy,
+                ),
+            ))
         }
     }
 }
@@ -239,7 +209,7 @@ pub(crate) fn verify_fidou2f_attestation(
     client_data_hash: &[u8],
     rp_id_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<AttestationType, WebauthnError> {
+) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     //
     // ^-- This is already DONE as a factor of serde_cbor not erroring up to this point,
@@ -329,7 +299,10 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-    Ok(AttestationType::Basic(credential, cerificate_public_key))
+    Ok((
+        ParsedAttestationData::Basic(cerificate_public_key),
+        credential,
+    ))
 }
 
 // https://www.w3.org/TR/webauthn/#none-attestation
@@ -338,7 +311,7 @@ pub(crate) fn verify_none_attestation(
     counter: u32,
     user_verified: bool,
     registration_policy: UserVerificationPolicy,
-) -> Result<AttestationType, WebauthnError> {
+) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
     // No attestation is performed, simply provide a credential.
     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
     let credential = Credential::new(
@@ -348,7 +321,7 @@ pub(crate) fn verify_none_attestation(
         user_verified,
         registration_policy,
     );
-    Ok(AttestationType::None(credential))
+    Ok((ParsedAttestationData::None, credential))
 }
 
 // https://w3c.github.io/webauthn/#sctn-tpm-attestation
@@ -360,7 +333,7 @@ pub(crate) fn verify_tpm_attestation(
     auth_data_bytes: &[u8],
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<AttestationType, WebauthnError> {
+) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
     log::debug!("begin verify_tpm_attest");
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR
@@ -585,17 +558,14 @@ pub(crate) fn verify_tpm_attestation(
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
-    Ok(AttestationType::AttCa(
-        Credential::new(
-            acd,
-            credential_public_key,
-            counter,
-            user_verified,
-            registration_policy,
-        ),
-        aik_cert,
-        arr_x509,
-    ))
+    let credential = Credential::new(
+        acd,
+        credential_public_key,
+        counter,
+        user_verified,
+        registration_policy,
+    );
+    Ok((ParsedAttestationData::AttCa(aik_cert, arr_x509), credential))
 }
 
 pub(crate) fn verify_apple_anonymous_attestation(
@@ -606,7 +576,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     auth_data_bytes: &[u8],
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<AttestationType, WebauthnError> {
+) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     let att_stmt_map =
         cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
@@ -665,15 +635,15 @@ pub(crate) fn verify_apple_anonymous_attestation(
     }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-    Ok(AttestationType::AnonCa(
-        Credential::new(
-            acd,
-            credential_public_key,
-            counter,
-            user_verified,
-            registration_policy,
-        ),
-        crypto::X509PublicKey::apple_x509(),
-        arr_x509,
+    let credential = Credential::new(
+        acd,
+        credential_public_key,
+        counter,
+        user_verified,
+        registration_policy,
+    );
+    Ok((
+        ParsedAttestationData::AnonCa(crypto::X509PublicKey::apple_x509(), arr_x509),
+        credential,
     ))
 }

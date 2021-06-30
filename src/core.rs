@@ -20,7 +20,7 @@ use std::convert::TryFrom;
 
 use crate::attestation::{
     verify_apple_anonymous_attestation, verify_fidou2f_attestation, verify_none_attestation,
-    verify_packed_attestation, verify_tpm_attestation, AttestationFormat, AttestationType,
+    verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
 };
 use crate::base64_data::Base64UrlSafeData;
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
@@ -429,11 +429,11 @@ impl<T> Webauthn<T> {
             .ok_or(WebauthnError::MissingAttestationCredentialData)?;
 
         // Now, match based on the attest_format
-        // This returns an AttestationType, containing all the metadata needed for
+        // This returns an ParsedAttestationData, containing all the metadata needed for
 
         log::debug!("attestation is: {:?}", &attest_format);
 
-        let attest_result = match attest_format {
+        let (attest_result, credential) = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
@@ -479,13 +479,16 @@ impl<T> Webauthn<T> {
             _ => {
                 if self.config.ignore_unsupported_attestation_formats() {
                     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-                    Ok(AttestationType::None(Credential::new(
-                        acd,
-                        credential_public_key,
-                        data.attestation_object.auth_data.counter,
-                        false,
-                        policy,
-                    )))
+                    Ok((
+                        ParsedAttestationData::None,
+                        Credential::new(
+                            acd,
+                            credential_public_key,
+                            data.attestation_object.auth_data.counter,
+                            false,
+                            policy,
+                        ),
+                    ))
                 } else {
                     // No other types are currently implemented
                     Err(WebauthnError::AttestationNotSupported)
@@ -513,7 +516,7 @@ impl<T> Webauthn<T> {
         //     root certificate, or is itself an acceptable certificate (i.e., it and the root certificate
         //     obtained in Step 20 may be the same).
 
-        let credential = self
+        let _: () = self
             .config
             .policy_verify_trust(attest_result)
             .map_err(|_e| WebauthnError::AttestationTrustFailure)?;
@@ -560,7 +563,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: &ChallengeRef,
         cred: &Credential,
-        appid: &Option<String>
+        appid: &Option<String>,
     ) -> Result<AuthenticatorData<Authentication>, WebauthnError>
     where
         T: WebauthnConfig,
@@ -609,7 +612,7 @@ impl<T> Webauthn<T> {
         // Note that if we have an appid stored in the state and the client indicates it has used the appid extension,
         // we also check the hash against this appid in addition to the Relying Party
         let has_appid_enabled = rsp.extensions.as_ref().map(|e| e.appid).unwrap_or(false);
-        
+
         let appid_hash = if has_appid_enabled {
             appid.as_ref().map(|id| compute_sha256(id.as_bytes()))
         } else {
@@ -1048,18 +1051,18 @@ pub trait WebauthnConfig {
     /// will "blindly trust" self attestation and the other types as valid.
     /// If you have strict security requirements we strongly recommend you implement this function,
     /// and we may in the future provide a stronger default relying party policy.
-    fn policy_verify_trust(&self, at: AttestationType) -> Result<Credential, ()> {
-        log::debug!("policy_verify_trust -> {:?}", at);
-        match at {
-            AttestationType::Basic(credential, _attest_cert) => Ok(credential),
-            AttestationType::Self_(credential) => Ok(credential),
-            AttestationType::AttCa(credential, _attest_cert, _ca_chain) => Ok(credential),
-            AttestationType::AnonCa(credential, _attest_cert, _ca_chain) => Ok(credential),
-            AttestationType::None(credential) => Ok(credential),
+    fn policy_verify_trust(&self, pad: ParsedAttestationData) -> Result<(), ()> {
+        log::debug!("policy_verify_trust -> {:?}", pad);
+        match pad {
+            ParsedAttestationData::Basic(_attest_cert) => Ok(()),
+            ParsedAttestationData::Self_ => Ok(()),
+            ParsedAttestationData::AttCa(_attest_cert, _ca_chain) => Ok(()),
+            ParsedAttestationData::AnonCa(_attest_cert, _ca_chain) => Ok(()),
+            ParsedAttestationData::None => Ok(()),
             // TODO: trust is unimplemented here
-            AttestationType::ECDAA => Err(()),
+            ParsedAttestationData::ECDAA => Err(()),
             // We don't trust Uncertain attestations
-            AttestationType::Uncertain(_) => Err(()),
+            ParsedAttestationData::Uncertain => Err(()),
         }
     }
 
@@ -1309,7 +1312,7 @@ mod tests {
             UserVerificationPolicy::Discouraged,
             &zero_chal,
             &cred,
-            &None
+            &None,
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -1339,7 +1342,7 @@ mod tests {
             UserVerificationPolicy::Discouraged,
             &zero_chal,
             &cred,
-            &Some(String::from("https://unused.local"))
+            &Some(String::from("https://unused.local")),
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -1630,7 +1633,7 @@ mod tests {
             UserVerificationPolicy::Required,
             &chal,
             &cred.0,
-            &None
+            &None,
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());

@@ -1062,6 +1062,38 @@ pub struct AuthenticatorData<T: Ceremony> {
     pub(crate) extensions: Option<T::SignedExtensions>,
 }
 
+/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
+#[derive(Debug)]
+#[cfg(feature = "core")]
+pub enum ParsedAttestationData {
+    /// The credential is authenticated by a signing X509 Certificate
+    /// from a vendor or provider.
+    Basic(crate::crypto::X509PublicKey),
+    /// The credential is authenticated using surrogate basic attestation
+    /// it uses the credential private key to create the attestation signature
+    Self_,
+    /// The credential is authenticated using a CA, and may provide a
+    /// ca chain to validate to it's root.
+    AttCa(
+        crate::crypto::X509PublicKey,
+        Vec<crate::crypto::X509PublicKey>,
+    ),
+    /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
+    /// validate to it's root.
+    AnonCa(
+        crate::crypto::X509PublicKey,
+        Vec<crate::crypto::X509PublicKey>,
+    ),
+    /// Unimplemented
+    ECDAA,
+    /// No Attestation type was provided with this Credential. If in doubt
+    /// reject this Credential.
+    None,
+    /// Uncertain Attestation was provided with this Credential, which may not
+    /// be trustworthy in all cases. If in doubt, reject this type.
+    Uncertain,
+}
+
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     let mut deserializer = serde_cbor::Deserializer::from_slice(i);
     let v = serde::de::Deserialize::deserialize(&mut deserializer)
@@ -1331,7 +1363,7 @@ pub struct AuthenticatorAssertionResponseRaw {
 pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
-    pub appid: bool
+    pub appid: bool,
 }
 
 /// A client response to an authentication challenge. This contains all required
