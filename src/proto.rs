@@ -3,7 +3,6 @@
 
 use crate::base64_data::Base64UrlSafeData;
 use crate::error::*;
-use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 #[cfg(feature = "wasm")]
@@ -20,7 +19,7 @@ pub type UserId = Vec<u8>;
 pub type Counter = u32;
 
 /// Representation of an AAGUID
-/// https://www.w3.org/TR/webauthn/#aaguid
+/// <https://www.w3.org/TR/webauthn/#aaguid>
 pub type Aaguid = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes.
@@ -340,7 +339,7 @@ impl PartialEq<Credential> for Credential {
 }
 
 /// Defines the User Authenticator Verification policy. This is documented
-/// https://w3c.github.io/webauthn/#enumdef-userverificationrequirement, and each
+/// <https://w3c.github.io/webauthn/#enumdef-userverificationrequirement>, and each
 /// variant lists it's effects.
 ///
 /// To be clear, Verification means that the Authenticator perform extra or supplementary
@@ -355,7 +354,7 @@ impl PartialEq<Credential> for Credential {
 /// As UserVerificationPolicy is *only* used in credential registration, this stores the
 /// verification state of the credential in the persisted credential. These persisted
 /// credentials define which UserVerificationPolicy is issued during authentications.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[allow(non_camel_case_types)]
 #[serde(rename_all = "lowercase")]
 pub enum UserVerificationPolicy {
@@ -373,6 +372,10 @@ pub enum UserVerificationPolicy {
     /// Request that no verification is performed, and fail if it is. This is intended to
     /// minimise user interaction in workflows, but is potentially a security risk to use.
     Discouraged,
+}
+
+impl Default for UserVerificationPolicy {
+    fn default() -> Self { UserVerificationPolicy::Discouraged }
 }
 
 /// Relying Party Entity
@@ -415,7 +418,7 @@ pub struct AllowCredentials {
     pub type_: String,
     /// The id of the credential.
     pub id: Base64UrlSafeData,
-    /// https://www.w3.org/TR/webauthn/#transport
+    /// <https://www.w3.org/TR/webauthn/#transport>
     /// may be usb, nfc, ble, internal
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transports: Option<Vec<String>>,
@@ -484,7 +487,7 @@ impl From<CredProtectResponse> for u8 {
 
 /// The desired options for the client's use of the `credProtect` extension
 ///
-/// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension
+/// <https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credProtect-extension>
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CredProtect {
@@ -516,7 +519,7 @@ impl CredProtect {
 pub struct CredBlobGet(pub bool);
 
 /// Wrapper for an ArrayBuffer containing opaque data in an RP-specific format.
-/// https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credBlob-extension
+/// <https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credBlob-extension>
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct CredBlobSet(pub Base64UrlSafeData);
 
@@ -721,7 +724,7 @@ impl Ceremony for Authentication {
     type SignedExtensions = AuthenticationSignedExtensions;
 }
 
-/// https://w3c.github.io/webauthn/#dictionary-makecredentialoptions
+/// <https://w3c.github.io/webauthn/#dictionary-makecredentialoptions>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialCreationOptions {
@@ -755,19 +758,19 @@ pub struct PublicKeyCredentialCreationOptions {
     pub extensions: Option<RequestRegistrationExtensions>,
 }
 
-/// https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria
+/// <https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorSelectionCriteria {
     /// How the authenticator should be attached to the client machine.
     /// Note this is only a hint. It is not enforced in anyway shape or form.
-    /// https://www.w3.org/TR/webauthn/#attachment
+    /// <https://www.w3.org/TR/webauthn/#attachment>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authenticator_attachment: Option<AuthenticatorAttachment>,
 
     /// Hint to the credential to create a resident key. Note this can not be enforced
     /// or validated, so the authenticator may choose to ignore this parameter.
-    /// https://www.w3.org/TR/webauthn/#resident-credential
+    /// <https://www.w3.org/TR/webauthn/#resident-credential>
     pub require_resident_key: bool,
 
     /// The user verification level to request during registration. Depending on if this
@@ -779,37 +782,37 @@ pub struct AuthenticatorSelectionCriteria {
 /// The authenticator attachment hint. This is NOT enforced, and is only used
 /// to help a user select a relevant authenticator type.
 ///
-/// https://www.w3.org/TR/webauthn/#attachment
+/// <https://www.w3.org/TR/webauthn/#attachment>
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AuthenticatorAttachment {
     /// Request a device that is part of the machine aka inseperable.
-    /// https://www.w3.org/TR/webauthn/#attachment
+    /// <https://www.w3.org/TR/webauthn/#attachment>
     #[serde(rename = "platform")]
     Platform,
     /// Request a device that can be seperated from the machine aka an external token.
-    /// https://www.w3.org/TR/webauthn/#attachment
+    /// <https://www.w3.org/TR/webauthn/#attachment>
     #[serde(rename = "cross-platform")]
     CrossPlatform,
 }
 
-/// https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference
+/// <https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum AttestationConveyancePreference {
     /// Do not request attestation.
-    /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none
+    /// <https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none>
     None,
 
     /// Request attestation in a semi-anonymized form.
-    /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-indirect
+    /// <https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-indirect>
     Indirect,
 
     /// Request attestation in a direct form.
-    /// https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-direct
+    /// <https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-direct>
     Direct,
 }
 
-/// https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor
+/// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct PublicKeyCredentialDescriptor {
     /// The type of credential
@@ -834,18 +837,18 @@ impl PublicKeyCredentialDescriptor {
     }
 }
 
-/// https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport
+/// <https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[allow(unused)]
 pub enum AuthenticatorTransport {
-    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-usb
+    /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-usb>
     Usb,
-    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-nfc
+    /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-nfc>
     Nfc,
-    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-ble
+    /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-ble>
     Ble,
-    /// https://www.w3.org/TR/webauthn/#dom-authenticatortransport-internal
+    /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-internal>
     Internal,
 }
 
@@ -979,7 +982,7 @@ impl RequestChallengeResponse {
 }
 
 /// The data collected and hashed in the operation.
-/// https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata
+/// <https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct CollectedClientData {
     /// The credential type
@@ -1045,7 +1048,7 @@ pub trait Ceremony {
     type SignedExtensions: serde::de::DeserializeOwned + std::fmt::Debug;
 }
 
-/// https://w3c.github.io/webauthn/#sctn-attestation
+/// <https://w3c.github.io/webauthn/#sctn-attestation>
 #[derive(Debug, Clone)]
 pub struct AuthenticatorData<T: Ceremony> {
     /// Hash of the relying party id.
@@ -1190,7 +1193,7 @@ pub struct AttestationObject<T: Ceremony> {
     pub(crate) auth_data_bytes: Vec<u8>,
     /// format.
     pub(crate) fmt: String,
-    /// https://w3c.github.io/webauthn/#generating-an-attestation-object
+    /// <https://w3c.github.io/webauthn/#generating-an-attestation-object>
     pub(crate) att_stmt: serde_cbor::Value,
 }
 
@@ -1213,14 +1216,14 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
     }
 }
 
-/// https://w3c.github.io/webauthn/#authenticatorattestationresponse
+/// <https://w3c.github.io/webauthn/#authenticatorattestationresponse>
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticatorAttestationResponseRaw {
-    /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-attestationobject
+    /// <https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-attestationobject>
     #[serde(rename = "attestationObject")]
     pub attestation_object: Base64UrlSafeData,
 
-    /// https://w3c.github.io/webauthn/#dom-authenticatorresponse-clientdatajson
+    /// <https://w3c.github.io/webauthn/#dom-authenticatorresponse-clientdatajson>
     #[serde(rename = "clientDataJSON")]
     pub client_data_json: Base64UrlSafeData,
 }
@@ -1257,7 +1260,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
 ///
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
-/// https://w3c.github.io/webauthn/#iface-pkcredential
+/// <https://w3c.github.io/webauthn/#iface-pkcredential>
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RegisterPublicKeyCredential {
     /// The id of the PublicKey credential, likely in base64
@@ -1267,7 +1270,7 @@ pub struct RegisterPublicKeyCredential {
     #[serde(rename = "rawId")]
     pub raw_id: Base64UrlSafeData,
 
-    /// https://w3c.github.io/webauthn/#dom-publickeycredential-response
+    /// <https://w3c.github.io/webauthn/#dom-publickeycredential-response>
     pub response: AuthenticatorAttestationResponseRaw,
 
     /// The type of credential.
@@ -1339,7 +1342,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
     }
 }
 
-/// https://w3c.github.io/webauthn/#authenticatorassertionresponse
+/// <https://w3c.github.io/webauthn/#authenticatorassertionresponse>
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AuthenticatorAssertionResponseRaw {
     /// Raw authenticator data.
@@ -1358,12 +1361,26 @@ pub struct AuthenticatorAssertionResponseRaw {
     pub user_handle: Option<Base64UrlSafeData>,
 }
 
-/// https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs
+/// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
     pub appid: bool,
+}
+
+#[cfg(feature = "wasm")]
+impl From<web_sys::AuthenticationExtensionsClientOutputs> for AuthenticationExtensionsClientOutputs {
+    fn from(ext: web_sys::AuthenticationExtensionsClientOutputs) -> AuthenticationExtensionsClientOutputs {
+        let appid = js_sys::Reflect::get(&ext, &"appid".into())
+            .ok()
+            .and_then(|jv| jv.as_bool())
+            .unwrap_or(false);
+
+        AuthenticationExtensionsClientOutputs {
+            appid
+        }
+    }
 }
 
 /// A client response to an authentication challenge. This contains all required
@@ -1425,6 +1442,8 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         )
         .to_vec();
 
+        let data_extensions = data.get_client_extension_results();
+
         // Base64 it
 
         let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
@@ -1438,13 +1457,14 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         PublicKeyCredential {
             id: format!("{}", data_raw_id_b64),
             raw_id: data_raw_id_b64,
-            type_: "public-key".to_string(),
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: data_response_authenticator_data_b64,
                 client_data_json: data_response_client_data_json_b64,
                 signature: data_response_signature_b64,
                 user_handle: data_response_user_handle_b64,
             },
+            extensions: Some(data_extensions.into()),
+            type_: "public-key".to_string(),
         }
     }
 }

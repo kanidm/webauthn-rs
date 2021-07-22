@@ -21,21 +21,21 @@ wasm = ["wasm-bindgen", "web-sys", "js-sys"]
 
 [dependencies]
 serde = "1.0"
-nom = "4"
-base64 = "0.13"
 serde_derive = "1.0"
-thiserror = "1.0"
-log = "0.4"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
 serde_json = "1.0"
+nom = "4"
+base64 = "0.13"
+thiserror = "1.0"
+log = "0.4"
 # We could consider replacing this with openssl rand.
 openssl = { version = "0.10", optional = true }
 rand = { version = "0.8", optional = true }
 
 # Webauthny bits.
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
-web-sys = { version = "0.3", features = ["CredentialCreationOptions", "CredentialRequestOptions", "PublicKeyCredential"], optional = true }
+web-sys = { version = "0.3", features = ["CredentialCreationOptions", "CredentialRequestOptions", "PublicKeyCredential", "AuthenticationExtensionsClientOutputs"], optional = true }
 js-sys = { version = "0.3", optional = true }
 
 [dev-dependencies]

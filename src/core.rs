@@ -751,7 +751,7 @@ impl<T> Webauthn<T> {
     /// This error is returning when the set of credentials has a mix of registration
     /// user verification policies.
     /// This is due to an issue with the webauthn standard
-    /// as noted at https://github.com/w3c/webauthn/issues/1510. What can occur is that
+    /// as noted at <https://github.com/w3c/webauthn/issues/1510>. What can occur is that
     /// when you *register* a credential, you set an expectation as to the verification
     /// policy of that credential, and if that credential can soley be a MFA on it's own
     /// or requires extra material to function as an MFA. However, when you mix credentials
@@ -935,7 +935,7 @@ pub trait WebauthnConfig {
     /// you wish, but should rarely if ever change. Changes to the relying party name may
     /// confuse authenticators and will cause their credentials to be lost.
     ///
-    /// Examples of names could be "My Awesome Site", "https://my-awesome-site.com.au"
+    /// Examples of names could be `My Awesome Site`, `https://my-awesome-site.com.au`
     fn get_relying_party_name(&self) -> &str;
 
     /// Returns a reference to your sites origin. The origin is the URL to your site with
@@ -944,7 +944,7 @@ pub trait WebauthnConfig {
     /// only. We may add warnings or errors for non-https:// urls in the future. Changing this
     /// may cause associated authenticators to lose credentials.
     ///
-    /// Examples of this value could be. "https://my-site.com.au", "https://my-site.com.au:8443"
+    /// Examples of this value could be. `https://my-site.com.au`, `https://my-site.com.au:8443`
     fn get_origin(&self) -> &str;
 
     /// Returns the relying party id. This should never change, and is used as an id
@@ -954,7 +954,7 @@ pub trait WebauthnConfig {
     ///
     /// If changed, all associated credentials will be lost in all authenticators.
     ///
-    /// Examples of this value for the site "https://my-site.com.au/auth" is "my-site.com.au"
+    /// Examples of this value for the site `https://my-site.com.au/auth` is `my-site.com.au`
     fn get_relying_party_id(&self) -> &str;
 
     /// Get the list of valid credential algorthims that this service can accept. Unless you have
@@ -1000,7 +1000,7 @@ pub trait WebauthnConfig {
     /// to allow bypassing that part of the interaction flow.
     ///
     /// Defaults to "false" aka non-resident keys.
-    /// See also: https://www.w3.org/TR/webauthn/#resident-credential
+    /// See also: <https://www.w3.org/TR/webauthn/#resident-credential>
     ///
     /// WARNING: This is not enforced as the client may modify the registration request
     /// to disregard this, and no part of the registration process indicates residence of
