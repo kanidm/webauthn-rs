@@ -425,9 +425,7 @@ impl TryFrom<&X509PublicKey> for COSEKey {
     type Error = WebauthnError;
     fn try_from(cert: &X509PublicKey) -> Result<COSEKey, Self::Error> {
         let key = match cert.t {
-            COSEAlgorithm::ES256
-            | COSEAlgorithm::ES384
-            | COSEAlgorithm::ES512 => {
+            COSEAlgorithm::ES256 | COSEAlgorithm::ES384 | COSEAlgorithm::ES512 => {
                 let ec_key = cert
                     .pubk
                     .public_key()
