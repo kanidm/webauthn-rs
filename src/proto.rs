@@ -157,10 +157,13 @@ impl TryFrom<i128> for ECDSACurve {
 #[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum COSEAlgorithm {
     /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
+    #[serde(alias = "ECDSA_SHA256")]
     ES256 = -7, // recommends curve SECP256R1
     /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
+    #[serde(alias = "ECDSA_SHA384")]
     ES384 = -35, // recommends curve SECP384R1
     /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
+    #[serde(alias = "ECDSA_SHA512")]
     ES512 = -36, // recommends curve SECP521R1
     /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
     RS256 = -257,
