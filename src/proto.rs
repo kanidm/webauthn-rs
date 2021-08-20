@@ -737,7 +737,7 @@ pub struct PublicKeyCredentialCreationOptions {
     pub user: User,
     /// The one-time challenge for the credential to sign.
     pub challenge: Base64UrlSafeData,
-    /// The set of allowed cryptographic types allowed by this server.
+    /// The set of cryptographic types allowed by this server.
     pub pub_key_cred_params: Vec<PubKeyCredParams>,
 
     /// The timeout for the authenticator to stop accepting the operation
