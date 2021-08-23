@@ -23,7 +23,7 @@ use crate::WebauthnConfig;
 /// DERIVING `WebauthnConfig`!!! This structure WILL be removed in a future release!
 ///
 /// By default this implementation advertises support for all possible authenticators
-/// EVEN if they are NOT supported. This to is aid in test vector collection.
+/// EVEN if they are NOT supported. This is to aid in test vector collection.
 pub struct WebauthnEphemeralConfig {
     rp_name: String,
     rp_id: String,

@@ -17,7 +17,7 @@ What if that fails?
 -------------------
 
 If your system can't find localhost, this could be a failure in name resolution.
-You should check you systems etc/hosts file for this. If you navigate to
+You should check your system's etc/hosts file for this. If you navigate to
 "http://127.0.0.1:8080/auth" this example WILL FAIL as the origin is set to
 localhost, not 127.0.0.1.
 

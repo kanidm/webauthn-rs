@@ -229,7 +229,7 @@ impl<T> Webauthn<T> {
     /// On success this returns a new Credential that you must persist and associate with the
     /// user.
     ///
-    /// Optionally, you may provide a closure that is able to check if any credential of the
+    /// You need to provide a closure that is able to check if any credential of the
     /// same id has already been persisted by your server.
     pub fn register_credential(
         &self,
@@ -931,7 +931,7 @@ impl<T> Webauthn<T> {
 /// This provides a set of callbacks which are used to supply data to various structures
 /// and calls, as well as callbacks to manage data persistence and retrieval.
 pub trait WebauthnConfig {
-    /// Returns a copy of your relying parties name. This is generally any text identifier
+    /// Returns a reference to your relying parties name. This is generally any text identifier
     /// you wish, but should rarely if ever change. Changes to the relying party name may
     /// confuse authenticators and will cause their credentials to be lost.
     ///
@@ -949,7 +949,7 @@ pub trait WebauthnConfig {
 
     /// Returns the relying party id. This should never change, and is used as an id
     /// in cryptographic operations and credential scoping. This is defined as the domain name
-    /// of the service, minuse all protocol, port and location data. For example:
+    /// of the service, minus all protocol, port and location data. For example:
     ///   `https://name:port/path -> name`
     ///
     /// If changed, all associated credentials will be lost in all authenticators.
@@ -957,7 +957,7 @@ pub trait WebauthnConfig {
     /// Examples of this value for the site `https://my-site.com.au/auth` is `my-site.com.au`
     fn get_relying_party_id(&self) -> &str;
 
-    /// Get the list of valid credential algorthims that this service can accept. Unless you have
+    /// Get the list of valid credential algorithms that this service can accept. Unless you have
     /// speific requirements around this, we advise you leave this function to the default
     /// implementation.
     fn get_credential_algorithms(&self) -> Vec<COSEAlgorithm> {
@@ -965,7 +965,7 @@ pub trait WebauthnConfig {
     }
 
     /// Return a timeout on how long the authenticator has to respond to a challenge. This value
-    /// defaults to 6000 milliseconds. You likely won't need to implement this function, and should
+    /// defaults to 60000 milliseconds. You likely won't need to implement this function, and should
     /// rely on the defaults.
     fn get_authenticator_timeout(&self) -> u32 {
         AUTHENTICATOR_TIMEOUT
