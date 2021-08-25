@@ -11,7 +11,7 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 // use super::constants::*;
 use super::error::*;
 use crate::proto::{
-    Aaguid, COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSERSAKey, ECDSACurve,
+    Aaguid, COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, COSERSAKey, ECDSACurve,
 };
 // use super::proto::*;
 
@@ -318,105 +318,102 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 
         // https://www.iana.org/assignments/cose/cose.xhtml
         // https://www.w3.org/TR/webauthn/#sctn-encoded-credPubKey-examples
-        match key_type {
-            // 1 => {} OctetKey
-            2 => {
-                // This indicates this is an EC2 key consisting of crv, x, y, which are stored in
-                // crv (-1), x (-2) and y (-3)
-                // Get these values now ....
+        // match key_type {
+        // 1 => {} OctetKey
+        if key_type == (COSEKeyTypeId::EC_EC2 as i128) {
+            // This indicates this is an EC2 key consisting of crv, x, y, which are stored in
+            // crv (-1), x (-2) and y (-3)
+            // Get these values now ....
 
-                let curve_type_value = m
-                    .get(&serde_cbor::Value::Integer(-1))
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let curve_type = cbor_try_i128!(curve_type_value)?;
+            let curve_type_value = m
+                .get(&serde_cbor::Value::Integer(-1))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let curve_type = cbor_try_i128!(curve_type_value)?;
 
-                // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
+            // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
 
-                // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
+            // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
 
-                let x_value = m
-                    .get(&serde_cbor::Value::Integer(-2))
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let x = cbor_try_bytes!(x_value)?;
+            let x_value = m
+                .get(&serde_cbor::Value::Integer(-2))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let x = cbor_try_bytes!(x_value)?;
 
-                let y_value = m
-                    .get(&serde_cbor::Value::Integer(-3))
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let y = cbor_try_bytes!(y_value)?;
+            let y_value = m
+                .get(&serde_cbor::Value::Integer(-3))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let y = cbor_try_bytes!(y_value)?;
 
-                if x.len() != 32 || y.len() != 32 {
-                    return Err(WebauthnError::COSEKeyECDSAXYInvalid);
-                }
-
-                // Set the x and y, we know they are proper sizes.
-                let mut x_temp = [0; 32];
-                x_temp.copy_from_slice(x);
-                let mut y_temp = [0; 32];
-                y_temp.copy_from_slice(y);
-
-                // Right, now build the struct.
-                let cose_key = COSEKey {
-                    type_: COSEAlgorithm::try_from(content_type)?,
-                    key: COSEKeyType::EC_EC2(COSEEC2Key {
-                        curve: ECDSACurve::try_from(curve_type)?,
-                        x: x_temp,
-                        y: y_temp,
-                    }),
-                };
-
-                // The rfc additionally states:
-                //   "   Applications MUST check that the curve and the key type are
-                //     consistent and reject a key if they are not."
-                // this means feeding the values to openssl to validate them for us!
-
-                cose_key.validate()?;
-                // return it
-                Ok(cose_key)
+            if x.len() != 32 || y.len() != 32 {
+                return Err(WebauthnError::COSEKeyECDSAXYInvalid);
             }
-            3 => {
-                // RSAKey
 
-                // -37 -> PS256
-                // -257 -> RS256 aka RSASSA-PKCS1-v1_5 with SHA-256
+            // Set the x and y, we know they are proper sizes.
+            let mut x_temp = [0; 32];
+            x_temp.copy_from_slice(x);
+            let mut y_temp = [0; 32];
+            y_temp.copy_from_slice(y);
 
-                // -1 -> n 256 bytes
-                // -2 -> e 3 bytes
+            // Right, now build the struct.
+            let cose_key = COSEKey {
+                type_: COSEAlgorithm::try_from(content_type)?,
+                key: COSEKeyType::EC_EC2(COSEEC2Key {
+                    curve: ECDSACurve::try_from(curve_type)?,
+                    x: x_temp,
+                    y: y_temp,
+                }),
+            };
 
-                let n_value = m
-                    .get(&serde_cbor::Value::Integer(-1))
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let n = cbor_try_bytes!(n_value)?;
+            // The rfc additionally states:
+            //   "   Applications MUST check that the curve and the key type are
+            //     consistent and reject a key if they are not."
+            // this means feeding the values to openssl to validate them for us!
 
-                let e_value = m
-                    .get(&serde_cbor::Value::Integer(-2))
-                    .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-                let e = cbor_try_bytes!(e_value)?;
+            cose_key.validate()?;
+            // return it
+            Ok(cose_key)
+        } else if key_type == (COSEKeyTypeId::EC_RSA as i128) {
+            // RSAKey
 
-                if n.len() != 256 || e.len() != 3 {
-                    return Err(WebauthnError::COSEKeyRSANEInvalid);
-                }
+            // -37 -> PS256
+            // -257 -> RS256 aka RSASSA-PKCS1-v1_5 with SHA-256
 
-                // Set the n and e, we know they are proper sizes.
-                let mut e_temp = [0; 3];
-                e_temp.copy_from_slice(e.as_slice());
+            // -1 -> n 256 bytes
+            // -2 -> e 3 bytes
 
-                // Right, now build the struct.
-                let cose_key = COSEKey {
-                    type_: COSEAlgorithm::try_from(content_type)?,
-                    key: COSEKeyType::RSA(COSERSAKey {
-                        n: n.to_vec(),
-                        e: e_temp,
-                    }),
-                };
+            let n_value = m
+                .get(&serde_cbor::Value::Integer(-1))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let n = cbor_try_bytes!(n_value)?;
 
-                cose_key.validate()?;
-                // return it
-                Ok(cose_key)
+            let e_value = m
+                .get(&serde_cbor::Value::Integer(-2))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let e = cbor_try_bytes!(e_value)?;
+
+            if n.len() != 256 || e.len() != 3 {
+                return Err(WebauthnError::COSEKeyRSANEInvalid);
             }
-            _ => {
-                log::debug!("try from");
-                Err(WebauthnError::COSEKeyInvalidType)
-            }
+
+            // Set the n and e, we know they are proper sizes.
+            let mut e_temp = [0; 3];
+            e_temp.copy_from_slice(e.as_slice());
+
+            // Right, now build the struct.
+            let cose_key = COSEKey {
+                type_: COSEAlgorithm::try_from(content_type)?,
+                key: COSEKeyType::RSA(COSERSAKey {
+                    n: n.to_vec(),
+                    e: e_temp,
+                }),
+            };
+
+            cose_key.validate()?;
+            // return it
+            Ok(cose_key)
+        } else {
+            log::debug!("try from");
+            Err(WebauthnError::COSEKeyInvalidType)
         }
     }
 }

@@ -272,6 +272,23 @@ pub enum COSEKeyType {
     RSA(COSERSAKey),
 }
 
+/// The numeric if of the COSEKeyType used in the CBOR fields.
+#[allow(non_camel_case_types)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(i64)]
+pub enum COSEKeyTypeId {
+    /// Reserved
+    EC_Reserved = 0,
+    /// Octet Key Pair
+    EC_OKP = 1,
+    /// Elliptic Curve Keys w/ x- and y-coordinate
+    EC_EC2 = 2,
+    /// RSA
+    EC_RSA = 3,
+    /// Symmetric
+    EC_Symmetric = 4,
+}
+
 /// A COSE Key as provided by the Authenticator. You should never need
 /// to alter or change these values.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -378,7 +395,9 @@ pub enum UserVerificationPolicy {
 }
 
 impl Default for UserVerificationPolicy {
-    fn default() -> Self { UserVerificationPolicy::Discouraged }
+    fn default() -> Self {
+        UserVerificationPolicy::Discouraged
+    }
 }
 
 /// Relying Party Entity
@@ -1373,16 +1392,18 @@ pub struct AuthenticationExtensionsClientOutputs {
 }
 
 #[cfg(feature = "wasm")]
-impl From<web_sys::AuthenticationExtensionsClientOutputs> for AuthenticationExtensionsClientOutputs {
-    fn from(ext: web_sys::AuthenticationExtensionsClientOutputs) -> AuthenticationExtensionsClientOutputs {
+impl From<web_sys::AuthenticationExtensionsClientOutputs>
+    for AuthenticationExtensionsClientOutputs
+{
+    fn from(
+        ext: web_sys::AuthenticationExtensionsClientOutputs,
+    ) -> AuthenticationExtensionsClientOutputs {
         let appid = js_sys::Reflect::get(&ext, &"appid".into())
             .ok()
             .and_then(|jv| jv.as_bool())
             .unwrap_or(false);
 
-        AuthenticationExtensionsClientOutputs {
-            appid
-        }
+        AuthenticationExtensionsClientOutputs { appid }
     }
 }
 
