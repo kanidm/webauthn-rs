@@ -1013,7 +1013,7 @@ pub struct CollectedClientData {
     /// The challenge.
     pub challenge: Base64UrlSafeData,
     /// The rp origin as the browser understood it.
-    pub origin: String,
+    pub origin: url::Url,
     /// The inverse of the sameOriginWithAncestors argument value that was
     /// passed into the internal method.
     #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]

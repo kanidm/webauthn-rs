@@ -32,6 +32,7 @@ log = "0.4"
 # We could consider replacing this with openssl rand.
 openssl = { version = "0.10", optional = true }
 rand = { version = "0.8", optional = true }
+url = { version = "2", features = ["serde"] }
 
 # Webauthny bits.
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
