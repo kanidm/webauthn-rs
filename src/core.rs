@@ -313,14 +313,11 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if data.client_data_json.origin != self.config.get_origin() {
-            log::debug!(
-                "{} != {}",
-                data.client_data_json.origin,
-                self.config.get_origin()
-            );
-            return Err(WebauthnError::InvalidRPOrigin);
-        }
+        Self::validate_origin(
+            self.config.allow_subdomains_origin(),
+            &data.client_data_json.origin,
+            self.config.get_origin(),
+        )?;
 
         // ATM most browsers do not send this value, so we must default to
         // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
@@ -598,10 +595,11 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if c.origin != self.config.get_origin() {
-            log::debug!("{} != {}", c.origin, self.config.get_origin());
-            return Err(WebauthnError::InvalidRPOrigin);
-        }
+        Self::validate_origin(
+            self.config.allow_subdomains_origin(),
+            &c.origin,
+            self.config.get_origin(),
+        )?;
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
         // TLS connection over which the attestation was obtained. If Token Binding was used on that
@@ -925,6 +923,50 @@ impl<T> Webauthn<T> {
 
         Ok((&cred.cred_id, auth_data))
     }
+
+    fn validate_origin(
+        allow_subdomains_origin: bool,
+        ccd_url: &url::Url,
+        cnf_url: &url::Url,
+    ) -> Result<(), WebauthnError> {
+        if allow_subdomains_origin {
+            match (ccd_url.origin(), cnf_url.origin()) {
+                (
+                    url::Origin::Tuple(ccd_scheme, ccd_host, ccd_port),
+                    url::Origin::Tuple(cnf_scheme, cnf_host, cnf_port),
+                ) => {
+                    if ccd_scheme != cnf_scheme || ccd_port != cnf_port {
+                        log::debug!("{} != {}", ccd_url, cnf_url);
+                        return Err(WebauthnError::InvalidRPOrigin);
+                    }
+                    let valid = match (ccd_host, cnf_host) {
+                        (url::Host::Domain(ccd_domain), url::Host::Domain(cnf_domain)) => {
+                            ccd_domain.ends_with(&cnf_domain)
+                        }
+                        (a, b) => a == b,
+                    };
+
+                    if valid {
+                        Ok(())
+                    } else {
+                        log::debug!("Domain/IP in origin do not match");
+                        Err(WebauthnError::InvalidRPOrigin)
+                    }
+                }
+                _ => {
+                    log::debug!("Origin is opaque");
+                    Err(WebauthnError::InvalidRPOrigin)
+                }
+            }
+        } else {
+            if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
+                log::debug!("{} != {}", ccd_url, cnf_url);
+                Err(WebauthnError::InvalidRPOrigin)
+            } else {
+                Ok(())
+            }
+        }
+    }
 }
 
 /// The WebauthnConfig type allows site-specific customisation of the Webauthn library.
@@ -945,7 +987,7 @@ pub trait WebauthnConfig {
     /// may cause associated authenticators to lose credentials.
     ///
     /// Examples of this value could be. `https://my-site.com.au`, `https://my-site.com.au:8443`
-    fn get_origin(&self) -> &str;
+    fn get_origin(&self) -> &url::Url;
 
     /// Returns the relying party id. This should never change, and is used as an id
     /// in cryptographic operations and credential scoping. This is defined as the domain name
@@ -1076,6 +1118,23 @@ pub trait WebauthnConfig {
     /// we assume where the key is absent that the credential was not created in
     /// a cross-origin context.
     fn allow_cross_origin(&self) -> bool {
+        false
+    }
+
+    /// Allow subdomains of origin to be valid to use credentils from the parent origin. This
+    /// exists due to a subtle confusion in the webauthn specification. In
+    /// https://www.w3.org/TR/webauthn-2/#scope we see that the relying party ID is intended
+    /// to allow effective domains to be validated by the client for the origin that we are
+    /// using, however in https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential step
+    /// 9 it is requested that origin *equality* is performed. This would disallow subdomains
+    /// of the effective domain from being use.
+    ///
+    /// By default we take the "strict" behaviour to only allow exact origin matches, but some
+    /// applications may wish subdomains of origin to valid. Consider idm.example.com and
+    /// host.idm.example.com where a credential should be valid for either.
+    ///
+    /// In most cases you DO NOT need to enable this option.
+    fn allow_subdomains_origin(&self) -> bool {
         false
     }
 }
@@ -2196,6 +2255,165 @@ mod tests {
 
         let r = wan.generate_challenge_authenticate(creds.clone());
         eprintln!("{:?}", r);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn test_subdomain_origin() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let wan_c = WebauthnEphemeralConfig::new(
+            "rp_name",
+            "https://idm.example.com:8080",
+            "idm.example.com",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let id =
+            "zIQDbMsgDg89LbWHAMLrpgI4w5Bz5Hy8U6F-gaUmda1fgwgn6NzhXQFJwEDfowsiY0NTgdU2jjAG2PmzaD5aWA".to_string();
+        let raw_id = Base64UrlSafeData(vec![
+            204, 132, 3, 108, 203, 32, 14, 15, 61, 45, 181, 135, 0, 194, 235, 166, 2, 56, 195, 144,
+            115, 228, 124, 188, 83, 161, 126, 129, 165, 38, 117, 173, 95, 131, 8, 39, 232, 220,
+            225, 93, 1, 73, 192, 64, 223, 163, 11, 34, 99, 67, 83, 129, 213, 54, 142, 48, 6, 216,
+            249, 179, 104, 62, 90, 88,
+        ]);
+
+        let chal = Challenge::new(vec![
+            174, 237, 157, 66, 159, 70, 216, 148, 130, 184, 54, 89, 38, 149, 217, 32, 161, 42, 99,
+            227, 50, 124, 208, 164, 221, 38, 202, 210, 140, 102, 116, 84,
+        ]);
+
+        let rsp_d = RegisterPublicKeyCredential {
+            id: id.clone(),
+            raw_id: raw_id.clone(),
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: Base64UrlSafeData(vec![
+                    163, 99, 102, 109, 116, 104, 102, 105, 100, 111, 45, 117, 50, 102, 103, 97,
+                    116, 116, 83, 116, 109, 116, 162, 99, 115, 105, 103, 88, 70, 48, 68, 2, 32,
+                    125, 195, 114, 22, 37, 221, 215, 19, 15, 177, 53, 167, 63, 179, 235, 152, 8,
+                    204, 65, 203, 37, 196, 223, 76, 226, 35, 234, 182, 102, 156, 93, 50, 2, 32, 20,
+                    177, 103, 196, 47, 107, 19, 76, 35, 2, 14, 186, 197, 229, 113, 38, 83, 252, 17,
+                    164, 221, 19, 27, 34, 193, 155, 205, 220, 133, 53, 47, 223, 99, 120, 53, 99,
+                    129, 89, 2, 193, 48, 130, 2, 189, 48, 130, 1, 165, 160, 3, 2, 1, 2, 2, 4, 24,
+                    172, 70, 192, 48, 13, 6, 9, 42, 134, 72, 134, 247, 13, 1, 1, 11, 5, 0, 48, 46,
+                    49, 44, 48, 42, 6, 3, 85, 4, 3, 19, 35, 89, 117, 98, 105, 99, 111, 32, 85, 50,
+                    70, 32, 82, 111, 111, 116, 32, 67, 65, 32, 83, 101, 114, 105, 97, 108, 32, 52,
+                    53, 55, 50, 48, 48, 54, 51, 49, 48, 32, 23, 13, 49, 52, 48, 56, 48, 49, 48, 48,
+                    48, 48, 48, 48, 90, 24, 15, 50, 48, 53, 48, 48, 57, 48, 52, 48, 48, 48, 48, 48,
+                    48, 90, 48, 110, 49, 11, 48, 9, 6, 3, 85, 4, 6, 19, 2, 83, 69, 49, 18, 48, 16,
+                    6, 3, 85, 4, 10, 12, 9, 89, 117, 98, 105, 99, 111, 32, 65, 66, 49, 34, 48, 32,
+                    6, 3, 85, 4, 11, 12, 25, 65, 117, 116, 104, 101, 110, 116, 105, 99, 97, 116,
+                    111, 114, 32, 65, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110, 49, 39, 48,
+                    37, 6, 3, 85, 4, 3, 12, 30, 89, 117, 98, 105, 99, 111, 32, 85, 50, 70, 32, 69,
+                    69, 32, 83, 101, 114, 105, 97, 108, 32, 52, 49, 51, 57, 52, 51, 52, 56, 56, 48,
+                    89, 48, 19, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 8, 42, 134, 72, 206, 61, 3, 1,
+                    7, 3, 66, 0, 4, 121, 234, 59, 44, 124, 73, 112, 16, 98, 35, 12, 210, 63, 235,
+                    96, 229, 41, 49, 113, 212, 131, 241, 0, 190, 133, 157, 107, 15, 131, 151, 3, 1,
+                    181, 70, 205, 212, 110, 207, 202, 227, 227, 243, 15, 129, 233, 237, 98, 189,
+                    38, 141, 76, 30, 189, 55, 179, 188, 190, 146, 168, 194, 174, 235, 78, 58, 163,
+                    108, 48, 106, 48, 34, 6, 9, 43, 6, 1, 4, 1, 130, 196, 10, 2, 4, 21, 49, 46, 51,
+                    46, 54, 46, 49, 46, 52, 46, 49, 46, 52, 49, 52, 56, 50, 46, 49, 46, 55, 48, 19,
+                    6, 11, 43, 6, 1, 4, 1, 130, 229, 28, 2, 1, 1, 4, 4, 3, 2, 5, 32, 48, 33, 6, 11,
+                    43, 6, 1, 4, 1, 130, 229, 28, 1, 1, 4, 4, 18, 4, 16, 203, 105, 72, 30, 143,
+                    247, 64, 57, 147, 236, 10, 39, 41, 161, 84, 168, 48, 12, 6, 3, 85, 29, 19, 1,
+                    1, 255, 4, 2, 48, 0, 48, 13, 6, 9, 42, 134, 72, 134, 247, 13, 1, 1, 11, 5, 0,
+                    3, 130, 1, 1, 0, 151, 157, 3, 151, 216, 96, 248, 46, 225, 93, 49, 28, 121, 110,
+                    186, 251, 34, 250, 167, 224, 132, 217, 186, 180, 198, 27, 187, 87, 243, 230,
+                    180, 193, 138, 72, 55, 184, 92, 60, 78, 219, 228, 131, 67, 244, 214, 165, 217,
+                    177, 206, 218, 138, 225, 254, 212, 145, 41, 33, 115, 5, 142, 94, 225, 203, 221,
+                    107, 218, 192, 117, 87, 198, 160, 232, 211, 104, 37, 186, 21, 158, 127, 181,
+                    173, 140, 218, 248, 4, 134, 140, 249, 14, 143, 31, 138, 234, 23, 192, 22, 181,
+                    92, 42, 122, 212, 151, 200, 148, 251, 113, 215, 83, 215, 155, 154, 72, 75, 108,
+                    55, 109, 114, 59, 153, 141, 46, 29, 67, 6, 191, 16, 51, 181, 174, 248, 204,
+                    165, 203, 178, 86, 139, 105, 36, 34, 109, 34, 163, 88, 171, 125, 135, 228, 172,
+                    95, 46, 9, 26, 167, 21, 121, 243, 165, 105, 9, 73, 125, 114, 245, 78, 6, 186,
+                    193, 195, 180, 65, 59, 186, 94, 175, 148, 195, 182, 79, 52, 249, 235, 164, 26,
+                    203, 106, 226, 131, 119, 109, 54, 70, 83, 120, 72, 254, 232, 132, 189, 221,
+                    245, 177, 186, 87, 152, 84, 207, 253, 206, 186, 195, 68, 5, 149, 39, 229, 109,
+                    213, 152, 248, 245, 102, 113, 90, 190, 67, 1, 221, 25, 17, 48, 230, 185, 240,
+                    198, 64, 57, 18, 83, 226, 41, 128, 63, 58, 239, 39, 75, 237, 191, 222, 63, 203,
+                    189, 66, 234, 214, 121, 104, 97, 117, 116, 104, 68, 97, 116, 97, 88, 196, 239,
+                    115, 241, 111, 91, 226, 27, 23, 185, 145, 15, 75, 208, 190, 109, 73, 186, 119,
+                    107, 122, 2, 224, 117, 140, 139, 132, 92, 21, 148, 105, 187, 55, 65, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 204, 132, 3, 108,
+                    203, 32, 14, 15, 61, 45, 181, 135, 0, 194, 235, 166, 2, 56, 195, 144, 115, 228,
+                    124, 188, 83, 161, 126, 129, 165, 38, 117, 173, 95, 131, 8, 39, 232, 220, 225,
+                    93, 1, 73, 192, 64, 223, 163, 11, 34, 99, 67, 83, 129, 213, 54, 142, 48, 6,
+                    216, 249, 179, 104, 62, 90, 88, 165, 1, 2, 3, 38, 32, 1, 33, 88, 32, 169, 47,
+                    103, 25, 132, 175, 84, 4, 152, 225, 66, 5, 83, 201, 162, 184, 13, 204, 129,
+                    162, 225, 184, 248, 76, 21, 9, 140, 51, 233, 28, 21, 189, 34, 88, 32, 152, 216,
+                    30, 49, 240, 214, 59, 66, 44, 67, 110, 41, 126, 83, 131, 50, 13, 175, 237, 57,
+                    225, 87, 38, 132, 17, 54, 52, 22, 0, 142, 54, 255,
+                ]),
+                client_data_json: Base64UrlSafeData(vec![
+                    123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
+                    46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
+                    103, 101, 34, 58, 34, 114, 117, 50, 100, 81, 112, 57, 71, 50, 74, 83, 67, 117,
+                    68, 90, 90, 74, 112, 88, 90, 73, 75, 69, 113, 89, 45, 77, 121, 102, 78, 67,
+                    107, 51, 83, 98, 75, 48, 111, 120, 109, 100, 70, 81, 34, 44, 34, 111, 114, 105,
+                    103, 105, 110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 105, 100, 109,
+                    46, 101, 120, 97, 109, 112, 108, 101, 46, 99, 111, 109, 58, 56, 48, 56, 48, 34,
+                    44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105, 110, 34, 58, 102, 97,
+                    108, 115, 101, 125,
+                ]),
+            },
+
+            type_: "public-key".to_string(),
+        };
+
+        let cred = wan
+            .register_credential_internal(&rsp_d, UserVerificationPolicy::Discouraged, &chal, &[])
+            .expect("Failed to register credential");
+
+        // In this we visit from "https://sub.idm.example.com:8080" which is an effective domain
+        // of the origin.
+
+        let chal = Challenge::new(vec![
+            127, 52, 208, 243, 214, 88, 79, 34, 12, 226, 145, 217, 217, 241, 99, 228, 171, 232,
+            226, 26, 191, 32, 122, 4, 164, 217, 49, 134, 85, 161, 116, 32,
+        ]);
+
+        let rsp_d = PublicKeyCredential {
+            id: id.clone(),
+            raw_id: raw_id.clone(),
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data: Base64UrlSafeData(vec![
+                    239, 115, 241, 111, 91, 226, 27, 23, 185, 145, 15, 75, 208, 190, 109, 73, 186,
+                    119, 107, 122, 2, 224, 117, 140, 139, 132, 92, 21, 148, 105, 187, 55, 1, 0, 0,
+                    3, 237,
+                ]),
+                client_data_json: Base64UrlSafeData(vec![
+                    123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
+                    46, 103, 101, 116, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110, 103, 101, 34,
+                    58, 34, 102, 122, 84, 81, 56, 57, 90, 89, 84, 121, 73, 77, 52, 112, 72, 90, 50,
+                    102, 70, 106, 53, 75, 118, 111, 52, 104, 113, 95, 73, 72, 111, 69, 112, 78,
+                    107, 120, 104, 108, 87, 104, 100, 67, 65, 34, 44, 34, 111, 114, 105, 103, 105,
+                    110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 115, 117, 98, 46, 105,
+                    100, 109, 46, 101, 120, 97, 109, 112, 108, 101, 46, 99, 111, 109, 58, 56, 48,
+                    56, 48, 34, 44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105, 110, 34,
+                    58, 102, 97, 108, 115, 101, 125,
+                ]),
+                signature: Base64UrlSafeData(vec![
+                    48, 69, 2, 32, 113, 175, 47, 74, 251, 87, 115, 175, 144, 222, 52, 128, 21, 250,
+                    35, 239, 213, 162, 75, 45, 110, 28, 15, 103, 138, 234, 106, 219, 34, 198, 74,
+                    74, 2, 33, 0, 204, 144, 147, 62, 250, 6, 11, 19, 239, 90, 108, 6, 126, 165,
+                    157, 41, 223, 251, 81, 22, 202, 121, 126, 133, 192, 81, 71, 193, 220, 208, 25,
+                    127,
+                ]),
+                user_handle: Some(Base64UrlSafeData(vec![])),
+            },
+            extensions: None,
+            type_: "public-key".to_string(),
+        };
+
+        let r = wan.verify_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged,
+            &chal,
+            &cred.0,
+            &None,
+        );
+        println!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
 }

@@ -13,6 +13,7 @@ use crate::proto::AttestationConveyancePreference;
 use crate::proto::AuthenticatorAttachment;
 use crate::proto::COSEAlgorithm;
 use crate::WebauthnConfig;
+use url::Url;
 
 /// An implementation of an Ephemeral (in-memory) webauthn configuration provider
 /// This stores all challenges and credentials in memory - IE they are lost on
@@ -27,7 +28,7 @@ use crate::WebauthnConfig;
 pub struct WebauthnEphemeralConfig {
     rp_name: String,
     rp_id: String,
-    rp_origin: String,
+    rp_origin: Url,
     attachment: Option<AuthenticatorAttachment>,
 }
 
@@ -53,8 +54,8 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
     }
 
     /// Retrieve the relying party origin. See the trait documentation for more.
-    fn get_origin(&self) -> &str {
-        self.rp_origin.as_str()
+    fn get_origin(&self) -> &Url {
+        &self.rp_origin
     }
 
     /// Retrieve the authenticator attachment hint. See the trait documentation for more.
@@ -85,6 +86,11 @@ impl WebauthnConfig for WebauthnEphemeralConfig {
             COSEAlgorithm::EDDSA,
         ]
     }
+
+    /// Allow subdomains
+    fn allow_subdomains_origin(&self) -> bool {
+        true
+    }
 }
 
 impl WebauthnEphemeralConfig {
@@ -100,7 +106,7 @@ impl WebauthnEphemeralConfig {
         WebauthnEphemeralConfig {
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
-            rp_origin: rp_origin.to_string(),
+            rp_origin: Url::parse(rp_origin).expect("Failed to parse origin"),
             attachment,
         }
     }
