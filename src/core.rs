@@ -313,48 +313,11 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if self.config.allow_subdomains_origin() {
-            let ccd_url = data.client_data_json.origin;
-            let cnf_url = self.config.get_origin();
-
-            match (ccd_url.origin(), cnf_url.origin()) {
-                (
-                    url::Origin::Tuple(ccd_scheme, ccd_host, ccd_port),
-                    url::Origin::Tuple(cnf_scheme, cnf_host, cnf_port),
-                ) => {
-                    if ccd_scheme != cnf_scheme || ccd_port != cnf_port {
-                        log::debug!("{} != {}", ccd_url, cnf_url);
-                        return Err(WebauthnError::InvalidRPOrigin);
-                    }
-                    let valid = match (ccd_host, cnf_host) {
-                        (url::Host::Domain(ccd_domain), url::Host::Domain(cnf_domain)) => {
-                            ccd_domain.ends_with(&cnf_domain)
-                        }
-                        (a, b) => a == b,
-                    };
-
-                    if !valid {
-                        log::debug!("Domain/IP in origin do not match");
-                        return Err(WebauthnError::InvalidRPOrigin);
-                    }
-                }
-                _ => {
-                    log::debug!("Origin is opaque");
-                    return Err(WebauthnError::InvalidRPOrigin);
-                }
-            }
-        } else {
-            if data.client_data_json.origin.origin() != self.config.get_origin().origin()
-                || !data.client_data_json.origin.origin().is_tuple()
-            {
-                log::debug!(
-                    "{} != {}",
-                    data.client_data_json.origin,
-                    self.config.get_origin()
-                );
-                return Err(WebauthnError::InvalidRPOrigin);
-            }
-        }
+        Self::validate_origin(
+            self.config.allow_subdomains_origin(),
+            &data.client_data_json.origin,
+            self.config.get_origin(),
+        )?;
 
         // ATM most browsers do not send this value, so we must default to
         // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
@@ -632,44 +595,11 @@ impl<T> Webauthn<T> {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        if self.config.allow_subdomains_origin() {
-            let ccd_url = &c.origin;
-            let cnf_url = self.config.get_origin();
-
-            match (ccd_url.origin(), cnf_url.origin()) {
-                (
-                    url::Origin::Tuple(ccd_scheme, ccd_host, ccd_port),
-                    url::Origin::Tuple(cnf_scheme, cnf_host, cnf_port),
-                ) => {
-                    if ccd_scheme != cnf_scheme || ccd_port != cnf_port {
-                        log::debug!("{} != {}", ccd_url, cnf_url);
-                        return Err(WebauthnError::InvalidRPOrigin);
-                    }
-                    let valid = match (ccd_host, cnf_host) {
-                        (url::Host::Domain(ccd_domain), url::Host::Domain(cnf_domain)) => {
-                            ccd_domain.ends_with(&cnf_domain)
-                        }
-                        (a, b) => a == b,
-                    };
-
-                    if !valid {
-                        log::debug!("Domain/IP in origin do not match");
-                        return Err(WebauthnError::InvalidRPOrigin);
-                    }
-                }
-                _ => {
-                    log::debug!("Origin is opaque");
-                    return Err(WebauthnError::InvalidRPOrigin);
-                }
-            }
-        } else {
-            if c.origin.origin() != self.config.get_origin().origin()
-                || !c.origin.origin().is_tuple()
-            {
-                log::debug!("{} != {}", c.origin, self.config.get_origin());
-                return Err(WebauthnError::InvalidRPOrigin);
-            }
-        }
+        Self::validate_origin(
+            self.config.allow_subdomains_origin(),
+            &c.origin,
+            self.config.get_origin(),
+        )?;
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
         // TLS connection over which the attestation was obtained. If Token Binding was used on that
@@ -992,6 +922,50 @@ impl<T> Webauthn<T> {
         }
 
         Ok((&cred.cred_id, auth_data))
+    }
+
+    fn validate_origin(
+        allow_subdomains_origin: bool,
+        ccd_url: &url::Url,
+        cnf_url: &url::Url,
+    ) -> Result<(), WebauthnError> {
+        if allow_subdomains_origin {
+            match (ccd_url.origin(), cnf_url.origin()) {
+                (
+                    url::Origin::Tuple(ccd_scheme, ccd_host, ccd_port),
+                    url::Origin::Tuple(cnf_scheme, cnf_host, cnf_port),
+                ) => {
+                    if ccd_scheme != cnf_scheme || ccd_port != cnf_port {
+                        log::debug!("{} != {}", ccd_url, cnf_url);
+                        return Err(WebauthnError::InvalidRPOrigin);
+                    }
+                    let valid = match (ccd_host, cnf_host) {
+                        (url::Host::Domain(ccd_domain), url::Host::Domain(cnf_domain)) => {
+                            ccd_domain.ends_with(&cnf_domain)
+                        }
+                        (a, b) => a == b,
+                    };
+
+                    if valid {
+                        Ok(())
+                    } else {
+                        log::debug!("Domain/IP in origin do not match");
+                        Err(WebauthnError::InvalidRPOrigin)
+                    }
+                }
+                _ => {
+                    log::debug!("Origin is opaque");
+                    Err(WebauthnError::InvalidRPOrigin)
+                }
+            }
+        } else {
+            if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
+                log::debug!("{} != {}", ccd_url, cnf_url);
+                Err(WebauthnError::InvalidRPOrigin)
+            } else {
+                Ok(())
+            }
+        }
     }
 }
 
