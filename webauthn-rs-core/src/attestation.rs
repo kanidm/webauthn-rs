@@ -624,8 +624,8 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let _nonce = compute_sha256(&nonce_to_hash);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
-    //
-    // Currently not possible to access extensions with openssl rust.
+    let oid = Oid::from(&[1, 2, 840, 113635, 100, 8, 2]).unwrap();
+    attestn_cert.validate_ext(&oid, |extension| _nonce == extension.value);
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;
