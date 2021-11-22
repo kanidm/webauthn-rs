@@ -7,7 +7,7 @@ use std::convert::TryFrom;
 
 use crate::crypto::{
     assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, get_fido_gen_ce_aaguid,
-    only_hash_from_type, verify_signature,
+    only_hash_from_type, validate_ext, verify_signature
 };
 use crate::error::WebauthnError;
 use crate::internals::*;
@@ -624,8 +624,8 @@ pub(crate) fn verify_apple_anonymous_attestation(
     let _nonce = compute_sha256(&nonce_to_hash);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
-    let oid = Oid::from(&[1, 2, 840, 113635, 100, 8, 2]).unwrap();
-    attestn_cert.validate_ext(&oid, |extension| _nonce == extension.value);
+    let oid = der_parser::Oid::from(&[1, 2, 840, 113635, 100, 8, 2]).unwrap();
+    validate_ext(attestn_cert, &oid, |extension| _nonce == extension.value);
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;

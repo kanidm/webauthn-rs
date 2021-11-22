@@ -211,6 +211,20 @@ pub(crate) fn get_fido_gen_ce_aaguid(_pubk: &x509::X509) -> Option<Aaguid> {
     None
 }
 
+pub(crate) fn validate_ext<F>(x509: &x509::X509, oid: &der_parser::Oid, f: F) -> bool
+where
+    F: FnOnce(&x509_parser::extensions::X509Extension) -> bool,
+{
+    let der_bytes = x509.to_der().unwrap();
+    let (_rem, x509) = x509_parser::parse_x509_certificate(&der_bytes).unwrap();
+    let extension = x509
+        .extensions()
+        .iter()
+        .find(|extension| *oid == extension.oid);
+
+    extension.map(f).unwrap_or(false)
+}
+
 impl TryFrom<nid::Nid> for ECDSACurve {
     type Error = WebauthnError;
     fn try_from(nid: nid::Nid) -> Result<Self, Self::Error> {
