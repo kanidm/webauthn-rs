@@ -412,7 +412,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             // return it
             Ok(cose_key)
         } else {
-            log::debug!("try from");
+            debug!("try from");
             Err(WebauthnError::COSEKeyInvalidType)
         }
     }
@@ -464,7 +464,7 @@ impl TryFrom<&X509PublicKey> for COSEKey {
             | COSEAlgorithm::PS512
             | COSEAlgorithm::EDDSA
             | COSEAlgorithm::INSECURE_RS1 => {
-                log::error!(
+                error!(
                     "unsupported X509 to COSE conversion for COSE algorithm type {:?}",
                     cert.t
                 );
@@ -490,7 +490,7 @@ impl COSEKey {
                     .collect())
             }
             _ => {
-                log::debug!("get_alg_key_ecc_x962_raw");
+                debug!("get_alg_key_ecc_x962_raw");
                 Err(WebauthnError::COSEKeyInvalidType)
             }
         }
@@ -562,7 +562,7 @@ impl COSEKey {
                 Ok(p)
             }
             _ => {
-                log::debug!("get_openssl_pkey");
+                debug!("get_openssl_pkey");
                 Err(WebauthnError::COSEKeyInvalidType)
             }
         }

@@ -38,7 +38,7 @@ impl WebauthnActor {
         &self,
         username: String,
     ) -> WebauthnResult<CreationChallengeResponse> {
-        tide::log::debug!("handle ChallengeRegister -> {:?}", username);
+        debug!("handle ChallengeRegister -> {:?}", username);
 
         let exts = RequestRegistrationExtensions::builder()
             .cred_blob(vec![0xde, 0xad, 0xbe, 0xef])
@@ -55,7 +55,7 @@ impl WebauthnActor {
 
         // let (ccr, rs) = self.wan.generate_challenge_register(&username, false)?;
         self.reg_chals.lock().await.put(username.into_bytes(), rs);
-        tide::log::debug!("complete ChallengeRegister -> {:?}", ccr);
+        debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok(ccr)
     }
 
@@ -63,7 +63,7 @@ impl WebauthnActor {
         &self,
         username: &String,
     ) -> WebauthnResult<RequestChallengeResponse> {
-        tide::log::debug!("handle ChallengeAuthenticate -> {:?}", username);
+        debug!("handle ChallengeAuthenticate -> {:?}", username);
 
         let creds = match self.creds.lock().await.get(&username.as_bytes().to_vec()) {
             Some(creds) => Some(creds.iter().map(|(_, v)| v.clone()).collect()),
@@ -82,7 +82,7 @@ impl WebauthnActor {
             .lock()
             .await
             .put(username.as_bytes().to_vec(), st);
-        tide::log::debug!("complete ChallengeAuthenticate -> {:?}", acr);
+        debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok(acr)
     }
 
@@ -91,10 +91,9 @@ impl WebauthnActor {
         username: &String,
         reg: &RegisterPublicKeyCredential,
     ) -> WebauthnResult<()> {
-        tide::log::debug!(
+        debug!(
             "handle Register -> (username: {:?}, reg: {:?})",
-            username,
-            reg
+            username, reg
         );
 
         let username = username.as_bytes().to_vec();
@@ -124,11 +123,11 @@ impl WebauthnActor {
                         t.insert(credential_id, cred.0);
                         creds.insert(username, t);
                     });
-                tide::log::debug!("{:?}", self.creds);
+                debug!("{:?}", self.creds);
                 r
             }
         };
-        tide::log::debug!("complete Register -> {:?}", r);
+        debug!("complete Register -> {:?}", r);
         r
     }
 
@@ -137,10 +136,9 @@ impl WebauthnActor {
         username: &String,
         lgn: &PublicKeyCredential,
     ) -> WebauthnResult<()> {
-        tide::log::debug!(
+        debug!(
             "handle Authenticate -> (username: {:?}, lgn: {:?})",
-            username,
-            lgn
+            username, lgn
         );
 
         let username = username.as_bytes().to_vec();
@@ -171,7 +169,7 @@ impl WebauthnActor {
                 };
                 ()
             });
-        tide::log::debug!("complete Authenticate -> {:?}", r);
+        debug!("complete Authenticate -> {:?}", r);
         r
     }
 }

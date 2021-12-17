@@ -28,7 +28,7 @@ serde_json = "1.0"
 nom = "4"
 base64 = "0.13"
 thiserror = "1.0"
-log = "0.4"
+tracing = "0.1"
 # We could consider replacing this with openssl rand.
 openssl = { version = "0.10", optional = true }
 rand = { version = "0.8", optional = true }
@@ -49,6 +49,4 @@ openssl = "0.10"
 lru = "0.6"
 structopt = { version = "0.3", default-features = false }
 rustls = "0.19.0"
-env_logger = "0.9"
-# Workaround for compilation bug: https://github.com/Geal/nom/issues/1284
-# funty="=1.1.0"
+tracing-subscriber = "0.2"

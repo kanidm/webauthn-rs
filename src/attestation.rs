@@ -13,7 +13,7 @@ use crate::proto::{
     Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId,
     TpmuPublicParms, UserVerificationPolicy,
 };
-use log::debug;
+use debug;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -283,7 +283,7 @@ pub(crate) fn verify_fidou2f_attestation(
     let verified = cerificate_public_key.verify_signature(&sig, &verification_data)?;
 
     if !verified {
-        log::error!("signature verification failed!");
+        error!("signature verification failed!");
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
@@ -334,7 +334,7 @@ pub(crate) fn verify_tpm_attestation(
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
 ) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
-    log::debug!("begin verify_tpm_attest");
+    debug!("begin verify_tpm_attest");
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR
     // decoding on it to extract the contained fields.

@@ -1046,6 +1046,7 @@ impl TryFrom<&[u8]> for CollectedClientData {
 }
 
 /// Attested Credential Data
+#[cfg(feature = "core")]
 #[derive(Debug, Clone)]
 pub(crate) struct AttestedCredentialData {
     /// The guid of the authenticator. May indicate manufacturer.
@@ -1071,6 +1072,7 @@ pub trait Ceremony {
 }
 
 /// <https://w3c.github.io/webauthn/#sctn-attestation>
+#[cfg(feature = "core")]
 #[derive(Debug, Clone)]
 pub struct AuthenticatorData<T: Ceremony> {
     /// Hash of the relying party id.
@@ -1119,6 +1121,7 @@ pub enum ParsedAttestationData {
     Uncertain,
 }
 
+#[cfg(feature = "core")]
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     let mut deserializer = serde_cbor::Deserializer::from_slice(i);
     let v = serde::de::Deserialize::deserialize(&mut deserializer)
@@ -1129,6 +1132,7 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     Ok((&i[len..], v))
 }
 
+#[cfg(feature = "core")]
 fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExtensions> {
     map_res!(
         i,
@@ -1137,6 +1141,7 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
     )
 }
 
+#[cfg(feature = "core")]
 named!( acd_parser<&[u8], AttestedCredentialData>,
     do_parse!(
         aaguid: take!(16) >>
@@ -1151,6 +1156,7 @@ named!( acd_parser<&[u8], AttestedCredentialData>,
     )
 );
 
+#[cfg(feature = "core")]
 named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
     bits!(
         do_parse!(
@@ -1167,6 +1173,7 @@ named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
     )
 );
 
+#[cfg(feature = "core")]
 fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], AuthenticatorData<T>> {
     do_parse!(
         i,
@@ -1186,18 +1193,20 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
     )
 }
 
+#[cfg(feature = "core")]
 impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     type Error = WebauthnError;
     fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
         authenticator_data_parser(auth_data_bytes)
             .map_err(|e| {
-                log::debug!("nom -> {:?}", e);
+                debug!("nom -> {:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, ad)| ad)
     }
 }
 
+#[cfg(feature = "core")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
@@ -1207,6 +1216,7 @@ pub(crate) struct AttestationObjectInner<'a> {
 }
 
 /// Attestation Object
+#[cfg(feature = "core")]
 #[derive(Debug)]
 pub struct AttestationObject<T: Ceremony> {
     /// auth_data.
@@ -1219,6 +1229,7 @@ pub struct AttestationObject<T: Ceremony> {
     pub(crate) att_stmt: serde_cbor::Value,
 }
 
+#[cfg(feature = "core")]
 impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
     type Error = WebauthnError;
 
@@ -1265,7 +1276,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
         let ccdj = CollectedClientData::try_from(aarr.client_data_json.as_ref())?;
-        log::debug!("ccdj: {:?}", ccdj);
+        debug!("ccdj: {:?}", ccdj);
         let ao = AttestationObject::try_from(aarr.attestation_object.as_ref())?;
 
         Ok(AuthenticatorAttestationResponse {
@@ -1338,6 +1349,7 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
     }
 }
 
+#[cfg(feature = "core")]
 #[derive(Debug)]
 pub(crate) struct AuthenticatorAssertionResponse<T: Ceremony> {
     pub(crate) authenticator_data: AuthenticatorData<T>,
@@ -1345,9 +1357,10 @@ pub(crate) struct AuthenticatorAssertionResponse<T: Ceremony> {
     pub(crate) client_data: CollectedClientData,
     pub(crate) client_data_bytes: Vec<u8>,
     pub(crate) signature: Vec<u8>,
-    pub(crate) user_handle: Option<Vec<u8>>,
+    pub(crate) _user_handle: Option<Vec<u8>>,
 }
 
+#[cfg(feature = "core")]
 impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
     for AuthenticatorAssertionResponse<T>
 {
@@ -1359,7 +1372,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
             client_data: CollectedClientData::try_from(aarr.client_data_json.as_ref())?,
             client_data_bytes: aarr.client_data_json.clone().into(),
             signature: aarr.signature.clone().into(),
-            user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
+            _user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
         })
     }
 }
@@ -1575,10 +1588,10 @@ impl TpmSt {
 #[derive(Debug)]
 /// Information about the TPM's clock. May be obfuscated.
 pub struct TpmsClockInfo {
-    clock: u64,
-    reset_count: u32,
-    restart_count: u32,
-    safe: bool, // u8
+    _clock: u64,
+    _reset_count: u32,
+    _restart_count: u32,
+    _safe: bool, // u8
 }
 
 named!( tpmsclockinfo_parser<&[u8], TpmsClockInfo>,
@@ -1591,7 +1604,10 @@ named!( tpmsclockinfo_parser<&[u8], TpmsClockInfo>,
             [1] => value!(true)
         ) >>
         (TpmsClockInfo {
-            clock, reset_count, restart_count, safe
+            _clock: clock,
+            _reset_count: reset_count,
+            _restart_count: restart_count,
+            _safe: safe
         })
     )
 );
@@ -1696,7 +1712,7 @@ impl TryFrom<&[u8]> for TpmsAttest {
     fn try_from(data: &[u8]) -> Result<TpmsAttest, WebauthnError> {
         tpmsattest_parser(data)
             .map_err(|e| {
-                log::debug!("{:?}", e);
+                debug!("{:?}", e);
                 // eprintln!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
@@ -1786,7 +1802,7 @@ impl TpmAlgId {
 #[derive(Debug)]
 /// Symmetric crypto definition. Unused in webauthn
 pub struct TpmtSymDefObject {
-    algorithm: TpmAlgId,
+    _algorithm: TpmAlgId,
     // keybits: Option<()>,
     // mode: Option<()>,
     // details
@@ -1806,7 +1822,7 @@ fn parse_tpmtsymdefobject(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtSymDef
 #[derive(Debug)]
 /// The Rsa Scheme. Unused in webauthn.
 pub struct TpmtRsaScheme {
-    algorithm: TpmAlgId,
+    _algorithm: TpmAlgId,
     // details
 }
 
@@ -1825,11 +1841,11 @@ fn parse_tpmtrsascheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtRsaScheme
 /// Rsa Parameters.
 pub struct TpmsRsaParms {
     // TPMT_SYM_DEF_OBJECT + ALG_NULL
-    symmetric: Option<TpmtSymDefObject>,
+    _symmetric: Option<TpmtSymDefObject>,
     // TPMT_RSA_SCHEME+ (rsapss, rsassa, null)
-    scheme: Option<TpmtRsaScheme>,
+    _scheme: Option<TpmtRsaScheme>,
     // TPMI_RSA_KEY_BITS
-    keybits: u16,
+    _keybits: u16,
     // u32
     /// The Rsa Exponent
     pub exponent: u32,
@@ -1842,7 +1858,10 @@ named!( tpmsrsaparms_parser<&[u8], TpmsRsaParms>,
         keybits: u16!(nom::Endianness::Big) >>
         exponent: u32!(nom::Endianness::Big) >>
         (TpmsRsaParms {
-            symmetric, scheme, keybits, exponent
+            _symmetric: symmetric,
+            _scheme: scheme,
+            _keybits: keybits,
+            exponent
         })
     )
 );
@@ -1935,7 +1954,7 @@ impl TryFrom<&[u8]> for TpmtPublic {
     fn try_from(data: &[u8]) -> Result<TpmtPublic, WebauthnError> {
         tpmtpublic_parser(data)
             .map_err(|e| {
-                log::debug!("{:?}", e);
+                debug!("{:?}", e);
                 // eprintln!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
@@ -1981,7 +2000,7 @@ impl TryFrom<&[u8]> for TpmtSignature {
     fn try_from(data: &[u8]) -> Result<TpmtSignature, WebauthnError> {
         tpmtsignature_parser(data)
             .map_err(|e| {
-                log::debug!("{:?}", e);
+                debug!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)

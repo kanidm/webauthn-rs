@@ -73,7 +73,6 @@ impl AuthenticationState {
 #[derive(Debug)]
 pub struct Webauthn<T> {
     config: T,
-    pkcp: Vec<PubKeyCredParams>,
     rp_id_hash: Vec<u8>,
 }
 
@@ -88,19 +87,10 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
-        let pkcp = config
-            .get_credential_algorithms()
-            .iter()
-            .map(|a| PubKeyCredParams {
-                type_: "public-key".to_string(),
-                alg: a.into(),
-            })
-            .collect();
         let rp_id_hash = compute_sha256(config.get_relying_party_id().as_bytes());
         Webauthn {
             // Use a per-thread csprng
             config,
-            pkcp,
             rp_id_hash,
         }
     }
@@ -162,7 +152,7 @@ impl<T> Webauthn<T> {
         let policy = policy.unwrap_or(UserVerificationPolicy::Discouraged);
 
         if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
-            log::warn!("UserVerificationPolicy::Preferred_DO_NOT_USE is misleading! You should select Discouraged or Required!");
+            warn!("UserVerificationPolicy::Preferred_DO_NOT_USE is misleading! You should select Discouraged or Required!");
         }
 
         if user_id.is_empty() {
@@ -395,9 +385,9 @@ impl<T> Webauthn<T> {
         // specific to the Relying Party and which extensions are in use.
 
         if let Some(ext) = &data.attestation_object.auth_data.extensions {
-            log::debug!("ext: {:?}", ext);
+            debug!("ext: {:?}", ext);
         } else {
-            log::debug!("no extensions");
+            debug!("no extensions");
         }
 
         // Determine the attestation statement format by performing a USASCII case-sensitive match on
@@ -428,7 +418,7 @@ impl<T> Webauthn<T> {
         // Now, match based on the attest_format
         // This returns an ParsedAttestationData, containing all the metadata needed for
 
-        log::debug!("attestation is: {:?}", &attest_format);
+        debug!("attestation is: {:?}", &attest_format);
 
         let (attest_result, credential) = match attest_format {
             AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
@@ -570,7 +560,7 @@ impl<T> Webauthn<T> {
         //
         // Let JSONtext be the result of running UTF-8 decode on the value of cData.
         let data = AuthenticatorAssertionResponse::try_from(&rsp.response).map_err(|e| {
-            log::debug!("AuthenticatorAssertionResponse::try_from -> {:?}", e);
+            debug!("AuthenticatorAssertionResponse::try_from -> {:?}", e);
             e
         })?;
 
@@ -646,7 +636,7 @@ impl<T> Webauthn<T> {
                 if cred.verified && self.config.get_require_uv_consistency() {
                     // This token always sends UV, so we enforce that.
                     if !data.authenticator_data.user_verified {
-                        log::debug!("Token registered UV=true with DC, enforcing UV policy.");
+                        debug!("Token registered UV=true with DC, enforcing UV policy.");
                         return Err(WebauthnError::UserNotVerified);
                     }
                 }
@@ -670,10 +660,10 @@ impl<T> Webauthn<T> {
         // Relying Party MUST be prepared to handle cases where none or not all of the requested
         // extensions were acted upon.
         if let Some(ext) = &data.authenticator_data.extensions {
-            log::debug!("ext: {:?}", ext);
+            debug!("ext: {:?}", ext);
             // we do not need to do any processing here
         } else {
-            log::debug!("no extensions");
+            debug!("no extensions");
         }
 
         // Let hash be the result of computing a hash over the cData using SHA-256.
@@ -936,7 +926,7 @@ impl<T> Webauthn<T> {
                     url::Origin::Tuple(cnf_scheme, cnf_host, cnf_port),
                 ) => {
                     if ccd_scheme != cnf_scheme || ccd_port != cnf_port {
-                        log::debug!("{} != {}", ccd_url, cnf_url);
+                        debug!("{} != {}", ccd_url, cnf_url);
                         return Err(WebauthnError::InvalidRPOrigin);
                     }
                     let valid = match (ccd_host, cnf_host) {
@@ -949,18 +939,18 @@ impl<T> Webauthn<T> {
                     if valid {
                         Ok(())
                     } else {
-                        log::debug!("Domain/IP in origin do not match");
+                        debug!("Domain/IP in origin do not match");
                         Err(WebauthnError::InvalidRPOrigin)
                     }
                 }
                 _ => {
-                    log::debug!("Origin is opaque");
+                    debug!("Origin is opaque");
                     Err(WebauthnError::InvalidRPOrigin)
                 }
             }
         } else {
             if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
-                log::debug!("{} != {}", ccd_url, cnf_url);
+                debug!("{} != {}", ccd_url, cnf_url);
                 Err(WebauthnError::InvalidRPOrigin)
             } else {
                 Ok(())
@@ -1094,7 +1084,7 @@ pub trait WebauthnConfig {
     /// If you have strict security requirements we strongly recommend you implement this function,
     /// and we may in the future provide a stronger default relying party policy.
     fn policy_verify_trust(&self, pad: ParsedAttestationData) -> Result<(), ()> {
-        log::debug!("policy_verify_trust -> {:?}", pad);
+        debug!("policy_verify_trust -> {:?}", pad);
         match pad {
             ParsedAttestationData::Basic(_attest_cert) => Ok(()),
             ParsedAttestationData::Self_ => Ok(()),
@@ -1156,6 +1146,7 @@ mod tests {
 
     #[test]
     fn test_registration() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "http://127.0.0.1:8080/auth",
             "http://127.0.0.1:8080",
@@ -1200,6 +1191,7 @@ mod tests {
     // These are vectors from https://github.com/duo-labs/webauthn
     #[test]
     fn test_registration_duo_go() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "webauthn.io",         // name, whatever you want
             "https://webauthn.io", // must be url origin
@@ -1235,6 +1227,7 @@ mod tests {
 
     #[test]
     fn test_registration_packed_attestation() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "localhost:8443/auth",
             "https://localhost:8443",
@@ -1304,6 +1297,7 @@ mod tests {
 
     #[test]
     fn test_authentication() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "http://localhost:8080/auth",
             "http://localhost:8080",
@@ -1409,6 +1403,7 @@ mod tests {
 
     #[test]
     fn test_authentication_appid() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://testing.local",
             "https://testing.local",
@@ -1513,6 +1508,7 @@ mod tests {
 
     #[test]
     fn test_registration_ipados_5ci() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://172.20.0.141:8443/auth",
             "https://172.20.0.141:8443",
@@ -1557,7 +1553,7 @@ mod tests {
     ) where
         T: crate::WebauthnConfig,
     {
-        let _ = env_logger::builder().is_test(true).try_init();
+        let _ = tracing_subscriber::fmt().try_init();
         let wan = Webauthn::new(wan_c);
 
         let result =
@@ -1568,7 +1564,7 @@ mod tests {
 
     #[test]
     fn test_win_hello_attest_none() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://etools-dev.example.com:8080/auth",
             "https://etools-dev.example.com:8080",
@@ -1700,7 +1696,7 @@ mod tests {
 
     #[test]
     fn test_win_hello_attest_tpm() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://etools-dev.example.com:8080/auth",
             "https://etools-dev.example.com:8080",
@@ -2021,6 +2017,7 @@ mod tests {
 
     #[test]
     fn test_touchid_attest_apple_anonymous() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://spectral.local:8443/auth",
             "https://spectral.local:8443",
@@ -2133,6 +2130,7 @@ mod tests {
 
     #[test]
     fn test_uv_consistency() {
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "http://127.0.0.1:8080/auth",
             "http://127.0.0.1:8080",
@@ -2260,7 +2258,7 @@ mod tests {
 
     #[test]
     fn test_subdomain_origin() {
-        let _ = env_logger::builder().is_test(true).try_init();
+        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "rp_name",
             "https://idm.example.com:8080",

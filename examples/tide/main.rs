@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate tracing;
+
 extern crate structopt;
 use structopt::StructOpt;
 extern crate openssl;
@@ -64,7 +67,7 @@ async fn challenge_register(request: tide::Request<AppState>) -> tide::Result {
             .body(tide::Body::from_json(&chal)?)
             .build(),
         Err(e) => {
-            tide::log::debug!("challenge_register -> {:?}", e);
+            debug!("challenge_register -> {:?}", e);
             tide::Response::new(tide::StatusCode::InternalServerError)
         }
     };
@@ -79,7 +82,7 @@ async fn challenge_login(request: tide::Request<AppState>) -> tide::Result {
             .body(tide::Body::from_json(&chal)?)
             .build(),
         Err(e) => {
-            tide::log::debug!("challenge_login -> {:?}", e);
+            debug!("challenge_login -> {:?}", e);
             tide::Response::new(tide::StatusCode::InternalServerError)
         }
     };
@@ -93,7 +96,7 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
     let res = match actor_res {
         Ok(()) => tide::Response::new(tide::StatusCode::Ok),
         Err(e) => {
-            tide::log::debug!("register -> {:?}", e);
+            debug!("register -> {:?}", e);
             tide::Response::new(tide::StatusCode::InternalServerError)
         }
     };
@@ -108,7 +111,7 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
     match request.state().authenticate(&username_copy, &lgn).await {
         Ok(()) => (),
         Err(e) => {
-            tide::log::debug!("login -> {:?}", e);
+            debug!("login -> {:?}", e);
             return Ok(tide::Response::new(tide::StatusCode::InternalServerError));
         }
     };
@@ -117,7 +120,7 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
 
     // Clear the anonymous flag
     session.remove("anonymous");
-    tide::log::debug!("removed anonymous flag");
+    debug!("removed anonymous flag");
 
     // Set the userid
     session.insert_raw("userid", username);
@@ -128,12 +131,8 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     let opt: CmdOptions = CmdOptions::from_args();
-
-    if opt.debug {
-        tide::log::with_level(tide::log::LevelFilter::Debug);
-    }
-
-    tide::log::debug!("Started logging ...");
+    tracing_subscriber::fmt::init();
+    debug!("Started logging ...");
 
     let prefix = opt.prefix.clone();
     let domain = opt.rp_id.clone();
@@ -176,7 +175,7 @@ async fn main() -> tide::Result<()> {
     app.at(&format!("{}/login/:username", prefix)).post(login);
 
     if opt.enable_tls {
-        tide::log::debug!("Starting with TLS ...");
+        debug!("Starting with TLS ...");
         let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
         app.listen(
             tide_rustls::TlsListener::build()
@@ -185,7 +184,7 @@ async fn main() -> tide::Result<()> {
         )
         .await?;
     } else {
-        tide::log::debug!("Starting without TLS ...");
+        debug!("Starting without TLS ...");
         app.listen(opt.bind).await?;
     };
 
