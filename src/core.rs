@@ -194,7 +194,7 @@ impl<T> Webauthn<T> {
                 authenticator_selection: Some(AuthenticatorSelectionCriteria {
                     authenticator_attachment: self.config.get_authenticator_attachment(),
                     require_resident_key: self.config.get_require_resident_key(),
-                    user_verification: policy.clone(),
+                    user_verification: policy,
                 }),
                 extensions,
             },
@@ -244,7 +244,7 @@ impl<T> Webauthn<T> {
 
         // send to register_credential_internal
         let credential =
-            self.register_credential_internal(reg, policy.clone(), chal, &exclude_credentials)?;
+            self.register_credential_internal(reg, *policy, chal, exclude_credentials)?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -439,7 +439,7 @@ impl<T> Webauthn<T> {
                 &client_data_json_hash,
                 policy,
             ),
-            AttestationFormat::TPM => verify_tpm_attestation(
+            AttestationFormat::Tpm => verify_tpm_attestation(
                 acd,
                 data.attestation_object.auth_data.counter,
                 data.attestation_object.auth_data.user_verified,
@@ -607,7 +607,7 @@ impl<T> Webauthn<T> {
             None
         };
 
-        if !(&data.authenticator_data.rp_id_hash == &self.rp_id_hash
+        if !(data.authenticator_data.rp_id_hash == self.rp_id_hash
             || Some(&data.authenticator_data.rp_id_hash) == appid_hash.as_ref())
         {
             return Err(WebauthnError::InvalidRPIDHash);
@@ -810,7 +810,7 @@ impl<T> Webauthn<T> {
             self.config.get_authenticator_timeout(),
             self.config.get_relying_party_id().to_owned(),
             ac,
-            policy.clone(),
+            policy,
             extensions,
         );
         let st = AuthenticationState {
@@ -889,7 +889,7 @@ impl<T> Webauthn<T> {
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
 
-        let auth_data = self.verify_credential_internal(rsp, policy.clone(), chal, &cred, appid)?;
+        let auth_data = self.verify_credential_internal(rsp, *policy, chal, cred, appid)?;
         let counter = auth_data.counter;
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
@@ -948,13 +948,11 @@ impl<T> Webauthn<T> {
                     Err(WebauthnError::InvalidRPOrigin)
                 }
             }
+        } else if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
+            debug!("{} != {}", ccd_url, cnf_url);
+            Err(WebauthnError::InvalidRPOrigin)
         } else {
-            if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
-                debug!("{} != {}", ccd_url, cnf_url);
-                Err(WebauthnError::InvalidRPOrigin)
-            } else {
-                Ok(())
-            }
+            Ok(())
         }
     }
 }
@@ -1146,7 +1144,6 @@ mod tests {
 
     #[test]
     fn test_registration() {
-        let _ = tracing_subscriber::fmt().try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "http://127.0.0.1:8080/auth",
             "http://127.0.0.1:8080",
@@ -1508,7 +1505,9 @@ mod tests {
 
     #[test]
     fn test_registration_ipados_5ci() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://172.20.0.141:8443/auth",
             "https://172.20.0.141:8443",

@@ -18,7 +18,7 @@ use debug;
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
     Packed,
-    TPM,
+    Tpm,
     AndroidKey,
     AndroidSafetyNet,
     FIDOU2F,
@@ -32,7 +32,7 @@ impl TryFrom<&str> for AttestationFormat {
     fn try_from(a: &str) -> Result<AttestationFormat, Self::Error> {
         match a {
             "packed" => Ok(AttestationFormat::Packed),
-            "tpm" => Ok(AttestationFormat::TPM),
+            "tpm" => Ok(AttestationFormat::Tpm),
             "android-key" => Ok(AttestationFormat::AndroidKey),
             "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
@@ -115,7 +115,7 @@ pub(crate) fn verify_packed_attestation(
                 .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
-                .and_then(|sig| attestn_cert.verify_signature(&sig, &verification_data))?;
+                .and_then(|sig| attestn_cert.verify_signature(sig, &verification_data))?;
             if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
@@ -179,7 +179,7 @@ pub(crate) fn verify_packed_attestation(
                 .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
-                .and_then(|sig| credential_public_key.verify_signature(&sig, &verification_data))?;
+                .and_then(|sig| credential_public_key.verify_signature(sig, &verification_data))?;
             if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
@@ -280,7 +280,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .collect();
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    let verified = cerificate_public_key.verify_signature(&sig, &verification_data)?;
+    let verified = cerificate_public_key.verify_signature(sig, &verification_data)?;
 
     if !verified {
         error!("signature verification failed!");

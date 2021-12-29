@@ -52,10 +52,10 @@ fn verify_signature(
     verification_data: &[u8],
 ) -> Result<bool, WebauthnError> {
     let mut verifier = match stype {
-        COSEAlgorithm::ES256 => sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+        COSEAlgorithm::ES256 => sign::Verifier::new(hash::MessageDigest::sha256(), pkey)
             .map_err(WebauthnError::OpenSSLError),
         COSEAlgorithm::RS256 => {
-            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), &pkey)
+            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha256(), pkey)
                 .map_err(WebauthnError::OpenSSLError)?;
             verifier
                 .set_rsa_padding(rsa::Padding::PKCS1)
@@ -63,7 +63,7 @@ fn verify_signature(
             Ok(verifier)
         }
         COSEAlgorithm::INSECURE_RS1 => {
-            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), &pkey)
+            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), pkey)
                 .map_err(WebauthnError::OpenSSLError)?;
             verifier
                 .set_rsa_padding(rsa::Padding::PKCS1)

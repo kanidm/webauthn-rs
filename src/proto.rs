@@ -12,6 +12,11 @@ use std::ops::Deref;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
+use nom::bytes::complete::take;
+use nom::combinator::{cond, map_opt, map_res, verify};
+use nom::error::ParseError;
+use nom::number::complete::{be_u16, be_u32, be_u64};
+
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
 
@@ -497,7 +502,7 @@ impl TryFrom<u8> for CredProtectResponse {
     type Error = <CredentialProtectionPolicy as TryFrom<u8>>::Error;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
-        CredentialProtectionPolicy::try_from(v).map(|policy| CredProtectResponse(policy))
+        CredentialProtectionPolicy::try_from(v).map(CredProtectResponse)
     }
 }
 
@@ -1124,8 +1129,13 @@ pub enum ParsedAttestationData {
 #[cfg(feature = "core")]
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     let mut deserializer = serde_cbor::Deserializer::from_slice(i);
-    let v = serde::de::Deserialize::deserialize(&mut deserializer)
-        .map_err(|_| nom::Err::Failure(nom::Context::Code(i, nom::ErrorKind::Custom(1))))?;
+    let v = serde::de::Deserialize::deserialize(&mut deserializer).map_err(|e| {
+        error!(?e);
+        nom::Err::Failure(nom::error::Error::from_error_kind(
+            i,
+            nom::error::ErrorKind::Fail,
+        ))
+    })?;
 
     let len = deserializer.byte_offset();
 
@@ -1134,63 +1144,59 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
 
 #[cfg(feature = "core")]
 fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExtensions> {
-    map_res!(
-        i,
+    map_res(
         cbor_parser,
-        serde_cbor::value::from_value::<T::SignedExtensions>
-    )
+        serde_cbor::value::from_value::<T::SignedExtensions>,
+    )(i)
 }
 
 #[cfg(feature = "core")]
-named!( acd_parser<&[u8], AttestedCredentialData>,
-    do_parse!(
-        aaguid: take!(16) >>
-        cred_id_len: u16!(nom::Endianness::Big) >>
-        cred_id: take!(cred_id_len) >>
-        cred_pk: cbor_parser >>
-        (AttestedCredentialData {
+fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
+    let (i, aaguid) = take(16usize)(i)?;
+    let (i, cred_id_len) = be_u16(i)?;
+    let (i, cred_id) = take(cred_id_len as usize)(i)?;
+    let (i, cred_pk) = cbor_parser(i)?;
+    Ok((
+        i,
+        AttestedCredentialData {
             aaguid: aaguid.to_vec(),
             credential_id: cred_id.to_vec(),
             credential_pk: cred_pk,
-        })
-    )
-);
+        },
+    ))
+}
 
 #[cfg(feature = "core")]
-named!( authenticator_data_flags<&[u8], (bool, bool, bool, bool)>,
-    bits!(
-        do_parse!(
-            exten_pres: map!(take_bits!(u8, 1), |i| i != 0)  >>
-            acd_pres: map!(take_bits!(u8, 1), |i| i != 0) >>
-            take_bits!(u8, 1) >>
-            take_bits!(u8, 1) >>
-            take_bits!(u8, 1) >>
-            u_ver: map!(take_bits!(u8, 1), |i| i != 0) >>
-            take_bits!(u8, 1) >>
-            u_pres: map!(take_bits!(u8, 1), |i| i != 0) >>
-            ((exten_pres, acd_pres, u_ver, u_pres))
-        )
-    )
-);
+fn authenticator_data_flags(i: &[u8]) -> nom::IResult<&[u8], (bool, bool, bool, bool)> {
+    // Using nom for bit fields is shit, do it by hand.
+    let (i, ctrl) = nom::number::complete::u8(i)?;
+    let exten_pres = (ctrl & 0b1000_0000) != 0;
+    let acd_pres = (ctrl & 0b0100_0000) != 0;
+    let u_ver = (ctrl & 0b0000_0100) != 0;
+    let u_pres = (ctrl & 0b0000_0001) != 0;
+
+    Ok((i, (exten_pres, acd_pres, u_ver, u_pres)))
+}
 
 #[cfg(feature = "core")]
 fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], AuthenticatorData<T>> {
-    do_parse!(
+    let (i, rp_id_hash) = take(32usize)(i)?;
+    let (i, data_flags) = authenticator_data_flags(i)?;
+    let (i, counter) = be_u32(i)?;
+    let (i, acd) = cond(data_flags.1, acd_parser)(i)?;
+    let (i, extensions) = cond(data_flags.0, extensions_parser::<T>)(i)?;
+
+    Ok((
         i,
-        rp_id_hash: take!(32)
-            >> data_flags: authenticator_data_flags
-            >> counter: u32!(nom::Endianness::Big)
-            >> acd: cond!(data_flags.1, acd_parser)
-            >> extensions: cond!(data_flags.0, extensions_parser::<T>)
-            >> (AuthenticatorData {
-                rp_id_hash: rp_id_hash.to_vec(),
-                counter,
-                user_verified: data_flags.2,
-                user_present: data_flags.3,
-                acd,
-                extensions,
-            })
-    )
+        AuthenticatorData {
+            rp_id_hash: rp_id_hash.to_vec(),
+            counter,
+            user_verified: data_flags.2,
+            user_present: data_flags.3,
+            acd,
+            extensions,
+        },
+    ))
 }
 
 #[cfg(feature = "core")]
@@ -1199,7 +1205,7 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
         authenticator_data_parser(auth_data_bytes)
             .map_err(|e| {
-                debug!("nom -> {:?}", e);
+                error!("nom -> {:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, ad)| ad)
@@ -1235,7 +1241,7 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
 
     fn try_from(data: &[u8]) -> Result<AttestationObject<T>, WebauthnError> {
         let aoi: AttestationObjectInner =
-            serde_cbor::from_slice(&data).map_err(WebauthnError::ParseCBORFailure)?;
+            serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
         let auth_data_bytes: &[u8] = aoi.auth_data;
         let auth_data = AuthenticatorData::try_from(auth_data_bytes)?;
 
@@ -1276,7 +1282,6 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
         let ccdj = CollectedClientData::try_from(aarr.client_data_json.as_ref())?;
-        debug!("ccdj: {:?}", ccdj);
         let ao = AttestationObject::try_from(aarr.attestation_object.as_ref())?;
 
         Ok(AuthenticatorAttestationResponse {
@@ -1594,23 +1599,22 @@ pub struct TpmsClockInfo {
     _safe: bool, // u8
 }
 
-named!( tpmsclockinfo_parser<&[u8], TpmsClockInfo>,
-    do_parse!(
-        clock: u64!(nom::Endianness::Big) >>
-        reset_count: u32!(nom::Endianness::Big) >>
-        restart_count: u32!(nom::Endianness::Big) >>
-        safe: switch!(take!(1),
-            [0] => value!(false) |
-            [1] => value!(true)
-        ) >>
-        (TpmsClockInfo {
+fn tpmsclockinfo_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsClockInfo> {
+    let (i, clock) = be_u64(i)?;
+    let (i, reset_count) = be_u32(i)?;
+    let (i, restart_count) = be_u32(i)?;
+    let (i, safe) = nom::combinator::map(nom::number::complete::u8, |v| v != 0)(i)?;
+
+    Ok((
+        i,
+        TpmsClockInfo {
             _clock: clock,
             _reset_count: reset_count,
             _restart_count: restart_count,
-            _safe: safe
-        })
-    )
-);
+            _safe: safe,
+        },
+    ))
+}
 
 #[derive(Debug)]
 /// Tpm name enumeration.
@@ -1657,54 +1661,63 @@ pub struct TpmsAttest {
     pub typeattested: TpmuAttest,
 }
 
-named!( tpm2b_name<&[u8], Tpm2bName>,
-    switch!(u16!(nom::Endianness::Big),
-        0 => value!(Tpm2bName::None) |
-        4 => map!(u32!(nom::Endianness::Big), Tpm2bName::Handle) |
-        size => map!(take!(size), |d| Tpm2bName::Digest(d.to_vec()))
-    )
-);
+fn tpm2b_name(i: &[u8]) -> nom::IResult<&[u8], Tpm2bName> {
+    let (i, case) = be_u16(i)?;
+    let (i, r) = match case {
+        0 => (i, Tpm2bName::None),
+        4 => {
+            let (i, h) = be_u32(i)?;
+            (i, Tpm2bName::Handle(h))
+        }
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            (i, Tpm2bName::Digest(d.to_vec()))
+        }
+    };
 
-named!( tpm2b_data<&[u8], Option<Vec<u8>>>,
-    switch!(u16!(nom::Endianness::Big),
-        0 => value!(None) |
-        size => map!(take!(size), |d| Some(d.to_vec()))
-    )
-);
+    Ok((i, r))
+}
 
-named! ( tpmuattestcertify<&[u8], TpmuAttest>,
-    do_parse!(
-        name: tpm2b_name >>
-        qualified_name: tpm2b_name >>
-        (
-            TpmuAttest::AttestCertify(name, qualified_name)
-        )
-    )
-);
+fn tpm2b_data(i: &[u8]) -> nom::IResult<&[u8], Option<Vec<u8>>> {
+    let (i, size) = be_u16(i)?;
+    match size {
+        0 => Ok((i, None)),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            Ok((i, Some(d.to_vec())))
+        }
+    }
+}
 
-named!( tpmsattest_parser<&[u8], TpmsAttest>,
-    do_parse!(
-        magic: verify!(u32!(nom::Endianness::Big), |x| x == TPM_GENERATED_VALUE) >>
-        type_: map_opt!(u16!(nom::Endianness::Big), TpmSt::new) >>
-        qualified_signer: tpm2b_name >>
-        extra_data: tpm2b_data >>
-        clock_info: tpmsclockinfo_parser >>
-        firmware_version: u64!(nom::Endianness::Big) >>
-        // we *could* try to parse this generically, BUT I can't work out how to amke nom
-        // reach back to type_ to switch on the type. However, webauthn ONLY needs attestCertify
-        // so we can blindly attempt to parse this as it is.
-        typeattested: tpmuattestcertify >>
-        /*
-        typeattested: switch!(type_,
-            TpmSt::AttestCertify => tpmuattestcertify |
-            _ => value!(TpmuAttest::Invalid)
-        ) >>
-        */
-        (TpmsAttest {
-            magic, type_, qualified_signer, extra_data, clock_info, firmware_version, typeattested
-        })
-    )
-);
+fn tpmuattestcertify(i: &[u8]) -> nom::IResult<&[u8], TpmuAttest> {
+    let (i, name) = tpm2b_name(i)?;
+    let (i, qualified_name) = tpm2b_name(i)?;
+
+    Ok((i, TpmuAttest::AttestCertify(name, qualified_name)))
+}
+
+fn tpmsattest_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsAttest> {
+    let (i, magic) = verify(be_u32, |x| *x == TPM_GENERATED_VALUE)(i)?;
+    let (i, type_) = map_opt(be_u16, TpmSt::new)(i)?;
+    let (i, qualified_signer) = tpm2b_name(i)?;
+    let (i, extra_data) = tpm2b_data(i)?;
+    let (i, clock_info) = tpmsclockinfo_parser(i)?;
+    let (i, firmware_version) = be_u64(i)?;
+    let (i, typeattested) = tpmuattestcertify(i)?;
+
+    Ok((
+        i,
+        TpmsAttest {
+            magic,
+            type_,
+            qualified_signer,
+            extra_data,
+            clock_info,
+            firmware_version,
+            typeattested,
+        },
+    ))
+}
 
 impl TryFrom<&[u8]> for TpmsAttest {
     type Error = WebauthnError;
@@ -1712,8 +1725,7 @@ impl TryFrom<&[u8]> for TpmsAttest {
     fn try_from(data: &[u8]) -> Result<TpmsAttest, WebauthnError> {
         tpmsattest_parser(data)
             .map_err(|e| {
-                debug!("{:?}", e);
-                // eprintln!("{:?}", e);
+                error!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -1809,12 +1821,12 @@ pub struct TpmtSymDefObject {
 }
 
 fn parse_tpmtsymdefobject(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtSymDefObject>> {
-    let (data, algorithm) = map_opt!(input, u16!(nom::Endianness::Big), TpmAlgId::new)?;
+    let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
     match algorithm {
         TpmAlgId::Null => Ok((data, None)),
-        _ => Err(nom::Err::Failure(nom::Context::Code(
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
             input,
-            nom::ErrorKind::Custom(2),
+            nom::error::ErrorKind::Fail,
         ))),
     }
 }
@@ -1827,12 +1839,12 @@ pub struct TpmtRsaScheme {
 }
 
 fn parse_tpmtrsascheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtRsaScheme>> {
-    let (data, algorithm) = map_opt!(input, u16!(nom::Endianness::Big), TpmAlgId::new)?;
+    let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
     match algorithm {
         TpmAlgId::Null => Ok((data, None)),
-        _ => Err(nom::Err::Failure(nom::Context::Code(
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
             input,
-            nom::ErrorKind::Custom(2),
+            nom::error::ErrorKind::Fail,
         ))),
     }
 }
@@ -1851,20 +1863,37 @@ pub struct TpmsRsaParms {
     pub exponent: u32,
 }
 
-named!( tpmsrsaparms_parser<&[u8], TpmsRsaParms>,
+fn tpmsrsaparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsRsaParms> {
+    let (i, symmetric) = parse_tpmtsymdefobject(i)?;
+    let (i, scheme) = parse_tpmtrsascheme(i)?;
+    let (i, keybits) = be_u16(i)?;
+    let (i, exponent) = be_u32(i)?;
+    Ok((
+        i,
+        TpmsRsaParms {
+            _symmetric: symmetric,
+            _scheme: scheme,
+            _keybits: keybits,
+            exponent,
+        },
+    ))
+    /*
     do_parse!(
         symmetric: parse_tpmtsymdefobject >>
         scheme: parse_tpmtrsascheme >>
         keybits: u16!(nom::Endianness::Big) >>
         exponent: u32!(nom::Endianness::Big) >>
-        (TpmsRsaParms {
+        (
+        TpmsRsaParms {
             _symmetric: symmetric,
             _scheme: scheme,
             _keybits: keybits,
             exponent
-        })
+        }
+        )
     )
-);
+    */
+}
 
 /*
 #[derive(Debug)]
@@ -1889,9 +1918,9 @@ fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], Tpm
         TpmAlgId::Rsa => {
             tpmsrsaparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Rsa(inner)))
         }
-        _ => Err(nom::Err::Failure(nom::Context::Code(
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
             input,
-            nom::ErrorKind::Custom(2),
+            nom::error::ErrorKind::Fail,
         ))),
     }
 }
@@ -1907,12 +1936,16 @@ pub enum TpmuPublicId {
     // Asym
 }
 
-named!( tpmsrsapublickey_parser<&[u8], Vec<u8>>,
-    switch!(u16!(nom::Endianness::Big),
-        0 => value!(Vec::new()) |
-        size => map!(take!(size), |d| d.to_vec())
-    )
-);
+fn tpmsrsapublickey_parser(i: &[u8]) -> nom::IResult<&[u8], Vec<u8>> {
+    let (i, size) = be_u16(i)?;
+    match size {
+        0 => Ok((i, Vec::new())),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            Ok((i, d.to_vec()))
+        }
+    }
+}
 
 fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPublicId> {
     // eprintln!("tpmupublicparms input -> {:?}", input);
@@ -1920,9 +1953,9 @@ fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPu
         TpmAlgId::Rsa => {
             tpmsrsapublickey_parser(input).map(|(data, inner)| (data, TpmuPublicId::Rsa(inner)))
         }
-        _ => Err(nom::Err::Failure(nom::Context::Code(
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
             input,
-            nom::ErrorKind::Custom(2),
+            nom::error::ErrorKind::Fail,
         ))),
     }
 }
@@ -1954,34 +1987,44 @@ impl TryFrom<&[u8]> for TpmtPublic {
     fn try_from(data: &[u8]) -> Result<TpmtPublic, WebauthnError> {
         tpmtpublic_parser(data)
             .map_err(|e| {
-                debug!("{:?}", e);
-                // eprintln!("{:?}", e);
+                error!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
     }
 }
 
-named!( tpm2b_digest<&[u8], Option<Vec<u8>>>,
-    switch!(u16!(nom::Endianness::Big),
-        0 => value!(None) |
-        size => map!(take!(size), |d| Some(d.to_vec()))
-    )
-);
+fn tpm2b_digest(i: &[u8]) -> nom::IResult<&[u8], Option<Vec<u8>>> {
+    let (i, size) = be_u16(i)?;
+    match size {
+        0 => Ok((i, None)),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            Ok((i, Some(d.to_vec())))
+        }
+    }
+}
 
-named!( tpmtpublic_parser<&[u8], TpmtPublic>,
-    do_parse!(
-        type_: map_opt!(u16!(nom::Endianness::Big), TpmAlgId::new) >>
-        name_alg: map_opt!(u16!(nom::Endianness::Big), TpmAlgId::new) >>
-        object_attributes: u32!(nom::Endianness::Big) >>
-        auth_policy: tpm2b_digest >>
-        parameters: call!(parse_tpmupublicparms, type_) >>
-        unique: call!(parse_tpmupublicid, type_) >>
-        (TpmtPublic {
-            type_, name_alg, object_attributes, auth_policy, parameters, unique
-        })
-    )
-);
+fn tpmtpublic_parser(i: &[u8]) -> nom::IResult<&[u8], TpmtPublic> {
+    let (i, type_) = map_opt(be_u16, TpmAlgId::new)(i)?;
+    let (i, name_alg) = map_opt(be_u16, TpmAlgId::new)(i)?;
+    let (i, object_attributes) = be_u32(i)?;
+    let (i, auth_policy) = tpm2b_digest(i)?;
+    let (i, parameters) = parse_tpmupublicparms(i, type_)?;
+    let (i, unique) = parse_tpmupublicid(i, type_)?;
+
+    Ok((
+        i,
+        TpmtPublic {
+            type_,
+            name_alg,
+            object_attributes,
+            auth_policy,
+            parameters,
+            unique,
+        },
+    ))
+}
 
 #[derive(Debug)]
 /// A TPM Signature.
@@ -2000,7 +2043,7 @@ impl TryFrom<&[u8]> for TpmtSignature {
     fn try_from(data: &[u8]) -> Result<TpmtSignature, WebauthnError> {
         tpmtsignature_parser(data)
             .map_err(|e| {
-                debug!("{:?}", e);
+                error!("{:?}", e);
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -2008,12 +2051,12 @@ impl TryFrom<&[u8]> for TpmtSignature {
 }
 
 fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
-    let (_data, algorithm) = map!(input, u16!(nom::Endianness::Big), TpmAlgId::new)?;
+    let (_data, algorithm) = nom::combinator::map(be_u16, TpmAlgId::new)(input)?;
     match algorithm {
         None => Ok((&[], TpmtSignature::RawSignature(Vec::from(input)))),
-        _ => Err(nom::Err::Failure(nom::Context::Code(
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
             input,
-            nom::ErrorKind::Custom(2),
+            nom::error::ErrorKind::Fail,
         ))),
     }
 }
