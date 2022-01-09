@@ -13,7 +13,9 @@ use std::ops::Deref;
 use wasm_bindgen::prelude::*;
 
 use nom::bytes::complete::take;
-use nom::combinator::{cond, map_opt, map_res, verify};
+#[cfg(not(feature = "wasm"))]
+use nom::combinator::{cond, map_res};
+use nom::combinator::{map_opt, verify};
 use nom::error::ParseError;
 use nom::number::complete::{be_u16, be_u32, be_u64};
 

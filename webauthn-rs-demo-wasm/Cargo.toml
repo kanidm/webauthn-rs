@@ -1,0 +1,46 @@
+[package]
+name = "webauthn_rs_demo_wasm"
+version = "0.1.0"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+webauthn-rs = { path = "../webauthn-rs", default-features = false, features = ["wasm"] }
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+wasm-bindgen-futures = { version = "0.4" }
+yew = "0.19"
+js-sys = "0.3"
+# anyhow = "1"
+# serde = "1.0"
+serde_json = "1.0"
+gloo = "0.6"
+
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "AuthenticationExtensionsClientOutputs",
+    "AuthenticatorResponse",
+    "CredentialCreationOptions",
+    "CredentialRequestOptions",
+    "CredentialsContainer",
+    "Event",
+    "Headers",
+    "Navigator",
+    "PublicKeyCredential",
+    "PublicKeyCredentialCreationOptions",
+    "PublicKeyCredentialRpEntity",
+    "PublicKeyCredentialUserEntity",
+    "Request",
+    "RequestCredentials",
+    "RequestInit",
+    "RequestMode",
+    "RequestRedirect",
+    "Response",
+    "Window",
+]
+
