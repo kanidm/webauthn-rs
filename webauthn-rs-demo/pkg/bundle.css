@@ -1,0 +1,39 @@
+html,
+body {
+  height: 100%;
+}
+
+body {
+  display: flex;
+  background-color: #f5f5f5;
+}
+
+.form-description {
+  padding-top: 40px;
+  padding-bottom: 40px;
+  width: 100%;
+  max-width: 700px;
+  margin: 0px auto;
+}
+
+.vert-center {
+  height: 80%;
+  display: flex;
+  align-items: center;
+}
+
+.form-signin {
+  width: 100%;
+  max-width: 520px;
+  padding: 20px;
+  margin: auto;
+}
+
+.form-signin .form-floating:focus-within {
+  z-index: 2;
+}
+
+.explain {
+  padding: 20px;
+  background-color: #ffffff;
+}

@@ -31,8 +31,6 @@ type AppState = Arc<WebauthnActor>;
 struct CmdOptions {
     #[structopt(short = "d", long = "debug")]
     debug: bool,
-    #[structopt(short = "p", long = "prefix", default_value = "/auth")]
-    prefix: String,
     #[structopt(short = "n", long = "name", default_value = "localhost")]
     rp_name: String,
     #[structopt(short = "o", long = "origin", default_value = "http://localhost:8080")]
@@ -134,9 +132,9 @@ async fn main() -> tide::Result<()> {
     tracing_subscriber::fmt::init();
     debug!("Started logging ...");
 
-    let prefix = opt.prefix.clone();
     let domain = opt.rp_id.clone();
 
+    info!("Using origin - {}", opt.rp_origin);
     let wan_c = WebauthnEphemeralConfig::new(
         opt.rp_name.as_str(),
         opt.rp_origin.as_str(),
@@ -152,27 +150,21 @@ async fn main() -> tide::Result<()> {
     let cookie_sig = StdRng::from_entropy().gen::<[u8; 32]>();
     let sessions =
         tide::sessions::SessionMiddleware::new(tide::sessions::MemoryStore::new(), &cookie_sig)
-            .with_cookie_path(prefix.as_str())
             .with_cookie_domain(domain.as_str())
             .with_same_site_policy(tide::http::cookies::SameSite::Strict)
             .with_cookie_name("webauthnrs");
     app.with(sessions);
     app.with(tide::log::LogMiddleware::new());
-    {
-        let prefix_copy = prefix.clone();
-        app.at("/")
-            .get(move |_| async_std::future::ready(Ok(tide::Redirect::new(prefix_copy.clone()))));
-    }
     // Serve our wasm content
     app.at("/pkg").serve_dir("pkg")?;
-    app.at(&prefix).get(index_view);
-    app.at(&format!("{}/challenge/register/:username", prefix))
+    app.at("/").get(index_view);
+    app.at("/challenge/register/:username")
         .post(challenge_register);
-    app.at(&format!("{}/challenge/login/:username", prefix))
+    app.at("/challenge/login/:username")
         .post(challenge_login);
-    app.at(&format!("{}/register/:username", prefix))
+    app.at("/register/:username")
         .post(register);
-    app.at(&format!("{}/login/:username", prefix)).post(login);
+    app.at("/login/:username").post(login);
 
     if opt.enable_tls {
         debug!("Starting with TLS ...");
