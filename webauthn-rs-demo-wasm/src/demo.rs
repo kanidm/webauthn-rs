@@ -13,21 +13,26 @@ use webauthn_rs::proto::{
 };
 use yew::prelude::*;
 
+#[derive(Debug)]
 pub enum Demo {
     Waiting,
-    Register { username: String },
-    Login { username: String },
-    Error { msg: Option<String> },
+    Register,
+    Login,
+    Error( Option<String> ),
 }
 
+#[derive(Debug)]
 pub enum AppMsg {
-    UserNameInput(String),
+    // This can probably go ...
+    // UserNameInput(String),
     Register,
     BeginRegisterChallenge(web_sys::CredentialCreationOptions, String),
     CompleteRegisterChallenge(JsValue, String),
+    RegisterSuccess,
     Login,
     BeginLoginChallenge(web_sys::CredentialRequestOptions, String),
     CompleteLoginChallenge(JsValue, String),
+    LoginSuccess,
     // Errors
     Error(String),
 }
@@ -99,7 +104,7 @@ impl Demo {
         let status = resp.status();
 
         if status == 200 {
-            Ok(AppMsg::Toast("Registration Success!".to_string()))
+            Ok(AppMsg::RegisterSuccess)
         } else {
             let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
@@ -168,7 +173,7 @@ impl Demo {
         let status = resp.status();
 
         if status == 200 {
-            Ok(AppMsg::Toast("Authentication Success! 🎉".to_string()))
+            Ok(AppMsg::LoginSuccess)
         } else {
             let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
@@ -177,7 +182,7 @@ impl Demo {
         }
     }
 
-    fn view_register(&self, ctx: &Context<Self>, username: String) -> Html {
+    fn view_register(&self, ctx: &Context<Self>) -> Html {
         html! {
                   <>
                     <div class="form-description">
@@ -196,8 +201,7 @@ impl Demo {
                     <main class="text-center form-signin">
                       <h3 class="h3 mb-3 fw-normal">{ "Register a Webauthn Credential" }</h3>
                       <div class="form-floating">
-                        <input id="username" type="text" class="form-control" value={ username }
-                               oninput={ ctx.link().callback(|e: InputEvent| AppMsg::UserNameInput(utils::get_value_from_input_event(e))) } />
+                        <input id="username" type="text" class="form-control" value="" />
                         <label for="username">{ "Username" }</label>
                       </div>
                       <button type="button" class="btn btn-lg btn-secondary" data-bs-toggle="modal" data-bs-target="#exampleModalDefault">
@@ -209,88 +213,88 @@ impl Demo {
                       </button>
                     </main>
 
-        <div class="modal fade" id="exampleModalDefault" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
-          <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h5 class="modal-title" id="exampleModalLabel">{ "Webauthn Settings" }</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-              </div>
-              <div class="modal-body">
-
-          <div class="container-fluid">
-            <div class="row">
-        <p>
-        { "Change settings of the credential that will be registered" }
-        </p>
-            </div>
-            <div class="row">
-              <table class="table">
-                <tbody>
-                  <tr>
-                    <td>{ "User Verification Required" }</td>
-                    <td>
-                      <input class="form-check-input" type="checkbox" value="" id="invalidCheck3" />
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>{ "Attestation" }</td>
-                    <td>
-                      <select class="form-select" id="validationServer04">
-                        <option selected=true value="">{ "None" }</option>
-                        <option>{ "Indirect" }</option>
-                        <option>{ "Direct" }</option>
-                      </select>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>{ "Attachment" }</td>
-                    <td>
-                      <select class="form-select" id="validationServer04">
-                        <option selected=true value="">{ "Any" }</option>
-                        <option>{ "Platform" }</option>
-                        <option>{ "Roaming" }</option>
-                      </select>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>{ "Algorithm" }</td>
-                    <td>
-                      <div class="row">
-                        <div class="col">
-                          { "ES256" }
+                    <div class="modal fade" id="exampleModalDefault" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+                      <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                          <div class="modal-header">
+                            <h5 class="modal-title" id="exampleModalLabel">{ "Webauthn Settings" }</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                          </div>
+                          <div class="modal-body">
+            
+                      <div class="container-fluid">
+                        <div class="row">
+                    <p>
+                    { "Change settings of the credential that will be registered" }
+                    </p>
                         </div>
-                        <div class="col">
-                          <input class="form-check-input" type="checkbox" value="ES256" id="invalidCheck3" checked=true />
+                        <div class="row">
+                          <table class="table">
+                            <tbody>
+                              <tr>
+                                <td>{ "User Verification Required" }</td>
+                                <td>
+                                  <input class="form-check-input" type="checkbox" value="" id="invalidCheck3" />
+                                </td>
+                              </tr>
+                              <tr>
+                                <td>{ "Attestation" }</td>
+                                <td>
+                                  <select class="form-select" id="validationServer04">
+                                    <option selected=true value="">{ "None" }</option>
+                                    <option>{ "Indirect" }</option>
+                                    <option>{ "Direct" }</option>
+                                  </select>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td>{ "Attachment" }</td>
+                                <td>
+                                  <select class="form-select" id="validationServer04">
+                                    <option selected=true value="">{ "Any" }</option>
+                                    <option>{ "Platform" }</option>
+                                    <option>{ "Roaming" }</option>
+                                  </select>
+                                </td>
+                              </tr>
+                              <tr>
+                                <td>{ "Algorithm" }</td>
+                                <td>
+                                  <div class="row">
+                                    <div class="col">
+                                      { "ES256" }
+                                    </div>
+                                    <div class="col">
+                                      <input class="form-check-input" type="checkbox" value="ES256" id="invalidCheck3" checked=true />
+                                    </div>
+                                  </div>
+                                  <div class="row">
+                                    <div class="col">
+                                      { "RS256" }
+                                    </div>
+                                    <div class="col">
+                                      <input class="form-check-input" type="checkbox" value="RS256" id="invalidCheck3" />
+                                    </div>
+                                  </div>
+            
+                                </td>
+                              </tr>
+            
+            
+                            </tbody>
+                          </table>
+                        </div>
+            
+                      </div>
+            
+                          </div>
+                          <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{ "Reset Settings" }</button>
+                            <button type="button" class="btn btn-primary">{ "Save changes" }</button>
+                          </div>
                         </div>
                       </div>
-                      <div class="row">
-                        <div class="col">
-                          { "RS256" }
-                        </div>
-                        <div class="col">
-                          <input class="form-check-input" type="checkbox" value="RS256" id="invalidCheck3" />
-                        </div>
-                      </div>
-
-                    </td>
-                  </tr>
-
-
-                </tbody>
-              </table>
-            </div>
-
-          </div>
-
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{ "Reset Settings" }</button>
-                <button type="button" class="btn btn-primary">{ "Save changes" }</button>
-              </div>
-            </div>
-          </div>
-        </div>
+                    </div>
 
                   </>
                 }
@@ -303,9 +307,7 @@ impl Component for Demo {
 
     fn create(ctx: &Context<Self>) -> Self {
         console::log!(format!("create").as_str());
-        Demo::Register {
-            username: "".to_string(),
-        }
+        Demo::Register
     }
 
     fn changed(&mut self, ctx: &Context<Self>) -> bool {
@@ -313,50 +315,49 @@ impl Component for Demo {
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
-        match msg {
-            AppMsg::Error(msg) => {
+        let mut state_change = match (&self, msg) {
+            (_, AppMsg::Error(msg)) => {
                 console::log!(format!("fetch task error -> {:?}", msg).as_str());
-                self.toastmsg = Some(msg)
+                Demo::Error( Some(msg) )
             }
+            /*
             AppMsg::UserNameInput(mut username) => {
-                std::mem::swap(&mut self.username, &mut username)
+                std::mem::swap(&mut self.username, &mut username);
             }
+            */
             // Rego
-            AppMsg::Register => {
-                console::log!(format!("register -> {:?}", self.username).as_str());
-                let username = self.username.clone();
+            (Demo::Register, AppMsg::Register) => {
+                let username = utils::get_value_from_element_id("username")
+                    .expect("No username");
+                console::log!(format!("register -> {:?}", username).as_str());
                 ctx.link().send_future(async {
                     match Self::register_begin(username).await {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }
                 });
+                Demo::Waiting
             }
-            AppMsg::BeginRegisterChallenge(ccr, username) => {
-                if let Some(win) = web_sys::window() {
-                    console::log!(format!("ccr -> {:?}", ccr).as_str());
+            (Demo::Waiting, AppMsg::BeginRegisterChallenge(ccr, username)) => {
+                let promise = utils::window()
+                    .navigator()
+                    .credentials()
+                    .create_with_options(&ccr)
+                    .expect("Unable to create promise");
+                let fut = JsFuture::from(promise);
 
-                    let promise = win
-                        .navigator()
-                        .credentials()
-                        .create_with_options(&ccr)
-                        .expect("Unable to create promise");
-                    let fut = JsFuture::from(promise);
-
-                    ctx.link().send_future(async {
-                        match fut.await {
-                            Ok(data) => AppMsg::CompleteRegisterChallenge(data, username),
-                            Err(e) => {
-                                console::log!(format!("error -> {:?}", e).as_str());
-                                AppMsg::DoNothing
-                            }
+                ctx.link().send_future(async {
+                    match fut.await {
+                        Ok(data) => AppMsg::CompleteRegisterChallenge(data, username),
+                        Err(e) => {
+                            console::log!(format!("error -> {:?}", e).as_str());
+                            AppMsg::Error(format!("error -> {:?}", e))
                         }
-                    });
-                } else {
-                    console::log!(format!("register failed for -> {:?}", self.username).as_str());
-                }
+                    }
+                });
+                Demo::Waiting
             }
-            AppMsg::CompleteRegisterChallenge(jsval, username) => {
+            (Demo::Waiting, AppMsg::CompleteRegisterChallenge(jsval, username)) => {
                 ctx.link().send_future(async {
                     match Self::register_complete(
                         web_sys::PublicKeyCredential::from(jsval),
@@ -368,22 +369,24 @@ impl Component for Demo {
                         Err(v) => v.into(),
                     }
                 });
+                Demo::Waiting
             }
             // Loggo
-            AppMsg::Login => {
-                console::log!(format!("login -> {:?}", self.username).as_str());
-                let username = self.username.clone();
+            (Demo::Login, AppMsg::Login) => {
+                let username = utils::get_value_from_element_id("username")
+                    .expect("No username");
+                console::log!(format!("login -> {:?}", username).as_str());
                 ctx.link().send_future(async {
                     match Self::login_begin(username).await {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }
                 });
+                Demo::Waiting
             }
-            AppMsg::BeginLoginChallenge(cro, username) => {
-                if let Some(win) = web_sys::window() {
+            (Demo::Waiting, AppMsg::BeginLoginChallenge(cro, username)) => {
                     console::log!(format!("cro -> {:?}", cro).as_str());
-                    let promise = win
+                    let promise = utils::window()
                         .navigator()
                         .credentials()
                         .get_with_options(&cro)
@@ -395,15 +398,13 @@ impl Component for Demo {
                             Ok(data) => AppMsg::CompleteLoginChallenge(data, username),
                             Err(e) => {
                                 console::log!(format!("error -> {:?}", e).as_str());
-                                AppMsg::DoNothing
+                                AppMsg::Error(format!("error -> {:?}", e))
                             }
                         }
                     });
-                } else {
-                    console::log!(format!("login failed for -> {:?}", self.username).as_str());
-                }
+                Demo::Waiting
             }
-            AppMsg::CompleteLoginChallenge(jsv, username) => {
+            (Demo::Waiting, AppMsg::CompleteLoginChallenge(jsv, username)) => {
                 ctx.link().send_future(async {
                     match Self::login_complete(web_sys::PublicKeyCredential::from(jsv), username)
                         .await
@@ -412,24 +413,36 @@ impl Component for Demo {
                         Err(v) => v.into(),
                     }
                 });
+                Demo::Waiting
+            }
+            (s, m) => {
+                let msg = format!("Invalid State Transition -> {:?}, {:?}", s, m);
+                console::log!(msg.as_str());
+                Demo::Error(Some(msg))
             }
         };
+        std::mem::swap(self, &mut state_change);
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
         match self {
             Demo::Waiting => {
+                html! {
+                  <main class="text-center form-signin h-100">
+                    <div class="vert-center">
+                      <h1>{ ". . ." }</h1>
+                    </div>
+                  </main>
+                }
+            }
+            Demo::Register => {
+                self.view_register(ctx)
+            }
+            Demo::Login => {
                 unimplemented!();
             }
-            Demo::Register { username } => {
-                let usernamec = username.clone();
-                self.view_register(ctx, usernamec)
-            }
-            Demo::Login { username } => {
-                unimplemented!();
-            }
-            Demo::Error { msg } => {
+            Demo::Error(msg) => {
                 unimplemented!();
             }
         }

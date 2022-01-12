@@ -24,6 +24,19 @@ pub enum Route {
     NotFound,
 }
 
+/*
+
+                <li class="nav-item">
+                  <Link<Route> classes={ classes!("nav-link", "active") } to={ Route::Demo }>{ "Demo" }</Link<Route>>
+                </li>
+                <li class="nav-item">
+                  <Link<Route> classes={ classes!("nav-link") } to={ Route::CompatTest }>{ "Compatability Test" }</Link<Route>>
+                </li>
+                <li class="nav-item">
+                  <Link<Route> classes={ classes!("nav-link") } to={ Route::UvInconsistent }>{ "Why is UV Discouraged Bad?" }</Link<Route>>
+                </li>
+*/
+
 #[function_component(Nav)]
 fn nav() -> Html {
     html! {
@@ -35,13 +48,13 @@ fn nav() -> Html {
                   <p class="navbar-brand">{ "Webauthn RS" }</p>
                 </li>
                 <li class="nav-item">
-                  <Link<Route> classes={ classes!("nav-link", "active") } to={ Route::Demo }>{ "Demo" }</Link<Route>>
+                  <a class="nav-link active" aria-current="page" href="/">{ "Demo" }</a>
                 </li>
                 <li class="nav-item">
-                  <Link<Route> classes={ classes!("nav-link") } to={ Route::CompatTest }>{ "Compatability Test" }</Link<Route>>
+                  <a class="nav-link" href="/compat_test">{ "Compatability Test" }</a>
                 </li>
                 <li class="nav-item">
-                  <Link<Route> classes={ classes!("nav-link") } to={ Route::UvInconsistent }>{ "Why is UV Discouraged Bad?" }</Link<Route>>
+                  <a class="nav-link" href="/uv_inconsistent">{ "Why is UV Discouraged Bad?" }</a>
                 </li>
               </ul>
             </div>

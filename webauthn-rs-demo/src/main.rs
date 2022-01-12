@@ -157,7 +157,6 @@ async fn main() -> tide::Result<()> {
     app.with(tide::log::LogMiddleware::new());
     // Serve our wasm content
     app.at("/pkg").serve_dir("pkg")?;
-    app.at("/").get(index_view);
     app.at("/challenge/register/:username")
         .post(challenge_register);
     app.at("/challenge/login/:username")
@@ -165,6 +164,8 @@ async fn main() -> tide::Result<()> {
     app.at("/register/:username")
         .post(register);
     app.at("/login/:username").post(login);
+    app.at("/").get(index_view);
+    app.at("/*").get(index_view);
 
     if opt.enable_tls {
         debug!("Starting with TLS ...");
