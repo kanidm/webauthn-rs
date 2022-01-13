@@ -3,6 +3,7 @@
 
 use crate::base64_data::Base64UrlSafeData;
 use crate::error::*;
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 
 #[cfg(feature = "wasm")]

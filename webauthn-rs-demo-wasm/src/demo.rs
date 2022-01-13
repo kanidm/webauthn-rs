@@ -1,6 +1,7 @@
 use crate::error::*;
 use crate::utils;
 
+use wasm_bindgen::UnwrapThrowExt;
 use gloo::console;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -11,6 +12,7 @@ use webauthn_rs::proto::{
     CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
     RequestChallengeResponse,
 };
+use webauthn_rs_demo_shared::ResponseError;
 use yew::prelude::*;
 
 #[derive(Debug)]
@@ -18,13 +20,13 @@ pub enum Demo {
     Waiting,
     Register,
     Login,
-    Error( Option<String> ),
+    LoginSuccess,
+    Error(String),
 }
 
 #[derive(Debug)]
 pub enum AppMsg {
     // This can probably go ...
-    // UserNameInput(String),
     Register,
     BeginRegisterChallenge(web_sys::CredentialCreationOptions, String),
     CompleteRegisterChallenge(JsValue, String),
@@ -34,12 +36,13 @@ pub enum AppMsg {
     CompleteLoginChallenge(JsValue, String),
     LoginSuccess,
     // Errors
-    Error(String),
+    Error(Option<String>),
+    ErrorCode(ResponseError),
 }
 
 impl From<FetchError> for AppMsg {
     fn from(fe: FetchError) -> Self {
-        AppMsg::Error(fe.as_string())
+        AppMsg::Error(Some(fe.as_string()))
     }
 }
 
@@ -58,18 +61,22 @@ impl Demo {
 
         let window = utils::window();
         let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-        let resp: Response = resp_value.dyn_into().unwrap();
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
         let status = resp.status();
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: CreationChallengeResponse = jsval.into_serde().unwrap();
+            let ccr: CreationChallengeResponse = jsval.into_serde().unwrap_throw();
             let c_options = ccr.into();
             Ok(AppMsg::BeginRegisterChallenge(c_options, username))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
         } else {
             let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "".to_string());
+            let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -100,15 +107,19 @@ impl Demo {
 
         let window = utils::window();
         let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-        let resp: Response = resp_value.dyn_into().unwrap();
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
         let status = resp.status();
 
         if status == 200 {
             Ok(AppMsg::RegisterSuccess)
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
         } else {
             let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "".to_string());
+            let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -127,18 +138,22 @@ impl Demo {
 
         let window = utils::window();
         let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-        let resp: Response = resp_value.dyn_into().unwrap();
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
         let status = resp.status();
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: RequestChallengeResponse = jsval.into_serde().unwrap();
+            let ccr: RequestChallengeResponse = jsval.into_serde().unwrap_throw();
             let c_options = ccr.into();
             Ok(AppMsg::BeginLoginChallenge(c_options, username))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
         } else {
             let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "".to_string());
+            let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -169,15 +184,19 @@ impl Demo {
 
         let window = utils::window();
         let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
-        let resp: Response = resp_value.dyn_into().unwrap();
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
         let status = resp.status();
 
         if status == 200 {
             Ok(AppMsg::LoginSuccess)
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
         } else {
             let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "".to_string());
+            let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -200,17 +219,25 @@ impl Demo {
                     </div>
                     <main class="text-center form-signin">
                       <h3 class="h3 mb-3 fw-normal">{ "Register a Webauthn Credential" }</h3>
-                      <div class="form-floating">
-                        <input id="username" type="text" class="form-control" value="" />
-                        <label for="username">{ "Username" }</label>
-                      </div>
-                      <button type="button" class="btn btn-lg btn-secondary" data-bs-toggle="modal" data-bs-target="#exampleModalDefault">
-                        { "Change Webauthn Settings" }
-                      </button>
-                      <button class="btn btn-lg btn-primary"
-                          onclick={ ctx.link().callback(|_| AppMsg::Register) }>
-                          { "Begin Registration" }
-                      </button>
+                      <form
+                            onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                            console::log!("prevent_default()");
+                            e.prevent_default();
+                            AppMsg::Register
+                        } ) }
+                        action="javascript:void(0);"
+                      >
+                        <div class="form-floating">
+                          <input id="autofocus" type="text" class="form-control" value="" />
+                          <label for="autofocus">{ "Username" }</label>
+                        </div>
+                        <button type="button" class="btn btn-lg btn-secondary" data-bs-toggle="modal" data-bs-target="#exampleModalDefault">
+                          { "Change Webauthn Settings" }
+                        </button>
+                        <button class="btn btn-lg btn-primary" type="submit">
+                            { "Begin Registration" }
+                        </button>
+                      </form>
                     </main>
 
                     <div class="modal fade" id="exampleModalDefault" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
@@ -221,7 +248,6 @@ impl Demo {
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                           </div>
                           <div class="modal-body">
-            
                       <div class="container-fluid">
                         <div class="row">
                     <p>
@@ -299,6 +325,103 @@ impl Demo {
                   </>
                 }
     }
+
+    fn view_login(&self, ctx: &Context<Self>) -> Html {
+        html! {
+          <>
+            <div class="form-description">
+              <div>
+                <p>
+                  { "Now try to authenticate! See what happens if you change the username or use a different credential" }
+                </p>
+              </div>
+            </div>
+            <main class="text-center form-signin">
+              <h3 class="h3 mb-3 fw-normal">{ "Authenticate with Webauthn" }</h3>
+              <form
+                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                    console::log!("prevent_default()");
+                    e.prevent_default();
+                    AppMsg::Login
+                } ) }
+                action="javascript:void(0);"
+              >
+                <div class="form-floating">
+                  <input id="autofocus" type="text" class="form-control" value="" />
+                  <label for="autofocus">{ "Username" }</label>
+                </div>
+                <button class="btn btn-lg btn-primary" type="submit">
+                    { "Authenticate" }
+                </button>
+              </form>
+            </main>
+          </>
+        }
+    }
+
+    fn view_login_success(&self, ctx: &Context<Self>) -> Html {
+        html! {
+          <>
+            <div class="form-description">
+              <div>
+                <h3>
+                  {" Success! 🎉 " }
+                </h3>
+                <p>
+                  { "See what happens if you use a different username, or a different credential" }
+                </p>
+                <p>
+                  { "Or you can go back and register new credentials to see how they work" }
+                </p>
+              </div>
+            </div>
+            <main class="text-center form-signin">
+              <h3 class="h3 mb-3 fw-normal">{ "Authenticate with Webauthn" }</h3>
+              <form
+                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                    console::log!("prevent_default()");
+                    e.prevent_default();
+                    AppMsg::Login
+                } ) }
+                action="javascript:void(0);"
+              >
+                <div class="form-floating">
+                  <input id="autofocus" type="text" class="form-control" value="" />
+                  <label for="autofocus">{ "Username" }</label>
+                </div>
+              <button class="btn btn-lg btn-secondary"
+                  onclick={ ctx.link().callback(|_| AppMsg::Register) }>
+                  { "Back to Register" }
+              </button>
+                <button class="btn btn-lg btn-primary" type="submit">
+                    { "Authenticate" }
+                </button>
+              </form>
+            </main>
+          </>
+        }
+    }
+
+    fn view_error(&self, ctx: &Context<Self>, msg: &str) -> Html {
+        html! {
+          <>
+            <div class="form-description">
+              <div>
+                <h3>
+                  {" Error! 🥺 " }
+                </h3>
+                <p>{ msg }</p>
+              </div>
+            </div>
+            <main class="text-center form-signin">
+              <button class="btn btn-lg btn-primary"
+                  onclick={ ctx.link().callback(|_| AppMsg::Register) }>
+                  { "Back to Register" }
+              </button>
+            </main>
+          </>
+        }
+    }
 }
 
 impl Component for Demo {
@@ -316,19 +439,26 @@ impl Component for Demo {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let mut state_change = match (&self, msg) {
-            (_, AppMsg::Error(msg)) => {
+            (_, AppMsg::Error(None)) => {
+                let msg = "No error message available".to_string();
+                console::log!(&msg);
+                Demo::Error(msg)
+            }
+            (_, AppMsg::Error(Some(msg))) => {
                 console::log!(format!("fetch task error -> {:?}", msg).as_str());
-                Demo::Error( Some(msg) )
+                Demo::Error(msg)
             }
-            /*
-            AppMsg::UserNameInput(mut username) => {
-                std::mem::swap(&mut self.username, &mut username);
+            (_, AppMsg::ErrorCode(e_code)) => {
+                let msg = format!("{:?}", e_code);
+                console::log!(&msg);
+                Demo::Error(msg)
             }
-            */
             // Rego
             (Demo::Register, AppMsg::Register) => {
-                let username = utils::get_value_from_element_id("username")
+                let username = utils::get_value_from_element_id("autofocus")
                     .expect("No username");
+                // Build the settings that we'll be using.
+
                 console::log!(format!("register -> {:?}", username).as_str());
                 ctx.link().send_future(async {
                     match Self::register_begin(username).await {
@@ -337,6 +467,9 @@ impl Component for Demo {
                     }
                 });
                 Demo::Waiting
+            }
+            (_, AppMsg::Register) => {
+                Demo::Register
             }
             (Demo::Waiting, AppMsg::BeginRegisterChallenge(ccr, username)) => {
                 let promise = utils::window()
@@ -351,7 +484,7 @@ impl Component for Demo {
                         Ok(data) => AppMsg::CompleteRegisterChallenge(data, username),
                         Err(e) => {
                             console::log!(format!("error -> {:?}", e).as_str());
-                            AppMsg::Error(format!("error -> {:?}", e))
+                            AppMsg::Error(Some(format!("error -> {:?}", e)))
                         }
                     }
                 });
@@ -371,9 +504,13 @@ impl Component for Demo {
                 });
                 Demo::Waiting
             }
+            (Demo::Waiting, AppMsg::RegisterSuccess) => {
+                Demo::Login
+            }
             // Loggo
+            (Demo::LoginSuccess, AppMsg::Login) |
             (Demo::Login, AppMsg::Login) => {
-                let username = utils::get_value_from_element_id("username")
+                let username = utils::get_value_from_element_id("autofocus")
                     .expect("No username");
                 console::log!(format!("login -> {:?}", username).as_str());
                 ctx.link().send_future(async {
@@ -398,7 +535,7 @@ impl Component for Demo {
                             Ok(data) => AppMsg::CompleteLoginChallenge(data, username),
                             Err(e) => {
                                 console::log!(format!("error -> {:?}", e).as_str());
-                                AppMsg::Error(format!("error -> {:?}", e))
+                                AppMsg::Error(Some(format!("error -> {:?}", e)))
                             }
                         }
                     });
@@ -415,10 +552,13 @@ impl Component for Demo {
                 });
                 Demo::Waiting
             }
+            (Demo::Waiting, AppMsg::LoginSuccess) => {
+                Demo::LoginSuccess
+            }
             (s, m) => {
                 let msg = format!("Invalid State Transition -> {:?}, {:?}", s, m);
                 console::log!(msg.as_str());
-                Demo::Error(Some(msg))
+                Demo::Error(msg)
             }
         };
         std::mem::swap(self, &mut state_change);
@@ -440,20 +580,20 @@ impl Component for Demo {
                 self.view_register(ctx)
             }
             Demo::Login => {
-                unimplemented!();
+                self.view_login(ctx)
+            }
+            Demo::LoginSuccess => {
+                self.view_login_success(ctx)
             }
             Demo::Error(msg) => {
-                unimplemented!();
+                self.view_error(ctx, &msg)
             }
         }
     }
+
+        fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
+                crate::utils::autofocus("autofocus");
+                        console::log!("oauth2::rendered");
+                            }
 }
 
-/*
-<div>
-    <input id="username" type="text" class="form-control" value={ username }
-        oninput={ ctx.link().callback(|e: InputEvent| AppMsg::UserNameInput(utils::get_value_from_input_event(e))) } />
-    <button type="button" class="btn btn-dark" onclick={ ctx.link().callback(|_| AppMsg::Register) }>{" Register "}</button>
-    <button type="button" class="btn btn-dark" onclick={ ctx.link().callback(|_| AppMsg::Login) }>{" Login "}</button>
-</div>
-*/

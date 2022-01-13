@@ -16,6 +16,7 @@
 #![warn(missing_docs)]
 
 use rand::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 use crate::attestation::{

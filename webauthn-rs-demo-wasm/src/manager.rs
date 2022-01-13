@@ -5,7 +5,7 @@ use yew_router::prelude::*;
 
 use crate::compat::CompatTest;
 use crate::demo::Demo;
-use crate::uv::UvInconsistent;
+// use crate::uv::UvInconsistent;
 
 // router to decide on state.
 #[derive(Routable, PartialEq, Clone, Debug)]
@@ -16,8 +16,8 @@ pub enum Route {
     #[at("/compat_test")]
     CompatTest,
 
-    #[at("/uv_inconsistent")]
-    UvInconsistent,
+    // #[at("/uv_inconsistent")]
+    // UvInconsistent,
 
     #[not_found]
     #[at("/404")]
@@ -25,20 +25,23 @@ pub enum Route {
 }
 
 /*
-
                 <li class="nav-item">
-                  <Link<Route> classes={ classes!("nav-link", "active") } to={ Route::Demo }>{ "Demo" }</Link<Route>>
-                </li>
-                <li class="nav-item">
-                  <Link<Route> classes={ classes!("nav-link") } to={ Route::CompatTest }>{ "Compatability Test" }</Link<Route>>
-                </li>
-                <li class="nav-item">
-                  <Link<Route> classes={ classes!("nav-link") } to={ Route::UvInconsistent }>{ "Why is UV Discouraged Bad?" }</Link<Route>>
+                  <Link<Route> classes={
+                    if matches!(cur_route, Some(Route::UvInconsistent)) {
+                        classes!("nav-link", "active")
+                    } else {
+                        classes!("nav-link")
+                    }
+                  } to={ Route::UvInconsistent }>{ "Why is UV Discouraged Bad?" }</Link<Route>>
                 </li>
 */
 
 #[function_component(Nav)]
 fn nav() -> Html {
+
+    let location = use_location().expect("unable to access location");
+    let cur_route = location.route();
+
     html! {
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
           <div class="container-fluid">
@@ -48,13 +51,22 @@ fn nav() -> Html {
                   <p class="navbar-brand">{ "Webauthn RS" }</p>
                 </li>
                 <li class="nav-item">
-                  <a class="nav-link active" aria-current="page" href="/">{ "Demo" }</a>
+                  <Link<Route> classes={
+                    if matches!(cur_route, Some(Route::Demo)) {
+                        classes!("nav-link", "active")
+                    } else {
+                        classes!("nav-link")
+                    }
+                  } to={ Route::Demo }>{ "Demo" }</Link<Route>>
                 </li>
                 <li class="nav-item">
-                  <a class="nav-link" href="/compat_test">{ "Compatability Test" }</a>
-                </li>
-                <li class="nav-item">
-                  <a class="nav-link" href="/uv_inconsistent">{ "Why is UV Discouraged Bad?" }</a>
+                  <Link<Route> classes={
+                    if matches!(cur_route, Some(Route::CompatTest)) {
+                        classes!("nav-link", "active")
+                    } else {
+                        classes!("nav-link")
+                    }
+                  } to={ Route::CompatTest }>{ "Compatability Test" }</Link<Route>>
                 </li>
               </ul>
             </div>
@@ -68,7 +80,7 @@ fn switch(routes: &Route) -> Html {
     match routes {
         Route::Demo => html! { <Demo /> },
         Route::CompatTest => html! { <CompatTest /> },
-        Route::UvInconsistent => html! { <UvInconsistent /> },
+        // Route::UvInconsistent => html! { <UvInconsistent /> },
         Route::NotFound => {
             html! {
                 <>
@@ -110,8 +122,8 @@ impl Component for ManagerApp {
     fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
           <div class="w-100 h-100">
-            <Nav />
             <BrowserRouter>
+                <Nav />
                 <Switch<Route> render={ Switch::render(switch) } />
             </BrowserRouter>
           </div>

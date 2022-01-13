@@ -9,6 +9,7 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared" }
 webauthn-rs = { path = "../webauthn-rs", default-features = false, features = ["wasm"] }
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
 wasm-bindgen-futures = { version = "0.4" }
