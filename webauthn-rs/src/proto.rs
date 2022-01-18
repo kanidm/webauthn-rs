@@ -390,21 +390,17 @@ pub enum UserVerificationPolicy {
     /// if false. If the authenticator is not able to perform verification, it may not be
     /// usable with this policy.
     Required,
-    /// Prefer User Verification bit to be set if possible - if not the credential will
-    /// be considered "unverified". We STRONGLY DISCOURAGE you from using this value, as
-    /// it *can* easily lead to inconistent states and unclear verification policies around
-    /// credentials. You *should* use either `Required` or `Discouraged` to clearly
-    /// request your requirements.
+    /// TO FILL IN
     #[serde(rename = "preferred")]
-    Preferred_DO_NOT_USE,
-    /// Request that no verification is performed, and fail if it is. This is intended to
-    /// minimise user interaction in workflows, but is potentially a security risk to use.
-    Discouraged,
+    Preferred,
+    /// TO FILL IN
+    #[serde(rename = "discouraged")]
+    Discouraged_DO_NOT_USE,
 }
 
 impl Default for UserVerificationPolicy {
     fn default() -> Self {
-        UserVerificationPolicy::Discouraged
+        UserVerificationPolicy::Preferred
     }
 }
 
@@ -726,7 +722,7 @@ impl RequestRegistrationExtensionsBuilder {
 ///
 /// Implements the registration bits of \[AuthenticatorExtensionsClientOutputs\]
 /// from the spec
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistrationSignedExtensions {
     /// The `credProtect` extension
@@ -739,7 +735,7 @@ pub struct RegistrationSignedExtensions {
 ///
 /// Implements the authentication bits of
 /// \[AuthenticationExtensionsClientOutputs] from the spec
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticationSignedExtensions {
     /// The credBlob extension
@@ -1094,7 +1090,7 @@ pub struct AuthenticatorData<T: Ceremony> {
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
-    pub(crate) extensions: Option<T::SignedExtensions>,
+    pub extensions: Option<T::SignedExtensions>,
 }
 
 /// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData

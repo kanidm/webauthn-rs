@@ -125,6 +125,9 @@ impl Demo {
         let status = resp.status();
 
         if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let rs: RegistrationSuccess = jsval.into_serde().unwrap_throw();
+            console::log!(format!("rs -> {:?}", rs).as_str());
             Ok(AppMsg::RegisterSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
@@ -208,6 +211,9 @@ impl Demo {
         let status = resp.status();
 
         if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let aus: AuthenticationSuccess = jsval.into_serde().unwrap_throw();
+            console::log!(format!("aus -> {:?}", aus).as_str());
             Ok(AppMsg::LoginSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
@@ -504,7 +510,7 @@ impl Component for Demo {
                     .map(|v| if v {
                         UserVerificationPolicy::Required
                     } else {
-                        UserVerificationPolicy::Preferred_DO_NOT_USE
+                        UserVerificationPolicy::default()
                     });
 
                 let es256_req = utils::get_checked_from_element_id("algorithm_es256")

@@ -85,16 +85,26 @@ impl WebauthnActor {
         &self,
         username: &String,
         creds: Vec<Credential>,
+        auth_settings: AuthenticateWithSettings,
     ) -> WebauthnResult<(RequestChallengeResponse, AuthenticationState)> {
         debug!("handle ChallengeAuthenticate -> {:?}", username);
 
+        /*
+        let AuthenticateWithSettings {
+            uv,
+            extensions
+        } = auth_settings;
+        */
+
+        /*
         let exts = RequestAuthenticationExtensions::builder()
             .get_cred_blob(true)
             .build();
+        */
 
         let (acr, st) = self
             .base_wan
-            .generate_challenge_authenticate_options(creds, Some(exts))?;
+            .generate_challenge_authenticate_options(creds, None)?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok((acr, st))
@@ -124,7 +134,11 @@ impl WebauthnActor {
         lgn: &PublicKeyCredential,
         st: AuthenticationState,
         mut creds: Vec<Credential>,
-    ) -> WebauthnResult<(Vec<Credential>, AuthenticatorData<Authentication>)> {
+    ) -> WebauthnResult<(
+        Vec<Credential>,
+        CredentialID,
+        AuthenticatorData<Authentication>,
+    )> {
         debug!(
             "handle Authenticate -> (username: {:?}, lgn: {:?})",
             username, lgn
@@ -140,7 +154,7 @@ impl WebauthnActor {
                     .iter_mut()
                     .filter(|cred| &cred.cred_id == cred_id)
                     .for_each(|cred| cred.counter = auth_data.counter);
-                (creds, auth_data)
+                (creds, cred_id.clone(), auth_data)
             });
         debug!("complete Authenticate -> {:?}", r);
         r

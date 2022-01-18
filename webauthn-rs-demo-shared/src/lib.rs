@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 use webauthn_rs::error::WebauthnError;
 
 pub use webauthn_rs::proto::{
-    AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
+    AttestationConveyancePreference, AuthenticationSignedExtensions, AuthenticatorAttachment,
+    COSEAlgorithm, Credential, CredentialID, RegistrationSignedExtensions,
     RequestAuthenticationExtensions, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
@@ -13,6 +14,14 @@ pub struct RegisterWithSettings {
     pub attestation: Option<AttestationConveyancePreference>,
     pub attachment: Option<AuthenticatorAttachment>,
     pub extensions: Option<RequestRegistrationExtensions>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RegistrationSuccess {
+    pub cred: Credential,
+    pub uv: bool,
+    pub counter: u32,
+    pub extensions: RegistrationSignedExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -28,6 +37,14 @@ impl From<&RegisterWithSettings> for AuthenticateWithSettings {
 
         AuthenticateWithSettings { uv, extensions }
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuthenticationSuccess {
+    pub cred_id: CredentialID,
+    pub uv: bool,
+    pub counter: u32,
+    pub extensions: AuthenticationSignedExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

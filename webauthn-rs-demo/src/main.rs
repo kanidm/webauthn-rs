@@ -148,7 +148,7 @@ async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
 
     let actor_res = request
         .state()
-        .challenge_authenticate(&username, creds)
+        .challenge_authenticate(&username, creds, auth_settings)
         .await;
 
     let session = request.session_mut();
@@ -205,7 +205,7 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
     let res = match actor_res {
         Ok((cred, auth_data)) => {
             // TODO make this a fn call back for cred exist
-            creds.push(cred);
+            creds.push(cred.clone());
             cred_map.insert(username, creds);
             // Set the credmap back
             request
@@ -217,7 +217,18 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
                 request.session().get_raw("cred_map")
             );
 
-            tide::Response::new(tide::StatusCode::Ok)
+            let reg_response = RegistrationSuccess {
+                cred,
+                uv: auth_data.user_verified,
+                counter: auth_data.counter,
+                extensions: auth_data
+                    .extensions
+                    .unwrap_or_else(|| RegistrationSignedExtensions::default()),
+            };
+
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&reg_response)?)
+                .build()
         }
         Err(e) => {
             debug!("register -> {:?}", e);
@@ -271,14 +282,26 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
         .authenticate(&username_copy, &lgn, st, creds)
         .await
     {
-        Ok((creds, auth_data)) => {
+        Ok((creds, cred_id, auth_data)) => {
             cred_map.insert(username, creds);
             // Set the credmap back
             request
                 .session_mut()
                 .insert("cred_map", cred_map)
                 .expect("Failed to insert");
-            tide::Response::new(tide::StatusCode::Ok)
+
+            let auth_response = AuthenticationSuccess {
+                cred_id: cred_id,
+                uv: auth_data.user_verified,
+                counter: auth_data.counter,
+                extensions: auth_data
+                    .extensions
+                    .unwrap_or_else(|| AuthenticationSignedExtensions::default()),
+            };
+
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&auth_response)?)
+                .build()
         }
         Err(e) => {
             debug!("login -> {:?}", e);

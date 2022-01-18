@@ -115,7 +115,8 @@ impl<T> Webauthn<T> {
         let policy = if user_verification_required {
             Some(UserVerificationPolicy::Required)
         } else {
-            Some(UserVerificationPolicy::Discouraged)
+            // I'm so mad about ctap2.0 you have no idea.
+            Some(UserVerificationPolicy::Preferred)
         };
         self.generate_challenge_register_options(
             user_name.as_bytes().to_vec(),
@@ -151,10 +152,10 @@ impl<T> Webauthn<T> {
     {
         // Technically this goes against the standard. But it's the correct
         // thing to do if no policy was requested.
-        let policy = policy.unwrap_or(UserVerificationPolicy::Discouraged);
+        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
 
-        if policy == UserVerificationPolicy::Preferred_DO_NOT_USE {
-            warn!("UserVerificationPolicy::Preferred_DO_NOT_USE is misleading! You should select Discouraged or Required!");
+        if policy == UserVerificationPolicy::Discouraged_DO_NOT_USE {
+            warn!("UserVerificationPolicy::Discouraged_DO_NOT_USE is misleading! You should select Preferred or Required!");
         }
 
         if user_id.is_empty() {
@@ -370,14 +371,11 @@ impl<T> Webauthn<T> {
 
         // If user verification is required for this registration, verify that the User Verified bit
         // of the flags in authData is set.
-        match policy {
-            UserVerificationPolicy::Required => {
-                if !data.attestation_object.auth_data.user_verified {
-                    return Err(WebauthnError::UserNotVerified);
-                }
-            }
-            UserVerificationPolicy::Preferred_DO_NOT_USE | UserVerificationPolicy::Discouraged => {}
-        };
+        if matches!(policy, UserVerificationPolicy::Required)
+            && !data.attestation_object.auth_data.user_verified
+        {
+            return Err(WebauthnError::UserNotVerified);
+        }
 
         // Verify that the "alg" parameter in the credential public key in authData matches the alg
         // attribute of one of the items in options.pubKeyCredParams.
@@ -632,21 +630,18 @@ impl<T> Webauthn<T> {
         // We also check the historical policy too. See designs/authentication-use-cases.md
 
         match (&policy, &cred.registration_policy) {
-            (UserVerificationPolicy::Required, _) => {
-                // If we requested required, enforce that.
+            (_, UserVerificationPolicy::Required) | (UserVerificationPolicy::Required, _) => {
+                // If we requested required at registration or now, enforce that.
                 if !data.authenticator_data.user_verified {
                     return Err(WebauthnError::UserNotVerified);
                 }
             }
-            (_, UserVerificationPolicy::Discouraged) => {
-                // If this token always verifies, even under discouraged, we can enforce that behaviour
-                // from registration.
-                if cred.verified && self.config.get_require_uv_consistency() {
-                    // This token always sends UV, so we enforce that.
-                    if !data.authenticator_data.user_verified {
-                        debug!("Token registered UV=true with DC, enforcing UV policy.");
-                        return Err(WebauthnError::UserNotVerified);
-                    }
+            (_, UserVerificationPolicy::Preferred) => {
+                // If we asked for Preferred at registration, we MAY have established to the user
+                // that they are required to enter a pin, so we SHOULD enforce this.
+                if cred.verified && !data.authenticator_data.user_verified {
+                    debug!("Token registered UV=preferred, enforcing UV policy.");
+                    return Err(WebauthnError::UserNotVerified);
                 }
             }
             // Pass - we can not know if verification was requested to the client in the past correctly.
@@ -785,7 +780,7 @@ impl<T> Webauthn<T> {
             ),
             (0, _) => self.generate_challenge_authenticate_inner(
                 unverified,
-                UserVerificationPolicy::Discouraged,
+                UserVerificationPolicy::Preferred,
                 extensions,
             ),
             (_, _) => Err(WebauthnError::InconsistentUserVerificationPolicy),
@@ -1052,22 +1047,6 @@ pub trait WebauthnConfig {
         false
     }
 
-    /// Enforce that the UV bit as set at registration is the same during authentication.
-    /// This applies to certain classes of authenticators that if registered with
-    /// userVerification::Discouraged, will still perform and enforce that userVerification
-    /// is true.
-    ///
-    /// For these authenticators, since they *always* enforce userVerification, we can use this
-    /// as an extra security check, and continue to enforce that they provide user verification
-    /// in all subsequent authentication operations.
-    ///
-    /// Defaults to true.
-    ///
-    /// If in doubt, you should leave this as the default (true).
-    fn get_require_uv_consistency(&self) -> bool {
-        true
-    }
-
     /// If the attestation format is not supported, should we ignore verifying the attestation
     fn ignore_unsupported_attestation_formats(&self) -> bool {
         false
@@ -1190,9 +1169,10 @@ mod tests {
         // Now register, providing our fake challenge.
         let result = wan.register_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            UserVerificationPolicy::Preferred,
             &zero_chal,
             &[],
+            &[COSEAlgorithm::ES256],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1227,9 +1207,10 @@ mod tests {
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
         let result = wan.register_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            UserVerificationPolicy::Preferred,
             chal.as_ref(),
             &[],
+            &[COSEAlgorithm::ES256],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1264,9 +1245,10 @@ mod tests {
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
         let result = wan.register_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            UserVerificationPolicy::Preferred,
             &chal,
             &[],
+            &[COSEAlgorithm::ES256],
         );
         assert!(result.is_ok());
     }
@@ -1299,8 +1281,13 @@ mod tests {
 
         println!("{:?}", rsp_d);
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1347,7 +1334,7 @@ mod tests {
                 }),
             },
             verified: false,
-            registration_policy: UserVerificationPolicy::Discouraged,
+            registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
         };
 
         // Persist it to our fake db.
@@ -1372,7 +1359,7 @@ mod tests {
         // Now verify it!
         let r = wan.verify_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Discouraged,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
             &zero_chal,
             &cred,
             &None,
@@ -1402,7 +1389,7 @@ mod tests {
         // Now verify it, as the RPID is valid, the appid should be ignored
         let r = wan.verify_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Discouraged,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
             &zero_chal,
             &cred,
             &Some(String::from("https://unused.local")),
@@ -1451,7 +1438,7 @@ mod tests {
                 }),
             },
             verified: false,
-            registration_policy: UserVerificationPolicy::Discouraged,
+            registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
         };
 
         // Persist it to our fake db.
@@ -1478,7 +1465,7 @@ mod tests {
         // Now verify it!
         let r = wan.verify_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Discouraged,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
             &zero_chal,
             &cred,
             &Some(String::from("https://testing.local/app-id.json")),
@@ -1507,7 +1494,7 @@ mod tests {
         // This will verify against the RPID while the client provided an appid, so it should fail
         let r = wan.verify_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Discouraged,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
             &zero_chal,
             &cred,
             &None,
@@ -1550,9 +1537,10 @@ mod tests {
 
         let result = wan.register_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Preferred_DO_NOT_USE,
+            UserVerificationPolicy::Preferred,
             &chal,
             &[],
+            &[COSEAlgorithm::ES256],
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1568,8 +1556,24 @@ mod tests {
         let _ = tracing_subscriber::fmt().try_init();
         let wan = Webauthn::new(wan_c);
 
-        let result =
-            wan.register_credential_internal(rsp_d, UserVerificationPolicy::Required, &chal, &[]);
+        let result = wan.register_credential_internal(
+            rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[
+                COSEAlgorithm::ES256,
+                COSEAlgorithm::ES384,
+                COSEAlgorithm::ES512,
+                COSEAlgorithm::RS256,
+                COSEAlgorithm::RS384,
+                COSEAlgorithm::RS512,
+                COSEAlgorithm::PS256,
+                COSEAlgorithm::PS384,
+                COSEAlgorithm::PS512,
+                COSEAlgorithm::EDDSA,
+            ],
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -1637,8 +1641,13 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::RS256],
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
@@ -1993,8 +2002,13 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        let result =
-            wan.register_credential_internal(&rsp_d, UserVerificationPolicy::Required, &chal, &[]);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::RS256],
+        );
         println!("{:?}", result);
         assert!(result.is_ok());
     }
@@ -2178,7 +2192,7 @@ mod tests {
                 },
                 counter: 0,
                 verified: false,
-                registration_policy: UserVerificationPolicy::Discouraged,
+                registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             },
             Credential {
                 cred_id: vec![
@@ -2249,7 +2263,7 @@ mod tests {
                 .get_mut(0)
                 .map(|cred| {
                     cred.verified = true;
-                    cred.registration_policy = UserVerificationPolicy::Discouraged;
+                    cred.registration_policy = UserVerificationPolicy::Discouraged_DO_NOT_USE;
                     ()
                 })
                 .unwrap();
@@ -2257,7 +2271,7 @@ mod tests {
                 .get_mut(1)
                 .map(|cred| {
                     cred.verified = false;
-                    cred.registration_policy = UserVerificationPolicy::Discouraged;
+                    cred.registration_policy = UserVerificationPolicy::Discouraged_DO_NOT_USE;
                     ()
                 })
                 .unwrap();
@@ -2372,7 +2386,13 @@ mod tests {
         };
 
         let cred = wan
-            .register_credential_internal(&rsp_d, UserVerificationPolicy::Discouraged, &chal, &[])
+            .register_credential_internal(
+                &rsp_d,
+                UserVerificationPolicy::Discouraged_DO_NOT_USE,
+                &chal,
+                &[],
+                &[COSEAlgorithm::ES256],
+            )
             .expect("Failed to register credential");
 
         // In this we visit from "https://sub.idm.example.com:8080" which is an effective domain
@@ -2418,7 +2438,7 @@ mod tests {
 
         let r = wan.verify_credential_internal(
             &rsp_d,
-            UserVerificationPolicy::Discouraged,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
             &chal,
             &cred.0,
             &None,
