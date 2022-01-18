@@ -1,48 +1,80 @@
+use crate::config::{WebauthnAuthConfig, WebauthnRegistrationConfig};
+use url::Url;
 use webauthn_rs::error::WebauthnError;
 use webauthn_rs::proto::{
     Authentication, AuthenticatorData, CreationChallengeResponse, Credential, CredentialID,
     PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
     UserId,
 };
-use webauthn_rs::{
-    ephemeral::WebauthnEphemeralConfig,
-    proto::{RequestAuthenticationExtensions, RequestRegistrationExtensions},
-};
+use webauthn_rs::proto::{RequestAuthenticationExtensions, RequestRegistrationExtensions};
 use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
+use webauthn_rs_demo_shared::*;
 
 type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
 
 pub struct WebauthnActor {
-    wan: Webauthn<WebauthnEphemeralConfig>,
-    // reg_chals: Mutex<LruCache<UserId, RegistrationState>>,
-    // auth_chals: Mutex<LruCache<UserId, AuthenticationState>>,
-    // creds: Mutex<BTreeMap<UserId, BTreeMap<CredentialID, Credential>>>,
+    pub rp_name: String,
+    pub rp_id: String,
+    pub rp_origin: Url,
+    base_wan: Webauthn<WebauthnAuthConfig>,
 }
 
 impl WebauthnActor {
-    pub fn new(config: WebauthnEphemeralConfig) -> Self {
+    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
+        let rp_name = rp_name.to_string();
+        let rp_id = rp_id.to_string();
+        let rp_origin = Url::parse(rp_origin).expect("Failed to parse origin");
+        let base_wan = Webauthn::new(WebauthnAuthConfig {
+            rp_name: rp_name.clone(),
+            rp_id: rp_id.clone(),
+            rp_origin: rp_origin.clone(),
+        });
         WebauthnActor {
-            wan: Webauthn::new(config),
+            rp_name,
+            rp_id,
+            rp_origin,
+            base_wan,
         }
     }
 
     pub async fn challenge_register(
         &self,
         username: String,
+        reg_settings: RegisterWithSettings,
     ) -> WebauthnResult<(CreationChallengeResponse, RegistrationState)> {
         debug!("handle ChallengeRegister -> {:?}", username);
 
+        let RegisterWithSettings {
+            uv,
+            attachment,
+            algorithm,
+            attestation,
+            extensions,
+        } = reg_settings;
+
+        let wan = Webauthn::new(WebauthnRegistrationConfig {
+            rp_name: self.rp_name.clone(),
+            rp_id: self.rp_id.clone(),
+            rp_origin: self.rp_origin.clone(),
+            attachment,
+            algorithms: algorithm
+                .unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
+            attestation: attestation.unwrap_or(AttestationConveyancePreference::None),
+        });
+
+        /*
         let exts = RequestRegistrationExtensions::builder()
             .cred_blob(vec![0xde, 0xad, 0xbe, 0xef])
             .build();
+        */
 
-        let (ccr, rs) = self.wan.generate_challenge_register_options(
+        let (ccr, rs) = wan.generate_challenge_register_options(
             username.as_bytes().to_vec(),
             username.to_string(),
             username.to_string(),
             None,
             Some(webauthn_rs::proto::UserVerificationPolicy::Discouraged),
-            Some(exts),
+            None,
         )?;
 
         debug!("complete ChallengeRegister -> {:?}", ccr);
@@ -61,7 +93,7 @@ impl WebauthnActor {
             .build();
 
         let (acr, st) = self
-            .wan
+            .base_wan
             .generate_challenge_authenticate_options(creds, Some(exts))?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);
@@ -81,7 +113,7 @@ impl WebauthnActor {
 
         let username = username.as_bytes().to_vec();
 
-        let r = self.wan.register_credential(reg, &rs, |_| Ok(false));
+        let r = self.base_wan.register_credential(reg, &rs, |_| Ok(false));
         debug!("complete Register -> {:?}", r);
         r
     }
@@ -101,7 +133,7 @@ impl WebauthnActor {
         let username = username.as_bytes().to_vec();
 
         let r = self
-            .wan
+            .base_wan
             .authenticate_credential(lgn, &st)
             .map(|(cred_id, auth_data)| {
                 creds

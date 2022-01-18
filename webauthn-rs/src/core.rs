@@ -36,6 +36,7 @@ pub struct RegistrationState {
     policy: UserVerificationPolicy,
     exclude_credentials: Vec<CredentialID>,
     challenge: Base64UrlSafeData,
+    credential_algorithms: Vec<COSEAlgorithm>,
 }
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
@@ -57,7 +58,7 @@ impl AuthenticationState {
 
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
-/// * generate_challenge_response
+/// * generate_challenge_register
 /// * register_credential
 /// * generate_challenge_authenticate
 /// * authenticate_credential
@@ -162,6 +163,8 @@ impl<T> Webauthn<T> {
 
         let challenge = self.generate_challenge();
 
+        let credential_algorithms = self.config.get_credential_algorithms().clone();
+
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
@@ -174,13 +177,11 @@ impl<T> Webauthn<T> {
                     display_name: user_display_name,
                 },
                 challenge: challenge.clone().into(),
-                pub_key_cred_params: self
-                    .config
-                    .get_credential_algorithms()
-                    .into_iter()
+                pub_key_cred_params: credential_algorithms
+                    .iter()
                     .map(|alg| PubKeyCredParams {
                         type_: "public-key".to_string(),
-                        alg: alg as i64,
+                        alg: *alg as i64,
                     })
                     .collect(),
                 timeout: Some(self.config.get_authenticator_timeout()),
@@ -205,6 +206,7 @@ impl<T> Webauthn<T> {
             policy,
             exclude_credentials: exclude_credentials.unwrap_or_else(|| Vec::with_capacity(0)),
             challenge: challenge.into(),
+            credential_algorithms,
         };
 
         // This should have an opaque type of username + chal + policy
@@ -237,6 +239,7 @@ impl<T> Webauthn<T> {
             policy,
             exclude_credentials,
             challenge,
+            credential_algorithms,
         } = state;
         let chal: &ChallengeRef = challenge.into();
 
@@ -244,8 +247,13 @@ impl<T> Webauthn<T> {
         // create the linkage between the username and the state.
 
         // send to register_credential_internal
-        let credential =
-            self.register_credential_internal(reg, *policy, chal, exclude_credentials)?;
+        let credential = self.register_credential_internal(
+            reg,
+            *policy,
+            chal,
+            exclude_credentials,
+            &credential_algorithms,
+        )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
         // requested for a credential that is already registered to a different user, the Relying
@@ -268,6 +276,7 @@ impl<T> Webauthn<T> {
         policy: UserVerificationPolicy,
         chal: &ChallengeRef,
         exclude_credentials: &[CredentialID],
+        credential_algorithms: &[COSEAlgorithm],
     ) -> Result<(Credential, AuthenticatorData<Registration>), WebauthnError>
     where
         T: WebauthnConfig,
@@ -510,11 +519,9 @@ impl<T> Webauthn<T> {
             .map_err(|_e| WebauthnError::AttestationTrustFailure)?;
 
         // Verify that the credential public key alg is one of the allowed algorithms.
-        let alg_valid = self
-            .config
-            .get_credential_algorithms()
-            .into_iter()
-            .any(|alg| alg == credential.cred.type_);
+        let alg_valid = credential_algorithms
+            .iter()
+            .any(|alg| alg == &credential.cred.type_);
 
         if !alg_valid {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
@@ -761,6 +768,11 @@ impl<T> Webauthn<T> {
     where
         T: WebauthnConfig,
     {
+        // Should this filter on cred.verified instead rather than the policy?
+        // Or do we need to send Preferred instead of Discouraged due to ctap2.0?
+        //
+        // https://github.com/kanidm/webauthn-rs/issues/91
+        //
         let (verified, unverified): (Vec<Credential>, Vec<Credential>) = creds
             .into_iter()
             .partition(|cred| cred.registration_policy == UserVerificationPolicy::Required);

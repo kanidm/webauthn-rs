@@ -1,8 +1,34 @@
 use serde::{Deserialize, Serialize};
 use webauthn_rs::error::WebauthnError;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct RegisterWithSettings {}
+pub use webauthn_rs::proto::{
+    AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
+    RequestAuthenticationExtensions, RequestRegistrationExtensions, UserVerificationPolicy,
+};
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct RegisterWithSettings {
+    pub uv: Option<UserVerificationPolicy>,
+    pub algorithm: Option<Vec<COSEAlgorithm>>,
+    pub attestation: Option<AttestationConveyancePreference>,
+    pub attachment: Option<AuthenticatorAttachment>,
+    pub extensions: Option<RequestRegistrationExtensions>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct AuthenticateWithSettings {
+    pub uv: Option<UserVerificationPolicy>,
+    pub extensions: Option<RequestAuthenticationExtensions>,
+}
+
+impl From<&RegisterWithSettings> for AuthenticateWithSettings {
+    fn from(regsettings: &RegisterWithSettings) -> AuthenticateWithSettings {
+        let uv = regsettings.uv.clone();
+        let extensions = None;
+
+        AuthenticateWithSettings { uv, extensions }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ResponseError {

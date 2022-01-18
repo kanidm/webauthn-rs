@@ -39,10 +39,11 @@ FIDO Compliance
 ---------------
 
 This library has been carefully implemented to follow the w3c standard for webauthn processing
-to ensure correct behaviour. However, not all elements of the standard are implemented (yet).
-This means the library is not yet FIDO compliant. It is a goal to improve this library to meet
-that standard over time as more test vectors and hardware becomes available, but the current
-focus has been on supporting the most popular key types.
+to ensure correct behaviour. However, not all elements of the standard are implemented (mainly 
+around certain extensions and how they are handled. This means the library is not FIDO compliant.
+It is a goal to improve this library to meet that standard over time as more test vectors and hardware
+becomes available, but the current focus has been on supporting the most popular key types, and
+going above and beyond the webauthn standard to provide a secure library.
 
 Feedback
 --------

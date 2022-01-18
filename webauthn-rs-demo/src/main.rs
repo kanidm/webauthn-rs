@@ -13,14 +13,14 @@ use std::time::Duration;
 
 use rand::prelude::*;
 
-use webauthn_rs::ephemeral::WebauthnEphemeralConfig;
 use webauthn_rs::proto::{
     Credential, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
 };
 
-use webauthn_rs_demo_shared::ResponseError;
+use webauthn_rs_demo_shared::*;
 
 mod actors;
+mod config;
 mod crypto;
 
 use crate::actors::*;
@@ -29,14 +29,29 @@ type AppState = Arc<WebauthnActor>;
 
 #[derive(Debug, StructOpt)]
 struct CmdOptions {
-    #[structopt(short = "n", long = "name", default_value = "localhost")]
+    #[structopt(
+        short = "n",
+        long = "name",
+        default_value = "localhost",
+        env = "RP_NAME"
+    )]
     rp_name: String,
-    #[structopt(short = "o", long = "origin", default_value = "http://localhost:8080")]
+    #[structopt(
+        short = "o",
+        long = "origin",
+        default_value = "http://localhost:8080",
+        env = "RP_ORIGIN"
+    )]
     /// Must match your sites domain/port/url
     rp_origin: String,
-    #[structopt(short = "i", long = "id", default_value = "localhost")]
+    #[structopt(short = "i", long = "id", default_value = "localhost", env = "RP_ID")]
     rp_id: String,
-    #[structopt(short = "b", long = "bind", default_value = "localhost:8080")]
+    #[structopt(
+        short = "b",
+        long = "bind",
+        default_value = "localhost:8080",
+        env = "BIND_ADDRESS"
+    )]
     bind: String,
     #[structopt(short = "s", long = "tls")]
     enable_tls: bool,
@@ -77,7 +92,13 @@ async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Resul
     let session = request.session_mut();
     session.remove("rs");
 
-    let actor_res = request.state().challenge_register(username).await;
+    let reg_settings = request.body_json::<RegisterWithSettings>().await?;
+    debug!(?reg_settings);
+
+    let actor_res = request
+        .state()
+        .challenge_register(username, reg_settings)
+        .await;
 
     let res = match actor_res {
         Ok((chal, rs)) => {
@@ -103,6 +124,9 @@ async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     debug!("session - {:?}", request.session().get_raw("cred_map"));
+
+    let auth_settings = request.body_json::<AuthenticateWithSettings>().await?;
+    debug!(?auth_settings);
 
     let session = request.session_mut();
     session.remove("st");
@@ -278,14 +302,12 @@ async fn main() -> tide::Result<()> {
     let domain = opt.rp_id.clone();
 
     info!("Using origin - {}", opt.rp_origin);
-    let wan_c = WebauthnEphemeralConfig::new(
+
+    let wan = WebauthnActor::new(
         opt.rp_name.as_str(),
         opt.rp_origin.as_str(),
         opt.rp_id.as_str(),
-        None,
     );
-
-    let wan = WebauthnActor::new(wan_c);
 
     let app_state = Arc::new(wan);
 

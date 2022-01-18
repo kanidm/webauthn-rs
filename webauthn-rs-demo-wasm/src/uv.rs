@@ -5,7 +5,7 @@ use yew_router::prelude::*;
 
 #[derive(Debug)]
 pub enum UvInconsistent {
-    Init
+    Init,
 }
 
 #[derive(Debug)]

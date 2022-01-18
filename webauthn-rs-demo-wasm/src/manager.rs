@@ -18,7 +18,6 @@ pub enum Route {
 
     // #[at("/uv_inconsistent")]
     // UvInconsistent,
-
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -38,7 +37,6 @@ pub enum Route {
 
 #[function_component(Nav)]
 fn nav() -> Html {
-
     let location = use_location().expect("unable to access location");
     let cur_route = location.route();
 

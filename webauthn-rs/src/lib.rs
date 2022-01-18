@@ -33,7 +33,7 @@ pub mod attestation;
 pub mod core;
 #[cfg(feature = "core")]
 pub mod crypto;
-#[cfg(feature = "core")]
+#[cfg(all(test, feature = "core"))]
 pub mod ephemeral;
 
 pub mod base64_data;

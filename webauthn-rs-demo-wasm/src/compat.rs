@@ -3,9 +3,23 @@ use yew::functional::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
+/*
+ * We want to test:
+ * Indirect Attest: Discouraged
+ * Direct Attest: Discouraged
+ * None Attest: Discouraged
+ * None Attest - remove the previous enc algo
+ * Auth - use the discouraged as above, see if we get UV=true?
+ * None Attest - preferred,
+ * Auth - use the discouraged as above, see if we get UV=true?
+ * None Attest - required
+ * If reg -> is req during auth
+ *
+ */
+
 #[derive(Debug)]
 pub enum CompatTest {
-    Init
+    Init,
 }
 
 #[derive(Debug)]
