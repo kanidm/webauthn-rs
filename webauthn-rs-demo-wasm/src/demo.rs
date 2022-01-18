@@ -330,7 +330,6 @@ impl Demo {
                     </div>
                   </div>
                   <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary">{ "Reset Settings" }</button>
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal">{ "Save changes" }</button>
                   </div>
                 </div>
