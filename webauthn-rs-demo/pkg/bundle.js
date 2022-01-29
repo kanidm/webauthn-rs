@@ -747,11 +747,11 @@
             var ret = makeMutClosure(arg0, arg1, 366, __wbg_adapter_30);
             return addHeapObject(ret);
         };
-        imports.wbg.__wbindgen_closure_wrapper1564 = function(arg0, arg1, arg2) {
+        imports.wbg.__wbindgen_closure_wrapper1565 = function(arg0, arg1, arg2) {
             var ret = makeClosure(arg0, arg1, 538, __wbg_adapter_33);
             return addHeapObject(ret);
         };
-        imports.wbg.__wbindgen_closure_wrapper1699 = function(arg0, arg1, arg2) {
+        imports.wbg.__wbindgen_closure_wrapper1700 = function(arg0, arg1, arg2) {
             var ret = makeMutClosure(arg0, arg1, 576, __wbg_adapter_36);
             return addHeapObject(ret);
         };

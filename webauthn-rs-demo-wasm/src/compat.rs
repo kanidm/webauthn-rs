@@ -41,15 +41,19 @@ enum CompatTestStep {
     DirectAttest1 = 1,
     IndirectAttest1 = 2,
     NoneAttest1 = 3,
-    FallBackAlg = 4,
-    UvPreferred = 5,
-    UvRequired = 6,
-    AuthDiscouraged = 7,
-    AuthDiscouragedConsistent = 8,
-    AuthPreferred = 9,
-    AuthPreferredConsistent = 10,
-    AuthRequired = 11,
-    Complete = 12,
+    AuthDiscouraged = 4,
+    AuthDiscouragedConsistent = 5,
+    // Some devices can only store one cred-per-domain, so this checks if
+    // that's the case.
+    NoneAttest2 = 6,
+    AuthMultipleCredentials = 7,
+    FallBackAlg = 8,
+    UvPreferred = 9,
+    AuthPreferred = 10,
+    AuthPreferredConsistent = 11,
+    UvRequired = 12,
+    AuthRequired = 13,
+    Complete = 14,
 }
 
 impl From<u32> for CompatTestStep {
@@ -58,15 +62,17 @@ impl From<u32> for CompatTestStep {
             1 => CompatTestStep::DirectAttest1,
             2 => CompatTestStep::IndirectAttest1,
             3 => CompatTestStep::NoneAttest1,
-            4 => CompatTestStep::FallBackAlg,
-            5 => CompatTestStep::UvPreferred,
-            6 => CompatTestStep::UvRequired,
-            7 => CompatTestStep::AuthDiscouraged,
-            8 => CompatTestStep::AuthDiscouragedConsistent,
-            9 => CompatTestStep::AuthPreferred,
-            10 => CompatTestStep::AuthPreferredConsistent,
-            11 => CompatTestStep::AuthRequired,
-            12 => CompatTestStep::Complete,
+            4 => CompatTestStep::AuthDiscouraged,
+            5 => CompatTestStep::AuthDiscouragedConsistent,
+            6 => CompatTestStep::NoneAttest2,
+            7 => CompatTestStep::AuthMultipleCredentials,
+            8 => CompatTestStep::FallBackAlg,
+            9 => CompatTestStep::UvPreferred,
+            10 => CompatTestStep::AuthPreferred,
+            11 => CompatTestStep::AuthPreferredConsistent,
+            12 => CompatTestStep::UvRequired,
+            13 => CompatTestStep::AuthRequired,
+            14 => CompatTestStep::Complete,
             _ => panic!("Unknown variant!"),
         }
     }
@@ -211,6 +217,19 @@ impl Component for CompatTest {
                             extensions: None,
                         });
                     }
+                    CompatTestStep::NoneAttest2 => {
+                        // Set the initial test results to failure.
+                        self.results.none_attest_2 = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                            attestation: Some(AttestationConveyancePreference::None),
+                            attachment: None,
+                            extensions: None,
+                        });
+                    }
                     CompatTestStep::FallBackAlg => {
                         // Look back at the previous test
                         let algs = if let Some(cred) = self.results.none_attest_1.get_credential() {
@@ -288,6 +307,29 @@ impl Component for CompatTest {
                             ctx.link().send_message(AppMsg::Begin);
                             return false;
                         };
+                    }
+                    CompatTestStep::AuthMultipleCredentials => {
+                        let mut skip = true;
+
+                        if let Some(cred_1) = self.results.none_attest_1.get_credential() {
+                            if let Some(_cred_2) = self.results.none_attest_2.get_credential() {
+                                self.results.authmultiple = CTestAuthState::failed();
+                                let use_cred_id = Some(cred_1.cred_id.clone());
+                                self.do_auth(ctx, AuthenticateWithSettings {
+                                    use_cred_id,
+                                    uv: None,
+                                    extensions: None,
+                                });
+                                skip = false;
+                            }
+                        }
+                        // Skip
+                        if skip {
+                            self.results.authmultiple = CTestAuthState::FailedPrerequisite;
+                            self.step = self.step.next();
+                            ctx.link().send_message(AppMsg::Begin);
+                            return false;
+                        }
                     }
                     CompatTestStep::AuthDiscouragedConsistent => {
                         if let Some(cred) = self.results.none_attest_1.get_credential() {
@@ -381,6 +423,9 @@ impl Component for CompatTest {
                     CompatTestStep::NoneAttest1 => {
                         self.results.none_attest_1.save_ccr(&ccr);
                     }
+                    CompatTestStep::NoneAttest2 => {
+                        self.results.none_attest_2.save_ccr(&ccr);
+                    }
                     CompatTestStep::FallBackAlg => {
                         self.results.fallback_alg.save_ccr(&ccr);
                     }
@@ -395,6 +440,7 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired |
                     CompatTestStep::AuthDiscouragedConsistent |
                     CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::AuthMultipleCredentials |
                     CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
@@ -436,6 +482,9 @@ impl Component for CompatTest {
                     CompatTestStep::NoneAttest1 => {
                         self.results.none_attest_1.save_rpkc(&rpkc);
                     }
+                    CompatTestStep::NoneAttest2 => {
+                        self.results.none_attest_2.save_rpkc(&rpkc);
+                    }
                     CompatTestStep::FallBackAlg => {
                         self.results.fallback_alg.save_rpkc(&rpkc);
                     }
@@ -450,6 +499,7 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired |
                     CompatTestStep::AuthDiscouragedConsistent |
                     CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::AuthMultipleCredentials |
                     CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
@@ -473,6 +523,9 @@ impl Component for CompatTest {
                     CompatTestStep::NoneAttest1 => {
                         self.results.none_attest_1.set_success(rs);
                     }
+                    CompatTestStep::NoneAttest2 => {
+                        self.results.none_attest_2.set_success(rs);
+                    }
                     CompatTestStep::FallBackAlg => {
                         self.results.fallback_alg.set_success(rs);
                     }
@@ -491,6 +544,7 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired |
                     CompatTestStep::AuthDiscouragedConsistent |
                     CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::AuthMultipleCredentials |
                     CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
@@ -509,9 +563,13 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired => {
                         self.results.authrequired.save_rcr(&rcr);
                     }
+                    CompatTestStep::AuthMultipleCredentials => {
+                        self.results.authmultiple.save_rcr(&rcr);
+                    }
                     CompatTestStep::DirectAttest1 |
-                    CompatTestStep::IndirectAttest1 | 
+                    CompatTestStep::IndirectAttest1 |
                     CompatTestStep::NoneAttest1  |
+                    CompatTestStep::NoneAttest2  |
                     CompatTestStep::FallBackAlg |
                     CompatTestStep::UvPreferred |
                     CompatTestStep::UvRequired |
@@ -558,9 +616,13 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired => {
                         self.results.authrequired.save_pkc(&pkc);
                     }
+                    CompatTestStep::AuthMultipleCredentials => {
+                        self.results.authmultiple.save_pkc(&pkc);
+                    }
                     CompatTestStep::DirectAttest1 |
                     CompatTestStep::IndirectAttest1 | 
                     CompatTestStep::NoneAttest1  |
+                    CompatTestStep::NoneAttest2  |
                     CompatTestStep::FallBackAlg |
                     CompatTestStep::UvPreferred |
                     CompatTestStep::UvRequired |
@@ -588,9 +650,13 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired => {
                         self.results.authrequired.set_success(aus);
                     }
+                    CompatTestStep::AuthMultipleCredentials => {
+                        self.results.authmultiple.set_success(aus);
+                    }
                     CompatTestStep::DirectAttest1 |
                     CompatTestStep::IndirectAttest1 | 
                     CompatTestStep::NoneAttest1  |
+                    CompatTestStep::NoneAttest2  |
                     CompatTestStep::FallBackAlg |
                     CompatTestStep::UvPreferred |
                     CompatTestStep::UvRequired |
@@ -613,6 +679,9 @@ impl Component for CompatTest {
                     }
                     CompatTestStep::NoneAttest1 => {
                         self.results.none_attest_1.set_err(err);
+                    }
+                    CompatTestStep::NoneAttest2 => {
+                        self.results.none_attest_2.set_err(err);
                     }
                     CompatTestStep::FallBackAlg => {
                         match err {
@@ -638,6 +707,16 @@ impl Component for CompatTest {
                     }
                     CompatTestStep::AuthDiscouraged => {
                         self.results.authdiscouraged.set_err(err);
+                    }
+                    CompatTestStep::AuthMultipleCredentials => {
+                        match err {
+                            ResponseError::NavigatorError(_) => {
+                                // Very likely we are on an ipad, and it can't proceed because the
+                                // credential that we want to use here no longer exists.
+                                self.results.authmultiple.set_warn(err)
+                            }
+                            _ => self.results.authmultiple.set_err(err),
+                        }
                     }
                     CompatTestStep::AuthPreferred => {
                         self.results.authpreferred.set_err(err);
@@ -755,46 +834,58 @@ Please add any extra details here:
                     </tr>
                     <tr>
                       <th scope="row">{ "3" }</th>
-                      <td>{ "None Attestation + UV Discouraged" }</td>
+                      <td>{ "None Attestation 1 + UV Discouraged" }</td>
                       <td>{ self.results.none_attest_1.to_result() }</td>
                     </tr>
                     <tr>
                       <th scope="row">{ "4" }</th>
-                      <td>{ "Fallback Algorithm" }</td>
-                      <td>{ self.results.fallback_alg.to_result() }</td>
-                    </tr>
-                    <tr>
-                      <th scope="row">{ "5" }</th>
-                      <td>{ "Register UserVerification Preferred" }</td>
-                      <td>{ self.results.uvpreferred.to_result() }</td>
-                    </tr>
-                    <tr>
-                      <th scope="row">{ "6" }</th>
-                      <td>{ "Register UserVerification Required" }</td>
-                      <td>{ self.results.uvrequired.to_result() }</td>
-                    </tr>
-                    <tr>
-                      <th scope="row">{ "7" }</th>
                       <td>{ "Auth UV Discouraged" }</td>
                       <td>{ self.results.authdiscouraged.to_result() }</td>
                     </tr>
                     <tr>
-                      <th scope="row">{ "8" }</th>
+                      <th scope="row">{ "5" }</th>
                       <td>{ "Auth UV Discouraged Consistent" }</td>
                       <td>{ self.results.authdiscouraged_consistent.to_result() }</td>
                     </tr>
                     <tr>
+                      <th scope="row">{ "6" }</th>
+                      <td>{ "None Attestation 2 + UV Discouraged" }</td>
+                      <td>{ self.results.none_attest_2.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "7" }</th>
+                      <td>{ "Multiple Credentials Allowed" }</td>
+                      <td>{ self.results.authmultiple.to_result() }</td>
+                    </tr>
+
+                    <tr>
+                      <th scope="row">{ "8" }</th>
+                      <td>{ "Fallback Algorithm" }</td>
+                      <td>{ self.results.fallback_alg.to_result() }</td>
+                    </tr>
+
+                    <tr>
                       <th scope="row">{ "9" }</th>
+                      <td>{ "Register UserVerification Preferred" }</td>
+                      <td>{ self.results.uvpreferred.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "10" }</th>
                       <td>{ "Auth UV Preferred" }</td>
                       <td>{ self.results.authpreferred.to_result() }</td>
                     </tr>
                     <tr>
-                      <th scope="row">{ "10" }</th>
+                      <th scope="row">{ "11" }</th>
                       <td>{ "Auth UV Preferred Consistent" }</td>
                       <td>{ self.results.authpreferred_consistent.to_result() }</td>
                     </tr>
                     <tr>
-                      <th scope="row">{ "11" }</th>
+                      <th scope="row">{ "12" }</th>
+                      <td>{ "Register UserVerification Required" }</td>
+                      <td>{ self.results.uvrequired.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "13" }</th>
                       <td>{ "Auth UV Required" }</td>
                       <td>{ self.results.authrequired.to_result() }</td>
                     </tr>

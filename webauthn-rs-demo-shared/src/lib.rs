@@ -316,13 +316,16 @@ pub struct CompatTestResults {
     pub direct_attest_1: CTestAttestState,
     pub indirect_attest_1: CTestAttestState,
     pub none_attest_1: CTestAttestState,
-    pub fallback_alg: CTestAttestState,
-    pub uvpreferred: CTestAttestState,
-    pub uvrequired: CTestAttestState,
     pub authdiscouraged: CTestAuthState,
     pub authdiscouraged_consistent: CTestSimpleState,
+    pub none_attest_2: CTestAttestState,
+    pub authmultiple: CTestAuthState,
+
+    pub fallback_alg: CTestAttestState,
+    pub uvpreferred: CTestAttestState,
     pub authpreferred: CTestAuthState,
     pub authpreferred_consistent: CTestSimpleState,
+    pub uvrequired: CTestAttestState,
     pub authrequired: CTestAuthState,
 }
 
