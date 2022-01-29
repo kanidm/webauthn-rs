@@ -707,7 +707,8 @@ impl<T> Webauthn<T> {
     }
 
     /// Authenticate a single credential, with the ability to override the userVerification
-    /// policy requested, or extensions in use.
+    /// policy requested, or extensions in use. If userVerification is `None`, the policy from
+    /// registration is used.
     ///
     /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
     /// understand how this interacts with the single credential in use, and how that may impact
@@ -717,12 +718,13 @@ impl<T> Webauthn<T> {
     pub fn generate_challenge_authenticate_credential(
         &self,
         cred: Credential,
-        policy: UserVerificationPolicy,
+        policy: Option<UserVerificationPolicy>,
         extensions: Option<RequestAuthenticationExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError>
     where
         T: WebauthnConfig,
     {
+        let policy = policy.unwrap_or(cred.registration_policy);
         self.generate_challenge_authenticate_inner(vec![cred], policy, extensions)
     }
 
@@ -1181,7 +1183,7 @@ mod tests {
     // These are vectors from https://github.com/duo-labs/webauthn
     #[test]
     fn test_registration_duo_go() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "webauthn.io",         // name, whatever you want
             "https://webauthn.io", // must be url origin
@@ -1218,7 +1220,7 @@ mod tests {
 
     #[test]
     fn test_registration_packed_attestation() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "localhost:8443/auth",
             "https://localhost:8443",
@@ -1294,7 +1296,7 @@ mod tests {
 
     #[test]
     fn test_authentication() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "http://localhost:8080/auth",
             "http://localhost:8080",
@@ -1400,7 +1402,7 @@ mod tests {
 
     #[test]
     fn test_authentication_appid() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://testing.local",
             "https://testing.local",
@@ -1553,7 +1555,7 @@ mod tests {
     ) where
         T: crate::WebauthnConfig,
     {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan = Webauthn::new(wan_c);
 
         let result = wan.register_credential_internal(
@@ -1580,7 +1582,7 @@ mod tests {
 
     #[test]
     fn test_win_hello_attest_none() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://etools-dev.example.com:8080/auth",
             "https://etools-dev.example.com:8080",
@@ -1717,7 +1719,7 @@ mod tests {
 
     #[test]
     fn test_win_hello_attest_tpm() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://etools-dev.example.com:8080/auth",
             "https://etools-dev.example.com:8080",
@@ -2043,7 +2045,7 @@ mod tests {
 
     #[test]
     fn test_touchid_attest_apple_anonymous() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "https://spectral.local:8443/auth",
             "https://spectral.local:8443",
@@ -2156,7 +2158,7 @@ mod tests {
 
     #[test]
     fn test_uv_consistency() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "http://127.0.0.1:8080/auth",
             "http://127.0.0.1:8080",
@@ -2284,7 +2286,7 @@ mod tests {
 
     #[test]
     fn test_subdomain_origin() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
             "rp_name",
             "https://idm.example.com:8080",
@@ -2445,5 +2447,44 @@ mod tests {
         );
         println!("RESULT: {:?}", r);
         assert!(r.is_ok());
+    }
+
+    #[test]
+    fn test_yk5bio_fallback_alg_attest_none() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan_c = WebauthnEphemeralConfig::new(
+            "http://localhost:8080/auth",
+            "http://localhost:8080",
+            "localhost",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"NE6dm0mgUe47-X0Yf5nRdhYokY3A8XAzs10KBLGlVY0\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(r#"{
+            "id": "k8-N3sbgQe_ze58s5b955iLRrqcizmms-YOqFQTQbBbbJLStt9CaR3vUYXEajy4O22fAgdyY1aOvc6HW9o1ikqiSWee2CxXXJe2DE40byI4-m4oesHfmz4urfMxkIrAd_4i8pgWHNLVlTSMtAzhCXH16Yw4uUsdsntv1HpYiu94",
+            "rawId": "k8-N3sbgQe_ze58s5b955iLRrqcizmms-YOqFQTQbBbbJLStt9CaR3vUYXEajy4O22fAgdyY1aOvc6HW9o1ikqiSWee2CxXXJe2DE40byI4-m4oesHfmz4urfMxkIrAd_4i8pgWHNLVlTSMtAzhCXH16Yw4uUsdsntv1HpYiu94",
+            "response": {
+                "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjhSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NFAAAAAQAAAAAAAAAAAAAAAAAAAAAAgJPPjd7G4EHv83ufLOW_eeYi0a6nIs5prPmDqhUE0GwW2yS0rbfQmkd71GFxGo8uDttnwIHcmNWjr3Oh1vaNYpKoklnntgsV1yXtgxONG8iOPpuKHrB35s-Lq3zMZCKwHf-IvKYFhzS1ZU0jLQM4Qlx9emMOLlLHbJ7b9R6WIrvepAEBAycgBiFYICgd3qEI_iQqhYAi0y47WqeU2Bf2kVY4Mq02t1zgTzkV",
+                "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiTkU2ZG0wbWdVZTQ3LVgwWWY1blJkaFlva1kzQThYQXpzMTBLQkxHbFZZMCIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODA4MCIsImNyb3NzT3JpZ2luIjpmYWxzZX0"
+            },
+            "type": "public-key"
+        }"#).unwrap();
+
+        info!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            &chal,
+            &[],
+            &[COSEAlgorithm::EDDSA],
+        );
+        info!("{:?}", result);
+        // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
+        assert!(result.is_err());
     }
 }

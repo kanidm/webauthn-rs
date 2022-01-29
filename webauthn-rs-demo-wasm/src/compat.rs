@@ -1,12 +1,23 @@
+use crate::error::*;
+use crate::utils;
+
 use gloo::console;
-use yew::functional::*;
+// use gloo::timers;
+// timers::future::TimeoutFuture::new(1_000).await;
 use yew::prelude::*;
-use yew_router::prelude::*;
+
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
+use wasm_bindgen::UnwrapThrowExt;
+use wasm_bindgen_futures::JsFuture;
+use web_sys::{Request, RequestInit, RequestMode, Response};
+
+use webauthn_rs_demo_shared::*;
 
 /*
  * We want to test:
- * Indirect Attest: Discouraged
  * Direct Attest: Discouraged
+ * Indirect Attest: Discouraged
  * None Attest: Discouraged
  * None Attest - remove the previous enc algo
  * Auth - use the discouraged as above, see if we get UV=true?
@@ -18,33 +29,834 @@ use yew_router::prelude::*;
  */
 
 #[derive(Debug)]
-pub enum CompatTest {
+enum CompatTestState {
     Init,
+    Step(u32),
+    Complete,
+}
+
+#[repr(u32)]
+#[derive(Debug, Clone, Copy)]
+enum CompatTestStep {
+    DirectAttest1 = 1,
+    IndirectAttest1 = 2,
+    NoneAttest1 = 3,
+    FallBackAlg = 4,
+    UvPreferred = 5,
+    UvRequired = 6,
+    AuthDiscouraged = 7,
+    AuthDiscouragedConsistent = 8,
+    AuthPreferred = 9,
+    AuthPreferredConsistent = 10,
+    AuthRequired = 11,
+    Complete = 12,
+}
+
+impl From<u32> for CompatTestStep {
+    fn from(v: u32) -> Self {
+        match v {
+            1 => CompatTestStep::DirectAttest1,
+            2 => CompatTestStep::IndirectAttest1,
+            3 => CompatTestStep::NoneAttest1,
+            4 => CompatTestStep::FallBackAlg,
+            5 => CompatTestStep::UvPreferred,
+            6 => CompatTestStep::UvRequired,
+            7 => CompatTestStep::AuthDiscouraged,
+            8 => CompatTestStep::AuthDiscouragedConsistent,
+            9 => CompatTestStep::AuthPreferred,
+            10 => CompatTestStep::AuthPreferredConsistent,
+            11 => CompatTestStep::AuthRequired,
+            12 => CompatTestStep::Complete,
+            _ => panic!("Unknown variant!"),
+        }
+    }
+}
+
+impl CompatTestStep {
+    fn next(&self) -> Self {
+        if matches!(self, CompatTestStep::Complete) {
+            CompatTestStep::Complete
+        } else {
+            Self::from((*self as u32) + 1)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct CompatTest {
+    state: CompatTestState,
+    step: CompatTestStep,
+    results: CompatTestResults,
+    show_next: bool,
 }
 
 #[derive(Debug)]
 pub enum AppMsg {
+    Ignore,
     Begin,
+    ResultsToClipboard,
+    BeginRegisterChallenge(CreationChallengeResponse),
+    CompleteRegisterChallenge(RegisterPublicKeyCredential),
+    RegisterSuccess(RegistrationSuccess),
+
+    BeginLoginChallenge(RequestChallengeResponse),
+    CompleteLoginChallenge(PublicKeyCredential),
+    LoginSuccess(AuthenticationSuccess),
+
+    ErrorCode(ResponseError),
+}
+
+impl From<FetchError> for AppMsg {
+    fn from(fe: FetchError) -> Self {
+        AppMsg::ErrorCode(ResponseError::UnknownError(fe.as_string()))
+    }
 }
 
 impl Component for CompatTest {
     type Message = AppMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         console::log!(format!("create").as_str());
-        CompatTest::Init
+        CompatTest {
+            state: CompatTestState::Init,
+            // state: CompatTestState::Complete,
+            step: CompatTestStep::DirectAttest1,
+            // step: CompatTestStep::NoneAttest1,
+            results: CompatTestResults::default(),
+            show_next: false,
+        }
     }
 
-    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, _ctx: &Context<Self>) -> bool {
         false
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        match msg {
+            AppMsg::Ignore => {
+                match self.step {
+                    // Triggers the complete view when done.
+                    CompatTestStep::Complete => {
+                        self.state = CompatTestState::Complete;
+                    }
+                    _ => {
+                        self.show_next = true;
+                        console::log!(&format!("{:?}", self.step));
+                    }
+                }
+            }
+            AppMsg::ResultsToClipboard => {
+                // Not yet supported, see: https://docs.rs/web-sys/latest/web_sys/struct.Clipboard.html
+                let data = serde_json::to_string(&self.results)
+                    .expect_throw("Failed to serialise results");
+
+                let promise = utils::clipboard().write_text(&data);
+                let fut = JsFuture::from(promise);
+
+                ctx.link().send_future(async move {
+                    match fut.await {
+                        Ok(_) => {
+                            console::log!("Wrote to clipboard!");
+                        },
+                        Err(e) => {
+                            console::log!(
+                                &format!("Unable to access clipboard -> {:?}", e)
+                            );
+                        }
+                    };
+                    AppMsg::Ignore
+                });
+            }
+            AppMsg::Begin => {
+                self.show_next = false;
+                let settings = match self.step {
+                    CompatTestStep::DirectAttest1 => {
+                        // Set the initial test results to failure.
+                        self.results.direct_attest_1 = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                            attestation: Some(AttestationConveyancePreference::Direct),
+                            attachment: None,
+                            extensions: None,
+                        }
+                        );
+                    }
+                    CompatTestStep::IndirectAttest1 => {
+                        // Set the initial test results to failure.
+                        self.results.indirect_attest_1 = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                            attestation: Some(AttestationConveyancePreference::Indirect),
+                            attachment: None,
+                            extensions: None,
+                        });
+                    }
+                    CompatTestStep::NoneAttest1 => {
+                        // Set the initial test results to failure.
+                        self.results.none_attest_1 = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                            attestation: Some(AttestationConveyancePreference::None),
+                            attachment: None,
+                            extensions: None,
+                        });
+                    }
+                    CompatTestStep::FallBackAlg => {
+                        // Look back at the previous test
+                        let algs = if let Some(cred) = self.results.none_attest_1.get_credential() {
+                            // What alg was used?
+                            let alg = cred.cred.type_;
+                            // Remove it from the list.
+                            let mut algs = COSEAlgorithm::all_possible_algs();
+                            algs.retain(|a| a != &alg);
+                            algs
+                        } else {
+                            // Skip
+                            self.step = self.step.next();
+                            ctx.link().send_message(AppMsg::Begin);
+                            return false;
+                        };
+
+                        /*
+                        if true {
+                            self.step = self.step.next();
+                            ctx.link().send_message(AppMsg::Begin);
+                            return false;
+                        }
+                        */
+
+                        self.results.fallback_alg = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                            algorithm: Some(algs),
+                            attestation: Some(AttestationConveyancePreference::None),
+                            attachment: None,
+                            extensions: None,
+                        });
+                    }
+                    CompatTestStep::UvPreferred => {
+                        // Set the initial test results to failure.
+                        self.results.uvpreferred = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Preferred),
+                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                            attestation: Some(AttestationConveyancePreference::None),
+                            attachment: None,
+                            extensions: None,
+                        });
+                    }
+                    CompatTestStep::UvRequired => {
+                        // Set the initial test results to failure.
+                        self.results.uvrequired = CTestAttestState::failed();
+                        // Start the process!
+                        self.do_registration(ctx, 
+                        RegisterWithSettings {
+                            uv: Some(UserVerificationPolicy::Required),
+                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                            attestation: Some(AttestationConveyancePreference::None),
+                            attachment: None,
+                            extensions: None,
+                        });
+                    }
+                    CompatTestStep::AuthDiscouraged => {
+                        if let Some(cred) = self.results.none_attest_1.get_credential() {
+                            self.results.authdiscouraged = CTestAuthState::failed();
+                            let use_cred_id = Some(cred.cred_id.clone());
+                            self.do_auth(ctx, AuthenticateWithSettings {
+                                use_cred_id,
+                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                extensions: None,
+                            });
+                        } else {
+                            // Skip
+                            self.results.authdiscouraged = CTestAuthState::FailedPrerequisite;
+                            self.step = self.step.next();
+                            ctx.link().send_message(AppMsg::Begin);
+                            return false;
+                        };
+                    }
+                    CompatTestStep::AuthDiscouragedConsistent => {
+                        if let Some(cred) = self.results.none_attest_1.get_credential() {
+                            if let Some(aus) = self.results.authdiscouraged.get_auth_result() {
+                                if aus.uv == cred.verified {
+                                    self.results.authdiscouraged_consistent = CTestSimpleState::Passed;
+                                } else {
+                                    self.results.authdiscouraged_consistent = CTestSimpleState::Warning;
+                                }
+                                self.step = self.step.next();
+                                ctx.link().send_message(AppMsg::Begin);
+                                return true;
+                            }
+                        }
+                        // Skip
+                        self.results.authdiscouraged_consistent = CTestSimpleState::FailedPrerequisite;
+                        self.step = self.step.next();
+                        ctx.link().send_message(AppMsg::Begin);
+                        return false;
+                    }
+                    CompatTestStep::AuthPreferred => {
+                        if let Some(cred) = self.results.uvpreferred.get_credential() {
+                            self.results.authpreferred = CTestAuthState::failed();
+                            let use_cred_id = Some(cred.cred_id.clone());
+                            self.do_auth(ctx, AuthenticateWithSettings {
+                                use_cred_id,
+                                uv: Some(UserVerificationPolicy::Preferred),
+                                extensions: None,
+                            });
+                        } else {
+                            // Skip
+                            self.results.authpreferred = CTestAuthState::FailedPrerequisite;
+                            self.step = self.step.next();
+                            ctx.link().send_message(AppMsg::Begin);
+                            return false;
+                        };
+                    }
+                    CompatTestStep::AuthPreferredConsistent => {
+                        if let Some(cred) = self.results.uvpreferred.get_credential() {
+                            if let Some(aus) = self.results.authpreferred.get_auth_result() {
+                                if aus.uv == cred.verified {
+                                    self.results.authpreferred_consistent = CTestSimpleState::Passed;
+                                } else {
+                                    self.results.authpreferred_consistent = CTestSimpleState::Failed;
+                                }
+                                self.step = self.step.next();
+                                ctx.link().send_message(AppMsg::Begin);
+                                return true;
+                            }
+                        }
+                        // Skip
+                        self.results.authpreferred_consistent = CTestSimpleState::FailedPrerequisite;
+                        self.step = self.step.next();
+                        ctx.link().send_message(AppMsg::Begin);
+                        return false;
+                    }
+                    CompatTestStep::AuthRequired => {
+                        if let Some(cred) = self.results.uvrequired.get_credential() {
+                            self.results.authrequired = CTestAuthState::failed();
+                            let use_cred_id = Some(cred.cred_id.clone());
+                            self.do_auth(ctx, AuthenticateWithSettings {
+                                use_cred_id,
+                                uv: Some(UserVerificationPolicy::Required),
+                                extensions: None,
+                            });
+                        } else {
+                            // Skip
+                            self.results.authrequired = CTestAuthState::FailedPrerequisite;
+                            self.step = self.step.next();
+                            ctx.link().send_message(AppMsg::Begin);
+                            return false;
+                        };
+                    }
+                    CompatTestStep::Complete => {
+                        self.state = CompatTestState::Complete;
+                        return true;
+                    }
+                };
+                // Set our step
+                self.state = CompatTestState::Step(self.step as u32);
+            }
+            AppMsg::BeginRegisterChallenge(ccr) => {
+                // Stash a copy of the ccr
+                match self.step {
+                    CompatTestStep::DirectAttest1 => {
+                        self.results.direct_attest_1.save_ccr(&ccr);
+                    }
+                    CompatTestStep::IndirectAttest1 => {
+                        self.results.indirect_attest_1.save_ccr(&ccr);
+                    }
+                    CompatTestStep::NoneAttest1 => {
+                        self.results.none_attest_1.save_ccr(&ccr);
+                    }
+                    CompatTestStep::FallBackAlg => {
+                        self.results.fallback_alg.save_ccr(&ccr);
+                    }
+                    CompatTestStep::UvPreferred => {
+                        self.results.uvpreferred.save_ccr(&ccr);
+                    }
+                    CompatTestStep::UvRequired => {
+                        self.results.uvrequired.save_ccr(&ccr);
+                    }
+                    CompatTestStep::AuthDiscouraged |
+                    CompatTestStep::AuthPreferred |
+                    CompatTestStep::AuthRequired |
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {
+                        console::log!("INVALID STATE!!!");
+                    }
+                };
+
+                let c_options: web_sys::CredentialCreationOptions = ccr.into();
+                let promise = utils::window()
+                    .navigator()
+                    .credentials()
+                    .create_with_options(&c_options)
+                    .expect_throw("Unable to create promise");
+                let fut = JsFuture::from(promise);
+
+                ctx.link().send_future(async move {
+                    match fut.await {
+                        Ok(jsval) => {
+                            let w_rpkc = web_sys::PublicKeyCredential::from(jsval);
+                            let rpkc = RegisterPublicKeyCredential::from(w_rpkc);
+                            AppMsg::CompleteRegisterChallenge(rpkc)
+                        }
+                        Err(e) => {
+                            console::log!(format!("error -> {:?}", e).as_str());
+                            AppMsg::ErrorCode(ResponseError::NavigatorError(format!(
+                                "{:?}",
+                                e
+                            )))
+                        }
+                    }
+                });
+            }
+            AppMsg::CompleteRegisterChallenge(rpkc) => {
+                match self.step {
+                    CompatTestStep::DirectAttest1 => {
+                        self.results.direct_attest_1.save_rpkc(&rpkc);
+                    }
+                    CompatTestStep::IndirectAttest1 => {
+                        self.results.indirect_attest_1.save_rpkc(&rpkc);
+                    }
+                    CompatTestStep::NoneAttest1 => {
+                        self.results.none_attest_1.save_rpkc(&rpkc);
+                    }
+                    CompatTestStep::FallBackAlg => {
+                        self.results.fallback_alg.save_rpkc(&rpkc);
+                    }
+                    CompatTestStep::UvPreferred => {
+                        self.results.uvpreferred.save_rpkc(&rpkc);
+                    }
+                    CompatTestStep::UvRequired => {
+                        self.results.uvrequired.save_rpkc(&rpkc);
+                    }
+                    CompatTestStep::AuthDiscouraged |
+                    CompatTestStep::AuthPreferred |
+                    CompatTestStep::AuthRequired |
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {
+                        console::log!("INVALID STATE!!!");
+                    }
+                };
+
+                ctx.link().send_future(async {
+                    match Self::register_complete(rpkc).await {
+                        Ok(v) => v,
+                        Err(v) => v.into(),
+                    }
+                });
+            }
+            AppMsg::RegisterSuccess(rs) => {
+                match self.step {
+                    CompatTestStep::DirectAttest1 => {
+                        self.results.direct_attest_1.set_success(rs);
+                    }
+                    CompatTestStep::IndirectAttest1 => {
+                        self.results.indirect_attest_1.set_success(rs);
+                    }
+                    CompatTestStep::NoneAttest1 => {
+                        self.results.none_attest_1.set_success(rs);
+                    }
+                    CompatTestStep::FallBackAlg => {
+                        self.results.fallback_alg.set_success(rs);
+                    }
+                    CompatTestStep::UvPreferred => {
+                        self.results.uvpreferred.set_success(rs);
+                    }
+                    CompatTestStep::UvRequired => {
+                        if rs.uv {
+                            self.results.uvrequired.set_success(rs);
+                        } else {
+                            self.results.uvrequired.set_err(ResponseError::UserNotVerified);
+                        }
+                    }
+                    CompatTestStep::AuthDiscouraged |
+                    CompatTestStep::AuthPreferred |
+                    CompatTestStep::AuthRequired |
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {
+                        console::log!("INVALID STATE!!!");
+                    }
+                };
+                self.step = self.step.next();
+                ctx.link().send_message(AppMsg::Ignore);
+            }
+            AppMsg::BeginLoginChallenge(rcr) => {
+                match self.step {
+                    CompatTestStep::AuthDiscouraged => {
+                        self.results.authdiscouraged.save_rcr(&rcr);
+                    }
+                    CompatTestStep::AuthPreferred => {
+                        self.results.authpreferred.save_rcr(&rcr);
+                    }
+                    CompatTestStep::AuthRequired => {
+                        self.results.authrequired.save_rcr(&rcr);
+                    }
+                    CompatTestStep::DirectAttest1 |
+                    CompatTestStep::IndirectAttest1 | 
+                    CompatTestStep::NoneAttest1  |
+                    CompatTestStep::FallBackAlg |
+                    CompatTestStep::UvPreferred |
+                    CompatTestStep::UvRequired |
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {
+                        console::log!("INVALID STATE!!!");
+                    }
+                }
+
+                let c_options: web_sys::CredentialRequestOptions = rcr.into();
+                let promise = utils::window()
+                    .navigator()
+                    .credentials()
+                    .get_with_options(&c_options)
+                    .expect_throw("Unable to create promise");
+                let fut = JsFuture::from(promise);
+
+                ctx.link().send_future(async move {
+                    match fut.await {
+                        Ok(jsval) => {
+                            let w_pkc = web_sys::PublicKeyCredential::from(jsval);
+                            let pkc = PublicKeyCredential::from(w_pkc);
+                            AppMsg::CompleteLoginChallenge(pkc)
+                        }
+                        Err(e) => {
+                            console::log!(format!("error -> {:?}", e).as_str());
+                            AppMsg::ErrorCode(ResponseError::NavigatorError(format!(
+                                "{:?}",
+                                e
+                            )))
+                        }
+                    }
+                });
+            }
+            AppMsg::CompleteLoginChallenge(pkc) => {
+                match self.step {
+                    CompatTestStep::AuthDiscouraged => {
+                        self.results.authdiscouraged.save_pkc(&pkc);
+                    }
+                    CompatTestStep::AuthPreferred => {
+                        self.results.authpreferred.save_pkc(&pkc);
+                    }
+                    CompatTestStep::AuthRequired => {
+                        self.results.authrequired.save_pkc(&pkc);
+                    }
+                    CompatTestStep::DirectAttest1 |
+                    CompatTestStep::IndirectAttest1 | 
+                    CompatTestStep::NoneAttest1  |
+                    CompatTestStep::FallBackAlg |
+                    CompatTestStep::UvPreferred |
+                    CompatTestStep::UvRequired |
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {
+                        console::log!("INVALID STATE!!!");
+                    }
+                }
+                ctx.link().send_future(async {
+                    match Self::login_complete(pkc).await {
+                        Ok(v) => v,
+                        Err(v) => v.into(),
+                    }
+                });
+            }
+            AppMsg::LoginSuccess(aus) => {
+                match self.step {
+                    CompatTestStep::AuthDiscouraged => {
+                        self.results.authdiscouraged.set_success(aus);
+                    }
+                    CompatTestStep::AuthPreferred => {
+                        self.results.authpreferred.set_success(aus);
+                    }
+                    CompatTestStep::AuthRequired => {
+                        self.results.authrequired.set_success(aus);
+                    }
+                    CompatTestStep::DirectAttest1 |
+                    CompatTestStep::IndirectAttest1 | 
+                    CompatTestStep::NoneAttest1  |
+                    CompatTestStep::FallBackAlg |
+                    CompatTestStep::UvPreferred |
+                    CompatTestStep::UvRequired |
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {
+                        console::log!("INVALID STATE!!!");
+                    }
+                }
+                self.step = self.step.next();
+                ctx.link().send_message(AppMsg::Ignore);
+            }
+            AppMsg::ErrorCode(err) => {
+                match self.step {
+                    CompatTestStep::DirectAttest1 => {
+                        self.results.direct_attest_1.set_err(err);
+                    }
+                    CompatTestStep::IndirectAttest1 => {
+                        self.results.indirect_attest_1.set_err(err);
+                    }
+                    CompatTestStep::NoneAttest1 => {
+                        self.results.none_attest_1.set_err(err);
+                    }
+                    CompatTestStep::FallBackAlg => {
+                        match err {
+                            ResponseError::NavigatorError(_) => {
+                                // This generally means that there is no fallback algo, so we only warn here.
+                                self.results.fallback_alg.set_warn(err)
+                            }
+                            _ => self.results.fallback_alg.set_err(err),
+                        }
+                    }
+                    CompatTestStep::UvPreferred => {
+                        self.results.uvpreferred.set_err(err);
+                    }
+                    CompatTestStep::UvRequired => {
+                        match err {
+                            ResponseError::NavigatorError(_) => {
+                                // This generally means that the browser de-selected the credential
+                                // since it can't do uv.
+                                self.results.uvrequired.set_warn(err)
+                            }
+                            _ => self.results.uvrequired.set_err(err),
+                        }
+                    }
+                    CompatTestStep::AuthDiscouraged => {
+                        self.results.authdiscouraged.set_err(err);
+                    }
+                    CompatTestStep::AuthPreferred => {
+                        self.results.authpreferred.set_err(err);
+                    }
+                    CompatTestStep::AuthRequired => {
+                        self.results.authrequired.set_err(err);
+                    }
+                    CompatTestStep::AuthDiscouragedConsistent |
+                    CompatTestStep::AuthPreferredConsistent |
+                    CompatTestStep::Complete => {}
+                };
+                self.step = self.step.next();
+                ctx.link().send_message(AppMsg::Ignore);
+            }
+        };
         true
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
+        match self.state {
+            CompatTestState::Init => self.view_begin(ctx),
+            CompatTestState::Step(step) => self.view_step(ctx, step),
+            CompatTestState::Complete => self.view_complete(ctx),
+        }
+    }
+
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
+        crate::utils::autofocus("autofocus");
+        console::log!("oauth2::rendered");
+    }
+}
+
+impl CompatTest {
+    fn do_registration(&mut self, ctx: &Context<Self>, settings: RegisterWithSettings) {
+        ctx.link().send_future(async move {
+            match Self::register_begin(settings).await {
+                Ok(v) => v,
+                Err(v) => v.into(),
+            }
+        });
+    }
+
+    fn do_auth(&mut self, ctx: &Context<Self>, settings: AuthenticateWithSettings) {
+        ctx.link().send_future(async move {
+            match Self::login_begin(settings).await {
+                Ok(v) => v,
+                Err(v) => v.into(),
+            }
+        });
+    }
+
+    fn view_issue_link(&self) -> Html {
+        let mut url = url::Url::parse("https://github.com/kanidm/webauthn-rs/issues/new")
+            .expect_throw("Failed to parse static url");
+
+        url.query_pairs_mut()
+            .append_pair("title", "Compatibility Test Failure")
+            .append_pair("body", r#"
+Please add any extra details here:
+
+* Browser version
+* Type of authenticator hardware
+* Any other details that may help
+
+```
+<please paste the details json here>
+```
+            "#);
+
+        html! {
+          <div class="vert-center w-100">
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+              { "An error occured in your test. If possible, please " }
+              <a href={ url.as_str().to_string() } class="alert-link" rel="noopener noreferrer" target="_blank">{ "open an issue" }</a>
+            </div>
+          </div>
+        }
+    }
+
+    fn view_complete(&self, ctx: &Context<Self>) -> Html {
+        let data = serde_json::to_string_pretty(&self.results)
+            .expect_throw("Failed to serialise results");
+
+        console::log!(&format!("{:?}", self.results));
+        html! {
+            <div class="form-description">
+              <main class="h-100">
+                <div class="text-center">
+                <h1>{ "Test Complete" }</h1>
+                </div>
+                { if self.results.did_err() {
+                    self.view_issue_link()
+                } else {
+                  html! { <></> }
+                } }
+                <div class="vert-center w-100">
+                  <table class="table table-striped">
+                    <thead>
+                    <tr>
+                      <th scope="col">{ "#" }</th>
+                      <th scope="col">{ "Name" }</th>
+                      <th scope="col">{ "Result" }</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                      <th scope="row">{ "1" }</th>
+                      <td>{ "Direct Attestation" }</td>
+                      <td>{ self.results.direct_attest_1.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "2" }</th>
+                      <td>{ "Indirect Attestation" }</td>
+                      <td>{ self.results.indirect_attest_1.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "3" }</th>
+                      <td>{ "None Attestation + UV Discouraged" }</td>
+                      <td>{ self.results.none_attest_1.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "4" }</th>
+                      <td>{ "Fallback Algorithm" }</td>
+                      <td>{ self.results.fallback_alg.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "5" }</th>
+                      <td>{ "Register UserVerification Preferred" }</td>
+                      <td>{ self.results.uvpreferred.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "6" }</th>
+                      <td>{ "Register UserVerification Required" }</td>
+                      <td>{ self.results.uvrequired.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "7" }</th>
+                      <td>{ "Auth UV Discouraged" }</td>
+                      <td>{ self.results.authdiscouraged.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "8" }</th>
+                      <td>{ "Auth UV Discouraged Consistent" }</td>
+                      <td>{ self.results.authdiscouraged_consistent.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "9" }</th>
+                      <td>{ "Auth UV Preferred" }</td>
+                      <td>{ self.results.authpreferred.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "10" }</th>
+                      <td>{ "Auth UV Preferred Consistent" }</td>
+                      <td>{ self.results.authpreferred_consistent.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "11" }</th>
+                      <td>{ "Auth UV Required" }</td>
+                      <td>{ self.results.authrequired.to_result() }</td>
+                    </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="vert-center w-100" style="padding-bottom: 10px;">
+                  <button class="btn btn-lg btn-info"
+                      onclick={ ctx.link().callback(|_| AppMsg::ResultsToClipboard) }>
+                      { "Copy Detailed Results to Clipboard" }
+                  </button>
+                </div>
+                <div class="w-100 accordion" id="accordionExample">
+                  <div class="accordion-item">
+                    <h4 class="accordion-header" id="headingThree">
+                      <button class="accordion-button collapsed" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#collapseThree"
+                        aria-expanded="false" aria-controls="collapseThree">
+                        { "Details (JSON)" }
+                      </button>
+                    </h4>
+                    <div id="collapseThree" class="accordion-collapse collapse"
+                      aria-labelledby="headingThree" data-bs-parent="#accordionExample">
+                      <div class="accordion-body">
+                        <pre>{ data }</pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </main>
+            </div>
+        }
+    }
+
+    fn view_step(&self, ctx: &Context<Self>, step: u32) -> Html {
+        html! {
+          <main class="text-center form-signin h-100">
+            <div class="vert-center">
+              { if self.show_next {
+                html! {
+                  <form
+                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                        console::log!("prevent_default()");
+                        e.prevent_default();
+                        AppMsg::Begin
+                    } ) }
+                    action="javascript:void(0);"
+                  >
+                    <button id="autofocus" class="btn btn-lg btn-primary" type="submit">{ "Next Test" }</button>
+                  </form>
+                }
+              } else {
+                  html! {
+                    <h1>{ format!("{} of {}", step, (CompatTestStep::Complete as u32) - 1 ) }</h1>
+                  }
+              } }
+            </div>
+          </main>
+        }
+    }
+
+    fn view_begin(&self, ctx: &Context<Self>) -> Html {
         html! {
             <div class="form-description">
               <main class="h-100">
@@ -66,13 +878,183 @@ impl Component for CompatTest {
                     { "If you have multiple authenticators available, you MUST ensure that you only use a single one of them during the test until completed." }
                     </p>
                     <div class="text-center">
-                      <button class="btn btn-lg btn-primary">{ "Begin Compatability Test" }</button>
+                      <form
+                        onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                            console::log!("prevent_default()");
+                            e.prevent_default();
+                            AppMsg::Begin
+                        } ) }
+                        action="javascript:void(0);"
+                      >
+                        <button id="autofocus" class="btn btn-lg btn-primary" type="submit">{ "Begin Compatibility Test" }</button>
+                      </form>
                     </div>
                   </div>
                 </div>
               </main>
-
             </div>
+        }
+    }
+
+    async fn register_begin(settings: RegisterWithSettings) -> Result<AppMsg, FetchError> {
+        let req_jsvalue = serde_json::to_string(&settings)
+            .map(|s| JsValue::from(&s))
+            .expect_throw("Failed to serialise settings");
+
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::SameOrigin);
+        opts.body(Some(&req_jsvalue));
+
+        let request = Request::new_with_str_and_init("/challenge/register/compat", &opts)?;
+
+        request
+            .headers()
+            .set("content-type", "application/json")
+            .expect_throw("failed to set header");
+
+        let window = utils::window();
+        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
+        let status = resp.status();
+
+        if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let ccr: CreationChallengeResponse = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::BeginRegisterChallenge(ccr))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
+        } else {
+            // let headers = resp.headers();
+            let text = JsFuture::from(resp.text()?).await?;
+            let emsg = text.as_string().unwrap_or_else(String::default);
+            Ok(AppMsg::ErrorCode(ResponseError::UnknownError(emsg)))
+        }
+    }
+
+    async fn register_complete(rpkc: RegisterPublicKeyCredential) -> Result<AppMsg, FetchError> {
+        console::log!(format!("rpkc -> {:?}", rpkc).as_str());
+
+        let req_jsvalue = serde_json::to_string(&rpkc)
+            .map(|s| JsValue::from(&s))
+            .expect("Failed to serialise rpkc");
+
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::SameOrigin);
+        opts.body(Some(&req_jsvalue));
+
+        let request = Request::new_with_str_and_init("/register/compat", &opts)?;
+
+        request
+            .headers()
+            .set("content-type", "application/json")
+            .expect_throw("failed to set header");
+
+        let window = utils::window();
+        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
+        let status = resp.status();
+
+        if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let rs: RegistrationSuccess = jsval.into_serde().unwrap_throw();
+            console::log!(format!("rs -> {:?}", rs).as_str());
+            Ok(AppMsg::RegisterSuccess(rs))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
+        } else {
+            // let headers = resp.headers();
+            let text = JsFuture::from(resp.text()?).await?;
+            let emsg = text.as_string().unwrap_or_else(String::default);
+            Ok(AppMsg::ErrorCode(ResponseError::UnknownError(emsg)))
+        }
+    }
+
+    async fn login_begin(
+        settings: AuthenticateWithSettings,
+    ) -> Result<AppMsg, FetchError> {
+        let req_jsvalue = serde_json::to_string(&settings)
+            .map(|s| JsValue::from(&s))
+            .expect_throw("Failed to serialise settings");
+
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::SameOrigin);
+        opts.body(Some(&req_jsvalue));
+
+        let request = Request::new_with_str_and_init("/challenge/login/compat", &opts)?;
+
+        request
+            .headers()
+            .set("content-type", "application/json")
+            .expect_throw("failed to set header");
+
+        let window = utils::window();
+        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
+        let status = resp.status();
+
+        if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let ccr: RequestChallengeResponse = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::BeginLoginChallenge(ccr))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
+        } else {
+            // let headers = resp.headers();
+            let text = JsFuture::from(resp.text()?).await?;
+            let emsg = text.as_string().unwrap_or_else(String::default);
+            Ok(AppMsg::ErrorCode(ResponseError::UnknownError(emsg)))
+        }
+    }
+
+    async fn login_complete(
+        pkc: PublicKeyCredential,
+    ) -> Result<AppMsg, FetchError> {
+        console::log!(format!("pkc -> {:?}", pkc).as_str());
+
+        let req_jsvalue = serde_json::to_string(&pkc)
+            .map(|s| JsValue::from(&s))
+            .expect("Failed to serialise pkc");
+
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::SameOrigin);
+        opts.body(Some(&req_jsvalue));
+
+        let request = Request::new_with_str_and_init("/login/compat", &opts)?;
+
+        request
+            .headers()
+            .set("content-type", "application/json")
+            .expect_throw("failed to set header");
+
+        let window = utils::window();
+        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
+        let status = resp.status();
+
+        if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let aus: AuthenticationSuccess = jsval.into_serde().unwrap_throw();
+            console::log!(format!("aus -> {:?}", aus).as_str());
+            Ok(AppMsg::LoginSuccess(aus))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
+        } else {
+            // let headers = resp.headers();
+            let text = JsFuture::from(resp.text()?).await?;
+            let emsg = text.as_string().unwrap_or_else(String::default);
+            Ok(AppMsg::ErrorCode(ResponseError::UnknownError(emsg)))
         }
     }
 }

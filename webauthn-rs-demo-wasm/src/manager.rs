@@ -42,12 +42,15 @@ fn nav() -> Html {
 
     html! {
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-          <div class="container-fluid">
-            <div class="collapse navbar-collapse justify-content-md-center">
+          <div class="container">
+            <p class="navbar-brand">{ "Webauthn RS" }</p>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarcontent" aria-controls="navbarcontent"
+                aria-expanded="false" aria-label="Toggle navigation">
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse justify-content-md-center" id="navbarcontent">
               <ul class="navbar-nav">
-                <li class="nav-item">
-                  <p class="navbar-brand">{ "Webauthn RS" }</p>
-                </li>
                 <li class="nav-item">
                   <Link<Route> classes={
                     if matches!(cur_route, Some(Route::Demo)) {
@@ -64,7 +67,7 @@ fn nav() -> Html {
                     } else {
                         classes!("nav-link")
                     }
-                  } to={ Route::CompatTest }>{ "Compatability Test" }</Link<Route>>
+                  } to={ Route::CompatTest }>{ "Compatibility Test" }</Link<Route>>
                 </li>
               </ul>
             </div>
@@ -108,12 +111,12 @@ impl Component for ManagerApp {
         false
     }
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
         console::log!("manager::update");
         true
     }
 
-    fn rendered(&mut self, ctx: &Context<Self>, first_render: bool) {
+    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
         console::log!("manager::rendered");
     }
 

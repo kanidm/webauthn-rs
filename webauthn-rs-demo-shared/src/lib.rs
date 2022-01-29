@@ -3,8 +3,9 @@ use webauthn_rs::error::WebauthnError;
 
 pub use webauthn_rs::proto::{
     AttestationConveyancePreference, AuthenticationSignedExtensions, AuthenticatorAttachment,
-    COSEAlgorithm, Credential, CredentialID, RegistrationSignedExtensions,
-    RequestAuthenticationExtensions, RequestRegistrationExtensions, UserVerificationPolicy,
+    COSEAlgorithm, CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
+    RegisterPublicKeyCredential, RegistrationSignedExtensions, RequestAuthenticationExtensions,
+    RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -26,16 +27,22 @@ pub struct RegistrationSuccess {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AuthenticateWithSettings {
+    pub use_cred_id: Option<CredentialID>,
     pub uv: Option<UserVerificationPolicy>,
     pub extensions: Option<RequestAuthenticationExtensions>,
 }
 
 impl From<&RegisterWithSettings> for AuthenticateWithSettings {
     fn from(regsettings: &RegisterWithSettings) -> AuthenticateWithSettings {
+        let use_cred_id = None;
         let uv = regsettings.uv.clone();
         let extensions = None;
 
-        AuthenticateWithSettings { uv, extensions }
+        AuthenticateWithSettings {
+            use_cred_id,
+            uv,
+            extensions,
+        }
     }
 }
 
@@ -45,6 +52,289 @@ pub struct AuthenticationSuccess {
     pub uv: bool,
     pub counter: u32,
     pub extensions: AuthenticationSignedExtensions,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CTestAttestState {
+    NotTested,
+    Passed {
+        rs: RegistrationSuccess,
+        ccr: CreationChallengeResponse,
+        rpkc: RegisterPublicKeyCredential,
+    },
+    Warning {
+        err: ResponseError,
+        ccr: Option<CreationChallengeResponse>,
+        rpkc: Option<RegisterPublicKeyCredential>,
+    },
+    Failed {
+        err: ResponseError,
+        ccr: Option<CreationChallengeResponse>,
+        rpkc: Option<RegisterPublicKeyCredential>,
+    },
+}
+
+impl Default for CTestAttestState {
+    fn default() -> Self {
+        CTestAttestState::NotTested
+    }
+}
+
+impl CTestAttestState {
+    pub fn failed() -> Self {
+        CTestAttestState::Failed {
+            err: ResponseError::IncompleteTest,
+            ccr: None,
+            rpkc: None,
+        }
+    }
+
+    pub fn to_result(&self) -> String {
+        match self {
+            CTestAttestState::NotTested => "🥑 ".to_string(),
+            CTestAttestState::Passed { .. } => "✅ ".to_string(),
+            CTestAttestState::Failed { .. } => "❌ ".to_string(),
+            CTestAttestState::Warning { .. } => "⚠️  ".to_string(),
+        }
+    }
+
+    pub fn set_warn(&mut self, err: ResponseError) {
+        let mut n_self = match self {
+            CTestAttestState::Failed {
+                err: ResponseError::IncompleteTest,
+                ccr,
+                rpkc,
+                ..
+            } => CTestAttestState::Warning {
+                err,
+                ccr: ccr.clone(),
+                rpkc: rpkc.clone(),
+            },
+            _ => panic!("Invalid State"),
+        };
+        std::mem::swap(self, &mut n_self);
+    }
+
+    pub fn set_err(&mut self, mut n_err: ResponseError) {
+        match self {
+            CTestAttestState::Failed { err, .. } => {
+                std::mem::swap(err, &mut n_err);
+            }
+            _ => panic!("Invalid State"),
+        }
+    }
+
+    pub fn save_ccr(&mut self, n_ccr: &CreationChallengeResponse) {
+        match self {
+            CTestAttestState::Failed { ccr, .. } => {
+                std::mem::swap(ccr, &mut Some(n_ccr.clone()));
+            }
+            _ => panic!("Invalid State"),
+        }
+    }
+
+    pub fn save_rpkc(&mut self, n_rpkc: &RegisterPublicKeyCredential) {
+        match self {
+            CTestAttestState::Failed { rpkc, .. } => {
+                std::mem::swap(rpkc, &mut Some(n_rpkc.clone()));
+            }
+            _ => panic!("Invalid State"),
+        }
+    }
+
+    pub fn set_success(&mut self, rs: RegistrationSuccess) {
+        let mut n_self = match self {
+            CTestAttestState::Failed {
+                err: ResponseError::IncompleteTest,
+                ccr: Some(ccr),
+                rpkc: Some(rpkc),
+                ..
+            } => CTestAttestState::Passed {
+                rs,
+                ccr: ccr.clone(),
+                rpkc: rpkc.clone(),
+            },
+            _ => panic!("Invalid State"),
+        };
+        std::mem::swap(self, &mut n_self);
+    }
+
+    pub fn get_credential(&self) -> Option<&Credential> {
+        match self {
+            CTestAttestState::Passed { rs, .. } => Some(&rs.cred),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CTestAuthState {
+    NotTested,
+    FailedPrerequisite,
+    Passed {
+        aus: AuthenticationSuccess,
+        rcr: RequestChallengeResponse,
+        pkc: PublicKeyCredential,
+    },
+    Warning {
+        err: ResponseError,
+        rcr: Option<RequestChallengeResponse>,
+        pkc: Option<PublicKeyCredential>,
+    },
+    Failed {
+        err: ResponseError,
+        rcr: Option<RequestChallengeResponse>,
+        pkc: Option<PublicKeyCredential>,
+    },
+}
+
+impl Default for CTestAuthState {
+    fn default() -> Self {
+        CTestAuthState::NotTested
+    }
+}
+
+impl CTestAuthState {
+    pub fn failed() -> Self {
+        CTestAuthState::Failed {
+            err: ResponseError::IncompleteTest,
+            rcr: None,
+            pkc: None,
+        }
+    }
+
+    pub fn to_result(&self) -> String {
+        match self {
+            CTestAuthState::NotTested => "🥑 ".to_string(),
+            CTestAuthState::FailedPrerequisite => "⏭ ".to_string(),
+            CTestAuthState::Passed { .. } => "✅ ".to_string(),
+            CTestAuthState::Failed { .. } => "❌ ".to_string(),
+            CTestAuthState::Warning { .. } => "⚠️  ".to_string(),
+        }
+    }
+
+    pub fn save_rcr(&mut self, n_rcr: &RequestChallengeResponse) {
+        match self {
+            CTestAuthState::Failed { rcr, .. } => {
+                std::mem::swap(rcr, &mut Some(n_rcr.clone()));
+            }
+            _ => panic!("Invalid State"),
+        }
+    }
+
+    pub fn save_pkc(&mut self, n_pkc: &PublicKeyCredential) {
+        match self {
+            CTestAuthState::Failed { pkc, .. } => {
+                std::mem::swap(pkc, &mut Some(n_pkc.clone()));
+            }
+            _ => panic!("Invalid State"),
+        }
+    }
+
+    pub fn set_warn(&mut self, err: ResponseError) {
+        let mut n_self = match self {
+            CTestAuthState::Failed {
+                err: ResponseError::IncompleteTest,
+                rcr,
+                pkc,
+            } => CTestAuthState::Warning {
+                err,
+                rcr: rcr.clone(),
+                pkc: pkc.clone(),
+            },
+            _ => panic!("Invalid State"),
+        };
+        std::mem::swap(self, &mut n_self);
+    }
+
+    pub fn set_err(&mut self, mut n_err: ResponseError) {
+        match self {
+            CTestAuthState::Failed { err, .. } => {
+                std::mem::swap(err, &mut n_err);
+            }
+            _ => panic!("Invalid State"),
+        }
+    }
+
+    pub fn set_success(&mut self, aus: AuthenticationSuccess) {
+        let mut n_self = match self {
+            CTestAuthState::Failed {
+                err: ResponseError::IncompleteTest,
+                rcr: Some(rcr),
+                pkc: Some(pkc),
+            } => CTestAuthState::Passed {
+                aus,
+                rcr: rcr.clone(),
+                pkc: pkc.clone(),
+            },
+            _ => panic!("Invalid State"),
+        };
+        std::mem::swap(self, &mut n_self);
+    }
+
+    pub fn get_auth_result(&self) -> Option<&AuthenticationSuccess> {
+        match self {
+            CTestAuthState::Passed { aus, .. } => Some(&aus),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CTestSimpleState {
+    NotTested,
+    FailedPrerequisite,
+    Passed,
+    Warning,
+    Failed,
+}
+
+impl Default for CTestSimpleState {
+    fn default() -> Self {
+        CTestSimpleState::NotTested
+    }
+}
+
+impl CTestSimpleState {
+    pub fn failed() -> CTestSimpleState {
+        CTestSimpleState::Failed
+    }
+
+    pub fn to_result(&self) -> String {
+        match self {
+            CTestSimpleState::NotTested => "🥑 ".to_string(),
+            CTestSimpleState::FailedPrerequisite => "⏭ ".to_string(),
+            CTestSimpleState::Passed => "✅ ".to_string(),
+            CTestSimpleState::Failed => "❌ ".to_string(),
+            CTestSimpleState::Warning => "⚠️  ".to_string(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct CompatTestResults {
+    pub direct_attest_1: CTestAttestState,
+    pub indirect_attest_1: CTestAttestState,
+    pub none_attest_1: CTestAttestState,
+    pub fallback_alg: CTestAttestState,
+    pub uvpreferred: CTestAttestState,
+    pub uvrequired: CTestAttestState,
+    pub authdiscouraged: CTestAuthState,
+    pub authdiscouraged_consistent: CTestSimpleState,
+    pub authpreferred: CTestAuthState,
+    pub authpreferred_consistent: CTestSimpleState,
+    pub authrequired: CTestAuthState,
+}
+
+impl CompatTestResults {
+    pub fn did_err(&self) -> bool {
+        matches!(self.direct_attest_1, CTestAttestState::Failed { .. })
+            || matches!(self.indirect_attest_1, CTestAttestState::Failed { .. })
+            || matches!(self.none_attest_1, CTestAttestState::Failed { .. })
+            || matches!(self.fallback_alg, CTestAttestState::Failed { .. })
+            || matches!(self.uvpreferred, CTestAttestState::Failed { .. })
+            || matches!(self.uvrequired, CTestAttestState::Failed { .. })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -97,6 +387,7 @@ pub enum ResponseError {
     COSEKeyECDSAXYInvalid,
     COSEKeyRSANEInvalid,
     COSEKeyECDSAInvalidCurve,
+    COSEKeyEDDSAInvalidCurve,
     COSEKeyInvalidAlgorithm,
     CredentialExistCheckError,
     CredentialAlreadyExists,
@@ -116,7 +407,9 @@ pub enum ResponseError {
     AttestationCredentialSubjectKeyMismatch,
     CredentialCrossOrigin,
     SessionStateInvalid,
+    NavigatorError(String),
     UnknownError(String),
+    IncompleteTest,
 }
 
 impl From<WebauthnError> for ResponseError {
@@ -213,6 +506,7 @@ impl From<WebauthnError> for ResponseError {
                 Self::AttestationCredentialSubjectKeyMismatch
             }
             WebauthnError::CredentialCrossOrigin => Self::CredentialCrossOrigin,
+            #[allow(unreachable_patterns)]
             _ => Self::UnknownError(format!("{:?}", value)),
             // WebauthnError::OpenSSLError(_)                                                                                =>      Self::OpenSSLError,
         }

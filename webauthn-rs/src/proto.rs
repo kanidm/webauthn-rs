@@ -132,10 +132,6 @@ pub enum ECDSACurve {
     // | P-256   | 1     | EC2      | NIST P-256 also known as secp256r1 |
     // | P-384   | 2     | EC2      | NIST P-384 also known as secp384r1 |
     // | P-521   | 3     | EC2      | NIST P-521 also known as secp521r1 |
-    // | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
-    // | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
-    // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
-    // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
     // +---------+-------+----------+------------------------------------+
     /// Identifies this curve as SECP256R1 (X9_62_PRIME256V1 in OpenSSL)
     SECP256R1 = 1,
@@ -143,8 +139,6 @@ pub enum ECDSACurve {
     SECP384R1 = 2,
     /// Identifies this curve as SECP521R1
     SECP521R1 = 3,
-    // /// Identifies this OKP as ED25519
-    // ED25519 = 6,
 }
 
 impl TryFrom<i128> for ECDSACurve {
@@ -155,6 +149,39 @@ impl TryFrom<i128> for ECDSACurve {
             2 => Ok(ECDSACurve::SECP384R1),
             3 => Ok(ECDSACurve::SECP521R1),
             _ => Err(WebauthnError::COSEKeyECDSAInvalidCurve),
+        }
+    }
+}
+
+/// An EDDSACurve identifier. You probably will never need to alter
+/// or use this value, as it is set inside the Credential for you.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EDDSACurve {
+    // +---------+-------+----------+------------------------------------+
+    // | Name    | Value | Key Type | Description                        |
+    // +---------+-------+----------+------------------------------------+
+    // | X25519  | 4     | OKP      | X25519 for use w/ ECDH only        |
+    // | X448    | 5     | OKP      | X448 for use w/ ECDH only          |
+    // | Ed25519 | 6     | OKP      | Ed25519 for use w/ EdDSA only      |
+    // | Ed448   | 7     | OKP      | Ed448 for use w/ EdDSA only        |
+    // +---------+-------+----------+------------------------------------+
+    // /// Identifies this curve as X25519 ECDH only
+    // X25519 = 4,
+    // /// Identifies this curve as X448 ECDH only
+    // X448 = 5,
+    /// Identifies this OKP as ED25519
+    ED25519 = 6,
+    /// Identifies this OKP as ED448
+    ED448 = 7,
+}
+
+impl TryFrom<i128> for EDDSACurve {
+    type Error = WebauthnError;
+    fn try_from(u: i128) -> Result<Self, Self::Error> {
+        match u {
+            6 => Ok(EDDSACurve::ED25519),
+            7 => Ok(EDDSACurve::ED448),
+            _ => Err(WebauthnError::COSEKeyEDDSAInvalidCurve),
         }
     }
 }
@@ -230,6 +257,25 @@ impl From<&COSEAlgorithm> for i64 {
     }
 }
 
+impl COSEAlgorithm {
+    /// Return the set of all possible algorithms that may exist as a COSEAlgorithm
+    pub fn all_possible_algs() -> Vec<Self> {
+        vec![
+            COSEAlgorithm::ES256,
+            COSEAlgorithm::ES384,
+            COSEAlgorithm::ES512,
+            COSEAlgorithm::RS256,
+            COSEAlgorithm::RS384,
+            COSEAlgorithm::RS512,
+            COSEAlgorithm::PS256,
+            COSEAlgorithm::PS384,
+            COSEAlgorithm::PS512,
+            COSEAlgorithm::EDDSA,
+            COSEAlgorithm::INSECURE_RS1,
+        ]
+    }
+}
+
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
@@ -242,6 +288,18 @@ pub struct COSEEC2Key {
     pub x: [u8; 32],
     /// The key's public Y coordinate.
     pub y: [u8; 32],
+}
+
+/// A COSE Elliptic Curve Public Key. This is generally the provided credential
+/// that an authenticator registers, and is used to authenticate the user.
+/// You will likely never need to interact with this value, as it is part of the Credential
+/// API.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct COSEOKPKey {
+    /// The curve that this key references.
+    pub curve: EDDSACurve,
+    /// The key's public X coordinate.
+    pub x: [u8; 32],
 }
 
 /// A COSE RSA PublicKey. This is a provided credential from a registered
@@ -271,7 +329,7 @@ pub enum COSEKeyType {
     //    | Reserved  | 0     | This value is reserved                        |
     //    +-----------+-------+-----------------------------------------------+
     /// Identifies this as an Eliptic Curve octet key pair
-    EC_OKP,
+    EC_OKP(COSEOKPKey),
     /// Identifies this as an Eliptic Curve EC2 key
     EC_EC2(COSEEC2Key),
     // EC_Symmetric,
@@ -1298,7 +1356,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
 /// <https://w3c.github.io/webauthn/#iface-pkcredential>
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RegisterPublicKeyCredential {
     /// The id of the PublicKey credential, likely in base64
     pub id: String,
@@ -1382,7 +1440,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
 }
 
 /// <https://w3c.github.io/webauthn/#authenticatorassertionresponse>
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AuthenticatorAssertionResponseRaw {
     /// Raw authenticator data.
     #[serde(rename = "authenticatorData")]
@@ -1401,7 +1459,7 @@ pub struct AuthenticatorAssertionResponseRaw {
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
@@ -1430,7 +1488,7 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
 ///
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PublicKeyCredential {
     /// The credential Id, likely base64
     pub id: String,

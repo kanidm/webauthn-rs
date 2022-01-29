@@ -8,6 +8,9 @@ use serde_json::error::Error as JSONError;
 // use serde::{Deserialize, Serialize};
 // use nom::Err as NOMError;
 
+/// A wrapper for `Result<T, WebauthnError>`
+pub type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
+
 /// Possible errors that may occur during Webauthn Operation processing.
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
@@ -158,6 +161,12 @@ pub enum WebauthnError {
 
     #[error("The COSEKey uses a curve that is not supported by this implementation")]
     COSEKeyECDSAInvalidCurve,
+
+    #[error("The COSEKey contains invalid EDDSA X coordinate data")]
+    COSEKeyEDDSAXInvalid,
+
+    #[error("The COSEKey uses a curve that is not supported by this implementation")]
+    COSEKeyEDDSAInvalidCurve,
 
     #[error("The COSEKey contains invalid cryptographic algorithm request")]
     COSEKeyInvalidAlgorithm,

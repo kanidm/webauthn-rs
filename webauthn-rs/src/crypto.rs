@@ -11,7 +11,8 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 // use super::constants::*;
 use super::error::*;
 use crate::proto::{
-    Aaguid, COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, COSERSAKey, ECDSACurve,
+    Aaguid, COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, COSEOKPKey, COSERSAKey,
+    ECDSACurve, EDDSACurve,
 };
 // use super::proto::*;
 
@@ -70,7 +71,10 @@ fn verify_signature(
                 .map_err(WebauthnError::OpenSSLError)?;
             Ok(verifier)
         }
-        _ => Err(WebauthnError::COSEKeyInvalidType),
+        c_alg => {
+            debug!(?c_alg, "WebauthnError::COSEKeyInvalidType");
+            Err(WebauthnError::COSEKeyInvalidType)
+        }
     }?;
 
     verifier
@@ -274,6 +278,17 @@ impl ECDSACurve {
     }
 }
 
+/*
+impl EDDSACurve {
+    fn to_openssl_nid(&self) -> nid::Nid {
+        match self {
+            EDDSACurve::ED25519 => nid::Nid::X9_62_PRIME256V1,
+            EDDSACurve::ED448 => nid::Nid::SECP384R1,
+        }
+    }
+}
+*/
+
 impl COSEAlgorithm {
     pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> Result<Vec<u8>, WebauthnError> {
         match self {
@@ -283,7 +298,10 @@ impl COSEAlgorithm {
                     .map(|dbytes| Vec::from(dbytes.as_ref()))
                     .map_err(WebauthnError::OpenSSLError)
             }
-            _ => Err(WebauthnError::COSEKeyInvalidType),
+            c_alg => {
+                debug!(?c_alg, "WebauthnError::COSEKeyInvalidType");
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }
     }
 }
@@ -316,11 +334,17 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
         let content_type = cbor_try_i128!(content_type_value)?;
 
+        let type_ = COSEAlgorithm::try_from(content_type)?;
+
         // https://www.iana.org/assignments/cose/cose.xhtml
         // https://www.w3.org/TR/webauthn/#sctn-encoded-credPubKey-examples
         // match key_type {
         // 1 => {} OctetKey
-        if key_type == (COSEKeyTypeId::EC_EC2 as i128) {
+        if key_type == (COSEKeyTypeId::EC_EC2 as i128)
+            && (type_ == COSEAlgorithm::ES256
+                || type_ == COSEAlgorithm::ES384
+                || type_ == COSEAlgorithm::ES512)
+        {
             // This indicates this is an EC2 key consisting of crv, x, y, which are stored in
             // crv (-1), x (-2) and y (-3)
             // Get these values now ....
@@ -356,7 +380,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 
             // Right, now build the struct.
             let cose_key = COSEKey {
-                type_: COSEAlgorithm::try_from(content_type)?,
+                type_,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
                     curve: ECDSACurve::try_from(curve_type)?,
                     x: x_temp,
@@ -372,7 +396,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             cose_key.validate()?;
             // return it
             Ok(cose_key)
-        } else if key_type == (COSEKeyTypeId::EC_RSA as i128) {
+        } else if key_type == (COSEKeyTypeId::EC_RSA as i128) && (type_ == COSEAlgorithm::RS256) {
             // RSAKey
 
             // -37 -> PS256
@@ -401,7 +425,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
 
             // Right, now build the struct.
             let cose_key = COSEKey {
-                type_: COSEAlgorithm::try_from(content_type)?,
+                type_,
                 key: COSEKeyType::RSA(COSERSAKey {
                     n: n.to_vec(),
                     e: e_temp,
@@ -411,8 +435,45 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             cose_key.validate()?;
             // return it
             Ok(cose_key)
+        } else if key_type == (COSEKeyTypeId::EC_OKP as i128) && (type_ == COSEAlgorithm::EDDSA) {
+            debug!(?d, "WebauthnError::COSEKeyInvalidType - EC_OKP");
+            // https://datatracker.ietf.org/doc/html/rfc8152#section-13.2
+
+            let curve_type_value = m
+                .get(&serde_cbor::Value::Integer(-1))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let curve_type = cbor_try_i128!(curve_type_value)?;
+
+            let x_value = m
+                .get(&serde_cbor::Value::Integer(-2))
+                .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
+            let x = cbor_try_bytes!(x_value)?;
+
+            if x.len() != 32 {
+                return Err(WebauthnError::COSEKeyEDDSAXInvalid);
+            }
+
+            let mut x_temp = [0; 32];
+            x_temp.copy_from_slice(x);
+
+            let cose_key = COSEKey {
+                type_,
+                key: COSEKeyType::EC_OKP(COSEOKPKey {
+                    curve: EDDSACurve::try_from(curve_type)?,
+                    x: x_temp,
+                }),
+            };
+
+            // The rfc additionally states:
+            //   "   Applications MUST check that the curve and the key type are
+            //     consistent and reject a key if they are not."
+            // this means feeding the values to openssl to validate them for us!
+
+            cose_key.validate()?;
+            // return it
+            Ok(cose_key)
         } else {
-            debug!("try from");
+            debug!(?key_type, ?type_, "WebauthnError::COSEKeyInvalidType");
             Err(WebauthnError::COSEKeyInvalidType)
         }
     }
@@ -526,7 +587,10 @@ impl COSEKey {
                 */
                 Ok(())
             }
-            _ => Err(WebauthnError::COSEKeyInvalidType),
+            COSEKeyType::EC_OKP(_edk) => {
+                error!("ED25519 or ED448 keys are not currently supported");
+                Err(WebauthnError::COSEKeyInvalidType)
+            }
         }
     }
 

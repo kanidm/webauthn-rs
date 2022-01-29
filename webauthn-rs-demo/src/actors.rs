@@ -1,6 +1,6 @@
 use crate::config::{WebauthnAuthConfig, WebauthnRegistrationConfig};
 use url::Url;
-use webauthn_rs::error::WebauthnError;
+use webauthn_rs::error::{WebauthnError, WebauthnResult};
 use webauthn_rs::proto::{
     Authentication, AuthenticatorData, CreationChallengeResponse, Credential, CredentialID,
     PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
@@ -9,8 +9,6 @@ use webauthn_rs::proto::{
 use webauthn_rs::proto::{RequestAuthenticationExtensions, RequestRegistrationExtensions};
 use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
 use webauthn_rs_demo_shared::*;
-
-type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
 
 pub struct WebauthnActor {
     pub rp_name: String,
@@ -89,12 +87,12 @@ impl WebauthnActor {
     ) -> WebauthnResult<(RequestChallengeResponse, AuthenticationState)> {
         debug!("handle ChallengeAuthenticate -> {:?}", username);
 
-        /*
         let AuthenticateWithSettings {
+            use_cred_id,
+
             uv,
-            extensions
+            extensions,
         } = auth_settings;
-        */
 
         /*
         let exts = RequestAuthenticationExtensions::builder()
@@ -102,9 +100,24 @@ impl WebauthnActor {
             .build();
         */
 
-        let (acr, st) = self
-            .base_wan
-            .generate_challenge_authenticate_options(creds, None)?;
+        // If use_cred_id is set, only allow this cred to be used. This also allows
+        // some extra "stuff".
+
+        let (acr, st) = match use_cred_id {
+            Some(use_cred_id) => {
+                let cred = creds
+                    .into_iter()
+                    .filter(|c| c.cred_id == use_cred_id)
+                    .next()
+                    .ok_or(WebauthnError::CredentialNotFound)?;
+
+                self.base_wan
+                    .generate_challenge_authenticate_credential(cred, uv, None)
+            }
+            None => self
+                .base_wan
+                .generate_challenge_authenticate_options(creds, None),
+        }?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);
         Ok((acr, st))

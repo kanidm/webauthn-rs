@@ -9,8 +9,10 @@ body {
 }
 
 .form-description {
-  padding-top: 40px;
-  padding-bottom: 40px;
+  padding-top: 25px;
+  padding-bottom: 20px;
+  padding-left: 10px;
+  padding-right: 10px;
   width: 100%;
   max-width: 700px;
   margin: 0px auto;
@@ -25,7 +27,7 @@ body {
 .form-signin {
   width: 100%;
   max-width: 520px;
-  padding: 20px;
+  padding: 10px;
   margin: auto;
 }
 

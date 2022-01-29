@@ -5,7 +5,6 @@ use gloo::console;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
-use wasm_bindgen_futures::spawn_local;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
 use webauthn_rs::proto::{
@@ -21,6 +20,7 @@ use yew::prelude::*;
 pub struct Demo {
     state: DemoState,
     reg_settings: RegisterWithSettings,
+    last_username: String,
 }
 
 #[derive(Debug)]
@@ -55,7 +55,10 @@ impl From<FetchError> for AppMsg {
 }
 
 impl Demo {
-    async fn register_begin(username: String, settings: RegisterWithSettings) -> Result<AppMsg, FetchError> {
+    async fn register_begin(
+        username: String,
+        settings: RegisterWithSettings,
+    ) -> Result<AppMsg, FetchError> {
         let req_jsvalue = serde_json::to_string(&settings)
             .map(|s| JsValue::from(&s))
             .expect_throw("Failed to serialise settings");
@@ -88,7 +91,7 @@ impl Demo {
             let err: ResponseError = jsval.into_serde().unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
-            let headers = resp.headers();
+            // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
             let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
@@ -134,14 +137,17 @@ impl Demo {
             let err: ResponseError = jsval.into_serde().unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
-            let headers = resp.headers();
+            // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
             let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
         }
     }
 
-    async fn login_begin(username: String, settings: AuthenticateWithSettings) -> Result<AppMsg, FetchError> {
+    async fn login_begin(
+        username: String,
+        settings: AuthenticateWithSettings,
+    ) -> Result<AppMsg, FetchError> {
         let req_jsvalue = serde_json::to_string(&settings)
             .map(|s| JsValue::from(&s))
             .expect_throw("Failed to serialise settings");
@@ -174,7 +180,7 @@ impl Demo {
             let err: ResponseError = jsval.into_serde().unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
-            let headers = resp.headers();
+            // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
             let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
@@ -220,7 +226,7 @@ impl Demo {
             let err: ResponseError = jsval.into_serde().unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
-            let headers = resp.headers();
+            // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
             let emsg = text.as_string();
             Ok(AppMsg::Error(emsg))
@@ -228,18 +234,16 @@ impl Demo {
     }
 
     fn view_register(&self, ctx: &Context<Self>) -> Html {
+        let last_username = self.last_username.clone();
         html! {
           <>
             <div class="form-description">
               <div>
                 <p>
-                  { "Webauthn is a modern, passwordless method of securely authenticating to a website." }
+                  { "Webauthn is a modern, passwordless method of securely authenticating to a website. You can test registering and then authenticating with Webauthn here!" }
                 </p>
                 <p>
                   { "A Webauthn credential uses strong cryptography to identify you to a site. The cryptographic key is contained in a secure device like a yubikey, a trusted platform module, or your phones secure enclave. Even when you use a finger print or a pin with your credential, that biometric or pin data never leaves your device. "}
-                </p>
-                <p>
-                  { "You can test registering and then authenticating with Webauthn here!" }
                 </p>
               </div>
             </div>
@@ -254,7 +258,7 @@ impl Demo {
                 action="javascript:void(0);"
               >
                 <div class="form-floating">
-                  <input id="autofocus" type="text" class="form-control" value="" />
+                  <input id="autofocus" type="text" class="form-control" value={ last_username } />
                   <label for="autofocus">{ "Username" }</label>
                 </div>
                 <button type="button" class="btn btn-lg btn-secondary" data-bs-toggle="modal" data-bs-target="#exampleModalDefault">
@@ -346,6 +350,7 @@ impl Demo {
     }
 
     fn view_login(&self, ctx: &Context<Self>) -> Html {
+        let last_username = self.last_username.clone();
         html! {
           <>
             <div class="form-description">
@@ -366,7 +371,7 @@ impl Demo {
                 action="javascript:void(0);"
               >
                 <div class="form-floating">
-                  <input id="autofocus" type="text" class="form-control" value="" />
+                  <input id="autofocus" type="text" class="form-control" value={ last_username } />
                   <label for="autofocus">{ "Username" }</label>
                 </div>
                 <button class="btn btn-lg btn-primary" type="submit">
@@ -379,6 +384,7 @@ impl Demo {
     }
 
     fn view_login_success(&self, ctx: &Context<Self>) -> Html {
+        let last_username = self.last_username.clone();
         html! {
           <>
             <div class="form-description">
@@ -405,7 +411,7 @@ impl Demo {
                 action="javascript:void(0);"
               >
                 <div class="form-floating">
-                  <input id="autofocus" type="text" class="form-control" value="" />
+                  <input id="autofocus" type="text" class="form-control" value={ last_username } />
                   <label for="autofocus">{ "Username" }</label>
                 </div>
               <button class="btn btn-lg btn-secondary"
@@ -427,8 +433,11 @@ impl Demo {
             <div class="form-description">
               <div>
                 <h3>
-                  {" Error! 🥺 We weren't expecting this one!" }
+                  {" Error! "}
                 </h3>
+                <h2>
+                  {"🥺 We weren't expecting this!" }
+                </h2>
                 <p>{ msg }</p>
               </div>
             </div>
@@ -447,7 +456,7 @@ impl Component for Demo {
     type Message = AppMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         console::log!(format!("create").as_str());
         Demo {
             state: DemoState::Register,
@@ -457,11 +466,12 @@ impl Component for Demo {
                 attestation: None,
                 attachment: None,
                 extensions: None,
-            }
+            },
+            last_username: String::default(),
         }
     }
 
-    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, _ctx: &Context<Self>) -> bool {
         false
     }
 
@@ -484,48 +494,47 @@ impl Component for Demo {
             // Rego
             (DemoState::Register, AppMsg::Register) => {
                 let username = utils::get_value_from_element_id("autofocus").expect("No username");
+
+                if username == "" {
+                    ctx.link().send_message(AppMsg::Error(Some(
+                        "A username must be provided".to_string(),
+                    )));
+                    return false;
+                }
+
+                self.last_username = username.clone();
                 // Build the settings that we'll be using.
 
                 let attachment = utils::get_select_value_from_element_id("attachment_type")
-                    .and_then(|v| {
-                        match v.as_str() {
-                            "any" => None,
-                            "platform" => Some(AuthenticatorAttachment::Platform),
-                            "roaming" => Some(AuthenticatorAttachment::CrossPlatform),
-                            _ => None,
-                        }
+                    .and_then(|v| match v.as_str() {
+                        "any" => None,
+                        "platform" => Some(AuthenticatorAttachment::Platform),
+                        "roaming" => Some(AuthenticatorAttachment::CrossPlatform),
+                        _ => None,
                     });
 
-                let attestation  = utils::get_select_value_from_element_id("attestation_type")
-                    .and_then(|v| {
-                        match v.as_str() {
-                            "none" => Some(AttestationConveyancePreference::None),
-                            "indirect" => Some(AttestationConveyancePreference::Indirect),
-                            "direct" => Some(AttestationConveyancePreference::Direct),
-                            _ => None,
-                        }
+                let attestation = utils::get_select_value_from_element_id("attestation_type")
+                    .and_then(|v| match v.as_str() {
+                        "none" => Some(AttestationConveyancePreference::None),
+                        "indirect" => Some(AttestationConveyancePreference::Indirect),
+                        "direct" => Some(AttestationConveyancePreference::Direct),
+                        _ => None,
                     });
 
-                let uv_req = utils::get_checked_from_element_id("user_verification_required")
-                    .map(|v| if v {
-                        UserVerificationPolicy::Required
-                    } else {
-                        UserVerificationPolicy::default()
+                let uv_req =
+                    utils::get_checked_from_element_id("user_verification_required").map(|v| {
+                        if v {
+                            UserVerificationPolicy::Required
+                        } else {
+                            UserVerificationPolicy::default()
+                        }
                     });
 
                 let es256_req = utils::get_checked_from_element_id("algorithm_es256")
-                    .and_then(|v| if v {
-                        Some(COSEAlgorithm::ES256)
-                    } else {
-                        None
-                    });
+                    .and_then(|v| if v { Some(COSEAlgorithm::ES256) } else { None });
 
                 let rs256_req = utils::get_checked_from_element_id("algorithm_rs256")
-                    .and_then(|v| if v {
-                        Some(COSEAlgorithm::RS256)
-                    } else {
-                        None
-                    });
+                    .and_then(|v| if v { Some(COSEAlgorithm::RS256) } else { None });
 
                 console::log!(format!("uv_req -> {:?}", uv_req).as_str());
                 console::log!(format!("es256_req -> {:?}", es256_req).as_str());
@@ -535,7 +544,9 @@ impl Component for Demo {
                 console::log!(format!("register -> {:?}", username).as_str());
 
                 let alg: Vec<_> = vec![es256_req, rs256_req]
-                    .into_iter().filter_map(|v| v).collect();
+                    .into_iter()
+                    .filter_map(|v| v)
+                    .collect();
 
                 self.reg_settings.uv = uv_req;
                 self.reg_settings.algorithm = Some(alg);
@@ -590,6 +601,14 @@ impl Component for Demo {
             // Loggo
             (DemoState::LoginSuccess, AppMsg::Login) | (DemoState::Login, AppMsg::Login) => {
                 let username = utils::get_value_from_element_id("autofocus").expect("No username");
+                if username == "" {
+                    ctx.link().send_message(AppMsg::Error(Some(
+                        "A username must be provided".to_string(),
+                    )));
+                    return false;
+                }
+                self.last_username = username.clone();
+
                 let settings: AuthenticateWithSettings = (&self.reg_settings).into();
 
                 console::log!(format!("login -> {:?}", username).as_str());
@@ -649,7 +668,9 @@ impl Component for Demo {
                 html! {
                   <main class="text-center form-signin h-100">
                     <div class="vert-center">
-                      <h1>{ ". . ." }</h1>
+                      <div class="spinner-border text-dark" role="status">
+                        <span class="visually-hidden">{ "Loading..." }</span>
+                      </div>
                     </div>
                   </main>
                 }

@@ -3,6 +3,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
 use web_sys::Document;
 use web_sys::Event;
+use web_sys::Clipboard;
+use web_sys::Navigator;
 use web_sys::HtmlInputElement;
 use web_sys::HtmlSelectElement;
 use web_sys::InputEvent;
@@ -22,9 +24,7 @@ pub fn get_select_value_from_element_id(id: &str) -> Option<String> {
             console::log!("Into Dyn Options Collection.");
             element.dyn_into::<web_sys::HtmlSelectElement>().ok()
         })
-        .map(|element|
-            element.value()
-        )
+        .map(|element| element.value())
 }
 
 pub fn get_value_from_element_id(id: &str) -> Option<String> {
@@ -52,4 +52,12 @@ pub fn document() -> Document {
 
 pub fn window() -> Window {
     web_sys::window().expect("Unable to retrieve window")
+}
+
+pub fn navigator() -> Navigator {
+    window().navigator()
+}
+
+pub fn clipboard() -> Clipboard {
+    navigator().clipboard().expect("Unable to access clipboard")
 }

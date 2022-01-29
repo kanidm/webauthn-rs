@@ -1,7 +1,5 @@
 use gloo::console;
-use yew::functional::*;
 use yew::prelude::*;
-use yew_router::prelude::*;
 
 #[derive(Debug)]
 pub enum UvInconsistent {
@@ -17,20 +15,20 @@ impl Component for UvInconsistent {
     type Message = AppMsg;
     type Properties = ();
 
-    fn create(ctx: &Context<Self>) -> Self {
+    fn create(_ctx: &Context<Self>) -> Self {
         console::log!(format!("create").as_str());
         UvInconsistent::Init
     }
 
-    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, _ctx: &Context<Self>) -> bool {
         false
     }
 
-    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
         true
     }
 
-    fn view(&self, ctx: &Context<Self>) -> Html {
+    fn view(&self, _ctx: &Context<Self>) -> Html {
         html! {
           <div class="row h-100">
             <div class="col-6 col-lg-4 col explain">
