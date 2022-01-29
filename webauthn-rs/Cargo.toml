@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs"
-version = "0.3.2"
+version = "0.4.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 
@@ -8,7 +8,7 @@ description = "Webauthn Framework for Rust Web Servers"
 # documentation = "..."
 # homepage = "..."
 repository = "https://github.com/kanidm/webauthn-rs"
-readme = "README.md"
+readme = "../README.md"
 keywords = ["webauthn", "authentication"]
 categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
