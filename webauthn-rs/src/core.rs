@@ -2487,4 +2487,43 @@ mod tests {
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_solokey_fallback_alg_attest_none() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan_c = WebauthnEphemeralConfig::new(
+            "https://webauthn.firstyear.id.au",
+            "https://webauthn.firstyear.id.au",
+            "webauthn.firstyear.id.au",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"rRPXQ7lps3xBQzX3dDAor9fHwH_ff55gUU-8wwZVK-g\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(r#"{
+            "id": "owBY6NCpGj_5nAM427VzsWjmifVdW10z3Ov8fyN5BPX5cxyR2umlVN5h7oGUos-9RPeoYBuCRBkSyAK6jM0gkZ0RLrHrCGRTwfk5p1NQ2ucX_cAh0uel-TkBpyWE-dxqXyk-WLlhSA4LKEdlmyTVqiDAGG7CRHdDn0oAufgq0za7-Crt6cWPKwzmkTGHsMAaEqEaQzHjo1D-pb_WkJJfYp5SZ52ZdTj5eKx7htT5QIogb70lwTKv82ix8PZskqiV-L4j5EroU-xXl7sxKlVtmkS8tSlHpyU-h8fZcFmmW4lr6cBOACd5aNEgR88BTFqQQZ97RORZ7J9sagJQJ63Jj-CZTqGBewVu2jazgA",
+            "rawId": "owBY6NCpGj_5nAM427VzsWjmifVdW10z3Ov8fyN5BPX5cxyR2umlVN5h7oGUos-9RPeoYBuCRBkSyAK6jM0gkZ0RLrHrCGRTwfk5p1NQ2ucX_cAh0uel-TkBpyWE-dxqXyk-WLlhSA4LKEdlmyTVqiDAGG7CRHdDn0oAufgq0za7-Crt6cWPKwzmkTGHsMAaEqEaQzHjo1D-pb_WkJJfYp5SZ52ZdTj5eKx7htT5QIogb70lwTKv82ix8PZskqiV-L4j5EroU-xXl7sxKlVtmkS8tSlHpyU-h8fZcFmmW4lr6cBOACd5aNEgR88BTFqQQZ97RORZ7J9sagJQJ63Jj-CZTqGBewVu2jazgA",
+            "response": {
+                "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVkBbWq5u_Dfmhb5Hbszu7Ey-vnRfHgsSCbG7HDs7ljZfvUqRQAAAEoAAAAAAAAAAAAAAAAAAAAAAQyjAFjo0KkaP_mcAzjbtXOxaOaJ9V1bXTPc6_x_I3kE9flzHJHa6aVU3mHugZSiz71E96hgG4JEGRLIArqMzSCRnREusesIZFPB-TmnU1Da5xf9wCHS56X5OQGnJYT53GpfKT5YuWFIDgsoR2WbJNWqIMAYbsJEd0OfSgC5-CrTNrv4Ku3pxY8rDOaRMYewwBoSoRpDMeOjUP6lv9aQkl9inlJnnZl1OPl4rHuG1PlAiiBvvSXBMq_zaLHw9mySqJX4viPkSuhT7FeXuzEqVW2aRLy1KUenJT6Hx9lwWaZbiWvpwE4AJ3lo0SBHzwFMWpBBn3tE5Fnsn2xqAlAnrcmP4JlOoYF7BW7aNrOApAEBAycgBiFYIKfpbghX95Ey_8DV4Ots95iyCRWa7OElliqsg9tdnRur",
+                "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiclJQWFE3bHBzM3hCUXpYM2REQW9yOWZId0hfZmY1NWdVVS04d3daVkstZyIsIm9yaWdpbiI6Imh0dHBzOi8vd2ViYXV0aG4uZmlyc3R5ZWFyLmlkLmF1IiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ"
+            },
+            "type": "public-key"
+        }"#).unwrap();
+
+        info!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            &chal,
+            &[],
+            &[COSEAlgorithm::EDDSA],
+        );
+        info!("{:?}", result);
+        // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
+        assert!(result.is_err());
+    }
 }

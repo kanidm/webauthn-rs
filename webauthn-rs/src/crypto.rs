@@ -589,7 +589,7 @@ impl COSEKey {
             }
             COSEKeyType::EC_OKP(_edk) => {
                 error!("ED25519 or ED448 keys are not currently supported");
-                Err(WebauthnError::COSEKeyInvalidType)
+                Err(WebauthnError::COSEKeyEDUnsupported)
             }
         }
     }

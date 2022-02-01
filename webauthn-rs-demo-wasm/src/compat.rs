@@ -689,6 +689,10 @@ impl Component for CompatTest {
                                 // This generally means that there is no fallback algo, so we only warn here.
                                 self.results.fallback_alg.set_warn(err)
                             }
+                            ResponseError::COSEKeyEDUnsupported => {
+                                // Means that ED keys are the fallback and we don't support it.
+                                self.results.fallback_alg.set_warn(err)
+                            }
                             _ => self.results.fallback_alg.set_err(err),
                         }
                     }

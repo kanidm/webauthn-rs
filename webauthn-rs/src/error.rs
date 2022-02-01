@@ -153,6 +153,9 @@ pub enum WebauthnError {
     #[error("The COSEKey type is not supported by this implementation")]
     COSEKeyInvalidType,
 
+    #[error("ED25519 and ED448 keys are not supported by this implementation")]
+    COSEKeyEDUnsupported,
+
     #[error("The COSEKey contains invalid ECDSA X/Y coordinate data")]
     COSEKeyECDSAXYInvalid,
 
