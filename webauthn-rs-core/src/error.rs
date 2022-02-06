@@ -85,6 +85,9 @@ pub enum WebauthnError {
     #[error("The attestation statement certInfo is not present")]
     AttestationStatementCertInfoMissing,
 
+    #[error("An extension for this identifier was not in the attestation statement")]
+    AttestationStatementMissingExtension,
+
     #[error("The attestation statement pubArea is not present")]
     AttestationStatementPubAreaMissing,
 
@@ -97,8 +100,11 @@ pub enum WebauthnError {
     #[error("The attestation trust could not be established")]
     AttestationTrustFailure,
 
-    #[error("The attestation Certificates OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not match the aaguid of the token")]
+    #[error("The attestation Certificate's OID 1.3.6.1.4.1.45724.1.1.4 aaguid does not match the aaguid of the token")]
     AttestationCertificateAAGUIDMismatch,
+
+    #[error("The attestation Certificate's computed nonce does not match its OID 1.2.840.113635.100.8.2 value")]
+    AttestationCertificateNonceMismatch,
 
     #[error("The attestation created by the TPM is not correct")]
     AttestationTpmStInvalid,

@@ -571,6 +571,21 @@ pub(crate) fn verify_tpm_attestation(
     Ok(credential)
 }
 
+fn parse_apple_attestation_extension(i: &[u8]) -> der_parser::error::BerResult<Vec<u8>> {
+    use der_parser::{ber::*, der::*, error::BerError};
+    parse_der_container(|i: &[u8], hdr: Header| {
+        if hdr.tag() != Tag::Sequence {
+            return Err(nom::Err::Error(BerError::BerTypeError.into()));
+        }
+        let (i, tagged_nonce) = parse_der_tagged_explicit(1, parse_der_octetstring)(i)?;
+        let (class, _tag, nonce) = tagged_nonce.as_tagged()?;
+        if class != Class::ContextSpecific {
+            return Err(nom::Err::Error(BerError::BerTypeError.into()));
+        }
+        Ok((i, nonce.as_slice()?.to_vec()))
+    })(i)
+}
+
 pub(crate) fn verify_apple_anonymous_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
@@ -613,6 +628,8 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .first()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
+    debug!("x509 pubkey: {:?}", attestn_cert.to_der().unwrap());
+
     // 2. Concatenate authenticatorData and clientDataHash to form nonceToHash.
     let nonce_to_hash: Vec<u8> = auth_data_bytes
         .iter()
@@ -621,11 +638,24 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .collect();
 
     // 3. Perform SHA-256 hash of nonceToHash to produce nonce.
-    let _nonce = compute_sha256(&nonce_to_hash);
+    let nonce = compute_sha256(&nonce_to_hash);
+
+    debug!("computed nonce: {:?}", nonce);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
     let oid = der_parser::Oid::from(&[1, 2, 840, 113635, 100, 8, 2]).unwrap();
-    validate_ext(attestn_cert, &oid, |extension| _nonce == extension.value);
+        let nonce_verification = validate_ext(&attestn_cert, &oid, |extension| {
+        let (_rem, extension_nonce) = parse_apple_attestation_extension(extension.value)
+            .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+        debug!("extension nonce: {:?}", extension_nonce);
+        Ok(nonce == extension_nonce)
+    });
+    (match nonce_verification {
+        Some(Ok(true)) => Ok(()),
+        Some(Ok(false)) => Err(WebauthnError::AttestationCertificateNonceMismatch),
+        Some(Err(err)) => Err(err),
+        None => Err(WebauthnError::AttestationStatementMissingExtension),
+    })?;
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;

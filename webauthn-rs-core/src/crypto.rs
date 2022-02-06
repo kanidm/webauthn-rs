@@ -11,6 +11,8 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 // use super::constants::*;
 use super::error::*;
 use crate::proto::*;
+use der_parser::oid::Oid;
+use x509_parser::prelude::X509Extension;
 
 // Why OpenSSL over another rust crate?
 // - The openssl crate allows us to reconstruct a public key from the
@@ -211,18 +213,16 @@ pub(crate) fn get_fido_gen_ce_aaguid(_pubk: &x509::X509) -> Option<Aaguid> {
     None
 }
 
-pub(crate) fn validate_ext<F>(x509: &x509::X509, oid: &der_parser::Oid, f: F) -> bool
+pub(crate) fn validate_ext<F>(x509: &x509::X509, oid: &Oid, f: F) -> Option<Result<bool, WebauthnError>>
 where
-    F: FnOnce(&x509_parser::extensions::X509Extension) -> bool,
+    F: FnOnce(&X509Extension) -> Result<bool, WebauthnError>,
 {
     let der_bytes = x509.to_der().unwrap();
     let (_rem, x509) = x509_parser::parse_x509_certificate(&der_bytes).unwrap();
-    let extension = x509
-        .extensions()
+    x509.extensions()
         .iter()
-        .find(|extension| *oid == extension.oid);
-
-    extension.map(f).unwrap_or(false)
+        .find(|extension| *oid == extension.oid)
+        .map(f)
 }
 
 impl TryFrom<nid::Nid> for ECDSACurve {
