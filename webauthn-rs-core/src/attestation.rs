@@ -17,6 +17,7 @@ use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
 use openssl::x509::verify;
+use x509_parser::oid_registry::Oid;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -643,13 +644,13 @@ pub(crate) fn verify_apple_anonymous_attestation(
     debug!("computed nonce: {:?}", nonce);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
-    let oid = der_parser::Oid::from(&[1, 2, 840, 113635, 100, 8, 2]).unwrap();
+    let oid = Oid::from(&[1, 2, 840, 113635, 100, 8, 2]).unwrap();
         let nonce_verification = validate_ext(&attestn_cert, &oid, |extension| {
         let (_rem, extension_nonce) = parse_apple_attestation_extension(extension.value)
             .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
-        debug!("extension nonce: {:?}", extension_nonce);
         Ok(nonce == extension_nonce)
     });
+
     (match nonce_verification {
         Some(Ok(true)) => Ok(()),
         Some(Ok(false)) => Err(WebauthnError::AttestationCertificateNonceMismatch),

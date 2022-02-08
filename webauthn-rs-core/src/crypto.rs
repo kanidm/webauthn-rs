@@ -11,8 +11,7 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 // use super::constants::*;
 use super::error::*;
 use crate::proto::*;
-use der_parser::oid::Oid;
-use x509_parser::prelude::X509Extension;
+use x509_parser::{prelude::X509Extension, oid_registry::Oid};
 
 // Why OpenSSL over another rust crate?
 // - The openssl crate allows us to reconstruct a public key from the
