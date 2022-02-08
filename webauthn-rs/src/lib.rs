@@ -18,8 +18,6 @@
 #![warn(missing_docs)]
 
 #[macro_use]
-extern crate serde_derive;
-#[macro_use]
 extern crate tracing;
 
 #[cfg(feature = "core")]
@@ -35,7 +33,7 @@ pub mod attestation;
 pub mod core;
 #[cfg(feature = "core")]
 pub mod crypto;
-#[cfg(feature = "core")]
+#[cfg(all(test, feature = "core"))]
 pub mod ephemeral;
 
 pub mod base64_data;

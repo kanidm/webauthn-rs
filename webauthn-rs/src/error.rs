@@ -5,7 +5,11 @@ use base64::DecodeError as b64DecodeError;
 use openssl::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
+// use serde::{Deserialize, Serialize};
 // use nom::Err as NOMError;
+
+/// A wrapper for `Result<T, WebauthnError>`
+pub type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
 
 /// Possible errors that may occur during Webauthn Operation processing.
 #[derive(Debug, thiserror::Error)]
@@ -149,6 +153,9 @@ pub enum WebauthnError {
     #[error("The COSEKey type is not supported by this implementation")]
     COSEKeyInvalidType,
 
+    #[error("ED25519 and ED448 keys are not supported by this implementation")]
+    COSEKeyEDUnsupported,
+
     #[error("The COSEKey contains invalid ECDSA X/Y coordinate data")]
     COSEKeyECDSAXYInvalid,
 
@@ -157,6 +164,12 @@ pub enum WebauthnError {
 
     #[error("The COSEKey uses a curve that is not supported by this implementation")]
     COSEKeyECDSAInvalidCurve,
+
+    #[error("The COSEKey contains invalid EDDSA X coordinate data")]
+    COSEKeyEDDSAXInvalid,
+
+    #[error("The COSEKey uses a curve that is not supported by this implementation")]
+    COSEKeyEDDSAInvalidCurve,
 
     #[error("The COSEKey contains invalid cryptographic algorithm request")]
     COSEKeyInvalidAlgorithm,

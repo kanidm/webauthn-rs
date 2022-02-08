@@ -1,51 +1,12 @@
-[package]
-name = "webauthn-rs"
-version = "0.3.2"
-authors = ["William Brown <william@blackhats.net.au>"]
-edition = "2021"
-build = "build.rs"
 
-description = "Webauthn Framework for Rust Web Servers"
-# documentation = "..."
-# homepage = "..."
-repository = "https://github.com/kanidm/webauthn-rs"
-readme = "README.md"
-keywords = ["webauthn", "authentication"]
-categories = ["authentication", "web-programming"]
-license = "MPL-2.0"
 
-[features]
-core = ["openssl", "rand"]
-default = ["core"]
-wasm = ["wasm-bindgen", "web-sys", "js-sys"]
+[workspace]
+members = [
+    "webauthn-rs",
+    "webauthn-rs-demo",
+    "webauthn-rs-demo-shared",
+]
 
-[dependencies]
-serde = "1.0"
-serde_derive = "1.0"
-serde_cbor = "0.11"
-serde_json = "1.0"
-nom = "7.1"
-base64 = "0.13"
-thiserror = "1.0"
-tracing = "0.1"
-# We could consider replacing this with openssl rand.
-openssl = { version = "0.10", optional = true }
-rand = { version = "0.8", optional = true }
-url = { version = "2", features = ["serde"] }
-
-# Webauthny bits.
-wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
-web-sys = { version = "0.3", features = ["CredentialCreationOptions", "CredentialRequestOptions", "PublicKeyCredential", "AuthenticationExtensionsClientOutputs"], optional = true }
-js-sys = { version = "0.3", optional = true }
-
-[dev-dependencies]
-askama = "0.11"
-tide = "0.16"
-tide-rustls = "0.3"
-askama_tide = "0.14"
-async-std = { version = "1.6", features = ["attributes"] }
-openssl = "0.10"
-lru = "0.7"
-structopt = { version = "0.3", default-features = false }
-rustls = "0.19.0"
-tracing-subscriber = "0.3"
+exclude = [
+    "webauthn-rs-demo-wasm"
+]

@@ -25,7 +25,7 @@ use url::Url;
 ///
 /// By default this implementation advertises support for all possible authenticators
 /// EVEN if they are NOT supported. This is to aid in test vector collection.
-pub struct WebauthnEphemeralConfig {
+pub(crate) struct WebauthnEphemeralConfig {
     rp_name: String,
     rp_id: String,
     rp_origin: Url,
@@ -97,7 +97,7 @@ impl WebauthnEphemeralConfig {
     /// Create a new Webauthn Ephemeral instance. This requires a provided relying party
     /// name, origin and id. See the trait documentation for more detail on relying party
     /// name, origin and id.
-    pub fn new(
+    pub(crate) fn new(
         rp_name: &str,
         rp_origin: &str,
         rp_id: &str,

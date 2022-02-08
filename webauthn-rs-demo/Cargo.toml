@@ -1,0 +1,25 @@
+[package]
+name = "webauthn-rs-demo"
+version = "0.1.0"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2021"
+build = "build.rs"
+
+description = "Webauthn Demonstration Server"
+repository = "https://github.com/kanidm/webauthn-rs"
+readme = "README.md"
+license = "MPL-2.0"
+
+[dependencies]
+webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared" }
+webauthn-rs = { path = "../webauthn-rs" }
+tide = "0.16"
+tide-rustls = "0.3"
+async-std = { version = "1.6", features = ["attributes"] }
+openssl = "0.10"
+structopt = { version = "0.3", default-features = false }
+rustls = "0.19.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+rand = "0.8"
+url = { version = "2", features = ["serde"] }
