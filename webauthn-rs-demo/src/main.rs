@@ -74,7 +74,15 @@ async fn index_view(request: tide::Request<AppState>) -> tide::Result {
 
 
     <link href="/pkg/bundle.css" rel="stylesheet">
-    <script src="/pkg/bundle.js" defer></script>
+    <script type="module">
+        import init, { run_app } from './pkg/webauthn_rs_demo_wasm.js';
+        async function main() {
+           await init('./pkg/webauthn_rs_demo_wasm_bg.wasm');
+           run_app();
+        }
+        main()
+    </script>
+
   </head>
 
   <body>
