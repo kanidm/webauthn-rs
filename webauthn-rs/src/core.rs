@@ -523,6 +523,7 @@ impl<T> Webauthn<T> {
             .any(|alg| alg == &credential.cred.type_);
 
         if !alg_valid {
+            error!("Authenticator ignored requested algorithm set - {:?} - {:?}", credential.cred.type_, credential_algorithms);
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
         }
 
@@ -2645,5 +2646,47 @@ mod tests {
         );
         info!("{:?}", result);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_google_pixel_3a_ignores_requested_algo() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan_c = WebauthnEphemeralConfig::new(
+            "https://webauthn.firstyear.id.au",
+            "https://webauthn.firstyear.id.au",
+            "webauthn.firstyear.id.au",
+            None,
+        );
+        let wan = Webauthn::new(wan_c);
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"t_We131NpwllyPL0x26bzZgkF5f_XvA7Ocb4b98zlxM\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(r#"{
+        "id": "AfJfonHsXY_f7_gFmV1dI473Ce--_g0tHhdXUoh7JmMn0gzhYUtU9bFqpCgSljjwJxEXkjzb-11ulePZyI0RiyQ",
+        "rawId": "AfJfonHsXY_f7_gFmV1dI473Ce--_g0tHhdXUoh7JmMn0gzhYUtU9bFqpCgSljjwJxEXkjzb-11ulePZyI0RiyQ",
+        "response": {
+            "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjFarm78N-aFvkduzO7sTL6-dF8eCxIJsbscOzuWNl-9SpFAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQHyX6Jx7F2P3-_4BZldXSOO9wnvvv4NLR4XV1KIeyZjJ9IM4WFLVPWxaqQoEpY48CcRF5I82_tdbpXj2ciNEYskpQECAyYgASFYIE_9awy66uhXZ6hIzPAW2AzIrTMZ7kyC2jtZe0zuH_pOIlggFbNKhOSt8-prIx0snKRqcxULtc2u1rzUUf47g1PxTcU",
+            "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoidF9XZTEzMU5wd2xseVBMMHgyNmJ6WmdrRjVmX1h2QTdPY2I0Yjk4emx4TSIsIm9yaWdpbiI6Imh0dHBzOlwvXC93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJhbmRyb2lkUGFja2FnZU5hbWUiOiJvcmcubW96aWxsYS5maXJlZm94In0"
+        },
+        "type": "public-key"
+        }"#).unwrap();
+
+        info!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            &chal,
+            &[],
+            &[
+                COSEAlgorithm::RS256,
+                COSEAlgorithm::EDDSA,
+                COSEAlgorithm::INSECURE_RS1,
+            ],
+        );
+        info!("{:?}", result);
+        assert!(result.is_err());
     }
 }
