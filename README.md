@@ -35,6 +35,11 @@ Known Supported Keys/Harwdare
 If your key/browser combination don't work (generally due to missing crypto routines)
 please open an issue so that I can help you generate vectors and add support!
 
+Known BROKEN Keys/Harwdare
+-----------------------------
+
+* Pixel 3a - Does not send correct attestation certificates, and ignores requested algorithms
+
 FIDO Compliance
 ---------------
 
