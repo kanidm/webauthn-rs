@@ -2529,7 +2529,9 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // ⚠️  Currently IGNORED as it appears that pixel 3a send INVALID attestation requests.
     #[test]
+    #[ignore]
     fn test_google_pixel_3a_direct_attestation() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
@@ -2608,9 +2610,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ⚠️  Currently IGNORED as it appears that pixel 3a send INVALID attestation requests.
     #[test]
-    #[ignore]
     fn test_google_pixel_3a_none_attestation() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan_c = WebauthnEphemeralConfig::new(
