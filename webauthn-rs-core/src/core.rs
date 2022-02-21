@@ -16,45 +16,18 @@
 #![warn(missing_docs)]
 
 use rand::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 use crate::attestation::{
     verify_apple_anonymous_attestation, verify_fidou2f_attestation, verify_none_attestation,
     verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
 };
-use crate::base64_data::Base64UrlSafeData;
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
+use crate::internals::*;
 use crate::proto::*;
-
-/// The in progress state of a credential registration attempt. You must persist this associated
-/// to the UserID requesting the registration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegistrationState {
-    policy: UserVerificationPolicy,
-    exclude_credentials: Vec<CredentialID>,
-    challenge: Base64UrlSafeData,
-    credential_algorithms: Vec<COSEAlgorithm>,
-}
-
-/// The in progress state of an authentication attempt. You must persist this associated to the UserID
-/// requesting the registration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthenticationState {
-    credentials: Vec<Credential>,
-    policy: UserVerificationPolicy,
-    challenge: Base64UrlSafeData,
-    appid: Option<String>,
-}
-
-impl AuthenticationState {
-    /// set which credentials the user is allowed to authenticate with
-    pub fn set_allowed_credentials(&mut self, credentials: Vec<Credential>) {
-        self.credentials = credentials;
-    }
-}
+use base64urlsafedata::Base64UrlSafeData;
 
 /// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
 /// use the most:
@@ -191,7 +164,11 @@ impl<T> Webauthn<T> {
                     creds
                         .iter()
                         .cloned()
-                        .map(PublicKeyCredentialDescriptor::from_bytes)
+                        .map(|bytes| PublicKeyCredentialDescriptor {
+                            type_: "public-key".to_string(),
+                            id: Base64UrlSafeData(bytes),
+                            transports: None,
+                        })
                         .collect()
                 }),
                 authenticator_selection: Some(AuthenticatorSelectionCriteria {
@@ -523,7 +500,10 @@ impl<T> Webauthn<T> {
             .any(|alg| alg == &credential.cred.type_);
 
         if !alg_valid {
-            error!("Authenticator ignored requested algorithm set - {:?} - {:?}", credential.cred.type_, credential_algorithms);
+            error!(
+                "Authenticator ignored requested algorithm set - {:?} - {:?}",
+                credential.cred.type_, credential_algorithms
+            );
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
         }
 
@@ -817,14 +797,16 @@ impl<T> Webauthn<T> {
 
         // Store the chal associated to the user.
         // Now put that into the correct challenge format
-        let r = RequestChallengeResponse::new(
-            chal.clone(),
-            self.config.get_authenticator_timeout(),
-            self.config.get_relying_party_id().to_owned(),
-            ac,
-            policy,
-            extensions,
-        );
+        let r = RequestChallengeResponse {
+            public_key: PublicKeyCredentialRequestOptions {
+                challenge: chal.clone().into(),
+                timeout: Some(self.config.get_authenticator_timeout()),
+                rp_id: self.config.get_relying_party_id().to_owned(),
+                allow_credentials: ac,
+                user_verification: policy,
+                extensions,
+            },
+        };
         let st = AuthenticationState {
             // username: username.clone(),
             credentials: creds,
@@ -1125,16 +1107,13 @@ pub trait WebauthnConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::base64_data::Base64UrlSafeData;
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
     use crate::ephemeral::WebauthnEphemeralConfig;
-    use crate::proto::{
-        AuthenticatorAssertionResponseRaw, AuthenticatorAttestationResponseRaw, Challenge,
-        Credential, PublicKeyCredential, RegisterPublicKeyCredential, UserVerificationPolicy,
-    };
-    use crate::proto::{COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
+    use crate::internals::*;
+    use crate::proto::*;
     use crate::Webauthn;
+    use base64urlsafedata::Base64UrlSafeData;
 
     // Test the crypto operations of the webauthn impl
 

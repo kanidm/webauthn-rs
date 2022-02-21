@@ -1,7 +1,6 @@
 //! Possible errors that may occur during Webauthn Operation processing
 
 use base64::DecodeError as b64DecodeError;
-#[cfg(feature = "core")]
 use openssl::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
@@ -140,7 +139,6 @@ pub enum WebauthnError {
     #[error("In parsing the attestation object, there was insufficient data")]
     ParseInsufficientBytesAvailable,
 
-    #[cfg(feature = "core")]
     #[error("An OpenSSL Error has occurred")]
     OpenSSLError(#[from] OpenSSLErrorStack),
 

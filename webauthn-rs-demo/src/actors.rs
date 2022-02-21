@@ -1,13 +1,15 @@
 use crate::config::{WebauthnAuthConfig, WebauthnRegistrationConfig};
 use url::Url;
-use webauthn_rs::error::{WebauthnError, WebauthnResult};
-use webauthn_rs::proto::{
+use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
+use webauthn_rs_core::proto::{
     Authentication, AuthenticatorData, CreationChallengeResponse, Credential, CredentialID,
     PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
-    UserId,
 };
-use webauthn_rs::proto::{RequestAuthenticationExtensions, RequestRegistrationExtensions};
-use webauthn_rs::{AuthenticationState, RegistrationState, Webauthn};
+use webauthn_rs_core::proto::{
+    AuthenticationState, RegistrationState, RequestAuthenticationExtensions,
+    RequestRegistrationExtensions,
+};
+use webauthn_rs_core::Webauthn;
 use webauthn_rs_demo_shared::*;
 
 pub struct WebauthnActor {

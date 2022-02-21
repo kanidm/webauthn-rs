@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use webauthn_rs::error::WebauthnError;
+#[cfg(feature = "core")]
+use webauthn_rs_core::error::WebauthnError;
 
-pub use webauthn_rs::proto::{
+pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticationSignedExtensions, AuthenticatorAttachment,
     COSEAlgorithm, CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
     RegisterPublicKeyCredential, RegistrationSignedExtensions, RequestAuthenticationExtensions,
@@ -416,6 +417,7 @@ pub enum ResponseError {
     IncompleteTest,
 }
 
+#[cfg(feature = "core")]
 impl From<WebauthnError> for ResponseError {
     fn from(value: WebauthnError) -> Self {
         match value {

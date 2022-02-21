@@ -5,14 +5,10 @@
 
 use std::convert::TryFrom;
 
-use crate::crypto;
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
-use crate::proto::{
-    AttestedCredentialData, COSEAlgorithm, COSEKey, COSEKeyType, Credential, ParsedAttestationData,
-    Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId,
-    TpmuPublicParms, UserVerificationPolicy,
-};
+use crate::internals::*;
+use crate::proto::*;
 use debug;
 
 #[derive(Debug)]
@@ -89,7 +85,7 @@ pub(crate) fn verify_packed_attestation(
                 .map(|values| {
                     cbor_try_bytes!(values)
                         .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                        .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+                        .and_then(|b| X509PublicKey::try_from((b.as_slice(), alg)))
                 })
                 .collect();
 
@@ -256,7 +252,7 @@ pub(crate) fn verify_fidou2f_attestation(
     //
     // // try from asserts this condition given the alg.
     let cerificate_public_key =
-        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEAlgorithm::ES256))?;
+        X509PublicKey::try_from((att_cert.as_slice(), COSEAlgorithm::ES256))?;
 
     // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
     //
@@ -418,7 +414,7 @@ pub(crate) fn verify_tpm_attestation(
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+                .and_then(|b| X509PublicKey::try_from((b.as_slice(), alg)))
         })
         .collect();
 
@@ -602,7 +598,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .map(|(values, alg)| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+                .and_then(|b| X509PublicKey::try_from((b.as_slice(), alg)))
         })
         .collect();
 
@@ -643,7 +639,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
         registration_policy,
     );
     Ok((
-        ParsedAttestationData::AnonCa(crypto::X509PublicKey::apple_x509(), arr_x509),
+        ParsedAttestationData::AnonCa(X509PublicKey::apple_x509(), arr_x509),
         credential,
     ))
 }

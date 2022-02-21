@@ -7,10 +7,6 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
-use webauthn_rs::proto::{
-    CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
-    RequestChallengeResponse,
-};
 use webauthn_rs_demo_shared::*;
 use yew::prelude::*;
 

@@ -1,6 +1,8 @@
 use url::Url;
-use webauthn_rs::proto::{AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm};
-use webauthn_rs::WebauthnConfig;
+use webauthn_rs_core::proto::{
+    AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
+};
+use webauthn_rs_core::WebauthnConfig;
 
 #[derive(Debug)]
 pub(crate) struct WebauthnRegistrationConfig {

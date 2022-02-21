@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use rand::prelude::*;
 
-use webauthn_rs::proto::{
+use webauthn_rs_core::proto::{
     Credential, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
 };
 

@@ -10,11 +10,7 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 
 // use super::constants::*;
 use super::error::*;
-use crate::proto::{
-    Aaguid, COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, COSEOKPKey, COSERSAKey,
-    ECDSACurve, EDDSACurve,
-};
-// use super::proto::*;
+use crate::proto::*;
 
 // Why OpenSSL over another rust crate?
 // - The openssl crate allows us to reconstruct a public key from the
@@ -83,20 +79,6 @@ fn verify_signature(
     verifier
         .verify(signature)
         .map_err(WebauthnError::OpenSSLError)
-}
-
-/// An X509PublicKey. This is what is otherwise known as a public certificate
-/// which comprises a public key and other signed metadata related to the issuer
-/// of the key.
-pub struct X509PublicKey {
-    pubk: x509::X509,
-    t: COSEAlgorithm,
-}
-
-impl std::fmt::Debug for X509PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "X509PublicKey")
-    }
 }
 
 impl TryFrom<(&[u8], COSEAlgorithm)> for X509PublicKey {

@@ -1,0 +1,32 @@
+[package]
+name = "webauthn-rs-core"
+version = "0.4.0-dev"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2021"
+
+description = "Webauthn Framework for Rust Web Servers"
+# documentation = "..."
+# homepage = "..."
+repository = "https://github.com/kanidm/webauthn-rs"
+readme = "../README.md"
+keywords = ["webauthn", "authentication"]
+categories = ["authentication", "web-programming"]
+license = "MPL-2.0"
+
+[dependencies]
+base64urlsafedata = { path = "../base64urlsafedata" }
+webauthn-rs-proto = { path = "../webauthn-rs-proto" }
+serde = { version = "1", features = ["derive"] }
+serde_cbor = "0.11"
+serde_json = "1.0"
+nom = "7.1"
+base64 = "0.13"
+thiserror = "1.0"
+tracing = "0.1"
+openssl = { version = "0.10" }
+# We could consider replacing this with openssl rand.
+rand = { version = "0.8" }
+url = { version = "2", features = ["serde"] }
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
