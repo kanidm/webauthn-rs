@@ -132,25 +132,8 @@ impl Credential {
     }
 }
 
-impl TryFrom<i128> for COSEAlgorithm {
-    type Error = WebauthnError;
-    fn try_from(i: i128) -> Result<Self, Self::Error> {
-        match i {
-            -7 => Ok(COSEAlgorithm::ES256),
-            -35 => Ok(COSEAlgorithm::ES384),
-            -36 => Ok(COSEAlgorithm::ES512),
-            -257 => Ok(COSEAlgorithm::RS256),
-            -258 => Ok(COSEAlgorithm::RS384),
-            -259 => Ok(COSEAlgorithm::RS512),
-            -37 => Ok(COSEAlgorithm::PS256),
-            -38 => Ok(COSEAlgorithm::PS384),
-            -39 => Ok(COSEAlgorithm::PS512),
-            -8 => Ok(COSEAlgorithm::EDDSA),
-            -65535 => Ok(COSEAlgorithm::INSECURE_RS1),
-            _ => Err(WebauthnError::COSEKeyInvalidAlgorithm),
-        }
-    }
-}
+/*
+WebauthnError::COSEKeyInvalidAlgorithm
 
 impl From<&COSEAlgorithm> for i64 {
     fn from(c: &COSEAlgorithm) -> Self {
@@ -169,25 +152,8 @@ impl From<&COSEAlgorithm> for i64 {
         }
     }
 }
+*/
 
-impl COSEAlgorithm {
-    /// Return the set of all possible algorithms that may exist as a COSEAlgorithm
-    pub fn all_possible_algs() -> Vec<Self> {
-        vec![
-            COSEAlgorithm::ES256,
-            COSEAlgorithm::ES384,
-            COSEAlgorithm::ES512,
-            COSEAlgorithm::RS256,
-            COSEAlgorithm::RS384,
-            COSEAlgorithm::RS512,
-            COSEAlgorithm::PS256,
-            COSEAlgorithm::PS384,
-            COSEAlgorithm::PS512,
-            COSEAlgorithm::EDDSA,
-            COSEAlgorithm::INSECURE_RS1,
-        ]
-    }
-}
 impl TryFrom<i128> for ECDSACurve {
     type Error = WebauthnError;
     fn try_from(u: i128) -> Result<Self, Self::Error> {
@@ -242,7 +208,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
         i,
         AttestedCredentialData {
             aaguid: aaguid.to_vec(),
-            credential_id: cred_id.to_vec(),
+            credential_id: Base64UrlSafeData(cred_id.to_vec()),
             credential_pk: cred_pk,
         },
     ))

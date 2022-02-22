@@ -271,19 +271,20 @@ impl EDDSACurve {
 }
 */
 
-impl COSEAlgorithm {
-    pub(crate) fn only_hash_from_type(&self, input: &[u8]) -> Result<Vec<u8>, WebauthnError> {
-        match self {
-            COSEAlgorithm::INSECURE_RS1 => {
-                // sha1
-                hash::hash(hash::MessageDigest::sha1(), input)
-                    .map(|dbytes| Vec::from(dbytes.as_ref()))
-                    .map_err(WebauthnError::OpenSSLError)
-            }
-            c_alg => {
-                debug!(?c_alg, "WebauthnError::COSEKeyInvalidType");
-                Err(WebauthnError::COSEKeyInvalidType)
-            }
+pub(crate) fn only_hash_from_type(
+    alg: &COSEAlgorithm,
+    input: &[u8],
+) -> Result<Vec<u8>, WebauthnError> {
+    match alg {
+        COSEAlgorithm::INSECURE_RS1 => {
+            // sha1
+            hash::hash(hash::MessageDigest::sha1(), input)
+                .map(|dbytes| Vec::from(dbytes.as_ref()))
+                .map_err(WebauthnError::OpenSSLError)
+        }
+        c_alg => {
+            debug!(?c_alg, "WebauthnError::COSEKeyInvalidType");
+            Err(WebauthnError::COSEKeyInvalidType)
         }
     }
 }
@@ -316,7 +317,8 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
         let content_type = cbor_try_i128!(content_type_value)?;
 
-        let type_ = COSEAlgorithm::try_from(content_type)?;
+        let type_ = COSEAlgorithm::try_from(content_type)
+            .map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)?;
 
         // https://www.iana.org/assignments/cose/cose.xhtml
         // https://www.w3.org/TR/webauthn/#sctn-encoded-credPubKey-examples

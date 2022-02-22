@@ -5,7 +5,7 @@
 
 use std::convert::TryFrom;
 
-use crate::crypto::compute_sha256;
+use crate::crypto::{compute_sha256, only_hash_from_type};
 use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
@@ -63,7 +63,9 @@ pub(crate) fn verify_packed_attestation(
 
     let alg = cbor_try_i128!(alg_value)
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
-        .and_then(COSEAlgorithm::try_from)?;
+        .and_then(|v| {
+            COSEAlgorithm::try_from(v).map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)
+        })?;
 
     match (
         att_stmt_map.get(x5c_key),
@@ -270,7 +272,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .iter()
         .chain(rp_id_hash.iter())
         .chain(client_data_hash.iter())
-        .chain(acd.credential_id.iter())
+        .chain(acd.credential_id.0.iter())
         .chain(public_key_u2f.iter())
         .copied()
         .collect();
@@ -357,7 +359,9 @@ pub(crate) fn verify_tpm_attestation(
 
     let alg = cbor_try_i128!(alg_value)
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
-        .and_then(COSEAlgorithm::try_from)?;
+        .and_then(|v| {
+            COSEAlgorithm::try_from(v).map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)
+        })?;
 
     // eprintln!("alg = {:?}", alg);
 
@@ -479,7 +483,7 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that extraData is set to the hash of attToBeSigned using the hash algorithm
     // employed in "alg".
-    let hash_verification_data = alg.only_hash_from_type(verification_data.as_slice())?;
+    let hash_verification_data = only_hash_from_type(&alg, verification_data.as_slice())?;
 
     if hash_verification_data != extra_data_hash {
         return Err(WebauthnError::AttestationTpmExtraDataMismatch);

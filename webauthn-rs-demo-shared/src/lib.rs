@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 use webauthn_rs_core::error::WebauthnError;
 
 pub use webauthn_rs_proto::{
-    AttestationConveyancePreference, AuthenticationSignedExtensions, AuthenticatorAttachment,
-    COSEAlgorithm, CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
-    RegisterPublicKeyCredential, RegistrationSignedExtensions, RequestAuthenticationExtensions,
-    RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
+    AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
+    CreationChallengeResponse, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
+    RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
+    UserVerificationPolicy,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -20,10 +20,12 @@ pub struct RegisterWithSettings {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RegistrationSuccess {
-    pub cred: Credential,
+    pub cred_id: CredentialID,
+    // pub cred: Credential,
     pub uv: bool,
-    pub counter: u32,
-    pub extensions: RegistrationSignedExtensions,
+    pub alg: COSEAlgorithm,
+    // pub counter: u32,
+    // pub extensions: RegistrationSignedExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -51,8 +53,8 @@ impl From<&RegisterWithSettings> for AuthenticateWithSettings {
 pub struct AuthenticationSuccess {
     pub cred_id: CredentialID,
     pub uv: bool,
-    pub counter: u32,
-    pub extensions: AuthenticationSignedExtensions,
+    // pub counter: u32,
+    // pub extensions: AuthenticationSignedExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -160,9 +162,23 @@ impl CTestAttestState {
         std::mem::swap(self, &mut n_self);
     }
 
-    pub fn get_credential(&self) -> Option<&Credential> {
+    pub fn get_credential_id(&self) -> Option<&CredentialID> {
         match self {
-            CTestAttestState::Passed { rs, .. } => Some(&rs.cred),
+            CTestAttestState::Passed { rs, .. } => Some(&rs.cred_id),
+            _ => None,
+        }
+    }
+
+    pub fn get_credential_alg(&self) -> Option<&COSEAlgorithm> {
+        match self {
+            CTestAttestState::Passed { rs, .. } => Some(&rs.alg),
+            _ => None,
+        }
+    }
+
+    pub fn get_reg_result(&self) -> Option<&RegistrationSuccess> {
+        match self {
+            CTestAttestState::Passed { rs, .. } => Some(&rs),
             _ => None,
         }
     }

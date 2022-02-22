@@ -4,6 +4,12 @@
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
+/// A credential ID type. At the moment this is a vector of bytes, but
+/// it could also be a future change for this to be base64 string instead.
+///
+/// If changed, this would likely be a major library version change.
+pub type CredentialID = Base64UrlSafeData;
+
 /// Defines the User Authenticator Verification policy. This is documented
 /// <https://w3c.github.io/webauthn/#enumdef-userverificationrequirement>, and each
 /// variant lists it's effects.

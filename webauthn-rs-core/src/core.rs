@@ -164,9 +164,9 @@ impl<T> Webauthn<T> {
                     creds
                         .iter()
                         .cloned()
-                        .map(|bytes| PublicKeyCredentialDescriptor {
+                        .map(|id| PublicKeyCredentialDescriptor {
                             type_: "public-key".to_string(),
-                            id: Base64UrlSafeData(bytes),
+                            id,
                             transports: None,
                         })
                         .collect()
@@ -510,7 +510,7 @@ impl<T> Webauthn<T> {
         // OUT OF SPEC - exclude any credential that is in our exclude list.
         let excluded = exclude_credentials
             .iter()
-            .any(|credid| credid.as_slice() == credential.cred_id.as_slice());
+            .any(|credid| credid.0.as_slice() == credential.cred_id.0.as_slice());
 
         if excluded {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
@@ -787,7 +787,7 @@ impl<T> Webauthn<T> {
             .iter()
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
-                id: Base64UrlSafeData(cred.cred_id.clone()),
+                id: cred.cred_id.clone(),
                 transports: None,
             })
             .collect();
@@ -874,7 +874,7 @@ impl<T> Webauthn<T> {
             // inappropriate for your use case), look up the corresponding credential public key.
             let mut found_cred: Option<&Credential> = None;
             for cred in creds {
-                if cred.cred_id == rsp.raw_id.0 {
+                if cred.cred_id.0 == rsp.raw_id.0 {
                     found_cred = Some(cred);
                     break;
                 }
@@ -1296,12 +1296,12 @@ mod tests {
         // Create the fake credential that we know is associated
         let cred = Credential {
             counter: 1,
-            cred_id: vec![
+            cred_id: Base64UrlSafeData(vec![
                 106, 223, 133, 124, 161, 172, 56, 141, 181, 18, 27, 66, 187, 181, 113, 251, 187,
                 123, 20, 169, 41, 80, 236, 138, 92, 137, 4, 4, 16, 255, 188, 47, 158, 202, 111,
                 192, 117, 110, 152, 245, 95, 22, 200, 172, 71, 154, 40, 181, 212, 64, 80, 17, 238,
                 238, 21, 13, 27, 145, 140, 27, 208, 101, 166, 81,
-            ],
+            ]),
             cred: COSEKey {
                 type_: COSEAlgorithm::ES256,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
@@ -1402,10 +1402,10 @@ mod tests {
         // Create the fake credential that we know is associated
         let cred = Credential {
             counter: 1,
-            cred_id: vec![
+            cred_id: Base64UrlSafeData(vec![
                 179, 64, 237, 0, 28, 248, 197, 30, 213, 228, 250, 139, 28, 11, 156, 130, 69, 242,
                 21, 48, 84, 77, 103, 163, 66, 204, 167, 147, 82, 214, 212,
-            ],
+            ]),
             cred: COSEKey {
                 type_: COSEAlgorithm::ES256,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
@@ -2151,12 +2151,12 @@ mod tests {
         // Given two credentials with differening policy
         let mut creds = vec![
             Credential {
-                cred_id: vec![
+                cred_id: Base64UrlSafeData(vec![
                     205, 198, 18, 130, 133, 220, 73, 23, 199, 211, 240, 143, 220, 154, 172, 117,
                     91, 18, 164, 211, 24, 147, 16, 203, 118, 76, 33, 65, 31, 92, 236, 211, 79, 67,
                     240, 30, 65, 247, 46, 134, 19, 136, 170, 209, 11, 115, 37, 12, 88, 244, 244,
                     240, 148, 132, 191, 165, 150, 166, 252, 39, 97, 137, 21, 186,
-                ],
+                ]),
                 cred: COSEKey {
                     type_: COSEAlgorithm::ES256,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {
@@ -2178,12 +2178,12 @@ mod tests {
                 registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             },
             Credential {
-                cred_id: vec![
+                cred_id: Base64UrlSafeData(vec![
                     211, 204, 163, 253, 101, 149, 83, 136, 242, 175, 211, 104, 215, 131, 122, 175,
                     187, 84, 13, 3, 21, 24, 11, 138, 50, 137, 55, 225, 180, 109, 49, 28, 98, 8, 28,
                     181, 149, 241, 106, 124, 110, 149, 154, 198, 23, 8, 8, 4, 41, 69, 236, 203,
                     122, 120, 204, 174, 28, 58, 171, 43, 218, 81, 195, 177,
-                ],
+                ]),
                 cred: COSEKey {
                     type_: COSEAlgorithm::ES256,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {

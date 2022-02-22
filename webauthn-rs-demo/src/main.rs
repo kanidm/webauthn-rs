@@ -226,12 +226,16 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
             );
 
             let reg_response = RegistrationSuccess {
-                cred,
+                cred_id: cred.cred_id,
+                // cred,
                 uv: auth_data.user_verified,
-                counter: auth_data.counter,
+                alg: cred.cred.type_,
+                // counter: auth_data.counter,
+                /*
                 extensions: auth_data
                     .extensions
                     .unwrap_or_else(|| RegistrationSignedExtensions::default()),
+                */
             };
 
             tide::Response::builder(tide::StatusCode::Ok)
@@ -301,10 +305,12 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
             let auth_response = AuthenticationSuccess {
                 cred_id: cred_id,
                 uv: auth_data.user_verified,
-                counter: auth_data.counter,
+                // counter: auth_data.counter,
+                /*
                 extensions: auth_data
                     .extensions
                     .unwrap_or_else(|| AuthenticationSignedExtensions::default()),
+                */
             };
 
             tide::Response::builder(tide::StatusCode::Ok)

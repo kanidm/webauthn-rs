@@ -11,6 +11,7 @@ wasm = ["wasm-bindgen", "web-sys", "js-sys"]
 [dependencies]
 base64urlsafedata = { path = "../base64urlsafedata" }
 serde = { version = "1", features = ["derive"] }
+# num_enum = "0.5"
 
 # Webauthn Components
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }

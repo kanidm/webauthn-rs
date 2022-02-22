@@ -1,6 +1,7 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
+use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
 
@@ -170,12 +171,6 @@ pub struct COSEKey {
     pub key: COSEKeyType,
 }
 
-/// A credential ID type. At the moment this is a vector of bytes, but
-/// it could also be a future change for this to be base64 string instead.
-///
-/// If changed, this would likely be a major library version change.
-pub type CredentialID = Vec<u8>;
-
 /// A user's authenticator credential. It contains an id, the public key
 /// and a counter of how many times the authenticator has been used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -202,39 +197,6 @@ pub struct Credential {
     /// component interacts with the device, IE an always verified authenticator
     /// vs one that can dynamically request it.
     pub registration_policy: UserVerificationPolicy,
-}
-
-/// A COSE signature algorithm, indicating the type of key and hash type
-/// that should be used. You shouldn't need to alter or use this value.
-#[allow(non_camel_case_types)]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum COSEAlgorithm {
-    /// Identifies this key as ECDSA (recommended SECP256R1) with SHA256 hashing
-    #[serde(alias = "ECDSA_SHA256")]
-    ES256 = -7, // recommends curve SECP256R1
-    /// Identifies this key as ECDSA (recommended SECP384R1) with SHA384 hashing
-    #[serde(alias = "ECDSA_SHA384")]
-    ES384 = -35, // recommends curve SECP384R1
-    /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
-    #[serde(alias = "ECDSA_SHA512")]
-    ES512 = -36, // recommends curve SECP521R1
-    /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
-    RS256 = -257,
-    /// Identifies this key as RS384 aka RSASSA-PKCS1-v1_5 w/ SHA-384
-    RS384 = -258,
-    /// Identifies this key as RS512 aka RSASSA-PKCS1-v1_5 w/ SHA-512
-    RS512 = -259,
-    /// Identifies this key as PS256 aka RSASSA-PSS w/ SHA-256
-    PS256 = -37,
-    /// Identifies this key as PS384 aka RSASSA-PSS w/ SHA-384
-    PS384 = -38,
-    /// Identifies this key as PS512 aka RSASSA-PSS w/ SHA-512
-    PS512 = -39,
-    /// Identifies this key as EdDSA (likely curve ed25519)
-    EDDSA = -8,
-    /// Identifies this as an INSECURE RS1 aka RSASSA-PKCS1-v1_5 using SHA-1. This is not
-    /// used by validators, but can exist in some windows hello tpm's
-    INSECURE_RS1 = -65535,
 }
 
 /// An X509PublicKey. This is what is otherwise known as a public certificate
