@@ -1,6 +1,8 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
+use crate::error::*;
+use std::fmt;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
@@ -22,6 +24,8 @@ pub struct RegistrationState {
     pub(crate) exclude_credentials: Vec<CredentialID>,
     pub(crate) challenge: Base64UrlSafeData,
     pub(crate) credential_algorithms: Vec<COSEAlgorithm>,
+    pub(crate) require_resident_key: bool,
+    pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
 }
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
@@ -171,6 +175,15 @@ pub struct COSEKey {
     pub key: COSEKeyType,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisteredExtensions {}
+
+impl RegisteredExtensions {
+    pub(crate) fn none() -> Self {
+        RegisteredExtensions {}
+    }
+}
+
 /// A user's authenticator credential. It contains an id, the public key
 /// and a counter of how many times the authenticator has been used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -191,43 +204,56 @@ pub struct Credential {
     /// ceremony attribute. For example it can be surprising to register
     /// a credential as un-verified but then to use verification with it
     /// in the future.
-    pub verified: bool,
+    pub user_verified: bool,
     /// During registration, the policy that was requested from this
     /// credential. This is used to understand if the how the verified
     /// component interacts with the device, IE an always verified authenticator
     /// vs one that can dynamically request it.
     pub registration_policy: UserVerificationPolicy,
+    /// The set of registrations that were verified at registration, that can
+    /// be used in future authentication attempts
+    pub extensions: RegisteredExtensions,
+    /// The attestation certificate of this credential.
+    // pub attestation: ParsedAttestationData,
+    pub attestation: SerialisableAttestationData,
 }
 
-/// An X509PublicKey. This is what is otherwise known as a public certificate
-/// which comprises a public key and other signed metadata related to the issuer
-/// of the key.
-pub struct X509PublicKey {
-    pub(crate) pubk: x509::X509,
-    pub(crate) t: COSEAlgorithm,
+#[derive(Clone, Serialize, Deserialize)]
+pub enum SerialisableAttestationData {
+    Basic(COSEAlgorithm, Vec<u8>),
+    Self_,
+    AttCa(COSEAlgorithm, Vec<u8>, Vec<Vec<u8>>),
+    AnonCa(COSEAlgorithm, Vec<u8>, Vec<Vec<u8>>),
+    ECDAA,
+    None,
+    Uncertain,
 }
 
-impl std::fmt::Debug for X509PublicKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "X509PublicKey")
+impl fmt::Debug for SerialisableAttestationData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        std::mem::discriminant(self).fmt(f)
     }
 }
 
 /// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    try_from = "SerialisableAttestationData",
+    into = "SerialisableAttestationData"
+)]
 pub enum ParsedAttestationData {
     /// The credential is authenticated by a signing X509 Certificate
     /// from a vendor or provider.
-    Basic(X509PublicKey),
+    Basic(COSEAlgorithm, x509::X509),
     /// The credential is authenticated using surrogate basic attestation
     /// it uses the credential private key to create the attestation signature
     Self_,
     /// The credential is authenticated using a CA, and may provide a
     /// ca chain to validate to it's root.
-    AttCa(X509PublicKey, Vec<X509PublicKey>),
+    AttCa(COSEAlgorithm, x509::X509, Vec<x509::X509>),
     /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
     /// validate to it's root.
-    AnonCa(X509PublicKey, Vec<X509PublicKey>),
+    AnonCa(COSEAlgorithm, x509::X509, Vec<x509::X509>),
     /// Unimplemented
     ECDAA,
     /// No Attestation type was provided with this Credential. If in doubt
@@ -236,6 +262,44 @@ pub enum ParsedAttestationData {
     /// Uncertain Attestation was provided with this Credential, which may not
     /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain,
+}
+
+impl Into<SerialisableAttestationData> for ParsedAttestationData {
+    fn into(self) -> SerialisableAttestationData {
+        match self {
+            ParsedAttestationData::Basic(alg, c) => {
+                SerialisableAttestationData::Basic(alg, c.to_der().expect("Invalid DER"))
+            }
+            ParsedAttestationData::Self_ => SerialisableAttestationData::Self_,
+            ParsedAttestationData::AttCa(alg, c, chain) => SerialisableAttestationData::AttCa(
+                alg,
+                c.to_der().expect("Invalid DER"),
+                chain
+                    .into_iter()
+                    .map(|c| c.to_der().expect("Invalid DER"))
+                    .collect(),
+            ),
+            ParsedAttestationData::AnonCa(alg, c, chain) => SerialisableAttestationData::AnonCa(
+                alg,
+                c.to_der().expect("Invalid DER"),
+                chain
+                    .into_iter()
+                    .map(|c| c.to_der().expect("Invalid DER"))
+                    .collect(),
+            ),
+            ParsedAttestationData::ECDAA => SerialisableAttestationData::ECDAA,
+            ParsedAttestationData::None => SerialisableAttestationData::None,
+            ParsedAttestationData::Uncertain => SerialisableAttestationData::Uncertain,
+        }
+    }
+}
+
+impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
+    type Error = WebauthnError;
+
+    fn try_from(data: SerialisableAttestationData) -> Result<Self, Self::Error> {
+        unimplemented!();
+    }
 }
 
 /// Marker type parameter for data related to registration ceremony
@@ -317,19 +381,14 @@ pub(crate) struct AttestedCredentialData {
     pub(crate) credential_pk: serde_cbor::Value,
 }
 
-/// Data returned by this authenticator during registration.
-#[derive(Debug, Clone)]
-pub struct AuthenticatorData<T: Ceremony> {
-    /// Hash of the relying party id.
-    pub(crate) rp_id_hash: Vec<u8>,
-    /// The counter of this credentials activations.
-    pub counter: u32,
-    /// Flag if the user was present.
-    pub user_present: bool,
-    /// Flag is the user verified to the device. Implies presence.
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct AuthenticationResult {
+    /// The credential ID that was used to authenticate.
+    pub cred_id: CredentialID,
+    /// If the authentication provided user_verification.
     pub user_verified: bool,
-    /// The optional attestation.
-    pub(crate) acd: Option<AttestedCredentialData>,
-    /// Extensions supplied by the device.
-    pub extensions: Option<T::SignedExtensions>,
+    /// The state of the counter
+    pub counter: u32,
+    // /// The response from associated extensions.
+    // pub extensions:
 }

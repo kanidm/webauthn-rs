@@ -1,8 +1,7 @@
-use crate::config::{WebauthnAuthConfig, WebauthnRegistrationConfig};
 use url::Url;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::{
-    Authentication, AuthenticatorData, CreationChallengeResponse, Credential, CredentialID,
+    Authentication, AuthenticationResult, CreationChallengeResponse, Credential, CredentialID,
     PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
 };
 use webauthn_rs_core::proto::{
@@ -16,7 +15,7 @@ pub struct WebauthnActor {
     pub rp_name: String,
     pub rp_id: String,
     pub rp_origin: Url,
-    base_wan: Webauthn<WebauthnAuthConfig>,
+    wan: Webauthn,
 }
 
 impl WebauthnActor {
@@ -24,16 +23,12 @@ impl WebauthnActor {
         let rp_name = rp_name.to_string();
         let rp_id = rp_id.to_string();
         let rp_origin = Url::parse(rp_origin).expect("Failed to parse origin");
-        let base_wan = Webauthn::new(WebauthnAuthConfig {
-            rp_name: rp_name.clone(),
-            rp_id: rp_id.clone(),
-            rp_origin: rp_origin.clone(),
-        });
+        let wan = unsafe { Webauthn::new(&rp_name, &rp_id, &rp_origin, None, None) };
         WebauthnActor {
             rp_name,
             rp_id,
             rp_origin,
-            base_wan,
+            wan,
         }
     }
 
@@ -52,29 +47,22 @@ impl WebauthnActor {
             extensions,
         } = reg_settings;
 
-        let wan = Webauthn::new(WebauthnRegistrationConfig {
-            rp_name: self.rp_name.clone(),
-            rp_id: self.rp_id.clone(),
-            rp_origin: self.rp_origin.clone(),
-            attachment,
-            algorithms: algorithm
-                .unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
-            attestation: attestation.unwrap_or(AttestationConveyancePreference::None),
-        });
-
         /*
         let exts = RequestRegistrationExtensions::builder()
             .cred_blob(vec![0xde, 0xad, 0xbe, 0xef])
             .build();
         */
 
-        let (ccr, rs) = wan.generate_challenge_register_options(
-            username.as_bytes().to_vec(),
+        let (ccr, rs) = self.wan.generate_challenge_register_options(
             username.to_string(),
             username.to_string(),
-            None,
+            attestation.unwrap_or(AttestationConveyancePreference::None),
             uv,
             None,
+            None,
+            algorithm.unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
+            false,
+            attachment,
         )?;
 
         debug!("complete ChallengeRegister -> {:?}", ccr);
@@ -113,11 +101,11 @@ impl WebauthnActor {
                     .next()
                     .ok_or(WebauthnError::CredentialNotFound)?;
 
-                self.base_wan
+                self.wan
                     .generate_challenge_authenticate_credential(cred, uv, None)
             }
             None => self
-                .base_wan
+                .wan
                 .generate_challenge_authenticate_options(creds, None),
         }?;
 
@@ -130,7 +118,7 @@ impl WebauthnActor {
         username: &String,
         reg: &RegisterPublicKeyCredential,
         rs: RegistrationState,
-    ) -> WebauthnResult<(Credential, AuthenticatorData<Registration>)> {
+    ) -> WebauthnResult<Credential> {
         debug!(
             "handle Register -> (username: {:?}, reg: {:?})",
             username, reg
@@ -138,7 +126,7 @@ impl WebauthnActor {
 
         let username = username.as_bytes().to_vec();
 
-        let r = self.base_wan.register_credential(reg, &rs, |_| Ok(false));
+        let r = self.wan.register_credential(reg, &rs);
         debug!("complete Register -> {:?}", r);
         r
     }
@@ -149,11 +137,7 @@ impl WebauthnActor {
         lgn: &PublicKeyCredential,
         st: AuthenticationState,
         mut creds: Vec<Credential>,
-    ) -> WebauthnResult<(
-        Vec<Credential>,
-        CredentialID,
-        AuthenticatorData<Authentication>,
-    )> {
+    ) -> WebauthnResult<(Vec<Credential>, AuthenticationResult)> {
         debug!(
             "handle Authenticate -> (username: {:?}, lgn: {:?})",
             username, lgn
@@ -162,14 +146,14 @@ impl WebauthnActor {
         let username = username.as_bytes().to_vec();
 
         let r = self
-            .base_wan
+            .wan
             .authenticate_credential(lgn, &st)
-            .map(|(cred_id, auth_data)| {
+            .map(|(auth_result)| {
                 creds
                     .iter_mut()
-                    .filter(|cred| &cred.cred_id == cred_id)
-                    .for_each(|cred| cred.counter = auth_data.counter);
-                (creds, cred_id.clone(), auth_data)
+                    .filter(|cred| &auth_result.cred_id == &cred.cred_id)
+                    .for_each(|cred| cred.counter = auth_result.counter);
+                (creds, auth_result)
             });
         debug!("complete Authenticate -> {:?}", r);
         r

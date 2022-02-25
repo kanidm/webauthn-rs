@@ -8,7 +8,6 @@ core = ["webauthn-rs-core"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-webauthn-rs-proto = { path = "../webauthn-rs-proto", default-features = false}
 
 webauthn-rs-core = { path = "../webauthn-rs-core", optional = true }
 

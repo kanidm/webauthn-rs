@@ -20,7 +20,6 @@ use webauthn_rs_core::proto::{
 use webauthn_rs_demo_shared::*;
 
 mod actors;
-mod config;
 mod crypto;
 
 use crate::actors::*;
@@ -211,7 +210,7 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let actor_res = request.state().register(&username, &reg, rs).await;
     let res = match actor_res {
-        Ok((cred, auth_data)) => {
+        Ok(cred) => {
             // TODO make this a fn call back for cred exist
             creds.push(cred.clone());
             cred_map.insert(username, creds);
@@ -228,7 +227,7 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
             let reg_response = RegistrationSuccess {
                 cred_id: cred.cred_id,
                 // cred,
-                uv: auth_data.user_verified,
+                uv: cred.user_verified,
                 alg: cred.cred.type_,
                 // counter: auth_data.counter,
                 /*
@@ -294,7 +293,7 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
         .authenticate(&username_copy, &lgn, st, creds)
         .await
     {
-        Ok((creds, cred_id, auth_data)) => {
+        Ok((creds, auth_result)) => {
             cred_map.insert(username, creds);
             // Set the credmap back
             request
@@ -303,8 +302,8 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
                 .expect("Failed to insert");
 
             let auth_response = AuthenticationSuccess {
-                cred_id: cred_id,
-                uv: auth_data.user_verified,
+                cred_id: auth_result.cred_id,
+                uv: auth_result.user_verified,
                 // counter: auth_data.counter,
                 /*
                 extensions: auth_data

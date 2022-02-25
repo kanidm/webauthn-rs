@@ -117,17 +117,24 @@ impl PartialEq<Credential> for Credential {
 impl Credential {
     pub(crate) fn new(
         acd: &AttestedCredentialData,
+        auth_data: &AuthenticatorData<Registration>,
         ck: COSEKey,
-        counter: u32,
-        verified: bool,
         registration_policy: UserVerificationPolicy,
+        attestation: ParsedAttestationData,
     ) -> Self {
+        let extensions = RegisteredExtensions {};
+
+        let counter = auth_data.counter;
+        let user_verified = auth_data.user_verified;
+
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
             counter,
-            verified,
+            user_verified,
             registration_policy,
+            extensions,
+            attestation: attestation.into(),
         }
     }
 }
@@ -243,6 +250,23 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
             extensions,
         },
     ))
+}
+
+/// Data returned by this authenticator during registration.
+#[derive(Debug, Clone)]
+pub struct AuthenticatorData<T: Ceremony> {
+    /// Hash of the relying party id.
+    pub(crate) rp_id_hash: Vec<u8>,
+    /// The counter of this credentials activations.
+    pub counter: u32,
+    /// Flag if the user was present.
+    pub user_present: bool,
+    /// Flag is the user verified to the device. Implies presence.
+    pub user_verified: bool,
+    /// The optional attestation.
+    pub(crate) acd: Option<AttestedCredentialData>,
+    /// Extensions supplied by the device.
+    pub extensions: Option<T::SignedExtensions>,
 }
 
 impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {

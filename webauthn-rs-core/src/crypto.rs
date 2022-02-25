@@ -23,26 +23,7 @@ use crate::proto::*;
 // Object({Integer(-3): Bytes([48, 185, 178, 204, 113, 186, 105, 138, 190, 33, 160, 46, 131, 253, 100, 177, 91, 243, 126, 128, 245, 119, 209, 59, 186, 41, 215, 196, 24, 222, 46, 102]), Integer(-2): Bytes([158, 212, 171, 234, 165, 197, 86, 55, 141, 122, 253, 6, 92, 242, 242, 114, 158, 221, 238, 163, 127, 214, 120, 157, 145, 226, 232, 250, 144, 150, 218, 138]), Integer(-1): U64(1), Integer(1): U64(2), Integer(3): I64(-7)})
 //
 
-// Apple makes a webauthn root certificate public at
-// https://www.apple.com/certificateauthority/private/.
-// The certificate data itself (as linked in the cert listing linked above) can be found at
-// https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem.
-pub(crate) const APPLE_X509_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
-MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8w
-HQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
-bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MjEzMloXDTQ1MDMx
-NTAwMDAwMFowSzEfMB0GA1UEAwwWQXBwbGUgV2ViQXV0aG4gUm9vdCBDQTETMBEG
-A1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49
-AgEGBSuBBAAiA2IABCJCQ2pTVhzjl4Wo6IhHtMSAzO2cv+H9DQKev3//fG59G11k
-xu9eI0/7o6V5uShBpe1u6l6mS19S1FEh6yGljnZAJ+2GNP1mi/YK2kSXIuTHjxA/
-pcoRf7XkOtO4o1qlcaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJtdk
-2cV4wlpn0afeaxLQG2PxxtcwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2cA
-MGQCMFrZ+9DsJ1PW9hfNdBywZDsWDbWFp28it1d/5w2RPkRX3Bbn/UbDTNLx7Jr3
-jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B
-1bWeT0vT
------END CERTIFICATE-----";
-
-fn verify_signature(
+fn pkey_verify_signature(
     pkey: &pkey::PKeyRef<pkey::Public>,
     stype: COSEAlgorithm,
     signature: &[u8],
@@ -81,12 +62,14 @@ fn verify_signature(
         .map_err(WebauthnError::OpenSSLError)
 }
 
+/*
 impl TryFrom<(&[u8], COSEAlgorithm)> for X509PublicKey {
     type Error = WebauthnError;
 
     // Must be DER bytes. If you have PEM, base64decode first!
     fn try_from((d, t): (&[u8], COSEAlgorithm)) -> Result<Self, Self::Error> {
-        let pubk = x509::X509::from_der(d).map_err(WebauthnError::OpenSSLError)?;
+        let pubk =
+        x509::X509::from_der(d).map_err(WebauthnError::OpenSSLError)
 
         #[allow(clippy::single_match)]
         match &t {
@@ -113,129 +96,145 @@ impl TryFrom<(&[u8], COSEAlgorithm)> for X509PublicKey {
         Ok(X509PublicKey { pubk, t })
     }
 }
+*/
 
-impl X509PublicKey {
-    pub(crate) fn verify_signature(
-        &self,
-        signature: &[u8],
-        verification_data: &[u8],
-    ) -> Result<bool, WebauthnError> {
-        let pkey = self
-            .pubk
-            .public_key()
-            .map_err(WebauthnError::OpenSSLError)?;
+pub(crate) fn verify_signature(
+    alg: COSEAlgorithm,
+    pubk: &x509::X509,
+    signature: &[u8],
+    verification_data: &[u8],
+) -> Result<bool, WebauthnError> {
+    let pkey = pubk.public_key().map_err(WebauthnError::OpenSSLError)?;
 
-        verify_signature(&pkey, self.t, signature, verification_data)
+    pkey_verify_signature(&pkey, alg, signature, verification_data)
+}
+
+pub(crate) fn assert_tpm_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+    // TPM attestation certificate MUST have the following fields/extensions:
+
+    // Version MUST be set to 3.
+    // version is not an attribute in openssl rust so I can't verify this
+
+    // Subject field MUST be set to empty.
+    let subject_name_ref = pubk.subject_name();
+    if subject_name_ref.entries().count() != 0 {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
-    pub(crate) fn assert_tpm_attest_req(&self) -> Result<(), WebauthnError> {
-        // TPM attestation certificate MUST have the following fields/extensions:
+    // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
+    // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
+    //
+    // I actually have no idea how to parse or process this ...
+    // self.pubk.subject_alt_names
 
-        // Version MUST be set to 3.
-        // version is not an attribute in openssl rust so I can't verify this
+    // Today there is no way to view eku/bc from openssl rust
 
-        // Subject field MUST be set to empty.
-        let subject_name_ref = self.pubk.subject_name();
-        if subject_name_ref.entries().count() != 0 {
-            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
-        }
+    // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
 
-        // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
-        // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
-        //
-        // I actually have no idea how to parse or process this ...
-        // self.pubk.subject_alt_names
+    // The Basic Constraints extension MUST have the CA component set to false.
 
-        // Today there is no way to view eku/bc from openssl rust
+    // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
+    // Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
+    // available through metadata services. See, for example, the FIDO Metadata Service [FIDOMetadataService].
 
-        // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
+    Ok(())
+}
 
-        // The Basic Constraints extension MUST have the CA component set to false.
+pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+    // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
+    // Statement Certificate Requirements.
+    // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
 
-        // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
-        // Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
-        // available through metadata services. See, for example, the FIDO Metadata Service [FIDOMetadataService].
+    // The attestation certificate MUST have the following fields/extensions:
+    // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
 
-        Ok(())
+    // Subject field MUST be set to:
+    //
+    // Subject-C
+    //  ISO 3166 code specifying the country where the Authenticator vendor is incorporated (PrintableString)
+    // Subject-O
+    //  Legal name of the Authenticator vendor (UTF8String)
+    // Subject-OU
+    //  Literal string “Authenticator Attestation” (UTF8String)
+    // Subject-CN
+    //  A UTF8String of the vendor’s choosing
+    let subject_name_ref = pubk.subject_name();
+
+    let subject_c = subject_name_ref
+        .entries_by_nid(nid::Nid::from_raw(14))
+        .take(1)
+        .next();
+    let subject_o = subject_name_ref
+        .entries_by_nid(nid::Nid::from_raw(17))
+        .take(1)
+        .next();
+    let subject_ou = subject_name_ref
+        .entries_by_nid(nid::Nid::from_raw(18))
+        .take(1)
+        .next();
+    let subject_cn = subject_name_ref
+        .entries_by_nid(nid::Nid::from_raw(13))
+        .take(1)
+        .next();
+
+    if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
-    pub(crate) fn assert_packed_attest_req(&self) -> Result<(), WebauthnError> {
-        // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
-        // Statement Certificate Requirements.
-        // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
-
-        // The attestation certificate MUST have the following fields/extensions:
-        // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
-
-        // Subject field MUST be set to:
-        //
-        // Subject-C
-        //  ISO 3166 code specifying the country where the Authenticator vendor is incorporated (PrintableString)
-        // Subject-O
-        //  Legal name of the Authenticator vendor (UTF8String)
-        // Subject-OU
-        //  Literal string “Authenticator Attestation” (UTF8String)
-        // Subject-CN
-        //  A UTF8String of the vendor’s choosing
-        let subject_name_ref = self.pubk.subject_name();
-
-        let subject_c = subject_name_ref
-            .entries_by_nid(nid::Nid::from_raw(14))
-            .take(1)
-            .next();
-        let subject_o = subject_name_ref
-            .entries_by_nid(nid::Nid::from_raw(17))
-            .take(1)
-            .next();
-        let subject_ou = subject_name_ref
-            .entries_by_nid(nid::Nid::from_raw(18))
-            .take(1)
-            .next();
-        let subject_cn = subject_name_ref
-            .entries_by_nid(nid::Nid::from_raw(13))
-            .take(1)
-            .next();
-
-        if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
-            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
-        }
-
-        match subject_ou {
-            Some(ou) => match ou.data().as_utf8() {
-                Ok(ou_d) => {
-                    if ou_d.to_string() != "Authenticator Attestation" {
-                        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
-                    }
+    match subject_ou {
+        Some(ou) => match ou.data().as_utf8() {
+            Ok(ou_d) => {
+                if ou_d.to_string() != "Authenticator Attestation" {
+                    return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
                 }
-                Err(_) => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
-            },
-            None => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
-        }
-
-        // If the related attestation root certificate is used for multiple authenticator models,
-        // the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
-        // containing the AAGUID as a 16-byte OCTET STRING. The extension MUST NOT be marked as critical.
-
-        // The Basic Constraints extension MUST have the CA component set to false.
-
-        // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL
-        // Distribution Point extension [RFC5280] are both OPTIONAL as the status of many
-        // attestation certificates is available through authenticator metadata services. See, for
-        // example, the FIDO Metadata Service [FIDOMetadataService].
-        Ok(())
+            }
+            Err(_) => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+        },
+        None => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
     }
 
-    pub(crate) fn get_fido_gen_ce_aaguid(&self) -> Option<Aaguid> {
-        None
-    }
+    // If the related attestation root certificate is used for multiple authenticator models,
+    // the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
+    // containing the AAGUID as a 16-byte OCTET STRING. The extension MUST NOT be marked as critical.
 
-    pub(crate) fn apple_x509() -> X509PublicKey {
-        Self {
-            pubk: x509::X509::from_pem(APPLE_X509_PEM).unwrap(),
-            // This content type was obtained statically (this certificate is static data)
-            t: COSEAlgorithm::ES384,
-        }
-    }
+    // The Basic Constraints extension MUST have the CA component set to false.
+
+    // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL
+    // Distribution Point extension [RFC5280] are both OPTIONAL as the status of many
+    // attestation certificates is available through authenticator metadata services. See, for
+    // example, the FIDO Metadata Service [FIDOMetadataService].
+    Ok(())
+}
+
+pub(crate) fn get_fido_gen_ce_aaguid(_pubk: &x509::X509) -> Option<Aaguid> {
+    None
+}
+
+// Apple makes a webauthn root certificate public at
+// https://www.apple.com/certificateauthority/private/.
+// The certificate data itself (as linked in the cert listing linked above) can be found at
+// https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem.
+pub(crate) const APPLE_X509_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
+MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8w
+HQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
+bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MjEzMloXDTQ1MDMx
+NTAwMDAwMFowSzEfMB0GA1UEAwwWQXBwbGUgV2ViQXV0aG4gUm9vdCBDQTETMBEG
+A1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49
+AgEGBSuBBAAiA2IABCJCQ2pTVhzjl4Wo6IhHtMSAzO2cv+H9DQKev3//fG59G11k
+xu9eI0/7o6V5uShBpe1u6l6mS19S1FEh6yGljnZAJ+2GNP1mi/YK2kSXIuTHjxA/
+pcoRf7XkOtO4o1qlcaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJtdk
+2cV4wlpn0afeaxLQG2PxxtcwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2cA
+MGQCMFrZ+9DsJ1PW9hfNdBywZDsWDbWFp28it1d/5w2RPkRX3Bbn/UbDTNLx7Jr3
+jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B
+1bWeT0vT
+-----END CERTIFICATE-----";
+
+pub(crate) fn apple_x509() -> (COSEAlgorithm, x509::X509) {
+    // This content type was obtained statically (this certificate is static data)
+    (
+        COSEAlgorithm::ES384,
+        x509::X509::from_pem(APPLE_X509_PEM).unwrap(),
+    )
 }
 
 impl TryFrom<nid::Nid> for ECDSACurve {
@@ -463,13 +462,12 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
     }
 }
 
-impl TryFrom<&X509PublicKey> for COSEKey {
+impl TryFrom<(COSEAlgorithm, &x509::X509)> for COSEKey {
     type Error = WebauthnError;
-    fn try_from(cert: &X509PublicKey) -> Result<COSEKey, Self::Error> {
-        let key = match cert.t {
+    fn try_from((alg, pubk): (COSEAlgorithm, &x509::X509)) -> Result<COSEKey, Self::Error> {
+        let key = match alg {
             COSEAlgorithm::ES256 | COSEAlgorithm::ES384 | COSEAlgorithm::ES512 => {
-                let ec_key = cert
-                    .pubk
+                let ec_key = pubk
                     .public_key()
                     .and_then(|pk| pk.ec_key())
                     .map_err(WebauthnError::OpenSSLError)?;
@@ -511,13 +509,13 @@ impl TryFrom<&X509PublicKey> for COSEKey {
             | COSEAlgorithm::INSECURE_RS1 => {
                 error!(
                     "unsupported X509 to COSE conversion for COSE algorithm type {:?}",
-                    cert.t
+                    alg
                 );
                 Err(WebauthnError::COSEKeyInvalidType)
             }
         }?;
 
-        Ok(COSEKey { type_: cert.t, key })
+        Ok(COSEKey { type_: alg, key })
     }
 }
 
@@ -622,7 +620,7 @@ impl COSEKey {
         verification_data: &[u8],
     ) -> Result<bool, WebauthnError> {
         let pkey = self.get_openssl_pkey()?;
-        verify_signature(&pkey, self.type_, signature, verification_data)
+        pkey_verify_signature(&pkey, self.type_, signature, verification_data)
     }
 }
 

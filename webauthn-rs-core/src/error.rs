@@ -14,6 +14,9 @@ pub type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum WebauthnError {
+    #[error("The configuration was invalid")]
+    Configuration,
+
     #[error("The JSON from the client did not indicate webauthn.<method> correctly")]
     InvalidClientDataType,
 

@@ -13,7 +13,7 @@
 //! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
 //! interactions.
 
-#![deny(warnings)]
+// #![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![warn(missing_docs)]
 
@@ -41,6 +41,3 @@ pub mod proto {
 }
 
 pub use crate::core::*;
-
-#[cfg(test)]
-mod ephemeral;

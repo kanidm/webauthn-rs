@@ -6,3 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+webauthn-rs-core = { path = "../webauthn-rs-core" }
+url = { version = "2", features = ["serde"] }
+tracing = "0.1"
