@@ -8,6 +8,8 @@ use webauthn_rs_core::proto::{
     AuthenticationState, RegistrationState, RequestAuthenticationExtensions,
     RequestRegistrationExtensions,
 };
+
+use webauthn_rs::{Webauthn, WebauthnBuilder};
 use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
 
@@ -15,7 +17,10 @@ pub struct WebauthnActor {
     pub rp_name: String,
     pub rp_id: String,
     pub rp_origin: Url,
+    /// Used for testing with compat.
     wan: WebauthnCore,
+    /// For demoing the simple cases.
+    swan: Webauthn,
 }
 
 impl WebauthnActor {
@@ -24,15 +29,23 @@ impl WebauthnActor {
         let rp_id = rp_id.to_string();
         let rp_origin = Url::parse(rp_origin).expect("Failed to parse origin");
         let wan = unsafe { WebauthnCore::new(&rp_name, &rp_id, &rp_origin, None, None) };
+
+        let swan = WebauthnBuilder::new(&rp_id, &rp_origin)
+            .expect("Invalid rp id or origin")
+            .rp_name(&rp_name)
+            .build()
+            .expect("Failed to build swan");
+
         WebauthnActor {
             rp_name,
             rp_id,
             rp_origin,
             wan,
+            swan,
         }
     }
 
-    pub async fn challenge_register(
+    pub async fn compat_start_register(
         &self,
         username: String,
         reg_settings: RegisterWithSettings,
@@ -69,7 +82,7 @@ impl WebauthnActor {
         Ok((ccr, rs))
     }
 
-    pub async fn challenge_authenticate(
+    pub async fn compat_start_login(
         &self,
         username: &String,
         creds: Vec<Credential>,
@@ -113,7 +126,7 @@ impl WebauthnActor {
         Ok((acr, st))
     }
 
-    pub async fn register(
+    pub async fn compat_finish_register(
         &self,
         username: &String,
         reg: &RegisterPublicKeyCredential,
@@ -131,7 +144,7 @@ impl WebauthnActor {
         r
     }
 
-    pub async fn authenticate(
+    pub async fn compat_finish_login(
         &self,
         username: &String,
         lgn: &PublicKeyCredential,

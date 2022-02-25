@@ -10,4 +10,5 @@ core = ["webauthn-rs-core"]
 serde = { version = "1", features = ["derive"] }
 
 webauthn-rs-core = { path = "../webauthn-rs-core", optional = true }
+webauthn-rs-proto = { path = "../webauthn-rs-proto" }
 

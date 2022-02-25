@@ -1000,7 +1000,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/challenge/register/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/register_start/compatuser", &opts)?;
 
         request
             .headers()
@@ -1040,7 +1040,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/register/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/register_finish/compatuser", &opts)?;
 
         request
             .headers()
@@ -1081,7 +1081,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/challenge/login/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/login_start/compatuser", &opts)?;
 
         request
             .headers()
@@ -1123,7 +1123,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/login/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/login_finish/compatuser", &opts)?;
 
         request
             .headers()

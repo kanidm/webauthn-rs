@@ -1,12 +1,17 @@
 #[macro_use]
 extern crate tracing;
 
+mod interface;
+
 use url::Url;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
-use webauthn_rs_core::proto::COSEAlgorithm;
+use webauthn_rs_core::proto::*;
 use webauthn_rs_core::WebauthnCore;
 
+use crate::interface::*;
+
 pub mod prelude {
+    pub use crate::interface::*;
     pub use crate::{Webauthn, WebauthnBuilder};
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 }
@@ -26,7 +31,7 @@ pub struct Webauthn {
 }
 
 impl<'a> WebauthnBuilder<'a> {
-    fn new(rp_id: &'a str, rp_origin: &'a Url) -> WebauthnResult<Self> {
+    pub fn new(rp_id: &'a str, rp_origin: &'a Url) -> WebauthnResult<Self> {
         // Check the rp_name and rp_id.
         let valid = rp_origin
             .domain()
@@ -51,17 +56,17 @@ impl<'a> WebauthnBuilder<'a> {
         }
     }
 
-    fn allow_subdomains(mut self, allow: bool) -> Self {
+    pub fn allow_subdomains(mut self, allow: bool) -> Self {
         self.allow_subdomains = allow;
         self
     }
 
-    fn rp_name(mut self, rp_name: &'a str) -> Self {
+    pub fn rp_name(mut self, rp_name: &'a str) -> Self {
         self.rp_name = Some(rp_name);
         self
     }
 
-    fn build(self) -> WebauthnResult<Webauthn> {
+    pub fn build(self) -> WebauthnResult<Webauthn> {
         Ok(Webauthn {
             core: unsafe {
                 WebauthnCore::new(
@@ -77,11 +82,66 @@ impl<'a> WebauthnBuilder<'a> {
 }
 
 impl Webauthn {
-    // Register A simple credential.
+    fn start_securitykey_registration(
+        &self,
+        user_name: &str,
+        user_display_name: Option<&str>,
+        exclude_credentials: Option<Vec<CredentialID>>,
+        attestation_ca_list: Option<AttestationCaList>,
+        // extensions
+    ) -> WebauthnResult<(CreationChallengeResponse, SecurityKeyRegistration)> {
+        let attestation = AttestationConveyancePreference::None;
+        let exclude_credentials = None;
+        let extensions = None;
+        let credential_algorithms = COSEAlgorithm::secure_algs();
+        let require_resident_key = false;
+        let authenticator_attachment = None;
+        let policy = Some(UserVerificationPolicy::Preferred);
+
+        self.core
+            .generate_challenge_register_options(
+                user_name.to_string(),
+                user_display_name.unwrap_or(user_name).to_string(),
+                attestation,
+                policy,
+                exclude_credentials,
+                extensions,
+                credential_algorithms,
+                require_resident_key,
+                authenticator_attachment,
+            )
+            .map(|(ccr, rs)| {
+                (
+                    ccr,
+                    SecurityKeyRegistration {
+                        rs,
+                        ca_list: attestation_ca_list,
+                    },
+                )
+            })
+    }
+
+    /*
 
     // Register a password-less credential, needs attestation
+    /// * Must be verified
+    /// * Must be attested
+    /// * May request a pin length
+    /// * Must return what TYPE of UV (?)
+    /// * Any attachment type
+    /// * Optional - RK
 
     // Register a trusted device credential
+    /// * Must be verified
+    /// * Must be attested
+    /// * Must be a DEVICE (platform) credential
+    /// * May request a pin length
+    /// * Must return what TYPE of UV (?)
+    /// * Must be platform attached
+    /// * Need to use credProps
+    /// * Optional - RK
+
+    */
 
     // Authenticate ^
 }

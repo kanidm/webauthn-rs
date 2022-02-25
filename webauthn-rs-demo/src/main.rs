@@ -93,7 +93,7 @@ async fn index_view(request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_start_register(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     let session = request.session_mut();
@@ -104,7 +104,7 @@ async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Resul
 
     let actor_res = request
         .state()
-        .challenge_register(username, reg_settings)
+        .compat_start_register(username, reg_settings)
         .await;
 
     let res = match actor_res {
@@ -127,7 +127,7 @@ async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Resul
     Ok(res)
 }
 
-async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     debug!("session - {:?}", request.session().get_raw("cred_map"));
@@ -155,7 +155,7 @@ async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
 
     let actor_res = request
         .state()
-        .challenge_authenticate(&username, creds, auth_settings)
+        .compat_start_login(&username, creds, auth_settings)
         .await;
 
     let session = request.session_mut();
@@ -185,7 +185,7 @@ async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-async fn register(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     debug!("session - {:?}", request.session().get_raw("cred_map"));
@@ -208,7 +208,10 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
 
-    let actor_res = request.state().register(&username, &reg, rs).await;
+    let actor_res = request
+        .state()
+        .compat_finish_register(&username, &reg, rs)
+        .await;
     let res = match actor_res {
         Ok(cred) => {
             // TODO make this a fn call back for cred exist
@@ -253,7 +256,7 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-async fn login(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
     let username_copy = username.clone();
 
@@ -290,7 +293,7 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
 
     let res = match request
         .state()
-        .authenticate(&username_copy, &lgn, st, creds)
+        .compat_finish_login(&username_copy, &lgn, st, creds)
         .await
     {
         Ok((creds, auth_result)) => {
@@ -327,6 +330,22 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
     debug!("session - {:?}", request.session().get_raw("cred_map"));
 
     Ok(res)
+}
+
+async fn demo_start_register(mut request: tide::Request<AppState>) -> tide::Result {
+    unimplemented!();
+}
+
+async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
+    unimplemented!();
+}
+
+async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result {
+    unimplemented!();
+}
+
+async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
+    unimplemented!();
 }
 
 #[async_std::main]
@@ -370,11 +389,24 @@ async fn main() -> tide::Result<()> {
     app.with(tide::log::LogMiddleware::new());
     // Serve our wasm content
     app.at("/pkg").serve_dir("pkg")?;
-    app.at("/challenge/register/:username")
-        .post(challenge_register);
-    app.at("/challenge/login/:username").post(challenge_login);
-    app.at("/register/:username").post(register);
-    app.at("/login/:username").post(login);
+
+    app.at("/compat/register_start/:username")
+        .post(compat_start_register);
+    app.at("/compat/register_finish/:username")
+        .post(compat_finish_register);
+    app.at("/compat/login_start/:username")
+        .post(compat_start_login);
+    app.at("/compat/login_finish/:username")
+        .post(compat_finish_login);
+
+    app.at("/demo/register_start/:username")
+        .post(demo_start_register);
+    app.at("/demo/register_finish/:username")
+        .post(demo_finish_register);
+    app.at("/demo/login_start/:username").post(demo_start_login);
+    app.at("/demo/login_finish/:username")
+        .post(demo_finish_login);
+
     app.at("/").get(index_view);
     app.at("/*").get(index_view);
 

@@ -64,7 +64,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/challenge/register/{}", username);
+        let dest = format!("/demo/register_start/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -110,7 +110,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/register/{}", username);
+        let dest = format!("/demo/register_finish/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -153,7 +153,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/challenge/login/{}", username);
+        let dest = format!("/demo/login_start/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -199,7 +199,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/login/{}", username);
+        let dest = format!("/demo/login_finish/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request

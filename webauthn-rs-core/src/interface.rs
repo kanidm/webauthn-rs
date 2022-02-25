@@ -220,10 +220,10 @@ pub struct Credential {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SerialisableAttestationData {
-    Basic(COSEAlgorithm, Vec<u8>),
+    Basic(COSEAlgorithm, Base64UrlSafeData),
     Self_,
-    AttCa(COSEAlgorithm, Vec<u8>, Vec<Vec<u8>>),
-    AnonCa(COSEAlgorithm, Vec<u8>, Vec<Vec<u8>>),
+    AttCa(COSEAlgorithm, Base64UrlSafeData, Vec<Base64UrlSafeData>),
+    AnonCa(COSEAlgorithm, Base64UrlSafeData, Vec<Base64UrlSafeData>),
     ECDAA,
     None,
     Uncertain,
@@ -267,24 +267,25 @@ pub enum ParsedAttestationData {
 impl Into<SerialisableAttestationData> for ParsedAttestationData {
     fn into(self) -> SerialisableAttestationData {
         match self {
-            ParsedAttestationData::Basic(alg, c) => {
-                SerialisableAttestationData::Basic(alg, c.to_der().expect("Invalid DER"))
-            }
+            ParsedAttestationData::Basic(alg, c) => SerialisableAttestationData::Basic(
+                alg,
+                Base64UrlSafeData(c.to_der().expect("Invalid DER")),
+            ),
             ParsedAttestationData::Self_ => SerialisableAttestationData::Self_,
             ParsedAttestationData::AttCa(alg, c, chain) => SerialisableAttestationData::AttCa(
                 alg,
-                c.to_der().expect("Invalid DER"),
+                Base64UrlSafeData(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| c.to_der().expect("Invalid DER"))
+                    .map(|c| Base64UrlSafeData(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::AnonCa(alg, c, chain) => SerialisableAttestationData::AnonCa(
                 alg,
-                c.to_der().expect("Invalid DER"),
+                Base64UrlSafeData(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| c.to_der().expect("Invalid DER"))
+                    .map(|c| Base64UrlSafeData(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::ECDAA => SerialisableAttestationData::ECDAA,
@@ -298,7 +299,32 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
     type Error = WebauthnError;
 
     fn try_from(data: SerialisableAttestationData) -> Result<Self, Self::Error> {
-        unimplemented!();
+        Ok(match data {
+            SerialisableAttestationData::Basic(alg, c) => ParsedAttestationData::Basic(
+                alg,
+                x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
+            ),
+            SerialisableAttestationData::Self_ => ParsedAttestationData::Self_,
+            SerialisableAttestationData::AttCa(alg, c, chain) => ParsedAttestationData::AttCa(
+                alg,
+                x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
+                chain
+                    .into_iter()
+                    .map(|c| x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError))
+                    .collect::<WebauthnResult<_>>()?,
+            ),
+            SerialisableAttestationData::AnonCa(alg, c, chain) => ParsedAttestationData::AnonCa(
+                alg,
+                x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
+                chain
+                    .into_iter()
+                    .map(|c| x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError))
+                    .collect::<WebauthnResult<_>>()?,
+            ),
+            SerialisableAttestationData::ECDAA => ParsedAttestationData::ECDAA,
+            SerialisableAttestationData::None => ParsedAttestationData::None,
+            SerialisableAttestationData::Uncertain => ParsedAttestationData::Uncertain,
+        })
     }
 }
 

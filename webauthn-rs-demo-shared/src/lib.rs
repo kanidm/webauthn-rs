@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
 
-pub use webauthn_rs_core::proto::{
+pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
     CreationChallengeResponse, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
     RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
