@@ -8,14 +8,14 @@ use webauthn_rs_core::proto::{
     AuthenticationState, RegistrationState, RequestAuthenticationExtensions,
     RequestRegistrationExtensions,
 };
-use webauthn_rs_core::Webauthn;
+use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
 
 pub struct WebauthnActor {
     pub rp_name: String,
     pub rp_id: String,
     pub rp_origin: Url,
-    wan: Webauthn,
+    wan: WebauthnCore,
 }
 
 impl WebauthnActor {
@@ -23,7 +23,7 @@ impl WebauthnActor {
         let rp_name = rp_name.to_string();
         let rp_id = rp_id.to_string();
         let rp_origin = Url::parse(rp_origin).expect("Failed to parse origin");
-        let wan = unsafe { Webauthn::new(&rp_name, &rp_id, &rp_origin, None, None) };
+        let wan = unsafe { WebauthnCore::new(&rp_name, &rp_id, &rp_origin, None, None) };
         WebauthnActor {
             rp_name,
             rp_id,

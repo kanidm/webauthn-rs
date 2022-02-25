@@ -47,7 +47,7 @@ use base64urlsafedata::Base64UrlSafeData;
 /// As a result, it's very important you read the function descriptions to understand the process
 /// as much as possible.
 #[derive(Debug)]
-pub struct Webauthn {
+pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
     rp_id_hash: Vec<u8>,
@@ -59,7 +59,7 @@ pub struct Webauthn {
     allow_subdomains_origin: bool,
 }
 
-impl Webauthn {
+impl WebauthnCore {
     /// ⚠️  ⚠️  ⚠️  THIS IS UNSAFE. AVOID USING THIS DIRECTLY ⚠️  ⚠️  ⚠️
     ///
     /// If possible, use the `webauthn-rs` crate, and it's safe wrapper instead!
@@ -84,7 +84,7 @@ impl Webauthn {
         allow_subdomains_origin: Option<bool>,
     ) -> Self {
         let rp_id_hash = compute_sha256(rp_id.as_bytes());
-        Webauthn {
+        WebauthnCore {
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
             rp_id_hash,
@@ -1136,7 +1136,7 @@ mod tests {
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
     use crate::internals::*;
     use crate::proto::*;
-    use crate::Webauthn;
+    use crate::WebauthnCore as Webauthn;
     use base64urlsafedata::Base64UrlSafeData;
     use url::Url;
 

@@ -4,7 +4,7 @@ extern crate tracing;
 use url::Url;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::COSEAlgorithm;
-use webauthn_rs_core::Webauthn as WebauthnCore;
+use webauthn_rs_core::WebauthnCore;
 
 pub mod prelude {
     pub use crate::{Webauthn, WebauthnBuilder};
