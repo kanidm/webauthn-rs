@@ -9,6 +9,30 @@ pub use webauthn_rs_proto::{
     UserVerificationPolicy,
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum RegisterWithType {
+    SecurityKey(bool),
+    Passwordless(bool),
+    // Device(bool),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum AuthenticateWithType {
+    SecurityKey,
+    Passwordless,
+    // Device
+}
+
+impl From<&RegisterWithType> for AuthenticateWithType {
+    fn from(regsettings: &RegisterWithType) -> AuthenticateWithType {
+        match regsettings {
+            RegisterWithType::SecurityKey(_) => AuthenticateWithType::SecurityKey,
+            RegisterWithType::Passwordless(_) => AuthenticateWithType::Passwordless,
+            // RegisterWithType::Device(_) => AuthenticateWithType::Device,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RegisterWithSettings {
     pub uv: Option<UserVerificationPolicy>,

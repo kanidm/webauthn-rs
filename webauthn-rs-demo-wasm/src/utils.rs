@@ -1,13 +1,8 @@
 use gloo::console;
 use wasm_bindgen::JsCast;
-use wasm_bindgen::UnwrapThrowExt;
 use web_sys::Document;
-use web_sys::Event;
 use web_sys::Clipboard;
 use web_sys::Navigator;
-use web_sys::HtmlInputElement;
-use web_sys::HtmlSelectElement;
-use web_sys::InputEvent;
 use web_sys::Window;
 
 pub fn get_checked_from_element_id(id: &str) -> Option<bool> {

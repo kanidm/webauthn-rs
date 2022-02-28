@@ -1,17 +1,42 @@
 use url::Url;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::{
-    Authentication, AuthenticationResult, CreationChallengeResponse, Credential, CredentialID,
-    PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
+    AttestationCaList, AuthenticationState, RegistrationState, RequestAuthenticationExtensions,
+    RequestRegistrationExtensions,
 };
 use webauthn_rs_core::proto::{
-    AuthenticationState, RegistrationState, RequestAuthenticationExtensions,
-    RequestRegistrationExtensions,
+    Authentication, AuthenticationResult, CreationChallengeResponse, Credential, CredentialID,
+    PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
 };
 
 use webauthn_rs::{Webauthn, WebauthnBuilder};
 use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
+
+use webauthn_rs::prelude::{
+    PasswordlessKey, PasswordlessKeyAuthentication, PasswordlessKeyRegistration, SecurityKey,
+    SecurityKeyAuthentication, SecurityKeyRegistration,
+};
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum RegistrationTypedState {
+    SecurityKey(SecurityKeyRegistration),
+    Passwordless(PasswordlessKeyRegistration),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum AuthenticationTypedState {
+    SecurityKey(SecurityKeyAuthentication),
+    Passwordless(PasswordlessKeyAuthentication),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum TypedCredential {
+    SecurityKey(SecurityKey),
+    Passwordless(PasswordlessKey),
+}
 
 pub struct WebauthnActor {
     pub rp_name: String,
@@ -43,6 +68,131 @@ impl WebauthnActor {
             wan,
             swan,
         }
+    }
+
+    pub async fn demo_start_register(
+        &self,
+        username: String,
+        reg_settings: RegisterWithType,
+    ) -> WebauthnResult<(CreationChallengeResponse, RegistrationTypedState)> {
+        debug!("handle ChallengeRegister -> {:?}", username);
+
+        let (ccr, rs) = match reg_settings {
+            RegisterWithType::SecurityKey(strict) => self
+                .swan
+                .start_securitykey_registration(
+                    &username,
+                    None,
+                    None,
+                    strict.then(AttestationCaList::strict),
+                )
+                .map(|(ccr, rs)| (ccr, RegistrationTypedState::SecurityKey(rs)))?,
+            RegisterWithType::Passwordless(strict) => {
+                self.swan
+                    .start_passwordlesskey_registration(
+                        &username,
+                        None,
+                        None,
+                        strict.then(AttestationCaList::strict),
+                        // Some(AuthenticatorAttachment::None),
+                        None,
+                    )
+                    .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passwordless(rs)))?
+            } // RegisterWithType::Device(strict) => {
+              // }
+        };
+
+        debug!("complete ChallengeRegister -> {:?}", ccr);
+        Ok((ccr, rs))
+    }
+
+    pub async fn demo_finish_register(
+        &self,
+        username: &String,
+        reg: &RegisterPublicKeyCredential,
+        rs: RegistrationTypedState,
+    ) -> WebauthnResult<TypedCredential> {
+        debug!(
+            "handle Register -> (username: {:?}, reg: {:?})",
+            username, reg
+        );
+
+        let r = match rs {
+            RegistrationTypedState::SecurityKey(rs) => self
+                .swan
+                .finish_securitykey_registration(reg, &rs)
+                .map(|sk| TypedCredential::SecurityKey(sk)),
+            RegistrationTypedState::Passwordless(rs) => self
+                .swan
+                .finish_passwordlesskey_registration(reg, &rs)
+                .map(|sk| TypedCredential::Passwordless(sk)),
+        };
+
+        debug!("complete Register -> {:?}", r);
+        r
+    }
+
+    pub async fn demo_start_login(
+        &self,
+        username: &String,
+        creds: Vec<TypedCredential>,
+        auth_settings: AuthenticateWithType,
+    ) -> WebauthnResult<(RequestChallengeResponse, AuthenticationTypedState)> {
+        debug!("handle ChallengeAuthenticate -> {:?}", username);
+
+        let (acr, st) = match auth_settings {
+            AuthenticateWithType::SecurityKey => {
+                let creds: Vec<_> = creds
+                    .iter()
+                    .filter_map(|c| match c {
+                        TypedCredential::SecurityKey(sk) => Some(sk),
+                        _ => None,
+                    })
+                    .collect();
+                self.swan
+                    .start_securitykey_authentication(&creds)
+                    .map(|(acr, ast)| (acr, AuthenticationTypedState::SecurityKey(ast)))?
+            }
+            AuthenticateWithType::Passwordless => {
+                let creds: Vec<_> = creds
+                    .iter()
+                    .filter_map(|c| match c {
+                        TypedCredential::Passwordless(sk) => Some(sk),
+                        _ => None,
+                    })
+                    .collect();
+                self.swan
+                    .start_passwordlesskey_authentication(&creds)
+                    .map(|(acr, ast)| (acr, AuthenticationTypedState::Passwordless(ast)))?
+            }
+        };
+
+        debug!("complete ChallengeAuthenticate -> {:?}", acr);
+        Ok((acr, st))
+    }
+
+    pub async fn demo_finish_login(
+        &self,
+        username: &str,
+        lgn: &PublicKeyCredential,
+        st: AuthenticationTypedState,
+    ) -> WebauthnResult<AuthenticationResult> {
+        debug!(
+            "handle Authenticate -> (username: {:?}, lgn: {:?})",
+            username, lgn
+        );
+
+        let r = match st {
+            AuthenticationTypedState::SecurityKey(ast) => {
+                self.swan.finish_securitykey_authentication(lgn, &ast)
+            }
+            AuthenticationTypedState::Passwordless(ast) => {
+                self.swan.finish_passwordlesskey_authentication(lgn, &ast)
+            }
+        };
+
+        debug!("complete Authenticate -> {:?}", r);
+        r
     }
 
     pub async fn compat_start_register(
@@ -161,7 +311,7 @@ impl WebauthnActor {
         let r = self
             .wan
             .authenticate_credential(lgn, &st)
-            .map(|(auth_result)| {
+            .map(|auth_result| {
                 creds
                     .iter_mut()
                     .filter(|cred| &auth_result.cred_id == &cred.cred_id)

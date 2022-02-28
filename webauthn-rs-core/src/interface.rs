@@ -418,3 +418,17 @@ pub struct AuthenticationResult {
     // /// The response from associated extensions.
     // pub extensions:
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttestationCa {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttestationCaList {
+    pub(crate) cas: Vec<AttestationCa>,
+}
+
+impl AttestationCaList {
+    pub fn strict() -> Self {
+        AttestationCaList { cas: Vec::new() }
+    }
+}

@@ -1,14 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use webauthn_rs_core::interface::RegistrationState;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttestationCa {}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AttestationCaList {
-    cas: Vec<AttestationCa>,
-}
+use webauthn_rs_core::interface::{AttestationCaList, AuthenticationState, RegistrationState};
+use webauthn_rs_core::proto::Credential;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityKeyRegistration {
@@ -16,6 +9,30 @@ pub struct SecurityKeyRegistration {
     pub(crate) ca_list: Option<AttestationCaList>,
 }
 
-// SecurityKey
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityKeyAuthentication {
+    pub(crate) ast: AuthenticationState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityKey {
+    pub(crate) cred: Credential,
+}
 
 // PasswordlessKey
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordlessKeyRegistration {
+    pub(crate) rs: RegistrationState,
+    pub(crate) ca_list: Option<AttestationCaList>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordlessKeyAuthentication {
+    pub(crate) ast: AuthenticationState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PasswordlessKey {
+    pub(crate) cred: Credential,
+}

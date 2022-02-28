@@ -6,7 +6,7 @@ mod demo;
 mod error;
 mod manager;
 mod utils;
-mod uv;
+// mod uv;
 
 #[wasm_bindgen]
 pub fn run_app() -> Result<(), JsValue> {

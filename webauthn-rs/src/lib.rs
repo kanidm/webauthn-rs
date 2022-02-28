@@ -82,7 +82,7 @@ impl<'a> WebauthnBuilder<'a> {
 }
 
 impl Webauthn {
-    fn start_securitykey_registration(
+    pub fn start_securitykey_registration(
         &self,
         user_name: &str,
         user_display_name: Option<&str>,
@@ -91,7 +91,6 @@ impl Webauthn {
         // extensions
     ) -> WebauthnResult<(CreationChallengeResponse, SecurityKeyRegistration)> {
         let attestation = AttestationConveyancePreference::None;
-        let exclude_credentials = None;
         let extensions = None;
         let credential_algorithms = COSEAlgorithm::secure_algs();
         let require_resident_key = false;
@@ -121,8 +120,107 @@ impl Webauthn {
             })
     }
 
-    /*
+    pub fn finish_securitykey_registration(
+        &self,
+        reg: &RegisterPublicKeyCredential,
+        state: &SecurityKeyRegistration,
+    ) -> WebauthnResult<SecurityKey> {
+        // TODO: Check the AttestationCa List!!
+        self.core
+            .register_credential(reg, &state.rs)
+            .map(|cred| SecurityKey { cred })
+    }
 
+    pub fn start_securitykey_authentication(
+        &self,
+        creds: &[&SecurityKey],
+    ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
+        let extensions = None;
+        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+
+        self.core
+            .generate_challenge_authenticate_options(creds, extensions)
+            .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
+    }
+
+    pub fn finish_securitykey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        state: &SecurityKeyAuthentication,
+    ) -> WebauthnResult<AuthenticationResult> {
+        self.core.authenticate_credential(reg, &state.ast)
+    }
+
+    pub fn start_passwordlesskey_registration(
+        &self,
+        user_name: &str,
+        user_display_name: Option<&str>,
+        exclude_credentials: Option<Vec<CredentialID>>,
+        attestation_ca_list: Option<AttestationCaList>,
+        authenticator_attachment: Option<AuthenticatorAttachment>,
+        // extensions
+    ) -> WebauthnResult<(CreationChallengeResponse, PasswordlessKeyRegistration)> {
+        let attestation = AttestationConveyancePreference::Direct;
+        let extensions = None;
+        let credential_algorithms = COSEAlgorithm::secure_algs();
+        let require_resident_key = false;
+        let policy = Some(UserVerificationPolicy::Required);
+
+        self.core
+            .generate_challenge_register_options(
+                user_name.to_string(),
+                user_display_name.unwrap_or(user_name).to_string(),
+                attestation,
+                policy,
+                exclude_credentials,
+                extensions,
+                credential_algorithms,
+                require_resident_key,
+                authenticator_attachment,
+            )
+            .map(|(ccr, rs)| {
+                (
+                    ccr,
+                    PasswordlessKeyRegistration {
+                        rs,
+                        ca_list: attestation_ca_list,
+                    },
+                )
+            })
+    }
+
+    pub fn finish_passwordlesskey_registration(
+        &self,
+        reg: &RegisterPublicKeyCredential,
+        state: &PasswordlessKeyRegistration,
+    ) -> WebauthnResult<PasswordlessKey> {
+        // TODO: Check the AttestationCa List!!
+        self.core
+            .register_credential(reg, &state.rs)
+            .map(|cred| PasswordlessKey { cred })
+    }
+
+    pub fn start_passwordlesskey_authentication(
+        &self,
+        creds: &[&PasswordlessKey],
+    ) -> WebauthnResult<(RequestChallengeResponse, PasswordlessKeyAuthentication)> {
+        let extensions = None;
+        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+
+        self.core
+            .generate_challenge_authenticate_options(creds, extensions)
+            .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
+    }
+
+    pub fn finish_passwordlesskey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        state: &PasswordlessKeyAuthentication,
+    ) -> WebauthnResult<AuthenticationResult> {
+        self.core.authenticate_credential(reg, &state.ast)
+    }
+
+    /*
     // Register a password-less credential, needs attestation
     /// * Must be verified
     /// * Must be attested

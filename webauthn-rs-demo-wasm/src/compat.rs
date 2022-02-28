@@ -176,7 +176,7 @@ impl Component for CompatTest {
             }
             AppMsg::Begin => {
                 self.show_next = false;
-                let settings = match self.step {
+                match self.step {
                     CompatTestStep::DirectAttest1 => {
                         // Set the initial test results to failure.
                         self.results.direct_attest_1 = CTestAttestState::failed();
