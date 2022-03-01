@@ -124,6 +124,20 @@ pub enum WebauthnError {
     #[error("The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements are not met by this attestation certificate")]
     AttestationCertificateRequirementsNotMet,
 
+    #[error("The provided list of CA's for attestation is empty, allowing no trust path to be established")]
+    AttestationCertificateTrustStoreEmpty,
+
+    #[error("The leaf certificate we intented to verify is missing.")]
+    AttestationLeafCertMissing,
+
+    #[error("The attestation was parsed, but is not a format valid for CA chain validation")]
+    AttestationNotVerifiable,
+
+    #[error(
+        "The attestation was parsed, but is not trusted by one of the selected CA certificates"
+    )]
+    AttestationChainNotTrusted(String),
+
     #[error("The X5C trust root is not a valid algorithm for signing")]
     CertificatePublicKeyInvalid,
 

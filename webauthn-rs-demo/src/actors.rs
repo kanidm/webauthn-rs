@@ -289,7 +289,7 @@ impl WebauthnActor {
 
         let username = username.as_bytes().to_vec();
 
-        let r = self.wan.register_credential(reg, &rs);
+        let r = self.wan.register_credential(reg, &rs, None);
         debug!("complete Register -> {:?}", r);
         r
     }

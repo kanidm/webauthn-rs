@@ -20,8 +20,8 @@ use std::convert::TryFrom;
 use url::Url;
 
 use crate::attestation::{
-    verify_apple_anonymous_attestation, verify_fidou2f_attestation, verify_none_attestation,
-    verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
+    verify_apple_anonymous_attestation, verify_attestation_ca_chain, verify_fidou2f_attestation,
+    verify_none_attestation, verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
 };
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::compute_sha256;
@@ -104,6 +104,7 @@ impl WebauthnCore {
 
     /// Generate a new challenge for client registration.
     /// Same as `generate_challenge_register_options` but default options
+    #[cfg(test)]
     pub fn generate_challenge_register(
         &self,
         user_name: &str,
@@ -265,6 +266,7 @@ impl WebauthnCore {
         &self,
         reg: &RegisterPublicKeyCredential,
         state: &RegistrationState,
+        attestation_cas: Option<&AttestationCaList>,
         // does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<Credential, WebauthnError> {
         // Decompose our registration state which contains everything we need to proceed.
@@ -289,6 +291,8 @@ impl WebauthnCore {
             chal,
             exclude_credentials,
             &credential_algorithms,
+            attestation_cas,
+            false
         )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
@@ -315,6 +319,8 @@ impl WebauthnCore {
         chal: &ChallengeRef,
         exclude_credentials: &[CredentialID],
         credential_algorithms: &[COSEAlgorithm],
+        attestation_cas: Option<&AttestationCaList>,
+        danger_disable_certificate_time_checks: bool,
     ) -> Result<Credential, WebauthnError> {
         // ======================================================================
         // References:
@@ -512,10 +518,7 @@ impl WebauthnCore {
         // statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata
         // Service [FIDOMetadataService] provides one way to obtain such information, using the
         // aaguid in the attestedCredentialData in authData.
-
-        // ⚠️  This is done through the policy verify trust callback that the user of this library
-        // implements and provides.
-
+        //
         // Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
         //
         // * If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
@@ -525,13 +528,9 @@ impl WebauthnCore {
         //     root certificate, or is itself an acceptable certificate (i.e., it and the root certificate
         //     obtained in Step 20 may be the same).
 
-        /*
-        // ParsedAttestationData
-        let _: () = self
-            .config
-            .policy_verify_trust(attest_result)
-            .map_err(|_e| WebauthnError::AttestationTrustFailure)?;
-        */
+        if let Some(ca_list) = attestation_cas {
+            verify_attestation_ca_chain(&credential, &ca_list, danger_disable_certificate_time_checks)?;
+        }
 
         // Verify that the credential public key alg is one of the allowed algorithms.
         let alg_valid = credential_algorithms
@@ -1143,7 +1142,8 @@ mod tests {
     // Test the crypto operations of the webauthn impl
 
     #[test]
-    fn test_registration() {
+    fn test_registration_yk() {
+        let _ = tracing_subscriber::fmt::try_init();
         let wan = unsafe {
             Webauthn::new(
                 "http://127.0.0.1:8080/auth",
@@ -1183,6 +1183,12 @@ mod tests {
             &zero_chal,
             &[],
             &[COSEAlgorithm::ES256],
+            Some(&AttestationCaList {
+                cas: vec![
+                    AttestationCa::yubico_u2f_root_ca_serial_457200631()
+                ],
+            }),
+            false
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1223,6 +1229,8 @@ mod tests {
             chal.as_ref(),
             &[],
             &[COSEAlgorithm::ES256],
+            None,
+            false
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1263,6 +1271,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
+            None,
+            false
         );
         assert!(result.is_ok());
     }
@@ -1304,6 +1314,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
+            None,
+            false
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1356,7 +1368,7 @@ mod tests {
             user_verified: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
-            attestation: SerialisableAttestationData::None,
+            attestation: ParsedAttestationData::None,
         };
 
         // Persist it to our fake db.
@@ -1464,7 +1476,7 @@ mod tests {
             user_verified: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
-            attestation: SerialisableAttestationData::None,
+            attestation: ParsedAttestationData::None,
         };
 
         // Persist it to our fake db.
@@ -1568,35 +1580,12 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
-        );
-        println!("{:?}", result);
-        assert!(result.is_ok());
-    }
-
-    fn test_credential_registration(
-        wan: Webauthn,
-        chal: Challenge,
-        rsp_d: &RegisterPublicKeyCredential,
-    ) {
-        let _ = tracing_subscriber::fmt::try_init();
-
-        let result = wan.register_credential_internal(
-            rsp_d,
-            UserVerificationPolicy::Required,
-            &chal,
-            &[],
-            &[
-                COSEAlgorithm::ES256,
-                COSEAlgorithm::ES384,
-                COSEAlgorithm::ES512,
-                COSEAlgorithm::RS256,
-                COSEAlgorithm::RS384,
-                COSEAlgorithm::RS512,
-                COSEAlgorithm::PS256,
-                COSEAlgorithm::PS384,
-                COSEAlgorithm::PS512,
-                COSEAlgorithm::EDDSA,
-            ],
+            Some(&AttestationCaList {
+                cas: vec![
+                    AttestationCa::yubico_u2f_root_ca_serial_457200631()
+                ],
+            }),
+            false
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1673,6 +1662,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::RS256],
+            None,
+            false
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -2036,6 +2027,10 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::RS256],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::microsoft_tpm_root_certificate_authority_2014()],
+            }),
+            false
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -2184,7 +2179,31 @@ mod tests {
             type_: "public-key".to_string(),
         };
 
-        test_credential_registration(wan, chal, &rsp_d);
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[
+                COSEAlgorithm::ES256,
+                COSEAlgorithm::ES384,
+                COSEAlgorithm::ES512,
+                COSEAlgorithm::RS256,
+                COSEAlgorithm::RS384,
+                COSEAlgorithm::RS512,
+                COSEAlgorithm::PS256,
+                COSEAlgorithm::PS384,
+                COSEAlgorithm::PS512,
+                COSEAlgorithm::EDDSA,
+            ],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::apple_webauthn_root_ca()],
+            }),
+            // Must disable time checks because the submission is limited to 5 days.
+            true
+        );
+        debug!("{:?}", result);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -2229,7 +2248,7 @@ mod tests {
                 user_verified: false,
                 registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
                 extensions: RegisteredExtensions::none(),
-                attestation: SerialisableAttestationData::None,
+                attestation: ParsedAttestationData::None,
             },
             Credential {
                 cred_id: Base64UrlSafeData(vec![
@@ -2257,7 +2276,7 @@ mod tests {
                 user_verified: true,
                 registration_policy: UserVerificationPolicy::Required,
                 extensions: RegisteredExtensions::none(),
-                attestation: SerialisableAttestationData::None,
+                attestation: ParsedAttestationData::None,
             },
         ];
         // Ensure we get a bad result.
@@ -2433,6 +2452,8 @@ mod tests {
                 &chal,
                 &[],
                 &[COSEAlgorithm::ES256],
+                None,
+                false
             )
             .expect("Failed to register credential");
 
@@ -2523,6 +2544,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::EDDSA],
+            None,
+            false
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2564,6 +2587,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::EDDSA],
+            None,
+            false
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2606,6 +2631,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
+            None,
+            false
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2649,6 +2676,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
+            None,
+            false
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2690,6 +2719,8 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
+            None,
+            false
         );
         info!("{:?}", result);
         assert!(result.is_ok());
@@ -2734,6 +2765,8 @@ mod tests {
                 COSEAlgorithm::EDDSA,
                 COSEAlgorithm::INSECURE_RS1,
             ],
+            None,
+            false
         );
         info!("{:?}", result);
         assert!(result.is_err());

@@ -90,7 +90,11 @@ impl Webauthn {
         attestation_ca_list: Option<AttestationCaList>,
         // extensions
     ) -> WebauthnResult<(CreationChallengeResponse, SecurityKeyRegistration)> {
-        let attestation = AttestationConveyancePreference::None;
+        let attestation = if attestation_ca_list.is_some() {
+            AttestationConveyancePreference::Direct
+        } else {
+            AttestationConveyancePreference::None
+        };
         let extensions = None;
         let credential_algorithms = COSEAlgorithm::secure_algs();
         let require_resident_key = false;
@@ -127,7 +131,7 @@ impl Webauthn {
     ) -> WebauthnResult<SecurityKey> {
         // TODO: Check the AttestationCa List!!
         self.core
-            .register_credential(reg, &state.rs)
+            .register_credential(reg, &state.rs, state.ca_list.as_ref())
             .map(|cred| SecurityKey { cred })
     }
 
@@ -196,7 +200,7 @@ impl Webauthn {
     ) -> WebauthnResult<PasswordlessKey> {
         // TODO: Check the AttestationCa List!!
         self.core
-            .register_credential(reg, &state.rs)
+            .register_credential(reg, &state.rs, state.ca_list.as_ref())
             .map(|cred| PasswordlessKey { cred })
     }
 

@@ -62,7 +62,7 @@ impl From<Vec<u8>> for CredBlobSet {
     }
 }
 
-/// Extension option inputs for [PublicKeyCredentialCreationOptions].
+/// Extension option inputs for PublicKeyCredentialCreationOptions.
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -84,7 +84,7 @@ pub struct RequestRegistrationExtensions {
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct CredBlobGet(pub bool);
 
-/// Extension option inputs for [PublicKeyCredentialRequestOptions]
+/// Extension option inputs for PublicKeyCredentialRequestOptions
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
 #[derive(Debug, Serialize, Clone, Deserialize)]
