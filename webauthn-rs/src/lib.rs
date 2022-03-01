@@ -165,10 +165,26 @@ impl Webauthn {
         // extensions
     ) -> WebauthnResult<(CreationChallengeResponse, PasswordlessKeyRegistration)> {
         let attestation = AttestationConveyancePreference::Direct;
-        let extensions = None;
         let credential_algorithms = COSEAlgorithm::secure_algs();
         let require_resident_key = false;
         let policy = Some(UserVerificationPolicy::Required);
+
+        // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
+        // UVM
+
+        // If rk - credProps
+
+        // credProtect
+        let extensions = Some(RequestRegistrationExtensions {
+            cred_protect: Some(CredProtect {
+                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                // If set to true, causes many authenticators to shit the bed.
+                enforce_credential_protection_policy: Some(false),
+            }),
+            cred_blob: None,
+        });
+
+        // min pin
 
         self.core
             .generate_challenge_register_options(

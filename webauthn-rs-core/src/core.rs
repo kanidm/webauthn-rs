@@ -233,7 +233,7 @@ impl WebauthnCore {
                     require_resident_key,
                     user_verification: policy,
                 }),
-                extensions,
+                extensions: extensions.clone(),
             },
         };
 
@@ -245,6 +245,7 @@ impl WebauthnCore {
             // We can potentially enforce these!
             require_resident_key,
             authenticator_attachment,
+            extensions: extensions.unwrap_or_else(|| RequestRegistrationExtensions::default()),
         };
 
         // This should have an opaque type of username + chal + policy
@@ -278,6 +279,7 @@ impl WebauthnCore {
             credential_algorithms,
             require_resident_key: _,
             authenticator_attachment: _,
+            extensions,
         } = state;
         let chal: &ChallengeRef = challenge.into();
 
@@ -292,7 +294,8 @@ impl WebauthnCore {
             exclude_credentials,
             &credential_algorithms,
             attestation_cas,
-            false
+            false,
+            &extensions,
         )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
@@ -321,6 +324,7 @@ impl WebauthnCore {
         credential_algorithms: &[COSEAlgorithm],
         attestation_cas: Option<&AttestationCaList>,
         danger_disable_certificate_time_checks: bool,
+        req_extn: &RequestRegistrationExtensions,
     ) -> Result<Credential, WebauthnError> {
         // ======================================================================
         // References:
@@ -431,11 +435,12 @@ impl WebauthnCore {
         // present that were not requested. In the general case, the meaning of "are as expected" is
         // specific to the Relying Party and which extensions are in use.
 
-        if let Some(ext) = &data.attestation_object.auth_data.extensions {
-            debug!("ext: {:?}", ext);
-        } else {
-            debug!("no extensions");
-        }
+        debug!(
+            "extensions: {:?}",
+            data.attestation_object.auth_data.extensions
+        );
+
+        // Only packed, tpm and apple allow extensions to be verified!
 
         // Determine the attestation statement format by performing a USASCII case-sensitive match on
         // fmt against the set of supported WebAuthn Attestation Statement Format Identifier values.
@@ -477,18 +482,21 @@ impl WebauthnCore {
                 &data.attestation_object,
                 &client_data_json_hash,
                 policy,
+                req_extn,
             ),
             AttestationFormat::Tpm => verify_tpm_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
                 policy,
+                req_extn,
             ),
             AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
                 policy,
+                req_extn,
             ),
             AttestationFormat::None => {
                 verify_none_attestation(acd, &data.attestation_object, policy)
@@ -506,6 +514,7 @@ impl WebauthnCore {
                         credential_public_key,
                         policy,
                         ParsedAttestationData::Uncertain,
+                        None,
                     ))
                 }
             }
@@ -529,7 +538,11 @@ impl WebauthnCore {
         //     obtained in Step 20 may be the same).
 
         if let Some(ca_list) = attestation_cas {
-            verify_attestation_ca_chain(&credential, &ca_list, danger_disable_certificate_time_checks)?;
+            verify_attestation_ca_chain(
+                &credential,
+                &ca_list,
+                danger_disable_certificate_time_checks,
+            )?;
         }
 
         // Verify that the credential public key alg is one of the allowed algorithms.
@@ -675,12 +688,7 @@ impl WebauthnCore {
         // Note: Since all extensions are OPTIONAL for both the client and the authenticator, the
         // Relying Party MUST be prepared to handle cases where none or not all of the requested
         // extensions were acted upon.
-        if let Some(ext) = &data.authenticator_data.extensions {
-            debug!("ext: {:?}", ext);
-            // we do not need to do any processing here
-        } else {
-            debug!("no extensions");
-        }
+        debug!("extensions: {:?}", data.authenticator_data.extensions);
 
         // Let hash be the result of computing a hash over the cData using SHA-256.
         let client_data_json_hash = compute_sha256(data.client_data_bytes.as_slice());
@@ -1184,11 +1192,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&AttestationCaList {
-                cas: vec![
-                    AttestationCa::yubico_u2f_root_ca_serial_457200631()
-                ],
+                cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
             }),
-            false
+            false,
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1230,7 +1236,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false
+            false,
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1272,7 +1278,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false
+            false,
         );
         assert!(result.is_ok());
     }
@@ -1315,7 +1321,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false
+            false,
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1581,11 +1587,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&AttestationCaList {
-                cas: vec![
-                    AttestationCa::yubico_u2f_root_ca_serial_457200631()
-                ],
+                cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
             }),
-            false
+            false,
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1663,7 +1667,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::RS256],
             None,
-            false
+            false,
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -2030,7 +2034,7 @@ mod tests {
             Some(&AttestationCaList {
                 cas: vec![AttestationCa::microsoft_tpm_root_certificate_authority_2014()],
             }),
-            false
+            false,
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -2200,7 +2204,7 @@ mod tests {
                 cas: vec![AttestationCa::apple_webauthn_root_ca()],
             }),
             // Must disable time checks because the submission is limited to 5 days.
-            true
+            true,
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -2453,7 +2457,7 @@ mod tests {
                 &[],
                 &[COSEAlgorithm::ES256],
                 None,
-                false
+                false,
             )
             .expect("Failed to register credential");
 
@@ -2545,7 +2549,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::EDDSA],
             None,
-            false
+            false,
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2588,7 +2592,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::EDDSA],
             None,
-            false
+            false,
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2632,7 +2636,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false
+            false,
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2677,7 +2681,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false
+            false,
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2720,7 +2724,7 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false
+            false,
         );
         info!("{:?}", result);
         assert!(result.is_ok());
@@ -2766,7 +2770,7 @@ mod tests {
                 COSEAlgorithm::INSECURE_RS1,
             ],
             None,
-            false
+            false,
         );
         info!("{:?}", result);
         assert!(result.is_err());

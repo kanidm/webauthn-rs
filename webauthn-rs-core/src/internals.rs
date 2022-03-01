@@ -121,8 +121,23 @@ impl Credential {
         ck: COSEKey,
         registration_policy: UserVerificationPolicy,
         attestation: ParsedAttestationData,
+        req_extn: Option<&RequestRegistrationExtensions>,
     ) -> Self {
-        let extensions = RegisteredExtensions {};
+        let extensions = if let Some(req_extn) = req_extn {
+            let cred_protect = match (
+                auth_data.extensions.cred_protect.as_ref(),
+                req_extn.cred_protect.is_some(),
+            ) {
+                (Some(credprotect), false) => ExtnState::Unsolicited(credprotect.0),
+                (Some(credprotect), true) => ExtnState::Set(credprotect.0),
+                (None, true) => ExtnState::Ignored,
+                (None, false) => ExtnState::NotRequested,
+            };
+
+            RegisteredExtensions { cred_protect }
+        } else {
+            RegisteredExtensions::unsigned()
+        };
 
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
@@ -238,6 +253,7 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
     let (i, counter) = be_u32(i)?;
     let (i, acd) = cond(data_flags.1, acd_parser)(i)?;
     let (i, extensions) = cond(data_flags.0, extensions_parser::<T>)(i)?;
+    let extensions = extensions.unwrap_or_else(|| T::SignedExtensions::default());
 
     Ok((
         i,
@@ -266,7 +282,7 @@ pub struct AuthenticatorData<T: Ceremony> {
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
-    pub extensions: Option<T::SignedExtensions>,
+    pub extensions: T::SignedExtensions,
 }
 
 impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {

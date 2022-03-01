@@ -8,6 +8,7 @@ use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
 
 use base64urlsafedata::Base64UrlSafeData;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use openssl::x509;
@@ -26,6 +27,7 @@ pub struct RegistrationState {
     pub(crate) credential_algorithms: Vec<COSEAlgorithm>,
     pub(crate) require_resident_key: bool,
     pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
+    pub(crate) extensions: RequestRegistrationExtensions,
 }
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
@@ -176,11 +178,33 @@ pub struct COSEKey {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RegisteredExtensions {}
+pub enum ExtnState<T>
+where
+    T: Clone + std::fmt::Debug,
+{
+    Unsigned,
+    NotRequested,
+    Ignored,
+    Set(T),
+    Unsolicited(T),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisteredExtensions {
+    pub cred_protect: ExtnState<CredentialProtectionPolicy>,
+}
 
 impl RegisteredExtensions {
     pub(crate) fn none() -> Self {
-        RegisteredExtensions {}
+        RegisteredExtensions {
+            cred_protect: ExtnState::NotRequested,
+        }
+    }
+
+    pub(crate) fn unsigned() -> Self {
+        RegisteredExtensions {
+            cred_protect: ExtnState::Unsigned,
+        }
     }
 }
 
@@ -355,7 +379,7 @@ pub struct Authentication;
 /// Trait for ceremony marker structs
 pub trait Ceremony {
     /// The type of the extension outputs of the ceremony
-    type SignedExtensions: serde::de::DeserializeOwned + std::fmt::Debug;
+    type SignedExtensions: DeserializeOwned + std::fmt::Debug + std::default::Default;
 }
 
 impl Ceremony for Registration {
@@ -563,8 +587,6 @@ impl AttestationCa {
             ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM).unwrap(),
         }
     }
-
-
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -53,6 +53,7 @@ pub(crate) fn verify_packed_attestation(
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
+    req_extn: &RequestRegistrationExtensions,
 ) -> Result<Credential, WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
@@ -151,6 +152,7 @@ pub(crate) fn verify_packed_attestation(
                 credential_public_key,
                 registration_policy,
                 ParsedAttestationData::Basic(arr_x509),
+                None,
             ))
         }
         (None, Some(_ecdaa_key_id)) => {
@@ -190,6 +192,7 @@ pub(crate) fn verify_packed_attestation(
                 credential_public_key,
                 registration_policy,
                 ParsedAttestationData::Self_,
+                Some(req_extn),
             ))
         }
     }
@@ -293,6 +296,7 @@ pub(crate) fn verify_fidou2f_attestation(
         credential_public_key,
         registration_policy,
         attestation,
+        None,
     );
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
@@ -316,6 +320,7 @@ pub(crate) fn verify_none_attestation(
         credential_public_key,
         registration_policy,
         ParsedAttestationData::None,
+        None,
     );
     Ok(credential)
 }
@@ -326,6 +331,7 @@ pub(crate) fn verify_tpm_attestation(
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
+    req_extn: &RequestRegistrationExtensions,
 ) -> Result<Credential, WebauthnError> {
     debug!("begin verify_tpm_attest");
 
@@ -560,6 +566,7 @@ pub(crate) fn verify_tpm_attestation(
         credential_public_key,
         registration_policy,
         ParsedAttestationData::AttCa(arr_x509),
+        Some(req_extn),
     );
     Ok(credential)
 }
@@ -569,6 +576,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
+    req_extn: &RequestRegistrationExtensions,
 ) -> Result<Credential, WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
@@ -633,6 +641,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
         credential_public_key,
         registration_policy,
         ParsedAttestationData::AnonCa(arr_x509),
+        Some(req_extn),
     );
     Ok(credential)
 }
@@ -683,7 +692,8 @@ pub(crate) fn verify_attestation_ca_chain(
 
     // In tests we may need to allow disabling time window validity.
     if danger_disable_certificate_time_checks {
-        ca_store.set_flags(verify::X509VerifyFlags::NO_CHECK_TIME)
+        ca_store
+            .set_flags(verify::X509VerifyFlags::NO_CHECK_TIME)
             .map_err(WebauthnError::OpenSSLError)?;
     }
 
@@ -695,8 +705,7 @@ pub(crate) fn verify_attestation_ca_chain(
 
     let ca_store = ca_store.build();
 
-    let mut ca_ctx = x509::X509StoreContext::new()
-    .map_err(WebauthnError::OpenSSLError)?;
+    let mut ca_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
 
     // Providing the cert and chain, validate we have a ref to our store.
     let res = ca_ctx

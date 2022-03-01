@@ -4,7 +4,7 @@ use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
 /// Valid credential protection policies
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 pub enum CredentialProtectionPolicy {
@@ -75,6 +75,15 @@ pub struct RequestRegistrationExtensions {
     /// The `credBlob` extension options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cred_blob: Option<CredBlobSet>,
+}
+
+impl Default for RequestRegistrationExtensions {
+    fn default() -> Self {
+        RequestRegistrationExtensions {
+            cred_protect: None,
+            cred_blob: None,
+        }
+    }
 }
 
 // ========== Auth exten ============
