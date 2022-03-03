@@ -1,15 +1,11 @@
 use gloo::console;
 use wasm_bindgen::JsCast;
-use wasm_bindgen::UnwrapThrowExt;
 use web_sys::Document;
-use web_sys::Event;
 use web_sys::Clipboard;
 use web_sys::Navigator;
-use web_sys::HtmlInputElement;
-use web_sys::HtmlSelectElement;
-use web_sys::InputEvent;
 use web_sys::Window;
 
+#[allow(dead_code)]
 pub fn get_checked_from_element_id(id: &str) -> Option<bool> {
     document()
         .get_element_by_id(id)
@@ -17,6 +13,7 @@ pub fn get_checked_from_element_id(id: &str) -> Option<bool> {
         .map(|element| element.checked())
 }
 
+#[allow(dead_code)]
 pub fn get_select_value_from_element_id(id: &str) -> Option<String> {
     document()
         .get_element_by_id(id)
@@ -27,6 +24,7 @@ pub fn get_select_value_from_element_id(id: &str) -> Option<String> {
         .map(|element| element.value())
 }
 
+#[allow(dead_code)]
 pub fn get_value_from_element_id(id: &str) -> Option<String> {
     document()
         .get_element_by_id(id)

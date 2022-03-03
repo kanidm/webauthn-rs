@@ -1,12 +1,60 @@
-use serde::{Deserialize, Serialize};
-use webauthn_rs::error::WebauthnError;
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
 
-pub use webauthn_rs::proto::{
-    AttestationConveyancePreference, AuthenticationSignedExtensions, AuthenticatorAttachment,
-    COSEAlgorithm, CreationChallengeResponse, Credential, CredentialID, PublicKeyCredential,
-    RegisterPublicKeyCredential, RegistrationSignedExtensions, RequestAuthenticationExtensions,
-    RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "core")]
+use webauthn_rs_core::error::WebauthnError;
+#[cfg(feature = "core")]
+use webauthn_rs_core::proto::AttestationCaList;
+
+pub use webauthn_rs_proto::{
+    AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
+    CreationChallengeResponse, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
+    RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
+    UserVerificationPolicy,
 };
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum AttestationLevel {
+    None,
+    AnyKnown,
+    Strict,
+}
+
+#[cfg(feature = "core")]
+impl Into<Option<AttestationCaList>> for AttestationLevel {
+    fn into(self) -> Option<AttestationCaList> {
+        match self {
+            AttestationLevel::None => None,
+            AttestationLevel::AnyKnown => Some(AttestationCaList::all_known_cas()),
+            AttestationLevel::Strict => Some(AttestationCaList::strict()),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum RegisterWithType {
+    SecurityKey(AttestationLevel),
+    Passwordless(AttestationLevel),
+    // Device(bool),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum AuthenticateWithType {
+    SecurityKey,
+    Passwordless,
+    // Device
+}
+
+impl From<&RegisterWithType> for AuthenticateWithType {
+    fn from(regsettings: &RegisterWithType) -> AuthenticateWithType {
+        match regsettings {
+            RegisterWithType::SecurityKey(_) => AuthenticateWithType::SecurityKey,
+            RegisterWithType::Passwordless(_) => AuthenticateWithType::Passwordless,
+            // RegisterWithType::Device(_) => AuthenticateWithType::Device,
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RegisterWithSettings {
@@ -19,10 +67,12 @@ pub struct RegisterWithSettings {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RegistrationSuccess {
-    pub cred: Credential,
+    pub cred_id: CredentialID,
+    // pub cred: Credential,
     pub uv: bool,
-    pub counter: u32,
-    pub extensions: RegistrationSignedExtensions,
+    pub alg: COSEAlgorithm,
+    // pub counter: u32,
+    // pub extensions: RegistrationSignedExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -50,8 +100,8 @@ impl From<&RegisterWithSettings> for AuthenticateWithSettings {
 pub struct AuthenticationSuccess {
     pub cred_id: CredentialID,
     pub uv: bool,
-    pub counter: u32,
-    pub extensions: AuthenticationSignedExtensions,
+    // pub counter: u32,
+    // pub extensions: AuthenticationSignedExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -159,9 +209,23 @@ impl CTestAttestState {
         std::mem::swap(self, &mut n_self);
     }
 
-    pub fn get_credential(&self) -> Option<&Credential> {
+    pub fn get_credential_id(&self) -> Option<&CredentialID> {
         match self {
-            CTestAttestState::Passed { rs, .. } => Some(&rs.cred),
+            CTestAttestState::Passed { rs, .. } => Some(&rs.cred_id),
+            _ => None,
+        }
+    }
+
+    pub fn get_credential_alg(&self) -> Option<&COSEAlgorithm> {
+        match self {
+            CTestAttestState::Passed { rs, .. } => Some(&rs.alg),
+            _ => None,
+        }
+    }
+
+    pub fn get_reg_result(&self) -> Option<&RegistrationSuccess> {
+        match self {
+            CTestAttestState::Passed { rs, .. } => Some(&rs),
             _ => None,
         }
     }
@@ -416,6 +480,7 @@ pub enum ResponseError {
     IncompleteTest,
 }
 
+#[cfg(feature = "core")]
 impl From<WebauthnError> for ResponseError {
     fn from(value: WebauthnError) -> Self {
         match value {

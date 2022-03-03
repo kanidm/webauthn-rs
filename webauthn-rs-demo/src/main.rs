@@ -1,26 +1,21 @@
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
+
 #[macro_use]
 extern crate tracing;
-
-extern crate structopt;
-use structopt::StructOpt;
-extern crate openssl;
-
-extern crate webauthn_rs;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
+use structopt::StructOpt;
 
 use rand::prelude::*;
 
-use webauthn_rs::proto::{
-    Credential, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
-};
+use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKeyCredential};
 
 use webauthn_rs_demo_shared::*;
 
 mod actors;
-mod config;
 mod crypto;
 
 use crate::actors::*;
@@ -57,7 +52,7 @@ struct CmdOptions {
     enable_tls: bool,
 }
 
-async fn index_view(request: tide::Request<AppState>) -> tide::Result {
+async fn index_view(_request: tide::Request<AppState>) -> tide::Result {
     let mut res = tide::Response::new(200);
     res.set_content_type("text/html;charset=utf-8");
     res.set_body(
@@ -94,7 +89,209 @@ async fn index_view(request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Result {
+async fn demo_start_register(mut request: tide::Request<AppState>) -> tide::Result {
+    let username: String = request.param("username")?.parse()?;
+
+    let session = request.session_mut();
+    session.remove("d_rs");
+
+    let reg_settings = request.body_json::<RegisterWithType>().await?;
+    debug!(?reg_settings);
+
+    let actor_res = request
+        .state()
+        .demo_start_register(username, reg_settings)
+        .await;
+
+    let res = match actor_res {
+        Ok((chal, rs)) => {
+            request
+                .session_mut()
+                .insert("d_rs", rs)
+                .expect("Failed to insert");
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&chal)?)
+                .build()
+        }
+        Err(e) => {
+            debug!("challenge_register -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+    Ok(res)
+}
+
+async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
+    let username: String = request.param("username")?.parse()?;
+
+    debug!("session - {:?}", request.session().get_raw("d_cred_map"));
+    let session = request.session_mut();
+    let rs = match session.get("d_rs") {
+        Some(v) => v,
+        None => {
+            error!("no reg session state");
+            return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::SessionStateInvalid)?)
+                .build());
+        }
+    };
+    session.remove("d_rs");
+
+    let mut cred_map: BTreeMap<String, Vec<TypedCredential>> =
+        session.get("d_cred_map").unwrap_or_else(|| BTreeMap::new());
+
+    let mut creds = cred_map.remove(&username).unwrap_or_else(|| Vec::new());
+
+    let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
+
+    let actor_res = request
+        .state()
+        .demo_finish_register(&username, &reg, rs)
+        .await;
+    let res = match actor_res {
+        Ok(cred) => {
+            // TODO make this a fn call back for cred exist
+            creds.push(cred.clone());
+            cred_map.insert(username, creds);
+            // Set the credmap back
+            request
+                .session_mut()
+                .insert("d_cred_map", cred_map)
+                .expect("Failed to insert");
+            debug!(
+                "write session to cookie - {:?}",
+                request.session().get_raw("d_cred_map")
+            );
+
+            /*
+            let reg_response = RegistrationSuccess {
+                cred_id: cred.cred_id,
+                // cred,
+                uv: cred.user_verified,
+                alg: cred.cred.type_,
+                // counter: auth_data.counter,
+                /*
+                extensions: auth_data
+                    .extensions
+                    .unwrap_or_else(|| RegistrationSignedExtensions::default()),
+                */
+            };
+
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&reg_response)?)
+                .build()
+            */
+            tide::Response::builder(tide::StatusCode::Ok).build()
+        }
+        Err(e) => {
+            debug!("register -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+
+    debug!("session - {:?}", request.session().get_raw("d_cred_map"));
+    Ok(res)
+}
+
+async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result {
+    let username: String = request.param("username")?.parse()?;
+
+    debug!("session - {:?}", request.session().get_raw("d_cred_map"));
+
+    let auth_settings = request.body_json::<AuthenticateWithType>().await?;
+    debug!(?auth_settings);
+
+    let session = request.session_mut();
+    session.remove("d_st");
+
+    let mut cred_map: BTreeMap<String, Vec<TypedCredential>> =
+        session.get("d_cred_map").unwrap_or_else(|| BTreeMap::new());
+
+    let creds = match cred_map.remove(&username) {
+        Some(v) => v,
+        None => {
+            error!("no creds for {}", username);
+            return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(
+                    &ResponseError::CredentialRetrievalError,
+                )?)
+                .build());
+        }
+    };
+
+    let actor_res = request
+        .state()
+        .demo_start_login(&username, creds, auth_settings)
+        .await;
+
+    let session = request.session_mut();
+    session.remove("d_st");
+
+    let res = match actor_res {
+        Ok((chal, st)) => {
+            request
+                .session_mut()
+                .insert("d_st", st)
+                .expect("Failed to insert");
+            debug!(
+                "Session - inserted auth state - {:?}",
+                request.session().get_raw("d_st")
+            );
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&chal)?)
+                .build()
+        }
+        Err(e) => {
+            debug!("challenge_login -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+    Ok(res)
+}
+
+async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
+    let username: String = request.param("username")?.parse()?;
+    let username_copy = username.clone();
+
+    let session = request.session_mut();
+
+    let st = match session.get("d_st") {
+        Some(v) => v,
+        None => {
+            error!("no auth session state");
+            return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::SessionStateInvalid)?)
+                .build());
+        }
+    };
+    session.remove("d_st");
+
+    let lgn = request.body_json::<PublicKeyCredential>().await?;
+
+    let res = match request
+        .state()
+        .demo_finish_login(&username_copy, &lgn, st)
+        .await
+    {
+        Ok(_auth_result) => tide::Response::builder(tide::StatusCode::Ok).build(),
+        Err(e) => {
+            debug!("login -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+
+    Ok(res)
+}
+
+async fn compat_start_register(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     let session = request.session_mut();
@@ -105,7 +302,7 @@ async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Resul
 
     let actor_res = request
         .state()
-        .challenge_register(username, reg_settings)
+        .compat_start_register(username, reg_settings)
         .await;
 
     let res = match actor_res {
@@ -128,7 +325,7 @@ async fn challenge_register(mut request: tide::Request<AppState>) -> tide::Resul
     Ok(res)
 }
 
-async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     debug!("session - {:?}", request.session().get_raw("cred_map"));
@@ -156,7 +353,7 @@ async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
 
     let actor_res = request
         .state()
-        .challenge_authenticate(&username, creds, auth_settings)
+        .compat_start_login(&username, creds, auth_settings)
         .await;
 
     let session = request.session_mut();
@@ -186,7 +383,7 @@ async fn challenge_login(mut request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-async fn register(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
 
     debug!("session - {:?}", request.session().get_raw("cred_map"));
@@ -209,9 +406,12 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
 
-    let actor_res = request.state().register(&username, &reg, rs).await;
+    let actor_res = request
+        .state()
+        .compat_finish_register(&username, &reg, rs)
+        .await;
     let res = match actor_res {
-        Ok((cred, auth_data)) => {
+        Ok(cred) => {
             // TODO make this a fn call back for cred exist
             creds.push(cred.clone());
             cred_map.insert(username, creds);
@@ -226,12 +426,16 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
             );
 
             let reg_response = RegistrationSuccess {
-                cred,
-                uv: auth_data.user_verified,
-                counter: auth_data.counter,
+                cred_id: cred.cred_id,
+                // cred,
+                uv: cred.user_verified,
+                alg: cred.cred.type_,
+                // counter: auth_data.counter,
+                /*
                 extensions: auth_data
                     .extensions
                     .unwrap_or_else(|| RegistrationSignedExtensions::default()),
+                */
             };
 
             tide::Response::builder(tide::StatusCode::Ok)
@@ -250,7 +454,7 @@ async fn register(mut request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-async fn login(mut request: tide::Request<AppState>) -> tide::Result {
+async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
     let username: String = request.param("username")?.parse()?;
     let username_copy = username.clone();
 
@@ -287,10 +491,10 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
 
     let res = match request
         .state()
-        .authenticate(&username_copy, &lgn, st, creds)
+        .compat_finish_login(&username_copy, &lgn, st, creds)
         .await
     {
-        Ok((creds, cred_id, auth_data)) => {
+        Ok((creds, auth_result)) => {
             cred_map.insert(username, creds);
             // Set the credmap back
             request
@@ -299,12 +503,14 @@ async fn login(mut request: tide::Request<AppState>) -> tide::Result {
                 .expect("Failed to insert");
 
             let auth_response = AuthenticationSuccess {
-                cred_id: cred_id,
-                uv: auth_data.user_verified,
-                counter: auth_data.counter,
+                cred_id: auth_result.cred_id,
+                uv: auth_result.user_verified,
+                // counter: auth_data.counter,
+                /*
                 extensions: auth_data
                     .extensions
                     .unwrap_or_else(|| AuthenticationSignedExtensions::default()),
+                */
             };
 
             tide::Response::builder(tide::StatusCode::Ok)
@@ -357,7 +563,10 @@ async fn main() -> tide::Result<()> {
         // some work here
         loop {
             async_std::task::sleep(Duration::from_secs(900)).await;
-            memory_store.cleanup().await;
+            memory_store
+                .cleanup()
+                .await
+                .expect("Failed to clean up sessions!");
         }
     });
 
@@ -365,11 +574,24 @@ async fn main() -> tide::Result<()> {
     app.with(tide::log::LogMiddleware::new());
     // Serve our wasm content
     app.at("/pkg").serve_dir("pkg")?;
-    app.at("/challenge/register/:username")
-        .post(challenge_register);
-    app.at("/challenge/login/:username").post(challenge_login);
-    app.at("/register/:username").post(register);
-    app.at("/login/:username").post(login);
+
+    app.at("/compat/register_start/:username")
+        .post(compat_start_register);
+    app.at("/compat/register_finish/:username")
+        .post(compat_finish_register);
+    app.at("/compat/login_start/:username")
+        .post(compat_start_login);
+    app.at("/compat/login_finish/:username")
+        .post(compat_finish_login);
+
+    app.at("/demo/register_start/:username")
+        .post(demo_start_register);
+    app.at("/demo/register_finish/:username")
+        .post(demo_finish_register);
+    app.at("/demo/login_start/:username").post(demo_start_login);
+    app.at("/demo/login_finish/:username")
+        .post(demo_finish_login);
+
     app.at("/").get(index_view);
     app.at("/*").get(index_view);
 

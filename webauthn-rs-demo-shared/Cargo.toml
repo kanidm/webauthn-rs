@@ -3,6 +3,12 @@ name = "webauthn-rs-demo-shared"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+core = ["webauthn-rs-core"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-webauthn-rs = { path = "../webauthn-rs", default-features = false }
+
+webauthn-rs-core = { path = "../webauthn-rs-core", optional = true }
+webauthn-rs-proto = { path = "../webauthn-rs-proto" }
+

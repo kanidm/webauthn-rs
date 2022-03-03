@@ -2,6 +2,9 @@
 
 [workspace]
 members = [
+    "base64urlsafedata",
+    "webauthn-rs-proto",
+    "webauthn-rs-core",
     "webauthn-rs",
     "webauthn-rs-demo",
     "webauthn-rs-demo-shared",

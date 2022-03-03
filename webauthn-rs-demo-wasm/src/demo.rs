@@ -7,10 +7,6 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
-use webauthn_rs::proto::{
-    CreationChallengeResponse, PublicKeyCredential, RegisterPublicKeyCredential,
-    RequestChallengeResponse,
-};
 use webauthn_rs_demo_shared::*;
 use yew::prelude::*;
 
@@ -19,7 +15,7 @@ use yew::prelude::*;
 #[derive(Debug)]
 pub struct Demo {
     state: DemoState,
-    reg_settings: RegisterWithSettings,
+    reg_settings: RegisterWithType,
     last_username: String,
 }
 
@@ -57,7 +53,7 @@ impl From<FetchError> for AppMsg {
 impl Demo {
     async fn register_begin(
         username: String,
-        settings: RegisterWithSettings,
+        settings: RegisterWithType,
     ) -> Result<AppMsg, FetchError> {
         let req_jsvalue = serde_json::to_string(&settings)
             .map(|s| JsValue::from(&s))
@@ -68,7 +64,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/challenge/register/{}", username);
+        let dest = format!("/demo/register_start/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -114,7 +110,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/register/{}", username);
+        let dest = format!("/demo/register_finish/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -128,9 +124,6 @@ impl Demo {
         let status = resp.status();
 
         if status == 200 {
-            let jsval = JsFuture::from(resp.json()?).await?;
-            let rs: RegistrationSuccess = jsval.into_serde().unwrap_throw();
-            console::log!(format!("rs -> {:?}", rs).as_str());
             Ok(AppMsg::RegisterSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
@@ -146,7 +139,7 @@ impl Demo {
 
     async fn login_begin(
         username: String,
-        settings: AuthenticateWithSettings,
+        settings: AuthenticateWithType,
     ) -> Result<AppMsg, FetchError> {
         let req_jsvalue = serde_json::to_string(&settings)
             .map(|s| JsValue::from(&s))
@@ -157,7 +150,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/challenge/login/{}", username);
+        let dest = format!("/demo/login_start/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -203,7 +196,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/login/{}", username);
+        let dest = format!("/demo/login_finish/{}", username);
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -217,9 +210,6 @@ impl Demo {
         let status = resp.status();
 
         if status == 200 {
-            let jsval = JsFuture::from(resp.json()?).await?;
-            let aus: AuthenticationSuccess = jsval.into_serde().unwrap_throw();
-            console::log!(format!("aus -> {:?}", aus).as_str());
             Ok(AppMsg::LoginSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
@@ -288,52 +278,26 @@ impl Demo {
                         <table class="table">
                           <tbody>
                             <tr>
-                              <td>{ "User Verification Required" }</td>
+                              <td>{ "Credential Type" }</td>
                               <td>
-                                <input class="form-check-input" type="checkbox" value="" id="user_verification_required" />
-                              </td>
-                            </tr>
-                            <tr>
-                              <td>{ "Attestation" }</td>
-                              <td>
-                                <select class="form-select" id="attestation_type">
-                                  <option selected=true value="none">{ "None" }</option>
-                                  <option value="indirect">{ "Indirect" }</option>
-                                  <option value="direct">{ "Direct" }</option>
+                                <select class="form-select" id="credential_type">
+                                  <option selected=true value="sk">{ "Security Key" }</option>
+                                  <option value="pl">{ "Passwordless" }</option>
                                 </select>
                               </td>
                             </tr>
+
                             <tr>
-                              <td>{ "Attachment" }</td>
+                              <td>{ "Attestation Level" }</td>
                               <td>
-                                <select class="form-select" id="attachment_type">
-                                  <option selected=true value="any">{ "Any" }</option>
-                                  <option value="platform">{ "Platform" }</option>
-                                  <option value="roaming">{ "Roaming" }</option>
+                                <select class="form-select" id="strict_attestation_required">
+                                  <option selected=true value="n">{ "None" }</option>
+                                  <option value="a">{ "Any Known Manufacturer" }</option>
+                                  <option value="s">{ "Strict" }</option>
                                 </select>
                               </td>
                             </tr>
-                            <tr>
-                              <td>{ "Algorithm" }</td>
-                              <td>
-                                <div class="row">
-                                  <div class="col">
-                                    { "ES256" }
-                                  </div>
-                                  <div class="col">
-                                    <input class="form-check-input" type="checkbox" value="ES256" id="algorithm_es256" checked=true />
-                                  </div>
-                                </div>
-                                <div class="row">
-                                  <div class="col">
-                                    { "RS256" }
-                                  </div>
-                                  <div class="col">
-                                    <input class="form-check-input" type="checkbox" value="RS256" id="algorithm_rs256" />
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
+
                           </tbody>
                         </table>
                       </div>
@@ -460,13 +424,7 @@ impl Component for Demo {
         console::log!(format!("create").as_str());
         Demo {
             state: DemoState::Register,
-            reg_settings: RegisterWithSettings {
-                uv: None,
-                algorithm: None,
-                attestation: None,
-                attachment: None,
-                extensions: None,
-            },
+            reg_settings: RegisterWithType::SecurityKey(AttestationLevel::None),
             last_username: String::default(),
         }
     }
@@ -505,55 +463,28 @@ impl Component for Demo {
                 self.last_username = username.clone();
                 // Build the settings that we'll be using.
 
-                let attachment = utils::get_select_value_from_element_id("attachment_type")
+                let attest_req = utils::get_select_value_from_element_id("strict_attestation_required")
                     .and_then(|v| match v.as_str() {
-                        "any" => None,
-                        "platform" => Some(AuthenticatorAttachment::Platform),
-                        "roaming" => Some(AuthenticatorAttachment::CrossPlatform),
+                        "s" => Some(AttestationLevel::Strict),
+                        "a" => Some(AttestationLevel::AnyKnown),
+                        // "dv" => Some(RegisterWithType::Device(attest_req)),
                         _ => None,
-                    });
+                    })
+                    .unwrap_or(AttestationLevel::None);
 
-                let attestation = utils::get_select_value_from_element_id("attestation_type")
+                let settings = utils::get_select_value_from_element_id("credential_type")
                     .and_then(|v| match v.as_str() {
-                        "none" => Some(AttestationConveyancePreference::None),
-                        "indirect" => Some(AttestationConveyancePreference::Indirect),
-                        "direct" => Some(AttestationConveyancePreference::Direct),
+                        "sk" => Some(RegisterWithType::SecurityKey(attest_req)),
+                        "pl" => Some(RegisterWithType::Passwordless(attest_req)),
+                        // "dv" => Some(RegisterWithType::Device(attest_req)),
                         _ => None,
-                    });
+                    })
+                    .unwrap_or(RegisterWithType::SecurityKey(attest_req));
 
-                let uv_req =
-                    utils::get_checked_from_element_id("user_verification_required").map(|v| {
-                        if v {
-                            UserVerificationPolicy::Required
-                        } else {
-                            UserVerificationPolicy::default()
-                        }
-                    });
+                console::log!(format!("cred_type  -> {:?}", settings).as_str());
+                console::log!(format!("username   -> {:?}", username).as_str());
 
-                let es256_req = utils::get_checked_from_element_id("algorithm_es256")
-                    .and_then(|v| if v { Some(COSEAlgorithm::ES256) } else { None });
-
-                let rs256_req = utils::get_checked_from_element_id("algorithm_rs256")
-                    .and_then(|v| if v { Some(COSEAlgorithm::RS256) } else { None });
-
-                console::log!(format!("uv_req -> {:?}", uv_req).as_str());
-                console::log!(format!("es256_req -> {:?}", es256_req).as_str());
-                console::log!(format!("rs256_req -> {:?}", rs256_req).as_str());
-                console::log!(format!("attachment -> {:?}", attachment).as_str());
-                console::log!(format!("attestation -> {:?}", attestation).as_str());
-                console::log!(format!("register -> {:?}", username).as_str());
-
-                let alg: Vec<_> = vec![es256_req, rs256_req]
-                    .into_iter()
-                    .filter_map(|v| v)
-                    .collect();
-
-                self.reg_settings.uv = uv_req;
-                self.reg_settings.algorithm = Some(alg);
-                self.reg_settings.attestation = attestation;
-                self.reg_settings.attachment = attachment;
-
-                let settings = self.reg_settings.clone();
+                self.reg_settings = settings.clone();
 
                 ctx.link().send_future(async {
                     match Self::register_begin(username, settings).await {
@@ -609,7 +540,7 @@ impl Component for Demo {
                 }
                 self.last_username = username.clone();
 
-                let settings: AuthenticateWithSettings = (&self.reg_settings).into();
+                let settings: AuthenticateWithType = (&self.reg_settings).into();
 
                 console::log!(format!("login -> {:?}", username).as_str());
                 ctx.link().send_future(async {

@@ -1,0 +1,28 @@
+[package]
+name = "webauthn-rs-proto"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+wasm = ["wasm-bindgen", "web-sys", "js-sys"]
+
+[dependencies]
+base64urlsafedata = { path = "../base64urlsafedata" }
+serde = { version = "1", features = ["derive"] }
+# num_enum = "0.5"
+
+# Webauthn Components
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
+js-sys = { version = "0.3", optional = true }
+
+[dependencies.web-sys]
+version = "0.3"
+optional = true
+features = [
+    "CredentialCreationOptions",
+    "CredentialRequestOptions",
+    "PublicKeyCredential",
+    "AuthenticationExtensionsClientOutputs"
+]

@@ -176,7 +176,7 @@ impl Component for CompatTest {
             }
             AppMsg::Begin => {
                 self.show_next = false;
-                let settings = match self.step {
+                match self.step {
                     CompatTestStep::DirectAttest1 => {
                         // Set the initial test results to failure.
                         self.results.direct_attest_1 = CTestAttestState::failed();
@@ -232,12 +232,11 @@ impl Component for CompatTest {
                     }
                     CompatTestStep::FallBackAlg => {
                         // Look back at the previous test
-                        let algs = if let Some(cred) = self.results.none_attest_1.get_credential() {
+                        let algs = if let Some(alg) = self.results.none_attest_1.get_credential_alg() {
                             // What alg was used?
-                            let alg = cred.cred.type_;
                             // Remove it from the list.
                             let mut algs = COSEAlgorithm::all_possible_algs();
-                            algs.retain(|a| a != &alg);
+                            algs.retain(|a| a != alg);
                             algs
                         } else {
                             // Skip
@@ -292,9 +291,9 @@ impl Component for CompatTest {
                         });
                     }
                     CompatTestStep::AuthDiscouraged => {
-                        if let Some(cred) = self.results.none_attest_1.get_credential() {
+                        if let Some(cred_id) = self.results.none_attest_1.get_credential_id() {
                             self.results.authdiscouraged = CTestAuthState::failed();
-                            let use_cred_id = Some(cred.cred_id.clone());
+                            let use_cred_id = Some(cred_id.clone());
                             self.do_auth(ctx, AuthenticateWithSettings {
                                 use_cred_id,
                                 uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
@@ -311,10 +310,10 @@ impl Component for CompatTest {
                     CompatTestStep::AuthMultipleCredentials => {
                         let mut skip = true;
 
-                        if let Some(cred_1) = self.results.none_attest_1.get_credential() {
-                            if let Some(_cred_2) = self.results.none_attest_2.get_credential() {
+                        if let Some(cred_1_id) = self.results.none_attest_1.get_credential_id() {
+                            if let Some(_cred_2) = self.results.none_attest_2.get_credential_id() {
                                 self.results.authmultiple = CTestAuthState::failed();
-                                let use_cred_id = Some(cred_1.cred_id.clone());
+                                let use_cred_id = Some(cred_1_id.clone());
                                 self.do_auth(ctx, AuthenticateWithSettings {
                                     use_cred_id,
                                     uv: None,
@@ -332,9 +331,9 @@ impl Component for CompatTest {
                         }
                     }
                     CompatTestStep::AuthDiscouragedConsistent => {
-                        if let Some(cred) = self.results.none_attest_1.get_credential() {
+                        if let Some(rs) = self.results.none_attest_1.get_reg_result() {
                             if let Some(aus) = self.results.authdiscouraged.get_auth_result() {
-                                if aus.uv == cred.verified {
+                                if aus.uv == rs.uv {
                                     self.results.authdiscouraged_consistent = CTestSimpleState::Passed;
                                 } else {
                                     self.results.authdiscouraged_consistent = CTestSimpleState::Warning;
@@ -351,9 +350,9 @@ impl Component for CompatTest {
                         return false;
                     }
                     CompatTestStep::AuthPreferred => {
-                        if let Some(cred) = self.results.uvpreferred.get_credential() {
+                        if let Some(cred_id) = self.results.uvpreferred.get_credential_id() {
                             self.results.authpreferred = CTestAuthState::failed();
-                            let use_cred_id = Some(cred.cred_id.clone());
+                            let use_cred_id = Some(cred_id.clone());
                             self.do_auth(ctx, AuthenticateWithSettings {
                                 use_cred_id,
                                 uv: Some(UserVerificationPolicy::Preferred),
@@ -368,9 +367,9 @@ impl Component for CompatTest {
                         };
                     }
                     CompatTestStep::AuthPreferredConsistent => {
-                        if let Some(cred) = self.results.uvpreferred.get_credential() {
+                        if let Some(rs) = self.results.uvpreferred.get_reg_result() {
                             if let Some(aus) = self.results.authpreferred.get_auth_result() {
-                                if aus.uv == cred.verified {
+                                if aus.uv == rs.uv {
                                     self.results.authpreferred_consistent = CTestSimpleState::Passed;
                                 } else {
                                     self.results.authpreferred_consistent = CTestSimpleState::Failed;
@@ -387,9 +386,9 @@ impl Component for CompatTest {
                         return false;
                     }
                     CompatTestStep::AuthRequired => {
-                        if let Some(cred) = self.results.uvrequired.get_credential() {
+                        if let Some(cred_id) = self.results.uvrequired.get_credential_id() {
                             self.results.authrequired = CTestAuthState::failed();
-                            let use_cred_id = Some(cred.cred_id.clone());
+                            let use_cred_id = Some(cred_id.clone());
                             self.do_auth(ctx, AuthenticateWithSettings {
                                 use_cred_id,
                                 uv: Some(UserVerificationPolicy::Required),
@@ -1001,7 +1000,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/challenge/register/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/register_start/compatuser", &opts)?;
 
         request
             .headers()
@@ -1041,7 +1040,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/register/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/register_finish/compatuser", &opts)?;
 
         request
             .headers()
@@ -1082,7 +1081,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/challenge/login/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/login_start/compatuser", &opts)?;
 
         request
             .headers()
@@ -1124,7 +1123,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/login/compat", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/login_finish/compatuser", &opts)?;
 
         request
             .headers()

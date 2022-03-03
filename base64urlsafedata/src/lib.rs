@@ -99,7 +99,7 @@ impl Serialize for Base64UrlSafeData {
 
 #[cfg(test)]
 mod tests {
-    use crate::base64_data::Base64UrlSafeData;
+    use crate::Base64UrlSafeData;
     use std::convert::TryFrom;
 
     #[test]

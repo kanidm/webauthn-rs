@@ -11,7 +11,8 @@ readme = "README.md"
 license = "MPL-2.0"
 
 [dependencies]
-webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared" }
+webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", features = ["core"] }
+webauthn-rs-core = { path = "../webauthn-rs-core" }
 webauthn-rs = { path = "../webauthn-rs" }
 tide = "0.16"
 tide-rustls = "0.3"
@@ -23,3 +24,5 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 rand = "0.8"
 url = { version = "2", features = ["serde"] }
+
+serde = { version = "1", features = ["derive"] }

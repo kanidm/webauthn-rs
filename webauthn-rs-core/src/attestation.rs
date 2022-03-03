@@ -5,15 +5,18 @@
 
 use std::convert::TryFrom;
 
-use crate::crypto;
-use crate::crypto::compute_sha256;
-use crate::error::WebauthnError;
-use crate::proto::{
-    AttestedCredentialData, COSEAlgorithm, COSEKey, COSEKeyType, Credential, ParsedAttestationData,
-    Tpm2bName, TpmAlgId, TpmSt, TpmsAttest, TpmtPublic, TpmtSignature, TpmuAttest, TpmuPublicId,
-    TpmuPublicParms, UserVerificationPolicy,
+use crate::crypto::{
+    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, get_fido_gen_ce_aaguid,
+    only_hash_from_type, verify_signature,
 };
+use crate::error::WebauthnError;
+use crate::internals::*;
+use crate::proto::*;
 use debug;
+use openssl::stack;
+use openssl::x509;
+use openssl::x509::store;
+use openssl::x509::verify;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -47,13 +50,14 @@ impl TryFrom<&str> for AttestationFormat {
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
 pub(crate) fn verify_packed_attestation(
     acd: &AttestedCredentialData,
-    counter: u32,
-    user_verified: bool,
-    att_stmt: &serde_cbor::Value,
-    auth_data_bytes: &[u8],
+    att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
+    req_extn: &RequestRegistrationExtensions,
+) -> Result<Credential, WebauthnError> {
+    let att_stmt = &att_obj.att_stmt;
+    let auth_data_bytes = &att_obj.auth_data_bytes;
+
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
     let att_stmt_map =
         cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
@@ -67,7 +71,9 @@ pub(crate) fn verify_packed_attestation(
 
     let alg = cbor_try_i128!(alg_value)
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
-        .and_then(COSEAlgorithm::try_from)?;
+        .and_then(|v| {
+            COSEAlgorithm::try_from(v).map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)
+        })?;
 
     match (
         att_stmt_map.get(x5c_key),
@@ -89,18 +95,16 @@ pub(crate) fn verify_packed_attestation(
                 .map(|values| {
                     cbor_try_bytes!(values)
                         .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                        .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+                        .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
                 })
                 .collect();
 
-            let mut arr_x509 = arr_x509?;
+            let arr_x509 = arr_x509?;
 
-            // Must have at least one x509 cert
-            if arr_x509.is_empty() {
-                return Err(WebauthnError::AttestationStatementX5CInvalid);
-            }
-
-            let attestn_cert = arr_x509.remove(0);
+            // Must have at least one x509 cert, this is the leaf certificate.
+            let attestn_cert = arr_x509
+                .get(0)
+                .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
             // Verify that sig is a valid signature over the concatenation of authenticatorData
             // and clientDataHash using the attestation public key in attestnCert with the
@@ -115,7 +119,7 @@ pub(crate) fn verify_packed_attestation(
                 .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
-                .and_then(|sig| attestn_cert.verify_signature(sig, &verification_data))?;
+                .and_then(|sig| verify_signature(alg, &attestn_cert, sig, &verification_data))?;
             if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
@@ -124,13 +128,13 @@ pub(crate) fn verify_packed_attestation(
             // Statement Certificate Requirements.
             // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
 
-            attestn_cert.assert_packed_attest_req()?;
+            assert_packed_attest_req(attestn_cert)?;
 
             // If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4
             // (id-fido-gen-ce-aaguid) verify that the value of this extension matches the aaguid
             // in authenticatorData.
 
-            if let Some(aaguid) = attestn_cert.get_fido_gen_ce_aaguid() {
+            if let Some(aaguid) = get_fido_gen_ce_aaguid(attestn_cert) {
                 if acd.aaguid != aaguid {
                     return Err(WebauthnError::AttestationCertificateAAGUIDMismatch);
                 }
@@ -138,20 +142,17 @@ pub(crate) fn verify_packed_attestation(
 
             // Optionally, inspect x5c and consult externally provided knowledge to determine
             // whether attStmt conveys a Basic or AttCA attestation.
-            // TODO: I'm not clear on this ....
 
             // If successful, return implementation-specific values representing attestation type
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-            Ok((
-                ParsedAttestationData::Basic(attestn_cert),
-                Credential::new(
-                    acd,
-                    credential_public_key,
-                    counter,
-                    user_verified,
-                    registration_policy,
-                ),
+            Ok(Credential::new(
+                acd,
+                &att_obj.auth_data,
+                credential_public_key,
+                registration_policy,
+                ParsedAttestationData::Basic(arr_x509),
+                None,
             ))
         }
         (None, Some(_ecdaa_key_id)) => {
@@ -185,15 +186,13 @@ pub(crate) fn verify_packed_attestation(
             }
 
             // 4.c. If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
-            Ok((
+            Ok(Credential::new(
+                acd,
+                &att_obj.auth_data,
+                credential_public_key,
+                registration_policy,
                 ParsedAttestationData::Self_,
-                Credential::new(
-                    acd,
-                    credential_public_key,
-                    counter,
-                    user_verified,
-                    registration_policy,
-                ),
+                Some(req_extn),
             ))
         }
     }
@@ -203,13 +202,12 @@ pub(crate) fn verify_packed_attestation(
 // https://medium.com/@herrjemand/verifying-fido-u2f-attestations-in-fido2-f83fab80c355
 pub(crate) fn verify_fidou2f_attestation(
     acd: &AttestedCredentialData,
-    counter: u32,
-    user_verified: bool,
-    att_stmt: &serde_cbor::Value,
+    att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-    rp_id_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
+) -> Result<Credential, WebauthnError> {
+    let att_stmt = &att_obj.att_stmt;
+
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     //
     // ^-- This is already DONE as a factor of serde_cbor not erroring up to this point,
@@ -242,21 +240,24 @@ pub(crate) fn verify_fidou2f_attestation(
         return Err(WebauthnError::AttestationStatementX5CInvalid);
     }
 
-    let att_cert_bytes = att_cert_array
-        .first()
-        // Now it's an Option<Value>
-        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+    let arr_x509 = att_cert_array
+        .into_iter()
+        .map(|att_cert_bytes| {
+            cbor_try_bytes!(att_cert_bytes).and_then(|att_cert| {
+                x509::X509::from_der(att_cert.as_slice()).map_err(WebauthnError::OpenSSLError)
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    // This is the certificate public key.
     // Let certificate public key be the public key conveyed by att_cert.
-    let att_cert = cbor_try_bytes!(att_cert_bytes)
-        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+    let cerificate_public_key = arr_x509
+        .get(0)
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
     //
     // // try from asserts this condition given the alg.
-    let cerificate_public_key =
-        crypto::X509PublicKey::try_from((att_cert.as_slice(), COSEAlgorithm::ES256))?;
+    let alg = COSEAlgorithm::ES256;
 
     // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
     //
@@ -272,69 +273,70 @@ pub(crate) fn verify_fidou2f_attestation(
     let r: [u8; 1] = [0x00];
     let verification_data: Vec<u8> = (&r)
         .iter()
-        .chain(rp_id_hash.iter())
+        .chain(att_obj.auth_data.rp_id_hash.iter())
         .chain(client_data_hash.iter())
-        .chain(acd.credential_id.iter())
+        .chain(acd.credential_id.0.iter())
         .chain(public_key_u2f.iter())
         .copied()
         .collect();
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    let verified = cerificate_public_key.verify_signature(sig, &verification_data)?;
+    let verified = verify_signature(alg, &cerificate_public_key, sig, &verification_data)?;
 
     if !verified {
         error!("signature verification failed!");
         return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
+    let attestation = ParsedAttestationData::Basic(arr_x509);
+
     let credential = Credential::new(
         acd,
+        &att_obj.auth_data,
         credential_public_key,
-        counter,
-        user_verified,
         registration_policy,
+        attestation,
+        None,
     );
 
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-    Ok((
-        ParsedAttestationData::Basic(cerificate_public_key),
-        credential,
-    ))
+    Ok(credential)
 }
 
 // https://www.w3.org/TR/webauthn/#none-attestation
 pub(crate) fn verify_none_attestation(
     acd: &AttestedCredentialData,
-    counter: u32,
-    user_verified: bool,
+    att_obj: &AttestationObject<Registration>,
     registration_policy: UserVerificationPolicy,
-) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
+) -> Result<Credential, WebauthnError> {
     // No attestation is performed, simply provide a credential.
     let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
     let credential = Credential::new(
         acd,
+        &att_obj.auth_data,
         credential_public_key,
-        counter,
-        user_verified,
         registration_policy,
+        ParsedAttestationData::None,
+        None,
     );
-    Ok((ParsedAttestationData::None, credential))
+    Ok(credential)
 }
 
 // https://w3c.github.io/webauthn/#sctn-tpm-attestation
 pub(crate) fn verify_tpm_attestation(
     acd: &AttestedCredentialData,
-    counter: u32,
-    user_verified: bool,
-    att_stmt: &serde_cbor::Value,
-    auth_data_bytes: &[u8],
+    att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
+    req_extn: &RequestRegistrationExtensions,
+) -> Result<Credential, WebauthnError> {
     debug!("begin verify_tpm_attest");
+
+    let att_stmt = &att_obj.att_stmt;
+    let auth_data_bytes = &att_obj.auth_data_bytes;
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR
     // decoding on it to extract the contained fields.
@@ -361,7 +363,9 @@ pub(crate) fn verify_tpm_attestation(
 
     let alg = cbor_try_i128!(alg_value)
         .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
-        .and_then(COSEAlgorithm::try_from)?;
+        .and_then(|v| {
+            COSEAlgorithm::try_from(v).map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)
+        })?;
 
     // eprintln!("alg = {:?}", alg);
 
@@ -418,18 +422,16 @@ pub(crate) fn verify_tpm_attestation(
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+                .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
         })
         .collect();
 
-    let mut arr_x509 = arr_x509?;
+    let arr_x509 = arr_x509?;
 
     // Must have at least one x509 cert
-    if arr_x509.is_empty() {
-        return Err(WebauthnError::AttestationStatementX5CInvalid);
-    }
-
-    let aik_cert = arr_x509.remove(0);
+    let aik_cert = arr_x509
+        .get(0)
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // Verify that the public key specified by the parameters and unique fields of pubArea is
     // identical to the credentialPublicKey in the attestedCredentialData in authenticatorData.
@@ -483,7 +485,7 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that extraData is set to the hash of attToBeSigned using the hash algorithm
     // employed in "alg".
-    let hash_verification_data = alg.only_hash_from_type(verification_data.as_slice())?;
+    let hash_verification_data = only_hash_from_type(&alg, verification_data.as_slice())?;
 
     if hash_verification_data != extra_data_hash {
         return Err(WebauthnError::AttestationTpmExtraDataMismatch);
@@ -537,7 +539,7 @@ pub(crate) fn verify_tpm_attestation(
         TpmtSignature::RawSignature(dsig) => {
             // Alg was pre-loaded into the x509 struct during parsing
             // so we should just be able to verify
-            aik_cert.verify_signature(&dsig, certinfo_bytes)?
+            verify_signature(alg, aik_cert, &dsig, certinfo_bytes)?
         }
     };
 
@@ -549,7 +551,7 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that aik_cert meets the requirements in § 8.3.1 TPM Attestation Statement Certificate
     // Requirements.
-    aik_cert.assert_tpm_attest_req()?;
+    assert_tpm_attest_req(aik_cert)?;
 
     // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     // verify that the value of this extension matches the aaguid in authenticatorData.
@@ -560,23 +562,25 @@ pub(crate) fn verify_tpm_attestation(
     // and attestation trust path x5c.
     let credential = Credential::new(
         acd,
+        &att_obj.auth_data,
         credential_public_key,
-        counter,
-        user_verified,
         registration_policy,
+        ParsedAttestationData::AttCa(arr_x509),
+        Some(req_extn),
     );
-    Ok((ParsedAttestationData::AttCa(aik_cert, arr_x509), credential))
+    Ok(credential)
 }
 
 pub(crate) fn verify_apple_anonymous_attestation(
     acd: &AttestedCredentialData,
-    counter: u32,
-    user_verified: bool,
-    att_stmt: &serde_cbor::Value,
-    auth_data_bytes: &[u8],
+    att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     registration_policy: UserVerificationPolicy,
-) -> Result<(ParsedAttestationData, Credential), WebauthnError> {
+    req_extn: &RequestRegistrationExtensions,
+) -> Result<Credential, WebauthnError> {
+    let att_stmt = &att_obj.att_stmt;
+    let auth_data_bytes = &att_obj.auth_data_bytes;
+
     // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
     let att_stmt_map =
         cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
@@ -595,14 +599,10 @@ pub(crate) fn verify_apple_anonymous_attestation(
 
     let arr_x509: Result<Vec<_>, _> = x5c_array_ref
         .iter()
-        .zip(
-            // FIXME: this is determined empirically, not sure if it's always right.
-            std::iter::once(alg).chain(std::iter::repeat(COSEAlgorithm::ES384)),
-        )
-        .map(|(values, alg)| {
+        .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| crypto::X509PublicKey::try_from((b.as_slice(), alg)))
+                .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
         })
         .collect();
 
@@ -628,7 +628,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // Currently not possible to access extensions with openssl rust.
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
-    let subject_public_key = COSEKey::try_from(attestn_cert)?;
+    let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;
 
     if credential_public_key != subject_public_key {
         return Err(WebauthnError::AttestationCredentialSubjectKeyMismatch);
@@ -637,13 +637,100 @@ pub(crate) fn verify_apple_anonymous_attestation(
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
     let credential = Credential::new(
         acd,
+        &att_obj.auth_data,
         credential_public_key,
-        counter,
-        user_verified,
         registration_policy,
+        ParsedAttestationData::AnonCa(arr_x509),
+        Some(req_extn),
     );
-    Ok((
-        ParsedAttestationData::AnonCa(crypto::X509PublicKey::apple_x509(), arr_x509),
-        credential,
-    ))
+    Ok(credential)
+}
+
+pub(crate) fn verify_attestation_ca_chain(
+    cred: &Credential,
+    ca_list: &AttestationCaList,
+    danger_disable_certificate_time_checks: bool,
+) -> Result<(), WebauthnError> {
+    // If the ca_list is empty, Immediately fail since no valid attesation can be created.
+    if ca_list.cas.is_empty() {
+        return Err(WebauthnError::AttestationCertificateTrustStoreEmpty);
+    }
+
+    // Do we have a format we can actually check?
+    let fullchain = match &cred.attestation {
+        ParsedAttestationData::Basic(chain) => chain,
+        ParsedAttestationData::AttCa(chain) => chain,
+        ParsedAttestationData::AnonCa(chain) => chain,
+        ParsedAttestationData::Self_
+        | ParsedAttestationData::ECDAA
+        | ParsedAttestationData::None
+        | ParsedAttestationData::Uncertain => {
+            return Err(WebauthnError::AttestationNotVerifiable);
+        }
+    };
+
+    for crt in fullchain {
+        debug!(?crt);
+    }
+    debug!(?ca_list);
+
+    let (leaf, chain) = fullchain
+        .split_first()
+        .ok_or(WebauthnError::AttestationLeafCertMissing)?;
+
+    // Convert the chain to a stackref so that openssl can use it.
+    let mut chain_stack = stack::Stack::new().map_err(WebauthnError::OpenSSLError)?;
+
+    for crt in chain.iter() {
+        chain_stack
+            .push(crt.clone())
+            .map_err(WebauthnError::OpenSSLError)?;
+    }
+
+    // Create the x509 store that we will validate against.
+    let mut ca_store = store::X509StoreBuilder::new().map_err(WebauthnError::OpenSSLError)?;
+
+    // In tests we may need to allow disabling time window validity.
+    if danger_disable_certificate_time_checks {
+        ca_store
+            .set_flags(verify::X509VerifyFlags::NO_CHECK_TIME)
+            .map_err(WebauthnError::OpenSSLError)?;
+    }
+
+    for ca_crt in ca_list.cas.iter() {
+        ca_store
+            .add_cert(ca_crt.ca.clone())
+            .map_err(WebauthnError::OpenSSLError)?;
+    }
+
+    let ca_store = ca_store.build();
+
+    let mut ca_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
+
+    // Providing the cert and chain, validate we have a ref to our store.
+    let res = ca_ctx
+        .init(&ca_store, &leaf, &chain_stack, |ca_ctx_ref| {
+            ca_ctx_ref.verify_cert().map(|_| {
+                // The value as passed in is a boolean that we ignore in favour of the richer error type.
+                debug!("{:?}", ca_ctx_ref.error());
+                debug!(
+                    "ca_ctx_ref verify cert - error depth={}, sn={:?}",
+                    ca_ctx_ref.error_depth(),
+                    ca_ctx_ref.current_cert().map(|crt| crt.subject_name())
+                );
+                ca_ctx_ref.error()
+            })
+        })
+        .map_err(|e| {
+            error!(?e);
+            e
+        })?;
+
+    if res != x509::X509VerifyResult::OK {
+        return Err(WebauthnError::AttestationChainNotTrusted(res.to_string()));
+    }
+
+    debug!("Attestation Success");
+
+    Ok(())
 }

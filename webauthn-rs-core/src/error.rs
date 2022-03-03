@@ -1,7 +1,6 @@
 //! Possible errors that may occur during Webauthn Operation processing
 
 use base64::DecodeError as b64DecodeError;
-#[cfg(feature = "core")]
 use openssl::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
@@ -15,6 +14,9 @@ pub type WebauthnResult<T> = core::result::Result<T, WebauthnError>;
 #[derive(Debug, thiserror::Error)]
 #[allow(missing_docs)]
 pub enum WebauthnError {
+    #[error("The configuration was invalid")]
+    Configuration,
+
     #[error("The JSON from the client did not indicate webauthn.<method> correctly")]
     InvalidClientDataType,
 
@@ -122,6 +124,20 @@ pub enum WebauthnError {
     #[error("The requirements of https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements are not met by this attestation certificate")]
     AttestationCertificateRequirementsNotMet,
 
+    #[error("The provided list of CA's for attestation is empty, allowing no trust path to be established")]
+    AttestationCertificateTrustStoreEmpty,
+
+    #[error("The leaf certificate we intented to verify is missing.")]
+    AttestationLeafCertMissing,
+
+    #[error("The attestation was parsed, but is not a format valid for CA chain validation")]
+    AttestationNotVerifiable,
+
+    #[error(
+        "The attestation was parsed, but is not trusted by one of the selected CA certificates"
+    )]
+    AttestationChainNotTrusted(String),
+
     #[error("The X5C trust root is not a valid algorithm for signing")]
     CertificatePublicKeyInvalid,
 
@@ -140,7 +156,6 @@ pub enum WebauthnError {
     #[error("In parsing the attestation object, there was insufficient data")]
     ParseInsufficientBytesAvailable,
 
-    #[cfg(feature = "core")]
     #[error("An OpenSSL Error has occurred")]
     OpenSSLError(#[from] OpenSSLErrorStack),
 

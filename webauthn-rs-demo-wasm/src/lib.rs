@@ -1,3 +1,6 @@
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
+
 #![recursion_limit = "512"]
 use wasm_bindgen::prelude::*;
 
@@ -6,7 +9,7 @@ mod demo;
 mod error;
 mod manager;
 mod utils;
-mod uv;
+// mod uv;
 
 #[wasm_bindgen]
 pub fn run_app() -> Result<(), JsValue> {
