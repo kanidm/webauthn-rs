@@ -344,7 +344,7 @@ impl WebauthnCore {
 
         let data = AuthenticatorAttestationResponse::try_from(&reg.response)?;
 
-        // println!("data: {:?}", data);
+        // trace!("data: {:?}", data);
 
         // Verify that the value of C.type is webauthn.create.
         if data.client_data_json.type_ != "webauthn.create" {
@@ -876,7 +876,7 @@ impl WebauthnCore {
         //
         // We always supply allowCredentials in this library, so we expect creds as a vec of credentials
         // that would be equivalent to what was allowed.
-        // println!("rsp: {:?}", rsp);
+        // trace!("rsp: {:?}", rsp);
 
         let cred = {
             // Identify the user being authenticated and verify that this user is the owner of the public
@@ -1197,7 +1197,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        println!("{:?}", result);
+        trace!("{:?}", result);
         assert!(result.is_ok());
     }
 
@@ -1240,7 +1240,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        println!("{:?}", result);
+        trace!("{:?}", result);
         assert!(result.is_ok());
     }
 
@@ -1315,7 +1315,7 @@ mod tests {
         }"#;
         let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
 
-        println!("{:?}", rsp_d);
+        trace!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -1327,7 +1327,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        println!("{:?}", result);
+        trace!("{:?}", result);
         assert!(result.is_ok());
     }
 
@@ -1407,7 +1407,7 @@ mod tests {
             &cred,
             &None,
         );
-        println!("RESULT: {:?}", r);
+        trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
 
         // Captured authentication attempt, this mentions the appid extension has been used, but we still provide a valid RPID
@@ -1437,7 +1437,7 @@ mod tests {
             &cred,
             &Some(String::from("https://unused.local")),
         );
-        println!("RESULT: {:?}", r);
+        trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
 
@@ -1517,7 +1517,7 @@ mod tests {
             &cred,
             &Some(String::from("https://testing.local/app-id.json")),
         );
-        println!("RESULT: {:?}", r);
+        trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
 
         // Captured authentication attempt, this client has NOT used the appid extension, but is providing the appid anyway
@@ -1546,7 +1546,7 @@ mod tests {
             &cred,
             &None,
         );
-        println!("RESULT: {:?}", r);
+        trace!("RESULT: {:?}", r);
         assert!(r.is_err());
     }
 
@@ -1596,7 +1596,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        println!("{:?}", result);
+        trace!("{:?}", result);
         assert!(result.is_ok());
     }
 
@@ -1675,7 +1675,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        println!("{:?}", result);
+        trace!("{:?}", result);
         assert!(result.is_ok());
         let cred = result.unwrap();
 
@@ -1738,7 +1738,7 @@ mod tests {
             &cred,
             &None,
         );
-        println!("RESULT: {:?}", r);
+        trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
 
@@ -2043,7 +2043,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        println!("{:?}", result);
+        trace!("{:?}", result);
         assert!(result.is_ok());
     }
 
@@ -2322,7 +2322,7 @@ mod tests {
         }
 
         let r = wan.generate_challenge_authenticate(creds.clone());
-        eprintln!("{:?}", r);
+        debug!("{:?}", r);
         assert!(r.is_ok());
 
         // now mutate to different states to check.
@@ -2348,7 +2348,7 @@ mod tests {
         }
 
         let r = wan.generate_challenge_authenticate(creds.clone());
-        eprintln!("{:?}", r);
+        debug!("{:?}", r);
         assert!(r.is_ok());
     }
 
@@ -2518,7 +2518,7 @@ mod tests {
             &cred,
             &None,
         );
-        println!("RESULT: {:?}", r);
+        trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
     }
 
@@ -2549,7 +2549,7 @@ mod tests {
             "type": "public-key"
         }"#).unwrap();
 
-        info!("{:?}", rsp_d);
+        debug!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2561,7 +2561,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        info!("{:?}", result);
+        debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
         assert!(result.is_err());
     }
@@ -2593,7 +2593,7 @@ mod tests {
             "type": "public-key"
         }"#).unwrap();
 
-        info!("{:?}", rsp_d);
+        debug!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2605,7 +2605,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        info!("{:?}", result);
+        debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
         assert!(result.is_err());
     }
@@ -2638,7 +2638,7 @@ mod tests {
             "type": "public-key"
         }"#).unwrap();
 
-        info!("{:?}", rsp_d);
+        debug!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2650,7 +2650,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        info!("{:?}", result);
+        debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
         assert!(result.is_err());
     }
@@ -2684,7 +2684,7 @@ mod tests {
         "type": "public-key"
         }"#).unwrap();
 
-        info!("{:?}", rsp_d);
+        debug!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2696,7 +2696,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        info!("{:?}", result);
+        debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
         assert!(result.is_err());
     }
@@ -2728,7 +2728,7 @@ mod tests {
         "type": "public-key"
         }"#).unwrap();
 
-        info!("{:?}", rsp_d);
+        debug!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2740,7 +2740,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        info!("{:?}", result);
+        debug!("{:?}", result);
         assert!(result.is_ok());
     }
 
@@ -2771,7 +2771,7 @@ mod tests {
         "type": "public-key"
         }"#).unwrap();
 
-        info!("{:?}", rsp_d);
+        debug!("{:?}", rsp_d);
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2787,7 +2787,7 @@ mod tests {
             false,
             &RequestRegistrationExtensions::default(),
         );
-        info!("{:?}", result);
+        debug!("{:?}", result);
         assert!(result.is_err());
     }
 }

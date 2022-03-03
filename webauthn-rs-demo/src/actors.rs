@@ -1,13 +1,10 @@
 use url::Url;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::{
-    AttestationCaList, AuthenticationState, RegistrationState, RequestAuthenticationExtensions,
-    RequestRegistrationExtensions,
+    AuthenticationResult, CreationChallengeResponse, Credential, PublicKeyCredential,
+    RegisterPublicKeyCredential, RequestChallengeResponse,
 };
-use webauthn_rs_core::proto::{
-    Authentication, AuthenticationResult, CreationChallengeResponse, Credential, CredentialID,
-    PublicKeyCredential, RegisterPublicKeyCredential, Registration, RequestChallengeResponse,
-};
+use webauthn_rs_core::proto::{AuthenticationState, RegistrationState};
 
 use webauthn_rs::{Webauthn, WebauthnBuilder};
 use webauthn_rs_core::WebauthnCore;
@@ -202,7 +199,7 @@ impl WebauthnActor {
             attachment,
             algorithm,
             attestation,
-            extensions,
+            extensions: _,
         } = reg_settings;
 
         /*
@@ -237,9 +234,8 @@ impl WebauthnActor {
 
         let AuthenticateWithSettings {
             use_cred_id,
-
             uv,
-            extensions,
+            extensions: _,
         } = auth_settings;
 
         /*
@@ -282,8 +278,6 @@ impl WebauthnActor {
             username, reg
         );
 
-        let username = username.as_bytes().to_vec();
-
         let r = self.wan.register_credential(reg, &rs, None);
         debug!("complete Register -> {:?}", r);
         r
@@ -300,8 +294,6 @@ impl WebauthnActor {
             "handle Authenticate -> (username: {:?}, lgn: {:?})",
             username, lgn
         );
-
-        let username = username.as_bytes().to_vec();
 
         let r = self
             .wan

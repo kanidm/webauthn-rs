@@ -1,21 +1,17 @@
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
+
 #[macro_use]
 extern crate tracing;
-
-extern crate structopt;
-use structopt::StructOpt;
-extern crate openssl;
-
-extern crate webauthn_rs;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
+use structopt::StructOpt;
 
 use rand::prelude::*;
 
-use webauthn_rs_core::proto::{
-    Credential, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
-};
+use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKeyCredential};
 
 use webauthn_rs_demo_shared::*;
 
@@ -56,7 +52,7 @@ struct CmdOptions {
     enable_tls: bool,
 }
 
-async fn index_view(request: tide::Request<AppState>) -> tide::Result {
+async fn index_view(_request: tide::Request<AppState>) -> tide::Result {
     let mut res = tide::Response::new(200);
     res.set_content_type("text/html;charset=utf-8");
     res.set_body(
@@ -283,7 +279,7 @@ async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result
         .demo_finish_login(&username_copy, &lgn, st)
         .await
     {
-        Ok(auth_result) => tide::Response::builder(tide::StatusCode::Ok).build(),
+        Ok(_auth_result) => tide::Response::builder(tide::StatusCode::Ok).build(),
         Err(e) => {
             debug!("login -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest)
@@ -567,7 +563,10 @@ async fn main() -> tide::Result<()> {
         // some work here
         loop {
             async_std::task::sleep(Duration::from_secs(900)).await;
-            memory_store.cleanup().await;
+            memory_store
+                .cleanup()
+                .await
+                .expect("Failed to clean up sessions!");
         }
     });
 

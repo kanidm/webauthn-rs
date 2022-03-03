@@ -1,3 +1,6 @@
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
+
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
