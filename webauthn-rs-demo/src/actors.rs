@@ -80,12 +80,7 @@ impl WebauthnActor {
         let (ccr, rs) = match reg_settings {
             RegisterWithType::SecurityKey(strict) => self
                 .swan
-                .start_securitykey_registration(
-                    &username,
-                    None,
-                    None,
-                    strict.then(AttestationCaList::strict),
-                )
+                .start_securitykey_registration(&username, None, None, strict.into())
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::SecurityKey(rs)))?,
             RegisterWithType::Passwordless(strict) => {
                 self.swan
@@ -93,7 +88,7 @@ impl WebauthnActor {
                         &username,
                         None,
                         None,
-                        strict.then(AttestationCaList::strict),
+                        strict.into(),
                         // Some(AuthenticatorAttachment::None),
                         None,
                     )

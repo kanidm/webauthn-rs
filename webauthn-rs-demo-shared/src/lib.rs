@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
+#[cfg(feature = "core")]
+use webauthn_rs_core::proto::AttestationCaList;
 
 pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
@@ -9,10 +11,28 @@ pub use webauthn_rs_proto::{
     UserVerificationPolicy,
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+pub enum AttestationLevel {
+    None,
+    AnyKnown,
+    Strict,
+}
+
+#[cfg(feature = "core")]
+impl Into<Option<AttestationCaList>> for AttestationLevel {
+    fn into(self) -> Option<AttestationCaList> {
+        match self {
+            AttestationLevel::None => None,
+            AttestationLevel::AnyKnown => Some(AttestationCaList::all_known_cas()),
+            AttestationLevel::Strict => Some(AttestationCaList::strict()),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum RegisterWithType {
-    SecurityKey(bool),
-    Passwordless(bool),
+    SecurityKey(AttestationLevel),
+    Passwordless(AttestationLevel),
     // Device(bool),
 }
 

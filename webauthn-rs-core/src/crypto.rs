@@ -41,6 +41,7 @@ fn pkey_verify_signature(
             Ok(verifier)
         }
         COSEAlgorithm::INSECURE_RS1 => {
+            warn!("INSECURE SHA1 USAGE DETECTED");
             let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), pkey)
                 .map_err(WebauthnError::OpenSSLError)?;
             verifier
@@ -250,6 +251,7 @@ pub(crate) fn only_hash_from_type(
     match alg {
         COSEAlgorithm::INSECURE_RS1 => {
             // sha1
+            warn!("INSECURE SHA1 USAGE DETECTED");
             hash::hash(hash::MessageDigest::sha1(), input)
                 .map(|dbytes| Vec::from(dbytes.as_ref()))
                 .map_err(WebauthnError::OpenSSLError)

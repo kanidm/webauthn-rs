@@ -286,12 +286,18 @@ impl Demo {
                                 </select>
                               </td>
                             </tr>
+
                             <tr>
-                              <td>{ "Strict Attestation " }</td>
+                              <td>{ "Attestation Level" }</td>
                               <td>
-                                <input class="form-check-input" type="checkbox" value="" id="strict_attestation_required" />
+                                <select class="form-select" id="strict_attestation_required">
+                                  <option selected=true value="n">{ "None" }</option>
+                                  <option value="a">{ "Any Known Manufacturer" }</option>
+                                  <option value="s">{ "Strict" }</option>
+                                </select>
                               </td>
                             </tr>
+
                           </tbody>
                         </table>
                       </div>
@@ -418,7 +424,7 @@ impl Component for Demo {
         console::log!(format!("create").as_str());
         Demo {
             state: DemoState::Register,
-            reg_settings: RegisterWithType::SecurityKey(false),
+            reg_settings: RegisterWithType::SecurityKey(AttestationLevel::None),
             last_username: String::default(),
         }
     }
@@ -457,9 +463,14 @@ impl Component for Demo {
                 self.last_username = username.clone();
                 // Build the settings that we'll be using.
 
-                let attest_req =
-                    utils::get_checked_from_element_id("strict_attestation_required")
-                    .unwrap_or(false);
+                let attest_req = utils::get_select_value_from_element_id("strict_attestation_required")
+                    .and_then(|v| match v.as_str() {
+                        "s" => Some(AttestationLevel::Strict),
+                        "a" => Some(AttestationLevel::AnyKnown),
+                        // "dv" => Some(RegisterWithType::Device(attest_req)),
+                        _ => None,
+                    })
+                    .unwrap_or(AttestationLevel::None);
 
                 let settings = utils::get_select_value_from_element_id("credential_type")
                     .and_then(|v| match v.as_str() {
@@ -468,7 +479,7 @@ impl Component for Demo {
                         // "dv" => Some(RegisterWithType::Device(attest_req)),
                         _ => None,
                     })
-                    .unwrap_or(RegisterWithType::SecurityKey(false));
+                    .unwrap_or(RegisterWithType::SecurityKey(attest_req));
 
                 console::log!(format!("cred_type  -> {:?}", settings).as_str());
                 console::log!(format!("username   -> {:?}", username).as_str());

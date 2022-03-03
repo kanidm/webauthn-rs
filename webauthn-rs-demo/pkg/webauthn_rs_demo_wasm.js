@@ -534,10 +534,6 @@ async function init(input) {
         var ret = getObject(arg0) instanceof HTMLInputElement;
         return ret;
     };
-    imports.wbg.__wbg_checked_39d5ce76226024a7 = function(arg0) {
-        var ret = getObject(arg0).checked;
-        return ret;
-    };
     imports.wbg.__wbg_setchecked_206243371da58f6a = function(arg0, arg1) {
         getObject(arg0).checked = arg1 !== 0;
     };
@@ -745,12 +741,12 @@ async function init(input) {
         var ret = makeMutClosure(arg0, arg1, 363, __wbg_adapter_30);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper1448 = function(arg0, arg1, arg2) {
-        var ret = makeClosure(arg0, arg1, 504, __wbg_adapter_33);
+    imports.wbg.__wbindgen_closure_wrapper1449 = function(arg0, arg1, arg2) {
+        var ret = makeClosure(arg0, arg1, 505, __wbg_adapter_33);
         return addHeapObject(ret);
     };
-    imports.wbg.__wbindgen_closure_wrapper1580 = function(arg0, arg1, arg2) {
-        var ret = makeMutClosure(arg0, arg1, 542, __wbg_adapter_36);
+    imports.wbg.__wbindgen_closure_wrapper1581 = function(arg0, arg1, arg2) {
+        var ret = makeMutClosure(arg0, arg1, 543, __wbg_adapter_36);
         return addHeapObject(ret);
     };
 

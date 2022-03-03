@@ -568,6 +568,31 @@ y5JsaRXlsOoWGRXE3kUT/MKR1UoAgR54c8Bsh+9Dq2wqIK9mRn15zvBDeyHG6+cz
 urLopziOUeWokxZN1syrEdKlhFoPYavm6t+PzIcpdxZwHA+V3jLJPfI=
 -----END CERTIFICATE-----";
 
+// Nitrokey fido2 and u2f root certs
+pub const NITROKEY_FIDO2_ROOT_CA_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
+MIIBmjCCAT8CFBZiBJbp2fT/LaRJ8Xwl9qhX62boMAoGCCqGSM49BAMCME4xCzAJ
+BgNVBAYTAkRFMRYwFAYDVQQKDA1OaXRyb2tleSBHbWJIMRAwDgYDVQQLDAdSb290
+IENBMRUwEwYDVQQDDAxuaXRyb2tleS5jb20wIBcNMTkxMjA0MDczNTM1WhgPMjA2
+OTExMjEwNzM1MzVaME4xCzAJBgNVBAYTAkRFMRYwFAYDVQQKDA1OaXRyb2tleSBH
+bWJIMRAwDgYDVQQLDAdSb290IENBMRUwEwYDVQQDDAxuaXRyb2tleS5jb20wWTAT
+BgcqhkjOPQIBBggqhkjOPQMBBwNCAAQy6KIN2gXqaSMWdWir/Hnx58NBzjthYdNv
+k95hdt7jCpyW2cHqLdQ5Sqcvo0CuordgDOach0ZGB60w9GZY8SHJMAoGCCqGSM49
+BAMCA0kAMEYCIQDLmdy2G2mM4rZKjl6CVfjV7khilIS5D3xRQzubeqzQNAIhAKIG
+X29SfiB6K9k6Hb3q+q7bRn1o1dhV1cj592YYnu1/
+-----END CERTIFICATE-----";
+
+pub const NITROKEY_U2F_ROOT_CA_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
+MIIBlTCCATqgAwIBAgIJAMBE6C6nkMPQMAoGCCqGSM49BAMCMB0xGzAZBgNVBAMM
+Ek5pdHJva2V5IFJvb3QgQ0EgMjAeFw0xODEwMzAwMTQ1NTlaFw0zODEwMjUwMTQ1
+NTlaMB0xGzAZBgNVBAMMEk5pdHJva2V5IFJvb3QgQ0EgMjBZMBMGByqGSM49AgEG
+CCqGSM49AwEHA0IABD1zniCkovs56QlA2dw+idGDJLOx8vQAJqB5ZhmxPaO3KTg5
+CGRGr+Prk0If1K+1UemOrIhUjGM6bS+GXHfEbdOjYzBhMB0GA1UdDgQWBBSbwFLo
+wWVgQmHkXJwmz2vo/cZvkTAfBgNVHSMEGDAWgBSbwFLowWVgQmHkXJwmz2vo/cZv
+kTASBgNVHRMBAf8ECDAGAQH/AgEBMAsGA1UdDwQEAwICBDAKBggqhkjOPQQDAgNJ
+ADBGAiEApf7+miYmy9hZ7hjj8M9v1hxRFPTaoAmwZrrEFSsasywCIQCYYa7ZvmIE
+skmkHTvaRVpIFP7npdI1nvHitJG2wEx4Iw==
+-----END CERTIFICATE-----";
+
 impl AttestationCa {
     pub fn apple_webauthn_root_ca() -> Self {
         // COSEAlgorithm::ES384,
@@ -582,9 +607,36 @@ impl AttestationCa {
         }
     }
 
+    /// The microsoft root CA for TPM attestation.
+    ///
+    /// Not ellible for strict - many TPM's use SHA1 in signatures, which means they are
+    /// potentially weak.
+    ///
+    /// In the future we may reject RS1 signatures, allowing this to be moved into the
+    /// strict category.
     pub fn microsoft_tpm_root_certificate_authority_2014() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM).unwrap(),
+        }
+    }
+
+    /// Nitrokey root CA for their FIDO2 device range.
+    ///
+    /// Not elligble for strict - hardware is difficult to interact with, low quality,
+    /// and easy to break or destroy.
+    pub fn nitrokey_fido2_root_ca() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).unwrap(),
+        }
+    }
+
+    /// Nitrokey root CA for their U2F device range.
+    ///
+    /// Not elligble for strict - hardware is difficult to interact with, low quality,
+    /// and easy to break or destroy.
+    pub fn nitrokey_u2f_root_ca() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).unwrap(),
         }
     }
 }
@@ -614,6 +666,8 @@ impl AttestationCaList {
                 AttestationCa::apple_webauthn_root_ca(),
                 AttestationCa::yubico_u2f_root_ca_serial_457200631(),
                 AttestationCa::microsoft_tpm_root_certificate_authority_2014(),
+                AttestationCa::nitrokey_fido2_root_ca(),
+                AttestationCa::nitrokey_u2f_root_ca(),
             ],
         }
     }
