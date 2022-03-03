@@ -52,9 +52,7 @@ pub(crate) fn verify_packed_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-    registration_policy: UserVerificationPolicy,
-    req_extn: &RequestRegistrationExtensions,
-) -> Result<Credential, WebauthnError> {
+) -> Result<ParsedAttestationData, WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
 
@@ -80,7 +78,6 @@ pub(crate) fn verify_packed_attestation(
         att_stmt_map.get(ecdaa_key_id_key),
     ) {
         (Some(x5c), _) => {
-            let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
             // 2. If x5c is present, this indicates that the attestation type is not ECDAA.
 
             // The elements of this array contain attestnCert and its certificate chain, each
@@ -146,14 +143,7 @@ pub(crate) fn verify_packed_attestation(
             // If successful, return implementation-specific values representing attestation type
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-            Ok(Credential::new(
-                acd,
-                &att_obj.auth_data,
-                credential_public_key,
-                registration_policy,
-                ParsedAttestationData::Basic(arr_x509),
-                None,
-            ))
+            Ok(ParsedAttestationData::Basic(arr_x509))
         }
         (None, Some(_ecdaa_key_id)) => {
             // 3. If ecdaaKeyId is present, then the attestation type is ECDAA.
@@ -186,14 +176,7 @@ pub(crate) fn verify_packed_attestation(
             }
 
             // 4.c. If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
-            Ok(Credential::new(
-                acd,
-                &att_obj.auth_data,
-                credential_public_key,
-                registration_policy,
-                ParsedAttestationData::Self_,
-                Some(req_extn),
-            ))
+            Ok(ParsedAttestationData::Self_)
         }
     }
 }
@@ -204,8 +187,7 @@ pub(crate) fn verify_fidou2f_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-    registration_policy: UserVerificationPolicy,
-) -> Result<Credential, WebauthnError> {
+) -> Result<ParsedAttestationData, WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
 
     // Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
@@ -289,40 +271,11 @@ pub(crate) fn verify_fidou2f_attestation(
     }
 
     let attestation = ParsedAttestationData::Basic(arr_x509);
-
-    let credential = Credential::new(
-        acd,
-        &att_obj.auth_data,
-        credential_public_key,
-        registration_policy,
-        attestation,
-        None,
-    );
-
     // Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation.
 
     // If successful, return implementation-specific values representing attestation type Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-    Ok(credential)
-}
-
-// https://www.w3.org/TR/webauthn/#none-attestation
-pub(crate) fn verify_none_attestation(
-    acd: &AttestedCredentialData,
-    att_obj: &AttestationObject<Registration>,
-    registration_policy: UserVerificationPolicy,
-) -> Result<Credential, WebauthnError> {
-    // No attestation is performed, simply provide a credential.
-    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-    let credential = Credential::new(
-        acd,
-        &att_obj.auth_data,
-        credential_public_key,
-        registration_policy,
-        ParsedAttestationData::None,
-        None,
-    );
-    Ok(credential)
+    Ok(attestation)
 }
 
 // https://w3c.github.io/webauthn/#sctn-tpm-attestation
@@ -330,9 +283,7 @@ pub(crate) fn verify_tpm_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-    registration_policy: UserVerificationPolicy,
-    req_extn: &RequestRegistrationExtensions,
-) -> Result<Credential, WebauthnError> {
+) -> Result<ParsedAttestationData, WebauthnError> {
     debug!("begin verify_tpm_attest");
 
     let att_stmt = &att_obj.att_stmt;
@@ -560,24 +511,14 @@ pub(crate) fn verify_tpm_attestation(
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
-    let credential = Credential::new(
-        acd,
-        &att_obj.auth_data,
-        credential_public_key,
-        registration_policy,
-        ParsedAttestationData::AttCa(arr_x509),
-        Some(req_extn),
-    );
-    Ok(credential)
+    Ok(ParsedAttestationData::AttCa(arr_x509))
 }
 
 pub(crate) fn verify_apple_anonymous_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-    registration_policy: UserVerificationPolicy,
-    req_extn: &RequestRegistrationExtensions,
-) -> Result<Credential, WebauthnError> {
+) -> Result<ParsedAttestationData, WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
 
@@ -635,29 +576,21 @@ pub(crate) fn verify_apple_anonymous_attestation(
     }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-    let credential = Credential::new(
-        acd,
-        &att_obj.auth_data,
-        credential_public_key,
-        registration_policy,
-        ParsedAttestationData::AnonCa(arr_x509),
-        Some(req_extn),
-    );
-    Ok(credential)
+    Ok(ParsedAttestationData::AnonCa(arr_x509))
 }
 
 pub(crate) fn verify_attestation_ca_chain(
-    cred: &Credential,
+    att_data: &ParsedAttestationData,
     ca_list: &AttestationCaList,
     danger_disable_certificate_time_checks: bool,
 ) -> Result<(), WebauthnError> {
-    // If the ca_list is empty, Immediately fail since no valid attesation can be created.
+    // If the ca_list is empty, Immediately fail since no valid attestation can be created.
     if ca_list.cas.is_empty() {
         return Err(WebauthnError::AttestationCertificateTrustStoreEmpty);
     }
 
     // Do we have a format we can actually check?
-    let fullchain = match &cred.attestation {
+    let fullchain = match att_data {
         ParsedAttestationData::Basic(chain) => chain,
         ParsedAttestationData::AttCa(chain) => chain,
         ParsedAttestationData::AnonCa(chain) => chain,
