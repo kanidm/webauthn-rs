@@ -1,6 +1,7 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
+use crate::constants::*;
 use crate::error::*;
 use std::fmt;
 use webauthn_rs_proto::cose::*;
@@ -177,24 +178,33 @@ pub struct COSEKey {
     pub key: COSEKeyType,
 }
 
+/// The result state of an extension as returned from the authenticator.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ExtnState<T>
 where
     T: Clone + std::fmt::Debug,
 {
+    /// The data in this extension is not signed cryptographically, and can not be trusted.
     Unsigned,
+    /// This extension was not requested, and so no result was provided.
     NotRequested,
+    /// The extension was requested, and the authenticator did NOT act on it.
     Ignored,
+    /// The extension was requested, and the authenticator correctly responded.
     Set(T),
+    /// The extension was not requested, and the authenticator sent an unsolicited extension value.
     Unsolicited(T),
 }
 
+/// The set of extensions that were registered by this credential.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RegisteredExtensions {
+    /// The state of the cred_protect extension
     pub cred_protect: ExtnState<CredentialProtectionPolicy>,
 }
 
 impl RegisteredExtensions {
+    #[cfg(test)]
     pub(crate) fn none() -> Self {
         RegisteredExtensions {
             cred_protect: ExtnState::NotRequested,
@@ -242,14 +252,22 @@ pub struct Credential {
     // pub attestation: SerialisableAttestationData,
 }
 
+/// Serialised Attestation Data which can be stored in a stable database or similar.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SerialisableAttestationData {
+    /// See [ParsedAttestationData::Basic]
     Basic(Vec<Base64UrlSafeData>),
+    /// See [ParsedAttestationData::Self_]
     Self_,
+    /// See [ParsedAttestationData::AttCa]
     AttCa(Vec<Base64UrlSafeData>),
+    /// See [ParsedAttestationData::AnonCa]
     AnonCa(Vec<Base64UrlSafeData>),
+    /// See [ParsedAttestationData::EDCAA]
     ECDAA,
+    /// See [ParsedAttestationData::None]
     None,
+    /// See [ParsedAttestationData::Uncertain]
     Uncertain,
 }
 
@@ -447,6 +465,7 @@ pub(crate) struct AttestedCredentialData {
     pub(crate) credential_pk: serde_cbor::Value,
 }
 
+/// Information about the authentication that occured.
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticationResult {
     /// The credential ID that was used to authenticate.
@@ -459,11 +478,13 @@ pub struct AuthenticationResult {
     // pub extensions:
 }
 
+/// A serialised Attestation CA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialisableAttestationCa {
     pub(crate) ca: Base64UrlSafeData,
 }
 
+/// A structure representing an Attestation CA and other options associated to this CA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     try_from = "SerialisableAttestationCa",
@@ -491,109 +512,8 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
     }
 }
 
-// Apple makes a webauthn root certificate public at
-// https://www.apple.com/certificateauthority/private/.
-// The certificate data itself (as linked in the cert listing linked above) can be found at
-// https://www.apple.com/certificateauthority/Apple_WebAuthn_Root_CA.pem.
-pub const APPLE_WEBAUTHN_ROOT_CA_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
-MIICEjCCAZmgAwIBAgIQaB0BbHo84wIlpQGUKEdXcTAKBggqhkjOPQQDAzBLMR8w
-HQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJ
-bmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MjEzMloXDTQ1MDMx
-NTAwMDAwMFowSzEfMB0GA1UEAwwWQXBwbGUgV2ViQXV0aG4gUm9vdCBDQTETMBEG
-A1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49
-AgEGBSuBBAAiA2IABCJCQ2pTVhzjl4Wo6IhHtMSAzO2cv+H9DQKev3//fG59G11k
-xu9eI0/7o6V5uShBpe1u6l6mS19S1FEh6yGljnZAJ+2GNP1mi/YK2kSXIuTHjxA/
-pcoRf7XkOtO4o1qlcaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQUJtdk
-2cV4wlpn0afeaxLQG2PxxtcwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2cA
-MGQCMFrZ+9DsJ1PW9hfNdBywZDsWDbWFp28it1d/5w2RPkRX3Bbn/UbDTNLx7Jr3
-jAGGiQIwHFj+dJZYUJR786osByBelJYsVZd2GbHQu209b5RCmGQ21gpSAk9QZW4B
-1bWeT0vT
------END CERTIFICATE-----";
-
-// Yubico root cert.
-// https://developers.yubico.com/U2F/yubico-u2f-ca-certs.txt
-pub const YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
-MIIDHjCCAgagAwIBAgIEG0BT9zANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZ
-dWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAw
-MDBaGA8yMDUwMDkwNDAwMDAwMFowLjEsMCoGA1UEAxMjWXViaWNvIFUyRiBSb290
-IENBIFNlcmlhbCA0NTcyMDA2MzEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
-AoIBAQC/jwYuhBVlqaiYWEMsrWFisgJ+PtM91eSrpI4TK7U53mwCIawSDHy8vUmk
-5N2KAj9abvT9NP5SMS1hQi3usxoYGonXQgfO6ZXyUA9a+KAkqdFnBnlyugSeCOep
-8EdZFfsaRFtMjkwz5Gcz2Py4vIYvCdMHPtwaz0bVuzneueIEz6TnQjE63Rdt2zbw
-nebwTG5ZybeWSwbzy+BJ34ZHcUhPAY89yJQXuE0IzMZFcEBbPNRbWECRKgjq//qT
-9nmDOFVlSRCt2wiqPSzluwn+v+suQEBsUjTGMEd25tKXXTkNW21wIWbxeSyUoTXw
-LvGS6xlwQSgNpk2qXYwf8iXg7VWZAgMBAAGjQjBAMB0GA1UdDgQWBBQgIvz0bNGJ
-hjgpToksyKpP9xv9oDAPBgNVHRMECDAGAQH/AgEAMA4GA1UdDwEB/wQEAwIBBjAN
-BgkqhkiG9w0BAQsFAAOCAQEAjvjuOMDSa+JXFCLyBKsycXtBVZsJ4Ue3LbaEsPY4
-MYN/hIQ5ZM5p7EjfcnMG4CtYkNsfNHc0AhBLdq45rnT87q/6O3vUEtNMafbhU6kt
-hX7Y+9XFN9NpmYxr+ekVY5xOxi8h9JDIgoMP4VB1uS0aunL1IGqrNooL9mmFnL2k
-LVVee6/VR6C5+KSTCMCWppMuJIZII2v9o4dkoZ8Y7QRjQlLfYzd3qGtKbw7xaF1U
-sG/5xUb/Btwb2X2g4InpiB/yt/3CpQXpiWX/K4mBvUKiGn05ZsqeY1gx4g0xLBqc
-U9psmyPzK+Vsgw2jeRQ5JlKDyqE0hebfC1tvFu0CCrJFcw==
------END CERTIFICATE-----";
-
-// https://docs.microsoft.com/en-us/windows-server/security/guarded-fabric-shielded-vm/guarded-fabric-install-trusted-tpm-root-certificates
-pub const MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
-MIIF9TCCA92gAwIBAgIQXbYwTgy/J79JuMhpUB5dyzANBgkqhkiG9w0BAQsFADCB
-jDELMAkGA1UEBhMCVVMxEzARBgNVBAgTCldhc2hpbmd0b24xEDAOBgNVBAcTB1Jl
-ZG1vbmQxHjAcBgNVBAoTFU1pY3Jvc29mdCBDb3Jwb3JhdGlvbjE2MDQGA1UEAxMt
-TWljcm9zb2Z0IFRQTSBSb290IENlcnRpZmljYXRlIEF1dGhvcml0eSAyMDE0MB4X
-DTE0MTIxMDIxMzExOVoXDTM5MTIxMDIxMzkyOFowgYwxCzAJBgNVBAYTAlVTMRMw
-EQYDVQQIEwpXYXNoaW5ndG9uMRAwDgYDVQQHEwdSZWRtb25kMR4wHAYDVQQKExVN
-aWNyb3NvZnQgQ29ycG9yYXRpb24xNjA0BgNVBAMTLU1pY3Jvc29mdCBUUE0gUm9v
-dCBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkgMjAxNDCCAiIwDQYJKoZIhvcNAQEBBQAD
-ggIPADCCAgoCggIBAJ+n+bnKt/JHIRC/oI/xgkgsYdPzP0gpvduDA2GbRtth+L4W
-UyoZKGBw7uz5bjjP8Aql4YExyjR3EZQ4LqnZChMpoCofbeDR4MjCE1TGwWghGpS0
-mM3GtWD9XiME4rE2K0VW3pdN0CLzkYbvZbs2wQTFfE62yNQiDjyHFWAZ4BQH4eWa
-8wrDMUxIAneUCpU6zCwM+l6Qh4ohX063BHzXlTSTc1fDsiPaKuMMjWjK9vp5UHFP
-a+dMAWr6OljQZPFIg3aZ4cUfzS9y+n77Hs1NXPBn6E4Db679z4DThIXyoKeZTv1a
-aWOWl/exsDLGt2mTMTyykVV8uD1eRjYriFpmoRDwJKAEMOfaURarzp7hka9TOElG
-yD2gOV4Fscr2MxAYCywLmOLzA4VDSYLuKAhPSp7yawET30AvY1HRfMwBxetSqWP2
-+yZRNYJlHpor5QTuRDgzR+Zej+aWx6rWNYx43kLthozeVJ3QCsD5iEI/OZlmWn5W
-Yf7O8LB/1A7scrYv44FD8ck3Z+hxXpkklAsjJMsHZa9mBqh+VR1AicX4uZG8m16x
-65ZU2uUpBa3rn8CTNmw17ZHOiuSWJtS9+PrZVA8ljgf4QgA1g6NPOEiLG2fn8Gm+
-r5Ak+9tqv72KDd2FPBJ7Xx4stYj/WjNPtEUhW4rcLK3ktLfcy6ea7Rocw5y5AgMB
-AAGjUTBPMAsGA1UdDwQEAwIBhjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR6
-jArOL0hiF+KU0a5VwVLscXSkVjAQBgkrBgEEAYI3FQEEAwIBADANBgkqhkiG9w0B
-AQsFAAOCAgEAW4ioo1+J9VWC0UntSBXcXRm1ePTVamtsxVy/GpP4EmJd3Ub53JzN
-BfYdgfUL51CppS3ZY6BoagB+DqoA2GbSL+7sFGHBl5ka6FNelrwsH6VVw4xV/8kl
-IjmqOyfatPYsz0sUdZev+reeiGpKVoXrK6BDnUU27/mgPtem5YKWvHB/soofUrLK
-zZV3WfGdx9zBr8V0xW6vO3CKaqkqU9y6EsQw34n7eJCbEVVQ8VdFd9iV1pmXwaBA
-fBwkviPTKEP9Cm+zbFIOLr3V3CL9hJj+gkTUuXWlJJ6wVXEG5i4rIbLAV59UrW4L
-onP+seqvWMJYUFxu/niF0R3fSGM+NU11DtBVkhRZt1u0kFhZqjDz1dWyfT/N7Hke
-3WsDqUFsBi+8SEw90rWx2aUkLvKo83oU4Mx4na+2I3l9F2a2VNGk4K7l3a00g51m
-iPiq0Da0jqw30PaLluTMTGY5+RnZVh50JD6nk+Ea3wRkU8aiYFnpIxfKBZ72whmY
-Ya/egj9IKeqpR0vuLebbU0fJBf880K1jWD3Z5SFyJXo057Mv0OPw5mttytE585ZI
-y5JsaRXlsOoWGRXE3kUT/MKR1UoAgR54c8Bsh+9Dq2wqIK9mRn15zvBDeyHG6+cz
-urLopziOUeWokxZN1syrEdKlhFoPYavm6t+PzIcpdxZwHA+V3jLJPfI=
------END CERTIFICATE-----";
-
-// Nitrokey fido2 and u2f root certs
-pub const NITROKEY_FIDO2_ROOT_CA_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
-MIIBmjCCAT8CFBZiBJbp2fT/LaRJ8Xwl9qhX62boMAoGCCqGSM49BAMCME4xCzAJ
-BgNVBAYTAkRFMRYwFAYDVQQKDA1OaXRyb2tleSBHbWJIMRAwDgYDVQQLDAdSb290
-IENBMRUwEwYDVQQDDAxuaXRyb2tleS5jb20wIBcNMTkxMjA0MDczNTM1WhgPMjA2
-OTExMjEwNzM1MzVaME4xCzAJBgNVBAYTAkRFMRYwFAYDVQQKDA1OaXRyb2tleSBH
-bWJIMRAwDgYDVQQLDAdSb290IENBMRUwEwYDVQQDDAxuaXRyb2tleS5jb20wWTAT
-BgcqhkjOPQIBBggqhkjOPQMBBwNCAAQy6KIN2gXqaSMWdWir/Hnx58NBzjthYdNv
-k95hdt7jCpyW2cHqLdQ5Sqcvo0CuordgDOach0ZGB60w9GZY8SHJMAoGCCqGSM49
-BAMCA0kAMEYCIQDLmdy2G2mM4rZKjl6CVfjV7khilIS5D3xRQzubeqzQNAIhAKIG
-X29SfiB6K9k6Hb3q+q7bRn1o1dhV1cj592YYnu1/
------END CERTIFICATE-----";
-
-pub const NITROKEY_U2F_ROOT_CA_PEM: &[u8] = b"-----BEGIN CERTIFICATE-----
-MIIBlTCCATqgAwIBAgIJAMBE6C6nkMPQMAoGCCqGSM49BAMCMB0xGzAZBgNVBAMM
-Ek5pdHJva2V5IFJvb3QgQ0EgMjAeFw0xODEwMzAwMTQ1NTlaFw0zODEwMjUwMTQ1
-NTlaMB0xGzAZBgNVBAMMEk5pdHJva2V5IFJvb3QgQ0EgMjBZMBMGByqGSM49AgEG
-CCqGSM49AwEHA0IABD1zniCkovs56QlA2dw+idGDJLOx8vQAJqB5ZhmxPaO3KTg5
-CGRGr+Prk0If1K+1UemOrIhUjGM6bS+GXHfEbdOjYzBhMB0GA1UdDgQWBBSbwFLo
-wWVgQmHkXJwmz2vo/cZvkTAfBgNVHSMEGDAWgBSbwFLowWVgQmHkXJwmz2vo/cZv
-kTASBgNVHRMBAf8ECDAGAQH/AgEBMAsGA1UdDwQEAwICBDAKBggqhkjOPQQDAgNJ
-ADBGAiEApf7+miYmy9hZ7hjj8M9v1hxRFPTaoAmwZrrEFSsasywCIQCYYa7ZvmIE
-skmkHTvaRVpIFP7npdI1nvHitJG2wEx4Iw==
------END CERTIFICATE-----";
-
 impl AttestationCa {
+    /// The Apple TouchID and FaceID root CA.
     pub fn apple_webauthn_root_ca() -> Self {
         // COSEAlgorithm::ES384,
         AttestationCa {
@@ -601,6 +521,7 @@ impl AttestationCa {
         }
     }
 
+    /// The yubico u2f root ca. Applies to all devices up to and including series 5.
     pub fn yubico_u2f_root_ca_serial_457200631() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).unwrap(),
@@ -641,6 +562,7 @@ impl AttestationCa {
     }
 }
 
+/// A list of AttestationCas and associated options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttestationCaList {
     pub(crate) cas: Vec<AttestationCa>,

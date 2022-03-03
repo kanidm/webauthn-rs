@@ -4,14 +4,14 @@
 //! to allow strong, passwordless, cryptographic authentication to be performed. Webauthn
 //! is able to operate with many authenticator types, such as U2F.
 //!
-//! This library aims to provide a secure Webauthn implementation that you can
-//! plug into your application, so that you can provide Webauthn to your users.
+//! ⚠️  ⚠️  ⚠️  THIS IS UNSAFE. AVOID USING THIS DIRECTLY ⚠️  ⚠️  ⚠️
 //!
-//! For examples, see our examples folder.
+//! If possible, use the `webauthn-rs` crate, and it's safe wrapper instead!
 //!
-//! To use this library yourself, you will want to reference the `WebauthnConfig` trait to
-//! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
-//! interactions.
+//! Webauthn as a standard has many traps that in the worst cases, may lead to
+//! bypasses and full account compromises. Many of the features of webauthn are
+//! NOT security policy, but user interface hints. Many options can NOT be
+//! enforced. `webauthn-rs` handles these correctly. USE `webauthn-rs` INSTEAD.
 
 #![warn(missing_docs)]
 
@@ -1195,6 +1195,7 @@ mod tests {
                 cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
             }),
             false,
+            &RequestRegistrationExtensions::default(),
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1237,6 +1238,7 @@ mod tests {
             &[COSEAlgorithm::ES256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1279,6 +1281,7 @@ mod tests {
             &[COSEAlgorithm::ES256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         assert!(result.is_ok());
     }
@@ -1322,6 +1325,7 @@ mod tests {
             &[COSEAlgorithm::ES256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1590,6 +1594,7 @@ mod tests {
                 cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
             }),
             false,
+            &RequestRegistrationExtensions::default(),
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -1668,6 +1673,7 @@ mod tests {
             &[COSEAlgorithm::RS256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -2035,6 +2041,7 @@ mod tests {
                 cas: vec![AttestationCa::microsoft_tpm_root_certificate_authority_2014()],
             }),
             false,
+            &RequestRegistrationExtensions::default(),
         );
         println!("{:?}", result);
         assert!(result.is_ok());
@@ -2205,6 +2212,7 @@ mod tests {
             }),
             // Must disable time checks because the submission is limited to 5 days.
             true,
+            &RequestRegistrationExtensions::default(),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -2458,6 +2466,7 @@ mod tests {
                 &[COSEAlgorithm::ES256],
                 None,
                 false,
+                &RequestRegistrationExtensions::default(),
             )
             .expect("Failed to register credential");
 
@@ -2550,6 +2559,7 @@ mod tests {
             &[COSEAlgorithm::EDDSA],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2593,6 +2603,7 @@ mod tests {
             &[COSEAlgorithm::EDDSA],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2637,6 +2648,7 @@ mod tests {
             &[COSEAlgorithm::ES256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2682,6 +2694,7 @@ mod tests {
             &[COSEAlgorithm::ES256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         info!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2725,6 +2738,7 @@ mod tests {
             &[COSEAlgorithm::ES256],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         info!("{:?}", result);
         assert!(result.is_ok());
@@ -2771,6 +2785,7 @@ mod tests {
             ],
             None,
             false,
+            &RequestRegistrationExtensions::default(),
         );
         info!("{:?}", result);
         assert!(result.is_err());

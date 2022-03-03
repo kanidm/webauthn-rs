@@ -710,7 +710,8 @@ pub(crate) fn verify_attestation_ca_chain(
     // Providing the cert and chain, validate we have a ref to our store.
     let res = ca_ctx
         .init(&ca_store, &leaf, &chain_stack, |ca_ctx_ref| {
-            ca_ctx_ref.verify_cert().map(|v| {
+            ca_ctx_ref.verify_cert().map(|_| {
+                // The value as passed in is a boolean that we ignore in favour of the richer error type.
                 debug!("{:?}", ca_ctx_ref.error());
                 debug!(
                     "ca_ctx_ref verify cert - error depth={}, sn={:?}",
