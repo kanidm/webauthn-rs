@@ -21,7 +21,7 @@ use url::Url;
 
 use crate::attestation::{
     verify_apple_anonymous_attestation, verify_attestation_ca_chain, verify_fidou2f_attestation,
-    verify_none_attestation, verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
+    verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
 };
 use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
 use crate::crypto::compute_sha256;
@@ -470,55 +470,48 @@ impl WebauthnCore {
         // Now, match based on the attest_format
         debug!("attestation is: {:?}", &attest_format);
 
-        let credential: Credential = match attest_format {
-            AttestationFormat::FIDOU2F => verify_fidou2f_attestation(
-                acd,
-                &data.attestation_object,
-                &client_data_json_hash,
-                policy,
-            ),
-            AttestationFormat::Packed => verify_packed_attestation(
-                acd,
-                &data.attestation_object,
-                &client_data_json_hash,
-                policy,
-                req_extn,
-            ),
-            AttestationFormat::Tpm => verify_tpm_attestation(
-                acd,
-                &data.attestation_object,
-                &client_data_json_hash,
-                policy,
-                req_extn,
-            ),
+        let opt_req_extn: Option<&RequestRegistrationExtensions> = match attest_format {
+            AttestationFormat::Packed
+            | AttestationFormat::Tpm
+            | AttestationFormat::AppleAnonymous => Some(req_extn),
+            _ => None,
+        };
+
+        let attestation_data = match attest_format {
+            AttestationFormat::FIDOU2F => {
+                verify_fidou2f_attestation(acd, &data.attestation_object, &client_data_json_hash)
+            }
+            AttestationFormat::Packed => {
+                verify_packed_attestation(acd, &data.attestation_object, &client_data_json_hash)
+            }
+            AttestationFormat::Tpm => {
+                verify_tpm_attestation(acd, &data.attestation_object, &client_data_json_hash)
+            }
             AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
-                policy,
-                req_extn,
             ),
-            AttestationFormat::None => {
-                verify_none_attestation(acd, &data.attestation_object, policy)
-            }
+            AttestationFormat::None => Ok(ParsedAttestationData::None),
             attest => {
                 if self.ignore_unsupported_attestation_formats {
                     debug!(?attest);
                     // No other types are currently implemented
                     Err(WebauthnError::AttestationNotSupported)
                 } else {
-                    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
-                    Ok(Credential::new(
-                        acd,
-                        &data.attestation_object.auth_data,
-                        credential_public_key,
-                        policy,
-                        ParsedAttestationData::Uncertain,
-                        None,
-                    ))
+                    Ok(ParsedAttestationData::Uncertain)
                 }
             }
         }?;
+
+        let credential: Credential = Credential::new(
+            acd,
+            &data.attestation_object.auth_data,
+            COSEKey::try_from(&acd.credential_pk)?,
+            policy,
+            attestation_data,
+            opt_req_extn,
+        );
 
         // Now based on result ...
 
@@ -539,7 +532,7 @@ impl WebauthnCore {
 
         if let Some(ca_list) = attestation_cas {
             verify_attestation_ca_chain(
-                &credential,
+                &credential.attestation,
                 &ca_list,
                 danger_disable_certificate_time_checks,
             )?;
