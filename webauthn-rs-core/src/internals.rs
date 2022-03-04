@@ -229,7 +229,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     Ok((
         i,
         AttestedCredentialData {
-            aaguid: aaguid.to_vec(),
+            aaguid: aaguid.try_into().expect("took 16 characters from input"),
             credential_id: Base64UrlSafeData(cred_id.to_vec()),
             credential_pk: cred_pk,
         },

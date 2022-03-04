@@ -11,7 +11,7 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 // use super::constants::*;
 use super::error::*;
 use crate::proto::*;
-use x509_parser::{prelude::X509Extension, oid_registry::Oid};
+use x509_parser::oid_registry::Oid;
 
 // Why OpenSSL over another rust crate?
 // - The openssl crate allows us to reconstruct a public key from the
@@ -208,20 +208,73 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     Ok(())
 }
 
-pub(crate) fn get_fido_gen_ce_aaguid(_pubk: &x509::X509) -> Option<Aaguid> {
-    None
+pub(crate) trait AttestationX509Extension {
+    type Output: Eq;
+
+    const OID: Oid<'static>;
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output>;
+
+    fn when_missing() -> Result<(), WebauthnError>;
+
+    fn when_unequal() -> WebauthnError;
 }
 
-pub(crate) fn validate_ext<F>(x509: &x509::X509, oid: &Oid, f: F) -> Option<Result<bool, WebauthnError>>
+pub(crate) struct FidoGenCeAaguid;
+
+impl AttestationX509Extension for FidoGenCeAaguid {
+    type Output = Aaguid;
+
+    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45624 .1 .1 .4);
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+        use der_parser::der::parse_der_octetstring;
+        let (rem, aaguid) = parse_der_octetstring(i)?;
+        let aaguid: &Aaguid = aaguid
+            .as_slice()
+            .expect("octet string can be used as a slice")
+            .try_into()
+            .map_err(|_| der_parser::error::BerError::InvalidLength)?;
+
+        Ok((rem, aaguid))
+    }
+
+    fn when_missing() -> Result<(), WebauthnError> {
+        Ok(())
+    }
+
+    fn when_unequal() -> WebauthnError {
+        WebauthnError::AttestationCertificateAAGUIDMismatch
+    }
+}
+
+pub(crate) fn validate_extension<T>(
+    x509: &x509::X509,
+    data: &<T as AttestationX509Extension>::Output,
+) -> Result<(), WebauthnError>
 where
-    F: FnOnce(&X509Extension) -> Result<bool, WebauthnError>,
+    T: AttestationX509Extension,
 {
-    let der_bytes = x509.to_der().unwrap();
-    let (_rem, x509) = x509_parser::parse_x509_certificate(&der_bytes).unwrap();
-    x509.extensions()
+    let der_bytes = x509.to_der()?;
+    x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1
+        .extensions()
         .iter()
-        .find(|extension| *oid == extension.oid)
-        .map(f)
+        .find_map(|extension| {
+            (extension.oid == T::OID).then(|| {
+                T::parse(extension.value)
+                    .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                    .and_then(|(_, output)| {
+                        if output == data {
+                            Ok(())
+                        } else {
+                            Err(T::when_unequal())
+                        }
+                    })
+            })
+        })
+        .unwrap_or_else(T::when_missing)
 }
 
 impl TryFrom<nid::Nid> for ECDSACurve {

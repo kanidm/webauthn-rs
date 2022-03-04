@@ -6,8 +6,9 @@
 use std::convert::TryFrom;
 
 use crate::crypto::{
-    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, get_fido_gen_ce_aaguid,
-    only_hash_from_type, validate_ext, verify_signature
+    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256,
+    only_hash_from_type, validate_extension, verify_signature,
+    FidoGenCeAaguid
 };
 use crate::error::WebauthnError;
 use crate::internals::*;
@@ -17,7 +18,6 @@ use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
 use openssl::x509::verify;
-use x509_parser::oid_registry::Oid;
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
