@@ -50,7 +50,7 @@ use base64urlsafedata::Base64UrlSafeData;
 pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
-    rp_id_hash: Vec<u8>,
+    rp_id_hash: [u8; 32],
     rp_origin: Url,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,

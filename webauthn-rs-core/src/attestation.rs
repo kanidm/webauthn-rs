@@ -6,8 +6,8 @@
 use std::convert::TryFrom;
 
 use crate::crypto::{
-    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256,
-    only_hash_from_type, verify_signature
+    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, only_hash_from_type,
+    verify_signature,
 };
 use crate::error::WebauthnError;
 use crate::internals::*;
@@ -40,9 +40,10 @@ pub(crate) trait AttestationX509Extension {
 }
 
 pub(crate) struct FidoGenCeAaguid;
+pub(crate) struct AppleAnonymousNonce;
 
 impl AttestationX509Extension for FidoGenCeAaguid {
-    // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
+    // If cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45724 .1 .1 .4);
 
     // verify that the value of this extension matches the aaguid in authenticatorData.
@@ -65,6 +66,40 @@ impl AttestationX509Extension for FidoGenCeAaguid {
 
     fn if_unequal() -> WebauthnError {
         WebauthnError::AttestationCertificateAAGUIDMismatch
+    }
+}
+
+impl AttestationX509Extension for AppleAnonymousNonce {
+    type Output = [u8; 32];
+
+    // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
+    const OID: Oid<'static> = der_parser::oid!(1.2.840 .113635 .100 .8 .2);
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+        use der_parser::{der::*, error::BerError};
+        parse_der_container(|i: &[u8], hdr: Header| {
+            if hdr.tag() != Tag::Sequence {
+                return Err(nom::Err::Error(BerError::BerTypeError.into()));
+            }
+            let (i, tagged_nonce) = parse_der_tagged_explicit(1, parse_der_octetstring)(i)?;
+            let (class, _tag, nonce) = tagged_nonce.as_tagged()?;
+            if class != Class::ContextSpecific {
+                return Err(nom::Err::Error(BerError::BerTypeError.into()));
+            }
+            let nonce = nonce
+                .as_slice()?
+                .try_into()
+                .map_err(|_| der_parser::error::BerError::InvalidLength)?;
+            Ok((i, nonce))
+        })(i)
+    }
+
+    fn if_missing() -> Result<(), WebauthnError> {
+        Err(WebauthnError::AttestationStatementMissingExtension)
+    }
+
+    fn if_unequal() -> WebauthnError {
+        WebauthnError::AttestationCertificateNonceMismatch
     }
 }
 
@@ -96,7 +131,6 @@ where
         })
         .unwrap_or_else(T::if_missing)
 }
-
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -586,8 +620,8 @@ pub(crate) fn verify_tpm_attestation(
             let hname = match pubarea.name_alg {
                 TpmAlgId::Sha256 => {
                     let mut v = vec![0, 11];
-                    let mut r = compute_sha256(pubarea_bytes);
-                    v.append(&mut r);
+                    let r = compute_sha256(pubarea_bytes);
+                    v.append(&mut r.to_vec());
                     v
                 }
                 _ => return Err(WebauthnError::AttestationTpmPubAreaHashUnknown),
@@ -697,11 +731,11 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .collect();
 
     // 3. Perform SHA-256 hash of nonceToHash to produce nonce.
-    let _nonce = compute_sha256(&nonce_to_hash);
+    let nonce = compute_sha256(&nonce_to_hash);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
-    //
-    // Currently not possible to access extensions with openssl rust.
+
+    validate_extension::<AppleAnonymousNonce>(&attestn_cert, &nonce)?;
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;

@@ -596,10 +596,10 @@ impl COSEKey {
 }
 
 /// Compute the sha256 of a slice of data.
-pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
+pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);
-    hasher.finish().iter().copied().collect()
+    hasher.finish()
 }
 
 #[cfg(test)]
