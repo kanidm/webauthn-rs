@@ -1331,6 +1331,97 @@ mod tests {
         assert!(result.is_ok());
     }
 
+
+    #[test]
+    fn test_registration_packed_attestaion_works_with_valid_fido_aaguid_extension() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.firstyear.id.au",
+                "webauthn.firstyear.id.au",
+                &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+                None,
+                None,
+            )
+        };
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp = r#"{
+            "id": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "rawId": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "response": {
+            "attestationObject": "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIgW2gYNWvUDgxl8LB7rflbuJw_zvJCT5ddfDZNROTy0JYCIQDxuy3JLSHDIrEFYqDifFA_ZHttNfRqJAPgH4hedttVIWN4NWOBWQLBMIICvTCCAaWgAwIBAgIEHo-HNDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNTEyNzIyNzQwMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqHn4IzjtFJS6wHBLzH_GY9GycXFZdiQxAcdgURXXwVKeKBwcZzItOEtc1V3T6YGNX9hcIq8ybgxk_CCv4z8jZqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBDAwIQYLKwYBBAGC5RwBAQQEEgQQL8BXn4ETR-qxFrtajbkgKjAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCGk_9i3w1XedR0jX_I0QInMYqOWA5qOlfBCOlOA8OFaLNmiU_OViS-Sj79fzQRiz2ZN0P3kqGYkWDI_JrgsE49-e4V4-iMBPyCqNy_WBjhCNzCloV3rnn_ZiuUc0497EWXMF1z5uVe4r65zZZ4ygk15TPrY4-OJvq7gXzaRB--mDGDKuX24q2ZL56720xiI4uPjXq0gdbTJjvNv55KV1UDcJiK1YE0QPoDLK22cjyt2PjXuoCfdbQ8_6Clua3RQjLvnZ4UgSY4IzxMpKhzufismOMroZFnYG4VkJ_N20ot_72uRiAkn5pmRqyB5IMtERn-v6pzGogtolp3gn1G0ZAXaGF1dGhEYXRhWMRqubvw35oW-R27M7uxMvr50Xx4LEgmxuxw7O5Y2X71KkUAAAACL8BXn4ETR-qxFrtajbkgKgBAeKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5HqUBAgMmIAEhWCBT_WnxT3SKAIGfnEKUi7xtZmnlcZRV-63N21154_r-xyJYIGuwu6BK1zp6D6EQ94VOcK1DuFWr58xI_PbeP5F1Nfe6",
+            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJxYWJTQ1lXX1BQS0tCQVc1X3FFc1BGM1EzcHJRZVlCT1JmRE1BcnNvS2RnIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0"
+            },
+            "type": "public-key"
+        }"#;
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        trace!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            None,
+            false,
+            &RequestRegistrationExtensions::default(),
+        );
+        trace!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_registration_packed_attestaion_fails_with_invalid_fido_aaguid_extension() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.firstyear.id.au",
+                "webauthn.firstyear.id.au",
+                &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+                None,
+                None,
+            )
+        };
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp = r#"{
+            "id": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "rawId": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "response": {
+            "attestationObject": "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIgW2gYNWvUDgxl8LB7rflbuJw_zvJCT5ddfDZNROTy0JYCIQDxuy3JLSHDIrEFYqDifFA_ZHttNfRqJAPgH4hedttVIWN4NWOBWQLBMIICvTCCAaWgAwIBAgIEHo-HNDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNTEyNzIyNzQwMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqHn4IzjtFJS6wHBLzH_GY9GycXFZdiQxAcdgURXXwVKeKBwcZzItOEtc1V3T6YGNX9hcIq8ybgxk_CCv4z8jZqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBDAwIQYLKwYBBAGC5RwBAQQEEgQQXXXXXXXXXXXXXXXXXXXXXjAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCGk_9i3w1XedR0jX_I0QInMYqOWA5qOlfBCOlOA8OFaLNmiU_OViS-Sj79fzQRiz2ZN0P3kqGYkWDI_JrgsE49-e4V4-iMBPyCqNy_WBjhCNzCloV3rnn_ZiuUc0497EWXMF1z5uVe4r65zZZ4ygk15TPrY4-OJvq7gXzaRB--mDGDKuX24q2ZL56720xiI4uPjXq0gdbTJjvNv55KV1UDcJiK1YE0QPoDLK22cjyt2PjXuoCfdbQ8_6Clua3RQjLvnZ4UgSY4IzxMpKhzufismOMroZFnYG4VkJ_N20ot_72uRiAkn5pmRqyB5IMtERn-v6pzGogtolp3gn1G0ZAXaGF1dGhEYXRhWMRqubvw35oW-R27M7uxMvr50Xx4LEgmxuxw7O5Y2X71KkUAAAACL8BXn4ETR-qxFrtajbkgKgBAeKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5HqUBAgMmIAEhWCBT_WnxT3SKAIGfnEKUi7xtZmnlcZRV-63N21154_r-xyJYIGuwu6BK1zp6D6EQ94VOcK1DuFWr58xI_PbeP5F1Nfe6",
+            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJxYWJTQ1lXX1BQS0tCQVc1X3FFc1BGM1EzcHJRZVlCT1JmRE1BcnNvS2RnIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0"
+            },
+            "type": "public-key"
+        }"#;
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        trace!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            None,
+            false,
+            &RequestRegistrationExtensions::default(),
+        );
+        trace!("{:?}", result);
+        assert!(matches!(result, Err(WebauthnError::AttestationCertificateAAGUIDMismatch)));
+    }
+
     #[test]
     fn test_authentication() {
         let _ = tracing_subscriber::fmt::try_init();

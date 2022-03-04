@@ -7,8 +7,7 @@ use std::convert::TryFrom;
 
 use crate::crypto::{
     assert_packed_attest_req, assert_tpm_attest_req, compute_sha256,
-    only_hash_from_type, validate_extension, verify_signature,
-    FidoGenCeAaguid
+    only_hash_from_type, verify_signature
 };
 use crate::error::WebauthnError;
 use crate::internals::*;
@@ -18,6 +17,86 @@ use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
 use openssl::x509::verify;
+use x509_parser::oid_registry::Oid;
+
+/// x509 certificate extensions are validated in the webauthn spec by checking
+/// that the value of the extension is equal to some other value
+pub(crate) trait AttestationX509Extension {
+    /// the type of the value in the certificate extension
+    type Output: Eq;
+
+    /// the oid of the extension
+    const OID: Oid<'static>;
+
+    /// how to parse the value out of the certificate extension
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output>;
+
+    /// how to behave if this certificate extension is not included in the x509 object
+    fn if_missing() -> Result<(), WebauthnError>;
+
+    /// how to behave if validation fails---i.e. if the "other value" is not
+    /// equal to that in the extension
+    fn if_unequal() -> WebauthnError;
+}
+
+pub(crate) struct FidoGenCeAaguid;
+
+impl AttestationX509Extension for FidoGenCeAaguid {
+    // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
+    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45724 .1 .1 .4);
+
+    // verify that the value of this extension matches the aaguid in authenticatorData.
+    type Output = Aaguid;
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+        let (rem, aaguid) = der_parser::der::parse_der_octetstring(i)?;
+        let aaguid: &Aaguid = aaguid
+            .as_slice()
+            .expect("octet string can be used as a slice")
+            .try_into()
+            .map_err(|_| der_parser::error::BerError::InvalidLength)?;
+
+        Ok((rem, aaguid))
+    }
+
+    fn if_missing() -> Result<(), WebauthnError> {
+        Ok(())
+    }
+
+    fn if_unequal() -> WebauthnError {
+        WebauthnError::AttestationCertificateAAGUIDMismatch
+    }
+}
+
+pub(crate) fn validate_extension<T>(
+    x509: &x509::X509,
+    data: &<T as AttestationX509Extension>::Output,
+) -> Result<(), WebauthnError>
+where
+    T: AttestationX509Extension,
+{
+    let der_bytes = x509.to_der()?;
+    x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1
+        .extensions()
+        .iter()
+        .find_map(|extension| {
+            (extension.oid == T::OID).then(|| {
+                T::parse(extension.value)
+                    .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                    .and_then(|(_, output)| {
+                        if output == data {
+                            Ok(())
+                        } else {
+                            Err(T::if_unequal())
+                        }
+                    })
+            })
+        })
+        .unwrap_or_else(T::if_missing)
+}
+
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
