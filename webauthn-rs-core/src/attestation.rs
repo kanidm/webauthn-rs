@@ -631,8 +631,8 @@ pub(crate) fn verify_tpm_attestation(
 
     // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     // verify that the value of this extension matches the aaguid in authenticatorData.
-    //
-    // Currently not possible to access extensions with openssl rust.
+
+    validate_extension::<FidoGenCeAaguid>(&aik_cert, &acd.aaguid)?;
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
