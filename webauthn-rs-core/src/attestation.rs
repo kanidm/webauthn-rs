@@ -31,12 +31,13 @@ pub(crate) trait AttestationX509Extension {
     /// how to parse the value out of the certificate extension
     fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output>;
 
-    /// how to behave if this certificate extension is not included in the x509 object
-    fn if_missing() -> Result<(), WebauthnError>;
+    /// if `true`, then validating this certificate fails if this extension is
+    /// missing
+    const IS_REQUIRED: bool;
 
-    /// how to behave if validation fails---i.e. if the "other value" is not
-    /// equal to that in the extension
-    fn if_unequal() -> WebauthnError;
+    /// what error to return if validation fails---i.e. if the "other value" is
+    /// not equal to that in the extension
+    const VALIDATION_ERROR: WebauthnError;
 }
 
 pub(crate) struct FidoGenCeAaguid;
@@ -60,13 +61,9 @@ impl AttestationX509Extension for FidoGenCeAaguid {
         Ok((rem, aaguid))
     }
 
-    fn if_missing() -> Result<(), WebauthnError> {
-        Ok(())
-    }
+    const IS_REQUIRED: bool = false;
 
-    fn if_unequal() -> WebauthnError {
-        WebauthnError::AttestationCertificateAAGUIDMismatch
-    }
+    const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateAAGUIDMismatch;
 }
 
 impl AttestationX509Extension for AppleAnonymousNonce {
@@ -94,13 +91,9 @@ impl AttestationX509Extension for AppleAnonymousNonce {
         })(i)
     }
 
-    fn if_missing() -> Result<(), WebauthnError> {
-        Err(WebauthnError::AttestationStatementMissingExtension)
-    }
+    const IS_REQUIRED: bool = true;
 
-    fn if_unequal() -> WebauthnError {
-        WebauthnError::AttestationCertificateNonceMismatch
-    }
+    const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateNonceMismatch;
 }
 
 pub(crate) fn validate_extension<T>(
@@ -124,12 +117,18 @@ where
                         if output == data {
                             Ok(())
                         } else {
-                            Err(T::if_unequal())
+                            Err(T::VALIDATION_ERROR)
                         }
                     })
             })
         })
-        .unwrap_or_else(T::if_missing)
+        .unwrap_or_else(|| {
+            if T::IS_REQUIRED {
+                Err(WebauthnError::AttestationStatementMissingExtension)
+            } else {
+                Ok(())
+            }
+        })
 }
 
 #[derive(Debug)]

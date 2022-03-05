@@ -85,7 +85,7 @@ pub enum WebauthnError {
     #[error("The attestation statement certInfo is not present")]
     AttestationStatementCertInfoMissing,
 
-    #[error("An extension for this identifier was not in the attestation statement")]
+    #[error("A required extension was not in the attestation statement")]
     AttestationStatementMissingExtension,
 
     #[error("The attestation statement pubArea is not present")]
