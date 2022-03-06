@@ -312,9 +312,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let curve_type = cbor_try_i128!(curve_type_value)?;
 
-            // Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error.
-
-            // Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error.
+            let curve = ECDSACurve::try_from(curve_type)?;
 
             let x_value = m
                 .get(&serde_cbor::Value::Integer(-2))
@@ -326,23 +324,18 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let y = cbor_try_bytes!(y_value)?;
 
-            if x.len() != 32 || y.len() != 32 {
+            let coord_len = curve.coordinate_size();
+            if x.len() != coord_len || y.len() != coord_len {
                 return Err(WebauthnError::COSEKeyECDSAXYInvalid);
             }
-
-            // Set the x and y, we know they are proper sizes.
-            let mut x_temp = [0; 32];
-            x_temp.copy_from_slice(x);
-            let mut y_temp = [0; 32];
-            y_temp.copy_from_slice(y);
 
             // Right, now build the struct.
             let cose_key = COSEKey {
                 type_,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
-                    curve: ECDSACurve::try_from(curve_type)?,
-                    x: x_temp,
-                    y: y_temp,
+                    curve,
+                    x: x.to_vec(),
+                    y: y.to_vec(),
                 }),
             };
 
@@ -466,13 +459,17 @@ impl TryFrom<(COSEAlgorithm, &x509::X509)> for COSEKey {
                     .ok_or(WebauthnError::OpenSSLErrorNoCurveName)
                     .and_then(ECDSACurve::try_from)?;
 
-                let mut x = [0; 32];
-                x.copy_from_slice(xbn.to_vec().as_slice());
+                if xbn.num_bytes() as usize != curve.coordinate_size()
+                    || ybn.num_bytes() as usize != curve.coordinate_size()
+                {
+                    return Err(WebauthnError::COSEKeyECDSAXYInvalid);
+                }
 
-                let mut y = [0; 32];
-                y.copy_from_slice(ybn.to_vec().as_slice());
-
-                Ok(COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }))
+                Ok(COSEKeyType::EC_EC2(COSEEC2Key {
+                    curve,
+                    x: xbn.to_vec(),
+                    y: ybn.to_vec(),
+                }))
             }
             COSEAlgorithm::RS256
             | COSEAlgorithm::RS384
@@ -623,7 +620,7 @@ mod tests {
     fn cbor_es256() {
         let hex_data = hex!(
             "
-                A5          // Map - 5 elements
+                A5         // Map - 5 elements
                 01 02      //   1:   2,  ; kty: EC2 key type
                 03 26      //   3:  -7,  ; alg: ES256 signature algorithm
                 20 01      //  -1:   1,  ; crv: P-256 curve
@@ -654,7 +651,7 @@ mod tests {
     fn cbor_es384() {
         let hex_data = hex!(
             "
-                A5          // Map - 5 elements
+                A5         // Map - 5 elements
                 01 02      //   1:   2,  ; kty: EC2 key type
                 03 38 22   //   3:  -35,  ; alg: ES384 signature algorithm
                 20 02      //  -1:   2,  ; crv: P-384 curve
@@ -694,7 +691,7 @@ mod tests {
     fn cbor_es512() {
         let hex_data = hex!(
             "
-                A5          // Map - 5 elements
+                A5         // Map - 5 elements
                 01 02      //   1:   2,  ; kty: EC2 key type
                 03 38 23   //   3:  -36,  ; alg: ES512 signature algorithm
                 20 03      //  -1:   3,  ; crv: P-521 curve
