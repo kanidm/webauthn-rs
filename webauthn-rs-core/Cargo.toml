@@ -27,6 +27,8 @@ openssl = { version = "0.10" }
 # We could consider replacing this with openssl rand.
 rand = { version = "0.8" }
 url = { version = "2", features = ["serde"] }
+x509-parser = "0.13.0"
+der-parser = "7.0.0"
 
 [dev-dependencies]
 tracing-subscriber = "0.3"

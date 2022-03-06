@@ -207,10 +207,6 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     Ok(())
 }
 
-pub(crate) fn get_fido_gen_ce_aaguid(_pubk: &x509::X509) -> Option<Aaguid> {
-    None
-}
-
 impl TryFrom<nid::Nid> for ECDSACurve {
     type Error = WebauthnError;
     fn try_from(nid: nid::Nid) -> Result<Self, Self::Error> {
@@ -600,10 +596,10 @@ impl COSEKey {
 }
 
 /// Compute the sha256 of a slice of data.
-pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
+pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
     let mut hasher = sha::Sha256::new();
     hasher.update(data);
-    hasher.finish().iter().copied().collect()
+    hasher.finish()
 }
 
 #[cfg(test)]

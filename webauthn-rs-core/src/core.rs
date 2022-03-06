@@ -50,7 +50,7 @@ use base64urlsafedata::Base64UrlSafeData;
 pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
-    rp_id_hash: Vec<u8>,
+    rp_id_hash: [u8; 32],
     rp_origin: Url,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,
@@ -1325,6 +1325,99 @@ mod tests {
     }
 
     #[test]
+    fn test_registration_packed_attestaion_works_with_valid_fido_aaguid_extension() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.firstyear.id.au",
+                "webauthn.firstyear.id.au",
+                &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+                None,
+                None,
+            )
+        };
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp = r#"{
+            "id": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "rawId": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "response": {
+            "attestationObject": "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIgW2gYNWvUDgxl8LB7rflbuJw_zvJCT5ddfDZNROTy0JYCIQDxuy3JLSHDIrEFYqDifFA_ZHttNfRqJAPgH4hedttVIWN4NWOBWQLBMIICvTCCAaWgAwIBAgIEHo-HNDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNTEyNzIyNzQwMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqHn4IzjtFJS6wHBLzH_GY9GycXFZdiQxAcdgURXXwVKeKBwcZzItOEtc1V3T6YGNX9hcIq8ybgxk_CCv4z8jZqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBDAwIQYLKwYBBAGC5RwBAQQEEgQQL8BXn4ETR-qxFrtajbkgKjAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCGk_9i3w1XedR0jX_I0QInMYqOWA5qOlfBCOlOA8OFaLNmiU_OViS-Sj79fzQRiz2ZN0P3kqGYkWDI_JrgsE49-e4V4-iMBPyCqNy_WBjhCNzCloV3rnn_ZiuUc0497EWXMF1z5uVe4r65zZZ4ygk15TPrY4-OJvq7gXzaRB--mDGDKuX24q2ZL56720xiI4uPjXq0gdbTJjvNv55KV1UDcJiK1YE0QPoDLK22cjyt2PjXuoCfdbQ8_6Clua3RQjLvnZ4UgSY4IzxMpKhzufismOMroZFnYG4VkJ_N20ot_72uRiAkn5pmRqyB5IMtERn-v6pzGogtolp3gn1G0ZAXaGF1dGhEYXRhWMRqubvw35oW-R27M7uxMvr50Xx4LEgmxuxw7O5Y2X71KkUAAAACL8BXn4ETR-qxFrtajbkgKgBAeKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5HqUBAgMmIAEhWCBT_WnxT3SKAIGfnEKUi7xtZmnlcZRV-63N21154_r-xyJYIGuwu6BK1zp6D6EQ94VOcK1DuFWr58xI_PbeP5F1Nfe6",
+            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJxYWJTQ1lXX1BQS0tCQVc1X3FFc1BGM1EzcHJRZVlCT1JmRE1BcnNvS2RnIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0"
+            },
+            "type": "public-key"
+        }"#;
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        trace!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            None,
+            false,
+            &RequestRegistrationExtensions::default(),
+        );
+        trace!("{:?}", result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_registration_packed_attestaion_fails_with_invalid_fido_aaguid_extension() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.firstyear.id.au",
+                "webauthn.firstyear.id.au",
+                &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+                None,
+                None,
+            )
+        };
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp = r#"{
+            "id": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "rawId": "eKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5Hg",
+            "response": {
+            "attestationObject": "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIgW2gYNWvUDgxl8LB7rflbuJw_zvJCT5ddfDZNROTy0JYCIQDxuy3JLSHDIrEFYqDifFA_ZHttNfRqJAPgH4hedttVIWN4NWOBWQLBMIICvTCCAaWgAwIBAgIEHo-HNDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNTEyNzIyNzQwMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEqHn4IzjtFJS6wHBLzH_GY9GycXFZdiQxAcdgURXXwVKeKBwcZzItOEtc1V3T6YGNX9hcIq8ybgxk_CCv4z8jZqNsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBDAwIQYLKwYBBAGC5RwBAQQEEgQQXXXXXXXXXXXXXXXXXXXXXjAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCGk_9i3w1XedR0jX_I0QInMYqOWA5qOlfBCOlOA8OFaLNmiU_OViS-Sj79fzQRiz2ZN0P3kqGYkWDI_JrgsE49-e4V4-iMBPyCqNy_WBjhCNzCloV3rnn_ZiuUc0497EWXMF1z5uVe4r65zZZ4ygk15TPrY4-OJvq7gXzaRB--mDGDKuX24q2ZL56720xiI4uPjXq0gdbTJjvNv55KV1UDcJiK1YE0QPoDLK22cjyt2PjXuoCfdbQ8_6Clua3RQjLvnZ4UgSY4IzxMpKhzufismOMroZFnYG4VkJ_N20ot_72uRiAkn5pmRqyB5IMtERn-v6pzGogtolp3gn1G0ZAXaGF1dGhEYXRhWMRqubvw35oW-R27M7uxMvr50Xx4LEgmxuxw7O5Y2X71KkUAAAACL8BXn4ETR-qxFrtajbkgKgBAeKSmfhLUwwmJpuD2IKaTopbbWKFv-qZAE4LXa2FGmTtRpvioMpeFhI8RqdsOGlBoQxJehEQyWyu7ECwPkVL5HqUBAgMmIAEhWCBT_WnxT3SKAIGfnEKUi7xtZmnlcZRV-63N21154_r-xyJYIGuwu6BK1zp6D6EQ94VOcK1DuFWr58xI_PbeP5F1Nfe6",
+            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJxYWJTQ1lXX1BQS0tCQVc1X3FFc1BGM1EzcHJRZVlCT1JmRE1BcnNvS2RnIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0"
+            },
+            "type": "public-key"
+        }"#;
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(rsp).unwrap();
+
+        trace!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            None,
+            false,
+            &RequestRegistrationExtensions::default(),
+        );
+        trace!("{:?}", result);
+        assert!(matches!(
+            result,
+            Err(WebauthnError::AttestationCertificateAAGUIDMismatch)
+        ));
+    }
+
+    #[test]
     fn test_authentication() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan = unsafe {
@@ -2209,6 +2302,149 @@ mod tests {
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_touchid_attest_apple_anonymous_fails_with_invalid_nonce_extension() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "https://spectral.local:8443/auth",
+                "spectral.local",
+                &Url::parse("https://spectral.local:8443").unwrap(),
+                None,
+                None,
+            )
+        };
+
+        let chal = Challenge::new(vec![
+            37, 54, 228, 239, 39, 164, 32, 163, 153, 67, 12, 29, 25, 110, 205, 120, 50, 31, 198,
+            182, 10, 208, 251, 238, 99, 27, 46, 123, 239, 134, 244, 210,
+        ]);
+
+        let rsp_d = RegisterPublicKeyCredential {
+            id: "u_tliFf-aXRLg9XIz-SuQ0XBlbE".to_string(),
+            raw_id: Base64UrlSafeData(vec![
+                187, 251, 101, 136, 87, 254, 105, 116, 75, 131, 213, 200, 207, 228, 174, 67, 69,
+                193, 149, 177,
+            ]),
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: Base64UrlSafeData(vec![
+                    163, 99, 102, 109, 116, 101, 97, 112, 112, 108, 101, 103, 97, 116, 116, 83,
+                    116, 109, 116, 162, 99, 97, 108, 103, 38, 99, 120, 53, 99, 130, 89, 2, 71, 48,
+                    130, 2, 67, 48, 130, 1, 201, 160, 3, 2, 1, 2, 2, 6, 1, 118, 69, 82, 254, 167,
+                    48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 2, 48, 72, 49, 28, 48, 26, 6, 3, 85,
+                    4, 3, 12, 19, 65, 112, 112, 108, 101, 32, 87, 101, 98, 65, 117, 116, 104, 110,
+                    32, 67, 65, 32, 49, 49, 19, 48, 17, 6, 3, 85, 4, 10, 12, 10, 65, 112, 112, 108,
+                    101, 32, 73, 110, 99, 46, 49, 19, 48, 17, 6, 3, 85, 4, 8, 12, 10, 67, 97, 108,
+                    105, 102, 111, 114, 110, 105, 97, 48, 30, 23, 13, 50, 48, 49, 50, 48, 56, 48,
+                    50, 50, 55, 49, 53, 90, 23, 13, 50, 48, 49, 50, 49, 49, 48, 50, 50, 55, 49, 53,
+                    90, 48, 129, 145, 49, 73, 48, 71, 6, 3, 85, 4, 3, 12, 64, 57, 97, 97, 57, 48,
+                    99, 55, 99, 57, 51, 54, 97, 52, 101, 49, 98, 98, 56, 54, 56, 57, 54, 53, 102,
+                    49, 52, 55, 97, 52, 51, 57, 57, 102, 49, 52, 48, 99, 102, 52, 48, 57, 98, 52,
+                    51, 52, 102, 57, 48, 53, 57, 98, 50, 100, 52, 102, 53, 97, 51, 99, 102, 99, 48,
+                    57, 50, 49, 26, 48, 24, 6, 3, 85, 4, 11, 12, 17, 65, 65, 65, 32, 67, 101, 114,
+                    116, 105, 102, 105, 99, 97, 116, 105, 111, 110, 49, 19, 48, 17, 6, 3, 85, 4,
+                    10, 12, 10, 65, 112, 112, 108, 101, 32, 73, 110, 99, 46, 49, 19, 48, 17, 6, 3,
+                    85, 4, 8, 12, 10, 67, 97, 108, 105, 102, 111, 114, 110, 105, 97, 48, 89, 48,
+                    19, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 8, 42, 134, 72, 206, 61, 3, 1, 7, 3,
+                    66, 0, 4, 212, 248, 99, 135, 245, 78, 94, 245, 231, 22, 62, 226, 45, 40, 215,
+                    4, 251, 188, 180, 125, 22, 236, 133, 161, 234, 78, 251, 105, 11, 119, 148, 144,
+                    105, 249, 199, 167, 152, 173, 94, 147, 57, 2, 250, 21, 5, 51, 116, 174, 217,
+                    39, 160, 35, 12, 249, 120, 237, 52, 148, 171, 134, 138, 205, 26, 173, 163, 85,
+                    48, 83, 48, 12, 6, 3, 85, 29, 19, 1, 1, 255, 4, 2, 48, 0, 48, 14, 6, 3, 85, 29,
+                    15, 1, 1, 255, 4, 4, 3, 2, 4, 240, 48, 51, 6, 9, 42, 134, 72, 134, 247, 99,
+                    100, 8, 2, 4, 38, 48, 36, 161, 34, 4, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 10, 6, 8, 42,
+                    134, 72, 206, 61, 4, 3, 2, 3, 104, 0, 48, 101, 2, 48, 14, 242, 134, 73, 12, 48,
+                    2, 103, 184, 132, 187, 132, 124, 204, 63, 148, 168, 78, 225, 227, 161, 240,
+                    147, 187, 90, 216, 65, 159, 90, 106, 102, 249, 56, 156, 201, 214, 182, 15, 173,
+                    187, 167, 243, 127, 234, 138, 41, 50, 62, 2, 49, 0, 198, 15, 10, 182, 142, 103,
+                    84, 7, 18, 0, 231, 130, 214, 26, 64, 58, 17, 118, 66, 14, 198, 244, 58, 211, 2,
+                    97, 236, 163, 116, 124, 73, 166, 69, 69, 112, 107, 228, 83, 104, 91, 205, 20,
+                    203, 250, 126, 29, 190, 42, 89, 2, 56, 48, 130, 2, 52, 48, 130, 1, 186, 160, 3,
+                    2, 1, 2, 2, 16, 86, 37, 83, 149, 199, 167, 251, 64, 235, 226, 40, 216, 38, 8,
+                    83, 182, 48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 3, 48, 75, 49, 31, 48, 29,
+                    6, 3, 85, 4, 3, 12, 22, 65, 112, 112, 108, 101, 32, 87, 101, 98, 65, 117, 116,
+                    104, 110, 32, 82, 111, 111, 116, 32, 67, 65, 49, 19, 48, 17, 6, 3, 85, 4, 10,
+                    12, 10, 65, 112, 112, 108, 101, 32, 73, 110, 99, 46, 49, 19, 48, 17, 6, 3, 85,
+                    4, 8, 12, 10, 67, 97, 108, 105, 102, 111, 114, 110, 105, 97, 48, 30, 23, 13,
+                    50, 48, 48, 51, 49, 56, 49, 56, 51, 56, 48, 49, 90, 23, 13, 51, 48, 48, 51, 49,
+                    51, 48, 48, 48, 48, 48, 48, 90, 48, 72, 49, 28, 48, 26, 6, 3, 85, 4, 3, 12, 19,
+                    65, 112, 112, 108, 101, 32, 87, 101, 98, 65, 117, 116, 104, 110, 32, 67, 65,
+                    32, 49, 49, 19, 48, 17, 6, 3, 85, 4, 10, 12, 10, 65, 112, 112, 108, 101, 32,
+                    73, 110, 99, 46, 49, 19, 48, 17, 6, 3, 85, 4, 8, 12, 10, 67, 97, 108, 105, 102,
+                    111, 114, 110, 105, 97, 48, 118, 48, 16, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6,
+                    5, 43, 129, 4, 0, 34, 3, 98, 0, 4, 131, 46, 135, 47, 38, 20, 145, 129, 2, 37,
+                    185, 245, 252, 214, 187, 99, 120, 181, 245, 95, 63, 203, 4, 91, 199, 53, 153,
+                    52, 117, 253, 84, 144, 68, 223, 155, 254, 25, 33, 23, 101, 198, 154, 29, 218,
+                    5, 11, 56, 212, 80, 131, 64, 26, 67, 79, 178, 77, 17, 45, 86, 195, 225, 207,
+                    191, 203, 152, 145, 254, 192, 105, 96, 129, 190, 249, 108, 188, 119, 200, 141,
+                    221, 175, 70, 165, 174, 225, 221, 81, 91, 90, 250, 171, 147, 190, 156, 11, 38,
+                    145, 163, 102, 48, 100, 48, 18, 6, 3, 85, 29, 19, 1, 1, 255, 4, 8, 48, 6, 1, 1,
+                    255, 2, 1, 0, 48, 31, 6, 3, 85, 29, 35, 4, 24, 48, 22, 128, 20, 38, 215, 100,
+                    217, 197, 120, 194, 90, 103, 209, 167, 222, 107, 18, 208, 27, 99, 241, 198,
+                    215, 48, 29, 6, 3, 85, 29, 14, 4, 22, 4, 20, 235, 174, 130, 196, 255, 161, 172,
+                    91, 81, 212, 207, 36, 97, 5, 0, 190, 99, 189, 119, 136, 48, 14, 6, 3, 85, 29,
+                    15, 1, 1, 255, 4, 4, 3, 2, 1, 6, 48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 3,
+                    3, 104, 0, 48, 101, 2, 49, 0, 221, 139, 26, 52, 129, 165, 250, 217, 219, 180,
+                    231, 101, 123, 132, 30, 20, 76, 39, 183, 91, 135, 106, 65, 134, 194, 177, 71,
+                    87, 80, 51, 114, 39, 239, 229, 84, 69, 126, 246, 72, 149, 12, 99, 46, 92, 72,
+                    62, 112, 193, 2, 48, 44, 138, 96, 68, 220, 32, 31, 207, 229, 155, 195, 77, 41,
+                    48, 193, 72, 120, 81, 217, 96, 237, 106, 117, 241, 235, 74, 202, 190, 56, 205,
+                    37, 184, 151, 208, 200, 5, 190, 240, 199, 247, 139, 7, 165, 113, 198, 232, 14,
+                    7, 104, 97, 117, 116, 104, 68, 97, 116, 97, 88, 152, 218, 20, 177, 242, 169,
+                    30, 45, 223, 21, 45, 254, 74, 34, 125, 188, 96, 11, 1, 71, 41, 58, 94, 252,
+                    180, 169, 243, 209, 21, 231, 138, 182, 91, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 187, 251, 101, 136, 87, 254, 105, 116, 75,
+                    131, 213, 200, 207, 228, 174, 67, 69, 193, 149, 177, 165, 1, 2, 3, 38, 32, 1,
+                    33, 88, 32, 212, 248, 99, 135, 245, 78, 94, 245, 231, 22, 62, 226, 45, 40, 215,
+                    4, 251, 188, 180, 125, 22, 236, 133, 161, 234, 78, 251, 105, 11, 119, 148, 144,
+                    34, 88, 32, 105, 249, 199, 167, 152, 173, 94, 147, 57, 2, 250, 21, 5, 51, 116,
+                    174, 217, 39, 160, 35, 12, 249, 120, 237, 52, 148, 171, 134, 138, 205, 26, 173,
+                ]),
+                client_data_json: Base64UrlSafeData(vec![
+                    123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
+                    46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
+                    103, 101, 34, 58, 34, 74, 84, 98, 107, 55, 121, 101, 107, 73, 75, 79, 90, 81,
+                    119, 119, 100, 71, 87, 55, 78, 101, 68, 73, 102, 120, 114, 89, 75, 48, 80, 118,
+                    117, 89, 120, 115, 117, 101, 45, 45, 71, 57, 78, 73, 34, 44, 34, 111, 114, 105,
+                    103, 105, 110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 115, 112, 101,
+                    99, 116, 114, 97, 108, 46, 108, 111, 99, 97, 108, 58, 56, 52, 52, 51, 34, 125,
+                ]),
+            },
+            type_: "public-key".to_string(),
+        };
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[
+                COSEAlgorithm::ES256,
+                COSEAlgorithm::ES384,
+                COSEAlgorithm::ES512,
+                COSEAlgorithm::RS256,
+                COSEAlgorithm::RS384,
+                COSEAlgorithm::RS512,
+                COSEAlgorithm::PS256,
+                COSEAlgorithm::PS384,
+                COSEAlgorithm::PS512,
+                COSEAlgorithm::EDDSA,
+            ],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::apple_webauthn_root_ca()],
+            }),
+            // Must disable time checks because the submission is limited to 5 days.
+            true,
+            &RequestRegistrationExtensions::default(),
+        );
+        debug!("{:?}", result);
+        assert!(matches!(
+            result,
+            Err(WebauthnError::AttestationCertificateNonceMismatch)
+        ));
     }
 
     #[test]

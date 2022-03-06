@@ -6,8 +6,8 @@
 use std::convert::TryFrom;
 
 use crate::crypto::{
-    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, get_fido_gen_ce_aaguid,
-    only_hash_from_type, verify_signature,
+    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, only_hash_from_type,
+    verify_signature,
 };
 use crate::error::WebauthnError;
 use crate::internals::*;
@@ -17,6 +17,119 @@ use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
 use openssl::x509::verify;
+use x509_parser::oid_registry::Oid;
+
+/// x509 certificate extensions are validated in the webauthn spec by checking
+/// that the value of the extension is equal to some other value
+pub(crate) trait AttestationX509Extension {
+    /// the type of the value in the certificate extension
+    type Output: Eq;
+
+    /// the oid of the extension
+    const OID: Oid<'static>;
+
+    /// how to parse the value out of the certificate extension
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output>;
+
+    /// if `true`, then validating this certificate fails if this extension is
+    /// missing
+    const IS_REQUIRED: bool;
+
+    /// what error to return if validation fails---i.e. if the "other value" is
+    /// not equal to that in the extension
+    const VALIDATION_ERROR: WebauthnError;
+}
+
+pub(crate) struct FidoGenCeAaguid;
+pub(crate) struct AppleAnonymousNonce;
+
+impl AttestationX509Extension for FidoGenCeAaguid {
+    // If cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
+    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45724 .1 .1 .4);
+
+    // verify that the value of this extension matches the aaguid in authenticatorData.
+    type Output = Aaguid;
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+        let (rem, aaguid) = der_parser::der::parse_der_octetstring(i)?;
+        let aaguid: &Aaguid = aaguid
+            .as_slice()
+            .expect("octet string can be used as a slice")
+            .try_into()
+            .map_err(|_| der_parser::error::BerError::InvalidLength)?;
+
+        Ok((rem, aaguid))
+    }
+
+    const IS_REQUIRED: bool = false;
+
+    const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateAAGUIDMismatch;
+}
+
+impl AttestationX509Extension for AppleAnonymousNonce {
+    type Output = [u8; 32];
+
+    // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
+    const OID: Oid<'static> = der_parser::oid!(1.2.840 .113635 .100 .8 .2);
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+        use der_parser::{der::*, error::BerError};
+        parse_der_container(|i: &[u8], hdr: Header| {
+            if hdr.tag() != Tag::Sequence {
+                return Err(nom::Err::Error(BerError::BerTypeError.into()));
+            }
+            let (i, tagged_nonce) = parse_der_tagged_explicit(1, parse_der_octetstring)(i)?;
+            let (class, _tag, nonce) = tagged_nonce.as_tagged()?;
+            if class != Class::ContextSpecific {
+                return Err(nom::Err::Error(BerError::BerTypeError.into()));
+            }
+            let nonce = nonce
+                .as_slice()?
+                .try_into()
+                .map_err(|_| der_parser::error::BerError::InvalidLength)?;
+            Ok((i, nonce))
+        })(i)
+    }
+
+    const IS_REQUIRED: bool = true;
+
+    const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateNonceMismatch;
+}
+
+pub(crate) fn validate_extension<T>(
+    x509: &x509::X509,
+    data: &<T as AttestationX509Extension>::Output,
+) -> Result<(), WebauthnError>
+where
+    T: AttestationX509Extension,
+{
+    let der_bytes = x509.to_der()?;
+    x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1
+        .extensions()
+        .iter()
+        .find_map(|extension| {
+            (extension.oid == T::OID).then(|| {
+                T::parse(extension.value)
+                    .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                    .and_then(|(_, output)| {
+                        if output == data {
+                            Ok(())
+                        } else {
+                            Err(T::VALIDATION_ERROR)
+                        }
+                    })
+            })
+        })
+        .unwrap_or_else(|| {
+            if T::IS_REQUIRED {
+                Err(WebauthnError::AttestationStatementMissingExtension)
+            } else {
+                Ok(())
+            }
+        })
+}
 
 #[derive(Debug)]
 pub(crate) enum AttestationFormat {
@@ -131,11 +244,7 @@ pub(crate) fn verify_packed_attestation(
             // (id-fido-gen-ce-aaguid) verify that the value of this extension matches the aaguid
             // in authenticatorData.
 
-            if let Some(aaguid) = get_fido_gen_ce_aaguid(attestn_cert) {
-                if acd.aaguid != aaguid {
-                    return Err(WebauthnError::AttestationCertificateAAGUIDMismatch);
-                }
-            }
+            validate_extension::<FidoGenCeAaguid>(&attestn_cert, &acd.aaguid)?;
 
             // Optionally, inspect x5c and consult externally provided knowledge to determine
             // whether attStmt conveys a Basic or AttCA attestation.
@@ -461,8 +570,8 @@ pub(crate) fn verify_tpm_attestation(
             let hname = match pubarea.name_alg {
                 TpmAlgId::Sha256 => {
                     let mut v = vec![0, 11];
-                    let mut r = compute_sha256(pubarea_bytes);
-                    v.append(&mut r);
+                    let r = compute_sha256(pubarea_bytes);
+                    v.append(&mut r.to_vec());
                     v
                 }
                 _ => return Err(WebauthnError::AttestationTpmPubAreaHashUnknown),
@@ -506,8 +615,8 @@ pub(crate) fn verify_tpm_attestation(
 
     // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     // verify that the value of this extension matches the aaguid in authenticatorData.
-    //
-    // Currently not possible to access extensions with openssl rust.
+
+    validate_extension::<FidoGenCeAaguid>(&aik_cert, &acd.aaguid)?;
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
@@ -562,11 +671,11 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .collect();
 
     // 3. Perform SHA-256 hash of nonceToHash to produce nonce.
-    let _nonce = compute_sha256(&nonce_to_hash);
+    let nonce = compute_sha256(&nonce_to_hash);
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
-    //
-    // Currently not possible to access extensions with openssl rust.
+
+    validate_extension::<AppleAnonymousNonce>(&attestn_cert, &nonce)?;
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;

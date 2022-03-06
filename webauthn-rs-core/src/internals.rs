@@ -229,7 +229,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     Ok((
         i,
         AttestedCredentialData {
-            aaguid: aaguid.to_vec(),
+            aaguid: aaguid.try_into().expect("took 16 bytes from input"),
             credential_id: Base64UrlSafeData(cred_id.to_vec()),
             credential_pk: cred_pk,
         },
@@ -258,7 +258,7 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
     Ok((
         i,
         AuthenticatorData {
-            rp_id_hash: rp_id_hash.to_vec(),
+            rp_id_hash: rp_id_hash.try_into().expect("took 32 bytes from input"),
             counter,
             user_verified: data_flags.2,
             user_present: data_flags.3,
@@ -272,7 +272,7 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
 #[derive(Debug, Clone)]
 pub struct AuthenticatorData<T: Ceremony> {
     /// Hash of the relying party id.
-    pub(crate) rp_id_hash: Vec<u8>,
+    pub(crate) rp_id_hash: [u8; 32],
     /// The counter of this credentials activations.
     pub counter: u32,
     /// Flag if the user was present.

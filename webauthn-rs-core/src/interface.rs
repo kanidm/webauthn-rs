@@ -16,7 +16,7 @@ use openssl::x509;
 
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
-pub type Aaguid = Vec<u8>;
+pub type Aaguid = [u8; 16];
 
 /// The in progress state of a credential registration attempt. You must persist this associated
 /// to the UserID requesting the registration.
