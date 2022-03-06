@@ -29,4 +29,5 @@ rand = { version = "0.8" }
 url = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
+hex-literal = "0.3"
 tracing-subscriber = "0.3"

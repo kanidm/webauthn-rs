@@ -609,11 +609,123 @@ pub fn compute_sha256(data: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hex_literal::hex;
+    use serde_cbor::Value;
     #[test]
     fn nid_to_curve() {
         assert_eq!(
             ECDSACurve::try_from(nid::Nid::X9_62_PRIME256V1).unwrap(),
             ECDSACurve::SECP256R1
         );
+    }
+
+    #[test]
+    fn cbor_es256() {
+        let hex_data = hex!(
+            "
+                A5          // Map - 5 elements
+                01 02      //   1:   2,  ; kty: EC2 key type
+                03 26      //   3:  -7,  ; alg: ES256 signature algorithm
+                20 01      //  -1:   1,  ; crv: P-256 curve
+                21 58 20   65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d // -2:   x,  ; x-coordinate
+                22 58 20   1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c // -3:   y,  ; y-coordinate");
+
+        let val: Value = serde_cbor::from_slice(&hex_data).unwrap();
+        let key = COSEKey::try_from(&val).unwrap();
+
+        assert_eq!(key.type_, COSEAlgorithm::ES256);
+        match key.key {
+            COSEKeyType::EC_EC2(pkey) => {
+                assert_eq!(
+                    pkey.x,
+                    hex!("65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d")
+                );
+                assert_eq!(
+                    pkey.y,
+                    hex!("1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c")
+                );
+                assert_eq!(pkey.curve, ECDSACurve::SECP256R1);
+            }
+            _ => panic!("Key should be parsed EC2 key"),
+        }
+    }
+
+    #[test]
+    fn cbor_es384() {
+        let hex_data = hex!(
+            "
+                A5          // Map - 5 elements
+                01 02      //   1:   2,  ; kty: EC2 key type
+                03 38 22   //   3:  -35,  ; alg: ES384 signature algorithm
+                20 02      //  -1:   2,  ; crv: P-384 curve
+                21 58 30   ceeaf818731db7af2d02e029854823d71bdbf65fb0c6ff69 // -2: x, ; x-coordinate
+                           42c9cf891efe18ea81430517d777f5c43550da801be5bf2f
+                22 58 30   dda1d0ead72e042efb7c36a38cc021abb2ca1a2e38159edd // -3: y ; y-coordinate
+                           a8c25f391e9a38d79dd56b9427d1c7c70cfa778ab849b087 "
+        );
+
+        let val: Value = serde_cbor::from_slice(&hex_data).unwrap();
+        let key = COSEKey::try_from(&val).unwrap();
+
+        assert_eq!(key.type_, COSEAlgorithm::ES384);
+        match key.key {
+            COSEKeyType::EC_EC2(pkey) => {
+                assert_eq!(
+                    pkey.x,
+                    hex!(
+                        "ceeaf818731db7af2d02e029854823d71bdbf65fb0c6ff69
+                         42c9cf891efe18ea81430517d777f5c43550da801be5bf2f"
+                    )
+                );
+                assert_eq!(
+                    pkey.y,
+                    hex!(
+                        "dda1d0ead72e042efb7c36a38cc021abb2ca1a2e38159edd
+                         a8c25f391e9a38d79dd56b9427d1c7c70cfa778ab849b087"
+                    )
+                );
+                assert_eq!(pkey.curve, ECDSACurve::SECP384R1);
+            }
+            _ => panic!("Key should be parsed EC2 key"),
+        }
+    }
+
+    #[test]
+    fn cbor_es512() {
+        let hex_data = hex!(
+            "
+                A5          // Map - 5 elements
+                01 02      //   1:   2,  ; kty: EC2 key type
+                03 38 23   //   3:  -36,  ; alg: ES512 signature algorithm
+                20 03      //  -1:   3,  ; crv: P-521 curve
+                21 58 42   0106cfaacf34b13f24bbb2f806fd9cfacff9a2a5ef9ecfcd85664609a0b2f6d4fd // -2:   x,  ; x-coordinate
+                           b8e1d58630905f13f38d8eed8714eceb716920a3a235581623261fed961f7b7d72
+                22 58 42   0089597a052a8d3c8b2b5692d467dea19f8e1b9ca17fa563a1a826855dade04811 // -3:   y,  ; y-coordinate
+                           b2881819e72f1706daeaf7d3773b2e284983a0eec33c2fe3ff5697722e95b29536");
+
+        let val: Value = serde_cbor::from_slice(&hex_data).unwrap();
+        let key = COSEKey::try_from(&val).unwrap();
+
+        assert_eq!(key.type_, COSEAlgorithm::ES512);
+        match key.key {
+            COSEKeyType::EC_EC2(pkey) => {
+                assert_eq!(
+                    pkey.x,
+                    hex!(
+                        "0106cfaacf34b13f24bbb2f806fd9cfacff9a2a5ef9ecfcd85664609a0b2f6d4fd
+                         b8e1d58630905f13f38d8eed8714eceb716920a3a235581623261fed961f7b7d72"
+                    )
+                );
+                assert_eq!(
+                    pkey.y,
+                    hex!(
+                        "0089597a052a8d3c8b2b5692d467dea19f8e1b9ca17fa563a1a826855dade04811
+                         b2881819e72f1706daeaf7d3773b2e284983a0eec33c2fe3ff5697722e95b29536"
+                    )
+                );
+                assert_eq!(pkey.curve, ECDSACurve::SECP521R1);
+            }
+            _ => panic!("Key should be parsed EC2 key"),
+        }
     }
 }
