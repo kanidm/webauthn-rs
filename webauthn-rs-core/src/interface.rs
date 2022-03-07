@@ -89,6 +89,17 @@ pub enum ECDSACurve {
     SECP521R1 = 3,
 }
 
+impl ECDSACurve {
+    /// Returns the size in bytes of the coordinate components (x and y) for the specified curve
+    pub(crate) fn coordinate_size(&self) -> usize {
+        match self {
+            Self::SECP256R1 => 32,
+            Self::SECP384R1 => 48,
+            Self::SECP521R1 => 66,
+        }
+    }
+}
+
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
@@ -98,9 +109,9 @@ pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
     /// The key's public X coordinate.
-    pub x: [u8; 32],
+    pub x: Vec<u8>,
     /// The key's public Y coordinate.
-    pub y: [u8; 32],
+    pub y: Vec<u8>,
 }
 
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
