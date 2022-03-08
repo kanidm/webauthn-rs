@@ -110,14 +110,14 @@ pub(crate) fn verify_signature(
     pkey_verify_signature(&pkey, alg, signature, verification_data)
 }
 
-pub(crate) fn assert_tpm_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnError> {
     // TPM attestation certificate MUST have the following fields/extensions:
 
     // Version MUST be set to 3.
     // version is not an attribute in openssl rust so I can't verify this
 
     // Subject field MUST be set to empty.
-    let subject_name_ref = pubk.subject_name();
+    let subject_name_ref = x509.subject_name();
     if subject_name_ref.entries().count() != 0 {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
@@ -131,6 +131,23 @@ pub(crate) fn assert_tpm_attest_req(pubk: &x509::X509) -> Result<(), WebauthnErr
     // Today there is no way to view eku/bc from openssl rust
 
     // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
+    let der_bytes = x509.to_der()?;
+    (match x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1
+        .extended_key_usage()
+    {
+        Ok(Some(extension)) => if extension.value.other.contains(&der_parser::oid!(2.23.133.8.3)) {
+            Ok(())
+        } else {
+            Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+        },
+        Ok(None) => Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+        Err(_) => {
+            debug!("extension present multiple times or invalid");
+            Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+        }
+    })?;
 
     // The Basic Constraints extension MUST have the CA component set to false.
 

@@ -31,4 +31,6 @@ der-parser = "7.0.0"
 
 [dev-dependencies]
 hex-literal = "0.3"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
+tracing-subscriber = "0.3"
+
+[features]
