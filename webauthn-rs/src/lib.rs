@@ -281,8 +281,12 @@ impl Webauthn {
     /// If any part of the registration is incorrect or invalid, an error will be returned. See `WebauthnError`.
     ///
     /// # Returns
+    ///
     /// The returned `SecurityKey` must be associated to the users account, and is used for future
     /// authentications via `start_securitykey_authentication`.
+    ///
+    /// You MUST assert that the registered credential id has not previously been registered.
+    /// to any other account.
     pub fn finish_securitykey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
@@ -319,7 +323,14 @@ impl Webauthn {
     /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
     /// process.
     ///
-    /// From this `AuthenticationResult` you *should* update the Credential's Counter value. If you wish
+    /// As per https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion 21:
+    ///
+    /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
+    /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
+    /// and you SHOULD invalidate and reject that credential as a result.
+    ///
+    /// From this `AuthenticationResult` you *should* update the Credential's Counter value if it is
+    /// valid per the above check. If you wish
     /// you *may* use the content of the `AuthenticationResult` for extended validations (such as the
     /// user verification flag).
     pub fn finish_securitykey_authentication(
@@ -513,8 +524,16 @@ impl Webauthn {
     /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
     /// process.
     ///
-    /// From this `AuthenticationResult` you *should* update the Credential's Counter value. If you wish
-    /// you *may* use the content of the `AuthenticationResult` for extended validations.
+    /// As per https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion 21:
+    ///
+    /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
+    /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
+    /// and you SHOULD invalidate and reject that credential as a result.
+    ///
+    /// From this `AuthenticationResult` you *should* update the Credential's Counter value if it is
+    /// valid per the above check. If you wish
+    /// you *may* use the content of the `AuthenticationResult` for extended validations (such as the
+    /// user verification flag).
     pub fn finish_passwordlesskey_authentication(
         &self,
         reg: &PublicKeyCredential,

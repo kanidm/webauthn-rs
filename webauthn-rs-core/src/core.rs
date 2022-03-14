@@ -283,9 +283,6 @@ impl WebauthnCore {
         } = state;
         let chal: &ChallengeRef = challenge.into();
 
-        // TODO: check the req username matches? I think it's not possible, the caller needs to
-        // create the linkage between the username and the state.
-
         // send to register_credential_internal
         let credential = self.register_credential_internal(
             reg,
@@ -446,14 +443,16 @@ impl WebauthnCore {
         // fmt against the set of supported WebAuthn Attestation Statement Format Identifier values.
         // An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values
         // is maintained in the IANA registry of the same name [WebAuthn-Registries].
-        // ( https://tools.ietf.org/html/draft-hodges-webauthn-registries-02 )
+        // ( https://www.rfc-editor.org/rfc/rfc8809 )
         //
-        //  https://w3c.github.io/webauthn/#packed-attestation
-        //  https://w3c.github.io/webauthn/#tpm-attestation
-        //  https://w3c.github.io/webauthn/#android-key-attestation
-        //  https://w3c.github.io/webauthn/#android-safetynet-attestation
-        //  https://w3c.github.io/webauthn/#fido-u2f-attestation
-        //  https://w3c.github.io/webauthn/#none-attestation
+        //  https://w3c.github.io/webauthn-3/#packed-attestation
+        //  https://w3c.github.io/webauthn-3/#tpm-attestation
+        //  https://w3c.github.io/webauthn-3/#android-key-attestation
+        //  https://w3c.github.io/webauthn-3/#android-safetynet-attestation
+        //  https://w3c.github.io/webauthn-3/#fido-u2f-attestation
+        //  https://w3c.github.io/webauthn-3/#none-attestation
+        //  https://www.w3.org/TR/webauthn-3/#sctn-apple-anonymous-attestation
+        //
         let attest_format = AttestationFormat::try_from(data.attestation_object.fmt.as_str())?;
 
         // Verify that attStmt is a correct attestation statement, conveying a valid attestation
@@ -530,6 +529,9 @@ impl WebauthnCore {
         //     root certificate, or is itself an acceptable certificate (i.e., it and the root certificate
         //     obtained in Step 20 may be the same).
 
+        // If the attestation statement attStmt successfully verified but is not trustworthy per step 21 above,
+        // the Relying Party SHOULD fail the registration ceremony.
+
         if let Some(ca_list) = attestation_cas {
             verify_attestation_ca_chain(
                 &credential.attestation,
@@ -575,7 +577,7 @@ impl WebauthnCore {
         Ok(credential)
     }
 
-    // https://w3c.github.io/webauthn/#verifying-assertion
+    // https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion
     pub(crate) fn verify_credential_internal(
         &self,
         rsp: &PublicKeyCredential,
@@ -584,6 +586,8 @@ impl WebauthnCore {
         cred: &Credential,
         appid: &Option<String>,
     ) -> Result<AuthenticatorData<Authentication>, WebauthnError> {
+        // Steps 1 through 7 are performed by the caller of this fn.
+
         // Let cData, authData and sig denote the value of credential’s response's clientDataJSON,
         // authenticatorData, and signature respectively.
         //
@@ -853,6 +857,8 @@ impl WebauthnCore {
         state: &'a AuthenticationState,
         // ) -> Result<(&'a CredentialID, AuthenticatorData<Authentication>), WebauthnError> {
     ) -> Result<AuthenticationResult, WebauthnError> {
+        // Steps 1 through 4 are client side.
+
         // https://w3c.github.io/webauthn/#verifying-assertion
         // Lookup challenge
 
@@ -900,6 +906,30 @@ impl WebauthnCore {
 
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
+
+        // Identify the user being authenticated and verify that this user is the owner of the public
+        // key credential source credentialSource identified by credential.id:
+
+        //  - If the user was identified before the authentication ceremony was initiated, e.g., 
+        //  via a username or cookie,
+        //      verify that the identified user is the owner of credentialSource. If
+        //      response.userHandle is present, let userHandle be its value. Verify that
+        //      userHandle also maps to the same user.
+
+        // - If the user was not identified before the authentication ceremony was initiated,
+        //      verify that response.userHandle is present, and that the user identified by this
+        //      value is the owner of credentialSource.
+
+        // Using credential.id (or credential.rawId, if base64url encoding is inappropriate for your
+        // use case), look up the corresponding credential public key and let credentialPublicKey be
+        // that credential public key.
+
+        // * Due to the design of this library, in the majority of workflows the user MUST be known
+        // before we begin, else we would not have the allowed Credentials list. When we proceed to
+        // allowing resident keys (client side discoverable) such as username-less, then we will need
+        // to consider how to proceed here. For now, username-less is such a hot-mess due to RK handling
+        // being basicly non-existant, that there is no point. As a result, we have already enforced
+        // these conditions.
 
         let auth_data = self.verify_credential_internal(rsp, *policy, chal, cred, appid)?;
         let counter = auth_data.counter;

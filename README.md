@@ -12,17 +12,14 @@ be associated to their accounts, and then are able to login using the token
 which performas a cryptographic authentication.
 
 This library aims to provide useful functions and frameworks allowing you to
-integrate webauthn into rust web servers. This means the library implements the
+integrate webauthn into Rust web servers. This means the library implements the
 Relying Party component of the FIDO2 workflow. We provide template and
-example javascript to demonstrate the browser interactions required.
+example javascript and wasm bindings to demonstrate the browser interactions required.
 
-Examples
---------
+Documentation
+-------------
 
-As this library aims to be usable in a variety of contexts, we have provided
-examples in the examples folder. These examples should demonstrate secure and
-valid use, so please report any issues found, and we'd love to see more examples
-contributed!
+Our docs are available on [docs rs](https://docs.rs/webauthn-rs/latest/webauthn_rs/)
 
 Known Supported Keys/Harwdare
 -----------------------------
@@ -30,25 +27,31 @@ Known Supported Keys/Harwdare
 * Yubico 5c + MacOS 10.14 + Firefox/Edge
 * Yubico 5ci + iPadOS 14 + Safari/Brave
 * TouchID + iPadOS + Safari
+* FaceID + iPhone + Safari
+* TouchID + MacOS + Edge
 * Windows Hello + Windows 10 + Chrome
 
 If your key/browser combination don't work (generally due to missing crypto routines)
-please open an issue so that I can help you generate vectors and add support!
+please conduct a [compatability test](https://webauthn.firstyear.id.au/compat_test) and then open an issue so that we can resolve the issue!
 
 Known BROKEN Keys/Harwdare
------------------------------
+--------------------------
 
-* Pixel 3a - Does not send correct attestation certificates, and ignores requested algorithms
+* Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates, and ignores requested algorithms
 
-FIDO Compliance
----------------
+Standards Compliance
+--------------------
 
-This library has been carefully implemented to follow the w3c standard for webauthn processing
-to ensure correct behaviour. However, not all elements of the standard are implemented (mainly 
-around certain extensions and how they are handled. This means the library is not FIDO compliant.
-It is a goal to improve this library to meet that standard over time as more test vectors and hardware
-becomes available, but the current focus has been on supporting the most popular key types, and
-going above and beyond the webauthn standard to provide a secure library.
+This library has been carefully implemented to follow the w3c standard for webauthn level 3 processing
+to ensure secure and correct behaviour. We support most major extensions and key types, but we do not claim
+to be standards complaint because:
+
+* We do not support certain esoteric options.
+* We do not support all cryptographic primitive types (only limited to secure ones).
+* We have enforced extra constraints in the library that go above and beyond the security guarantees the standard offers.
+
+This library has passed a security review performed by SUSE product security. Other security reviews
+are welcome!
 
 Feedback
 --------
@@ -77,7 +80,7 @@ Without this, we are not able to parse authenticator credentials to perform auth
 Resources
 ---------
 
-* Specification: https://w3c.github.io/webauthn/
+* Specification: https://www.w3.org/TR/webauthn-3
 * JSON details: https://fidoalliance.org/specs/fido-v2.0-rd-20180702/fido-server-v2.0-rd-20180702.html
 * Write up on interactions: https://medium.com/@herrjemand/introduction-to-webauthn-api-5fd1fb46c285
 
