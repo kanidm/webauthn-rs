@@ -221,15 +221,31 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
     )(i)
 }
 
-fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
+fn aaguid_parser(i: &[u8]) -> nom::IResult<&[u8], Aaguid> {
+    // We have observed with Windows Hello on Windows 11 aaguids of 0 being
+    // serialized as 1 null-byte rather than 16 of them, as required by the spec
+    // (https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data).
+    if i[0] == 0 {
+        warn!(
+            "Aaguids beginning with 0 are suspicious. This could be the Windows \
+             11 Windows Hello bug where a zero aaguid gets truncated down to 1 \
+             byte."
+        );
+    }
+
     let (i, aaguid) = take(16usize)(i)?;
+    Ok((i, aaguid.try_into().expect("took 16 bytes exactly")))
+}
+
+fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
+    let (i, aaguid) = aaguid_parser(i)?;
     let (i, cred_id_len) = be_u16(i)?;
     let (i, cred_id) = take(cred_id_len as usize)(i)?;
     let (i, cred_pk) = cbor_parser(i)?;
     Ok((
         i,
         AttestedCredentialData {
-            aaguid: aaguid.try_into().expect("took 16 bytes from input"),
+            aaguid,
             credential_id: Base64UrlSafeData(cred_id.to_vec()),
             credential_pk: cred_pk,
         },
