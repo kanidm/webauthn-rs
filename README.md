@@ -37,8 +37,8 @@ please conduct a [compatability test](https://webauthn.firstyear.id.au/compat_te
 Known BROKEN Keys/Harwdare
 --------------------------
 
-* Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates, and ignores requested algorithms
-* Windows Hello + Windows 11 (22000.556) + Firefox running on AMD Ryzen 9 + MSI X570 Chipset (BIOS version A.F3, released 2021-09-27) - truncates 16-byte authenticator aaguid to 1 byte.
+* Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates, and ignores requested algorithms.
+* Windows Hello + Windows 11 (22000.556) + Firefox running on AMD Ryzen 9 + MSI X570 Chipset (BIOS version A.F3, released 2021-09-27) - Truncates 16-byte authenticator aaguid to 1 byte.
 
 Standards Compliance
 --------------------
