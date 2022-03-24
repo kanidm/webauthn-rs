@@ -910,7 +910,7 @@ impl WebauthnCore {
         // Identify the user being authenticated and verify that this user is the owner of the public
         // key credential source credentialSource identified by credential.id:
 
-        //  - If the user was identified before the authentication ceremony was initiated, e.g., 
+        //  - If the user was identified before the authentication ceremony was initiated, e.g.,
         //  via a username or cookie,
         //      verify that the identified user is the owner of credentialSource. If
         //      response.userHandle is present, let userHandle be its value. Verify that
@@ -3105,5 +3105,4 @@ mod tests {
         debug!("{:?}", result);
         assert!(matches!(result, Err(WebauthnError::ParseNOMFailure)));
     }
-
 }
