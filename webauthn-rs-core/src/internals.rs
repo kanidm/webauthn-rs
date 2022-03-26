@@ -224,8 +224,8 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
 fn aaguid_parser(i: &[u8]) -> nom::IResult<&[u8], Aaguid> {
     // We have observed with Windows Hello on Windows 11 aaguids of 0 being
     // serialized as 1 null-byte rather than 16 of them, as required by the spec
-    // (https://www.w3.org/TR/webauthn-2/#sctn-attested-credential-data).
-    if i[0] == 0 {
+    // (https://www.w3.org/TR/webauthn-3/#sctn-attested-credential-data).
+    if let Some(0) = i.first() {
         warn!(
             "Aaguids beginning with 0 are suspicious. This could be the Windows \
              11 Windows Hello bug where a zero aaguid gets truncated down to 1 \
