@@ -910,7 +910,7 @@ impl WebauthnCore {
         // Identify the user being authenticated and verify that this user is the owner of the public
         // key credential source credentialSource identified by credential.id:
 
-        //  - If the user was identified before the authentication ceremony was initiated, e.g., 
+        //  - If the user was identified before the authentication ceremony was initiated, e.g.,
         //  via a username or cookie,
         //      verify that the identified user is the owner of credentialSource. If
         //      response.userHandle is present, let userHandle be its value. Verify that
@@ -3056,5 +3056,53 @@ mod tests {
         );
         debug!("{:?}", result);
         assert!(result.is_err());
+    }
+
+    /// See https://github.com/kanidm/webauthn-rs/issues/105
+    #[test]
+    fn test_windows_11_hello_incorrectly_truncates_aaguid() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "https://webauthn.firstyear.id.au",
+                "webauthn.firstyear.id.au",
+                &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+                None,
+                None,
+            )
+        };
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"FKVseWmr5DxQ_H9iTyoTgRPIClLspXO0XbOKQfMuaFc\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(r#"{
+            "id": "6h7wVk2n4Buulhd5fiShGb0BBViIgvDoVO3xhn0A0Mg",
+            "rawId": "6h7wVk2n4Buulhd5fiShGb0BBViIgvDoVO3xhn0A0Mg",
+            "response": {
+            "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVkBWGq5u_Dfmhb5Hbszu7Ey-vnRfHgsSCbG7HDs7ljZfvUqRQAAAAAAACDqHvBWTafgG66WF3l-JKEZvQEFWIiC8OhU7fGGfQDQyKQBAwM5AQAgWQEAt86lR2w_hmnhDr6tvJD5hmIuWt0QkG1sphC8aqeOHuIWnbcBWnxNUrKQibJxEGJilM20s-_w-aUjDoV5MYu4NBgguFHju-qA-qe1sjhqY7UkMkx4Z1KGMeiZNNGgk5Gtmu0xjaq-1RohB3TKADeWTularHWzG6q6sJHgC-qKKa67Rmwr0T4a4S3VjLvjvSPILx88nLJvwqO1rDb5cLOgL5CEjtRijR6SNeN05uBhz2ePn5mMo2lN73pHsMGPo68pGWIWWsb2sC_aBF2eA02Me2jldIgSzMy3y8xsTIg6r_xF105pC8jOPsQVN2TJDxN9zVEuxpY_mUsqGOAFGR-SiyFDAQAB",
+            "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJGS1ZzZVdtcjVEeFFfSDlpVHlvVGdSUElDbExzcFhPMFhiT0tRZk11YUZjIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0"
+            },
+            "type": "public-key"
+        }"#).unwrap();
+
+        debug!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            &chal,
+            &[],
+            &[
+                COSEAlgorithm::RS256,
+                COSEAlgorithm::EDDSA,
+                COSEAlgorithm::INSECURE_RS1,
+            ],
+            None,
+            false,
+            &RequestRegistrationExtensions::default(),
+        );
+        debug!("{:?}", result);
+        assert!(matches!(result, Err(WebauthnError::ParseNOMFailure)));
     }
 }
