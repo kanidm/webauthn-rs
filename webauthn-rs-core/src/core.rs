@@ -3060,7 +3060,7 @@ mod tests {
 
     /// See https://github.com/kanidm/webauthn-rs/issues/105
     #[test]
-    fn test_windows_11_hello_incorrectly_truncates_aaguid() {
+    fn test_firefox_98_hello_incorrectly_truncates_aaguid() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan = unsafe {
             Webauthn::new(
