@@ -183,6 +183,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "compatuser".to_string(),
                             uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
                             algorithm: Some(COSEAlgorithm::all_possible_algs()),
                             attestation: Some(AttestationConveyancePreference::Direct),
@@ -197,6 +198,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "compatuser".to_string(),
                             uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
                             algorithm: Some(COSEAlgorithm::all_possible_algs()),
                             attestation: Some(AttestationConveyancePreference::Indirect),
@@ -210,6 +212,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "compatuser".to_string(),
                             uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
                             algorithm: Some(COSEAlgorithm::all_possible_algs()),
                             attestation: Some(AttestationConveyancePreference::None),
@@ -223,6 +226,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "another_user".to_string(),
                             uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
                             algorithm: Some(COSEAlgorithm::all_possible_algs()),
                             attestation: Some(AttestationConveyancePreference::None),
@@ -257,6 +261,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "compatuser".to_string(),
                             uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
                             algorithm: Some(algs),
                             attestation: Some(AttestationConveyancePreference::None),
@@ -270,6 +275,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "compatuser".to_string(),
                             uv: Some(UserVerificationPolicy::Preferred),
                             algorithm: Some(COSEAlgorithm::all_possible_algs()),
                             attestation: Some(AttestationConveyancePreference::None),
@@ -283,6 +289,7 @@ impl Component for CompatTest {
                         // Start the process!
                         self.do_registration(ctx, 
                         RegisterWithSettings {
+                            username: "compatuser".to_string(),
                             uv: Some(UserVerificationPolicy::Required),
                             algorithm: Some(COSEAlgorithm::all_possible_algs()),
                             attestation: Some(AttestationConveyancePreference::None),
@@ -295,6 +302,7 @@ impl Component for CompatTest {
                             self.results.authdiscouraged = CTestAuthState::failed();
                             let use_cred_id = Some(cred_id.clone());
                             self.do_auth(ctx, AuthenticateWithSettings {
+                                username: "compatuser".to_string(),
                                 use_cred_id,
                                 uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
                                 extensions: None,
@@ -311,15 +319,20 @@ impl Component for CompatTest {
                         let mut skip = true;
 
                         if let Some(cred_1_id) = self.results.none_attest_1.get_credential_id() {
-                            if let Some(_cred_2) = self.results.none_attest_2.get_credential_id() {
+                            if let Some(cred_2_id) = self.results.none_attest_2.get_credential_id() {
                                 self.results.authmultiple = CTestAuthState::failed();
-                                let use_cred_id = Some(cred_1_id.clone());
-                                self.do_auth(ctx, AuthenticateWithSettings {
-                                    use_cred_id,
-                                    uv: None,
-                                    extensions: None,
-                                });
-                                skip = false;
+                                if cred_1_id != cred_2_id {
+                                    let use_cred_id = Some(cred_1_id.clone());
+                                    self.do_auth(ctx, AuthenticateWithSettings {
+                                        username: "compatuser".to_string(),
+                                        use_cred_id,
+                                        uv: None,
+                                        extensions: None,
+                                    });
+                                    skip = false;
+                                } else {
+                                    self.results.authmultiple.set_err(ResponseError::CredentialIdAreIdentical);
+                                }
                             }
                         }
                         // Skip
@@ -354,6 +367,7 @@ impl Component for CompatTest {
                             self.results.authpreferred = CTestAuthState::failed();
                             let use_cred_id = Some(cred_id.clone());
                             self.do_auth(ctx, AuthenticateWithSettings {
+                                username: "compatuser".to_string(),
                                 use_cred_id,
                                 uv: Some(UserVerificationPolicy::Preferred),
                                 extensions: None,
@@ -390,6 +404,7 @@ impl Component for CompatTest {
                             self.results.authrequired = CTestAuthState::failed();
                             let use_cred_id = Some(cred_id.clone());
                             self.do_auth(ctx, AuthenticateWithSettings {
+                                username: "compatuser".to_string(),
                                 use_cred_id,
                                 uv: Some(UserVerificationPolicy::Required),
                                 extensions: None,
@@ -857,7 +872,7 @@ Please add any extra details here:
                     </tr>
                     <tr>
                       <th scope="row">{ "7" }</th>
-                      <td>{ "Multiple Credentials Allowed" }</td>
+                      <td>{ "Multiple User Credentials Allowed" }</td>
                       <td>{ self.results.authmultiple.to_result() }</td>
                     </tr>
 
@@ -1000,7 +1015,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/compat/register_start/compatuser", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/register_start", &opts)?;
 
         request
             .headers()
@@ -1040,7 +1055,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/compat/register_finish/compatuser", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/register_finish", &opts)?;
 
         request
             .headers()
@@ -1081,7 +1096,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/compat/login_start/compatuser", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/login_start", &opts)?;
 
         request
             .headers()
@@ -1123,7 +1138,7 @@ Please add any extra details here:
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let request = Request::new_with_str_and_init("/compat/login_finish/compatuser", &opts)?;
+        let request = Request::new_with_str_and_init("/compat/login_finish", &opts)?;
 
         request
             .headers()

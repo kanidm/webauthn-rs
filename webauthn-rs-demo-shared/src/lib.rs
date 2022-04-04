@@ -58,6 +58,7 @@ impl From<&RegisterWithType> for AuthenticateWithType {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct RegisterWithSettings {
+    pub username: String,
     pub uv: Option<UserVerificationPolicy>,
     pub algorithm: Option<Vec<COSEAlgorithm>>,
     pub attestation: Option<AttestationConveyancePreference>,
@@ -77,6 +78,7 @@ pub struct RegistrationSuccess {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AuthenticateWithSettings {
+    pub username: String,
     pub use_cred_id: Option<CredentialID>,
     pub uv: Option<UserVerificationPolicy>,
     pub extensions: Option<RequestAuthenticationExtensions>,
@@ -87,8 +89,10 @@ impl From<&RegisterWithSettings> for AuthenticateWithSettings {
         let use_cred_id = None;
         let uv = regsettings.uv.clone();
         let extensions = None;
+        let username = regsettings.username.clone();
 
         AuthenticateWithSettings {
+            username,
             use_cred_id,
             uv,
             extensions,
@@ -478,6 +482,7 @@ pub enum ResponseError {
     NavigatorError(String),
     UnknownError(String),
     IncompleteTest,
+    CredentialIdAreIdentical,
 }
 
 #[cfg(feature = "core")]

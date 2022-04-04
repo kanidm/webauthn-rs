@@ -189,18 +189,18 @@ impl WebauthnActor {
 
     pub async fn compat_start_register(
         &self,
-        username: String,
         reg_settings: RegisterWithSettings,
     ) -> WebauthnResult<(CreationChallengeResponse, RegistrationState)> {
-        debug!("handle ChallengeRegister -> {:?}", username);
-
         let RegisterWithSettings {
+            username,
             uv,
             attachment,
             algorithm,
             attestation,
             extensions: _,
         } = reg_settings;
+
+        debug!("handle ChallengeRegister -> {:?}", username);
 
         /*
         let exts = RequestRegistrationExtensions::builder()
@@ -226,17 +226,17 @@ impl WebauthnActor {
 
     pub async fn compat_start_login(
         &self,
-        username: &String,
         creds: Vec<Credential>,
         auth_settings: AuthenticateWithSettings,
     ) -> WebauthnResult<(RequestChallengeResponse, AuthenticationState)> {
-        debug!("handle ChallengeAuthenticate -> {:?}", username);
-
         let AuthenticateWithSettings {
+            username,
             use_cred_id,
             uv,
             extensions: _,
         } = auth_settings;
+
+        debug!("handle ChallengeAuthenticate -> {:?}", username);
 
         /*
         let exts = RequestAuthenticationExtensions::builder()

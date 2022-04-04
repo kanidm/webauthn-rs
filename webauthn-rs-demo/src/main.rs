@@ -292,24 +292,21 @@ async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result
 }
 
 async fn compat_start_register(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-
     let session = request.session_mut();
     session.remove("rs");
 
     let reg_settings = request.body_json::<RegisterWithSettings>().await?;
     debug!(?reg_settings);
 
-    let actor_res = request
-        .state()
-        .compat_start_register(username, reg_settings)
-        .await;
+    let username = reg_settings.username.clone();
+
+    let actor_res = request.state().compat_start_register(reg_settings).await;
 
     let res = match actor_res {
         Ok((chal, rs)) => {
             request
                 .session_mut()
-                .insert("rs", rs)
+                .insert("rs", (rs, username))
                 .expect("Failed to insert");
             tide::Response::builder(tide::StatusCode::Ok)
                 .body(tide::Body::from_json(&chal)?)
@@ -326,8 +323,6 @@ async fn compat_start_register(mut request: tide::Request<AppState>) -> tide::Re
 }
 
 async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-
     debug!("session - {:?}", request.session().get_raw("cred_map"));
 
     let auth_settings = request.body_json::<AuthenticateWithSettings>().await?;
@@ -339,10 +334,10 @@ async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Resul
     let mut cred_map: BTreeMap<String, Vec<Credential>> =
         session.get("cred_map").unwrap_or_else(|| BTreeMap::new());
 
-    let creds = match cred_map.remove(&username) {
+    let creds = match cred_map.remove(&auth_settings.username) {
         Some(v) => v,
         None => {
-            error!("no creds for {}", username);
+            error!("no creds for {}", auth_settings.username);
             return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
                 .body(tide::Body::from_json(
                     &ResponseError::CredentialRetrievalError,
@@ -351,9 +346,11 @@ async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Resul
         }
     };
 
+    let username = auth_settings.username.clone();
+
     let actor_res = request
         .state()
-        .compat_start_login(&username, creds, auth_settings)
+        .compat_start_login(creds, auth_settings)
         .await;
 
     let session = request.session_mut();
@@ -363,7 +360,7 @@ async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Resul
         Ok((chal, st)) => {
             request
                 .session_mut()
-                .insert("st", st)
+                .insert("st", (st, username))
                 .expect("Failed to insert");
             debug!(
                 "Session - inserted auth state - {:?}",
@@ -384,11 +381,9 @@ async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Resul
 }
 
 async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-
     debug!("session - {:?}", request.session().get_raw("cred_map"));
     let session = request.session_mut();
-    let rs = match session.get("rs") {
+    let (rs, username) = match session.get("rs") {
         Some(v) => v,
         None => {
             error!("no reg session state");
@@ -402,9 +397,9 @@ async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::R
     let mut cred_map: BTreeMap<String, Vec<Credential>> =
         session.get("cred_map").unwrap_or_else(|| BTreeMap::new());
 
-    let mut creds = cred_map.remove(&username).unwrap_or_else(|| Vec::new());
-
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
+
+    let mut creds = cred_map.remove(&username).unwrap_or_else(|| Vec::new());
 
     let actor_res = request
         .state()
@@ -455,14 +450,11 @@ async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::R
 }
 
 async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-    let username_copy = username.clone();
-
     debug!("session - {:?}", request.session().get_raw("cred_map"));
 
     let session = request.session_mut();
 
-    let st = match session.get("st") {
+    let (st, username): (_, String) = match session.get("st") {
         Some(v) => v,
         None => {
             error!("no auth session state");
@@ -472,6 +464,8 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
         }
     };
     session.remove("st");
+
+    let username_copy: String = username.clone();
 
     let mut cred_map: BTreeMap<String, Vec<Credential>> =
         session.get("cred_map").unwrap_or_else(|| BTreeMap::new());
@@ -575,14 +569,11 @@ async fn main() -> tide::Result<()> {
     // Serve our wasm content
     app.at("/pkg").serve_dir("pkg")?;
 
-    app.at("/compat/register_start/:username")
-        .post(compat_start_register);
-    app.at("/compat/register_finish/:username")
+    app.at("/compat/register_start").post(compat_start_register);
+    app.at("/compat/register_finish")
         .post(compat_finish_register);
-    app.at("/compat/login_start/:username")
-        .post(compat_start_login);
-    app.at("/compat/login_finish/:username")
-        .post(compat_finish_login);
+    app.at("/compat/login_start").post(compat_start_login);
+    app.at("/compat/login_finish").post(compat_finish_login);
 
     app.at("/demo/register_start/:username")
         .post(demo_start_register);
