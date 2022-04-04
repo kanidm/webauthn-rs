@@ -1,0 +1,38 @@
+[package]
+name = "webauthn-authenticator-rs"
+version = "0.4.0-dev"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2021"
+license = "MPL-2.0"
+description = "Webauthn Authenticator Client Library"
+# documentation = "https://docs.rs/kanidm/latest/kanidm/"
+repository = "https://github.com/kanidm/webauthn-rs"
+
+[features]
+u2fhid = ["authenticator"]
+nfc = ["pcsc", "serde"]
+
+default = []
+
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+base64urlsafedata = { path = "../base64urlsafedata" }
+webauthn-rs-proto = { path = "../webauthn-rs-proto" }
+
+tracing = "0.1"
+url = "2"
+serde_json = "1.0"
+nom = "7.1"
+serde_cbor = "0.11"
+openssl = "0.10"
+
+authenticator = { version = "0.3", optional = true }
+pcsc = { version = "2", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+[dev-dependencies]
+webauthn-rs-core = { path = "../webauthn-rs-core" }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
+base64 = "0.13"

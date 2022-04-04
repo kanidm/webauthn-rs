@@ -104,7 +104,6 @@ impl WebauthnCore {
 
     /// Generate a new challenge for client registration.
     /// Same as `generate_challenge_register_options` but default options
-    #[cfg(test)]
     pub fn generate_challenge_register(
         &self,
         user_name: &str,

@@ -3,6 +3,7 @@
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// A credential ID type. At the moment this is a vector of bytes, but
 /// it could also be a future change for this to be base64 string instead.
@@ -181,4 +182,48 @@ pub struct AllowCredentials {
     /// may be usb, nfc, ble, internal
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transports: Option<Vec<AuthenticatorTransport>>,
+}
+
+/// The data collected and hashed in the operation.
+/// <https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata>
+#[derive(Debug, Serialize, Clone, Deserialize)]
+pub struct CollectedClientData {
+    /// The credential type
+    #[serde(rename = "type")]
+    pub type_: String,
+    /// The challenge.
+    pub challenge: Base64UrlSafeData,
+    /// The rp origin as the browser understood it.
+    pub origin: url::Url,
+    /// The inverse of the sameOriginWithAncestors argument value that was
+    /// passed into the internal method.
+    #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]
+    pub cross_origin: Option<bool>,
+    /// tokenBinding.
+    #[serde(rename = "tokenBinding")]
+    pub token_binding: Option<TokenBinding>,
+    /// This struct be extended, so it's important to be tolerant of unknown
+    /// keys.
+    #[serde(flatten)]
+    pub unknown_keys: BTreeMap<String, serde_json::value::Value>,
+}
+
+/*
+impl TryFrom<&[u8]> for CollectedClientData {
+    type Error = WebauthnError;
+    fn try_from(data: &[u8]) -> Result<CollectedClientData, WebauthnError> {
+        let ccd: CollectedClientData =
+            serde_json::from_slice(data).map_err(WebauthnError::ParseJSONFailure)?;
+        Ok(ccd)
+    }
+}
+*/
+
+/// Token binding
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TokenBinding {
+    /// status
+    pub status: String,
+    /// id
+    pub id: Option<String>,
 }

@@ -8,6 +8,7 @@ members = [
     "webauthn-rs",
     "webauthn-rs-demo",
     "webauthn-rs-demo-shared",
+    "webauthn-authenticator-rs",
 ]
 
 exclude = [
