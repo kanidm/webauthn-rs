@@ -222,19 +222,6 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
 }
 
 fn aaguid_parser(i: &[u8]) -> nom::IResult<&[u8], Aaguid> {
-    // We have observed with Firefox 98 on Windows 10 and 11 aaguids of 0 being
-    // serialized as 1 null-byte rather than 16 of them, as required by the spec
-    // [1]. A fix for this bug has been released into Firefox 99 [2].
-    //
-    // [1]: https://www.w3.org/TR/webauthn-3/#sctn-attested-credential-data
-    // [2]: https://bugzilla.mozilla.org/show_bug.cgi?id=1759098
-    if let Some(0) = i.first() {
-        warn!(
-            "Aaguids beginning with 0 are suspicious. This could be the Firefox \
-             98 Windows bug where a zero aaguid gets truncated down to 1 byte."
-        );
-    }
-
     let (i, aaguid) = take(16usize)(i)?;
     Ok((i, aaguid.try_into().expect("took 16 bytes exactly")))
 }
@@ -244,6 +231,15 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     let (i, cred_id_len) = be_u16(i)?;
     let (i, cred_id) = take(cred_id_len as usize)(i)?;
     let (i, cred_pk) = cbor_parser(i)?;
+
+    if usize::from(cred_id_len) > i.len() {
+        warn!(
+            "cred_id_len ({:?}) is larger than remaining number of bytes to parse ({:?}).",
+            cred_id_len,
+            i.len()
+        );
+    }
+
     Ok((
         i,
         AttestedCredentialData {
