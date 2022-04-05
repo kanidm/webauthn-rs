@@ -1,10 +1,9 @@
 use crate::error::WebauthnError;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use std::borrow::Borrow;
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::ops::Deref;
 
@@ -315,48 +314,6 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     }
 }
 
-/// The data collected and hashed in the operation.
-/// <https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata>
-#[derive(Debug, Serialize, Clone, Deserialize)]
-pub struct CollectedClientData {
-    /// The credential type
-    #[serde(rename = "type")]
-    pub type_: String,
-    /// The challenge.
-    pub challenge: Base64UrlSafeData,
-    /// The rp origin as the browser understood it.
-    pub origin: url::Url,
-    /// The inverse of the sameOriginWithAncestors argument value that was
-    /// passed into the internal method.
-    #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]
-    pub cross_origin: Option<bool>,
-    /// tokenBinding.
-    #[serde(rename = "tokenBinding")]
-    pub token_binding: Option<TokenBinding>,
-    /// This struct be extended, so it's important to be tolerant of unknown
-    /// keys.
-    #[serde(flatten)]
-    pub unknown_keys: BTreeMap<String, serde_json::value::Value>,
-}
-
-impl TryFrom<&[u8]> for CollectedClientData {
-    type Error = WebauthnError;
-    fn try_from(data: &[u8]) -> Result<CollectedClientData, WebauthnError> {
-        let ccd: CollectedClientData =
-            serde_json::from_slice(data).map_err(WebauthnError::ParseJSONFailure)?;
-        Ok(ccd)
-    }
-}
-
-/// Token binding
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TokenBinding {
-    /// status
-    pub status: String,
-    /// id
-    pub id: Option<String>,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
@@ -422,7 +379,9 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
 {
     type Error = WebauthnError;
     fn try_from(aarr: &AuthenticatorAttestationResponseRaw) -> Result<Self, Self::Error> {
-        let ccdj = CollectedClientData::try_from(aarr.client_data_json.as_ref())?;
+        let ccdj = serde_json::from_slice(aarr.client_data_json.as_ref())
+            .map_err(WebauthnError::ParseJSONFailure)?;
+
         let ao = AttestationObject::try_from(aarr.attestation_object.as_ref())?;
 
         Ok(AuthenticatorAttestationResponse {
@@ -451,7 +410,8 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
         Ok(AuthenticatorAssertionResponse {
             authenticator_data: AuthenticatorData::try_from(aarr.authenticator_data.as_ref())?,
             authenticator_data_bytes: aarr.authenticator_data.clone().into(),
-            client_data: CollectedClientData::try_from(aarr.client_data_json.as_ref())?,
+            client_data: serde_json::from_slice(aarr.client_data_json.as_ref())
+                .map_err(WebauthnError::ParseJSONFailure)?,
             client_data_bytes: aarr.client_data_json.clone().into(),
             signature: aarr.signature.clone().into(),
             _user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
