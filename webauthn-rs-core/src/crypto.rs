@@ -43,13 +43,18 @@ fn pkey_verify_signature(
             Ok(verifier)
         }
         COSEAlgorithm::INSECURE_RS1 => {
-            warn!("INSECURE SHA1 USAGE DETECTED");
-            let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), pkey)
-                .map_err(WebauthnError::OpenSSLError)?;
-            verifier
-                .set_rsa_padding(rsa::Padding::PKCS1)
-                .map_err(WebauthnError::OpenSSLError)?;
-            Ok(verifier)
+            if cfg!(feature = "insecure_rs1") {
+                warn!("INSECURE SHA1 USAGE DETECTED");
+                let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), pkey)
+                    .map_err(WebauthnError::OpenSSLError)?;
+                verifier
+                    .set_rsa_padding(rsa::Padding::PKCS1)
+                    .map_err(WebauthnError::OpenSSLError)?;
+                Ok(verifier)
+            } else {
+                error!("INSECURE SHA1 USAGE DETECTED");
+                Err(WebauthnError::CredentialInsecureCryptography)
+            }
         }
         c_alg => {
             debug!(?c_alg, "WebauthnError::COSEKeyInvalidType");

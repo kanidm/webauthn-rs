@@ -461,6 +461,8 @@ pub enum ResponseError {
     COSEKeyECDSAInvalidCurve,
     COSEKeyEDDSAInvalidCurve,
     COSEKeyInvalidAlgorithm,
+    CredentialMayNotBeHardwareBound,
+    CredentialInsecureCryptography,
     CredentialExistCheckError,
     CredentialAlreadyExists,
     CredentialPersistenceError,
@@ -558,6 +560,9 @@ impl From<WebauthnError> for ResponseError {
             WebauthnError::COSEKeyRSANEInvalid => Self::COSEKeyRSANEInvalid,
             WebauthnError::COSEKeyECDSAInvalidCurve => Self::COSEKeyECDSAInvalidCurve,
             WebauthnError::COSEKeyInvalidAlgorithm => Self::COSEKeyInvalidAlgorithm,
+
+            WebauthnError::CredentialMayNotBeHardwareBound => Self::CredentialMayNotBeHardwareBound,
+            WebauthnError::CredentialInsecureCryptography => Self::CredentialInsecureCryptography,
             WebauthnError::CredentialExistCheckError => Self::CredentialExistCheckError,
             WebauthnError::CredentialAlreadyExists => Self::CredentialAlreadyExists,
             WebauthnError::CredentialPersistenceError => Self::CredentialPersistenceError,

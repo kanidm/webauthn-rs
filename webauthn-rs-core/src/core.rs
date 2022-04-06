@@ -133,6 +133,7 @@ impl WebauthnCore {
             credential_algorithms,
             require_resident_key,
             authenticator_attachment,
+            false,
         )
     }
 
@@ -159,6 +160,7 @@ impl WebauthnCore {
         credential_algorithms: Vec<COSEAlgorithm>,
         require_resident_key: bool,
         authenticator_attachment: Option<AuthenticatorAttachment>,
+        experimental_reject_passkeys: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
 
@@ -245,6 +247,7 @@ impl WebauthnCore {
             require_resident_key,
             authenticator_attachment,
             extensions: extensions.unwrap_or_else(|| RequestRegistrationExtensions::default()),
+            experimental_allow_passkeys: !experimental_reject_passkeys,
         };
 
         // This should have an opaque type of username + chal + policy
@@ -279,6 +282,7 @@ impl WebauthnCore {
             require_resident_key: _,
             authenticator_attachment: _,
             extensions,
+            experimental_allow_passkeys,
         } = state;
         let chal: &ChallengeRef = challenge.into();
 
@@ -292,6 +296,7 @@ impl WebauthnCore {
             attestation_cas,
             false,
             &extensions,
+            *experimental_allow_passkeys,
         )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
@@ -321,6 +326,7 @@ impl WebauthnCore {
         attestation_cas: Option<&AttestationCaList>,
         danger_disable_certificate_time_checks: bool,
         req_extn: &RequestRegistrationExtensions,
+        experimental_allow_passkeys: bool,
     ) -> Result<Credential, WebauthnError> {
         // ======================================================================
         // References:
@@ -550,6 +556,13 @@ impl WebauthnCore {
                 credential.cred.type_, credential_algorithms
             );
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
+        }
+
+        // OUT OF SPEC - if the credential counter is 0, it *may* be a passkey, so we can experimentally
+        // reject it.
+        if !experimental_allow_passkeys && credential.counter == 0 {
+            error!("Credential counter is 0 - may indicate that it is a passkey and not bound to hardware.");
+            return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
 
         // OUT OF SPEC - exclude any credential that is in our exclude list.
@@ -1218,6 +1231,7 @@ mod tests {
             }),
             false,
             &RequestRegistrationExtensions::default(),
+            true,
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1261,6 +1275,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            true,
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1304,6 +1319,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         assert!(result.is_ok());
     }
@@ -1348,6 +1364,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1393,6 +1410,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1438,6 +1456,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1715,6 +1734,7 @@ mod tests {
             }),
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1795,6 +1815,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            true,
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -2164,9 +2185,17 @@ mod tests {
             }),
             false,
             &RequestRegistrationExtensions::default(),
+            true,
         );
         trace!("{:?}", result);
-        assert!(result.is_ok());
+        if cfg!(feature = "insecure_rs1") {
+            assert!(result.is_ok());
+        } else {
+            assert!(matches!(
+                result,
+                Err(WebauthnError::CredentialInsecureCryptography)
+            ))
+        }
     }
 
     fn register_userid(
@@ -2336,6 +2365,40 @@ mod tests {
             // Must disable time checks because the submission is limited to 5 days.
             true,
             &RequestRegistrationExtensions::default(),
+            // Don't allow passkeys
+            false,
+        );
+        debug!("{:?}", result);
+        assert!(matches!(
+            result,
+            Err(WebauthnError::CredentialMayNotBeHardwareBound)
+        ));
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[
+                COSEAlgorithm::ES256,
+                COSEAlgorithm::ES384,
+                COSEAlgorithm::ES512,
+                COSEAlgorithm::RS256,
+                COSEAlgorithm::RS384,
+                COSEAlgorithm::RS512,
+                COSEAlgorithm::PS256,
+                COSEAlgorithm::PS384,
+                COSEAlgorithm::PS512,
+                COSEAlgorithm::EDDSA,
+            ],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::apple_webauthn_root_ca()],
+            }),
+            // Must disable time checks because the submission is limited to 5 days.
+            true,
+            &RequestRegistrationExtensions::default(),
+            // Allow them.
+            true,
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -2477,6 +2540,7 @@ mod tests {
             // Must disable time checks because the submission is limited to 5 days.
             true,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         assert!(matches!(
@@ -2738,6 +2802,7 @@ mod tests {
                 None,
                 false,
                 &RequestRegistrationExtensions::default(),
+                true,
             )
             .expect("Failed to register credential");
 
@@ -2831,6 +2896,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2875,6 +2941,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2920,6 +2987,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -2966,6 +3034,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -3010,6 +3079,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            true,
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -3057,6 +3127,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         assert!(result.is_err());
@@ -3105,6 +3176,7 @@ mod tests {
             None,
             false,
             &RequestRegistrationExtensions::default(),
+            false,
         );
         debug!("{:?}", result);
         assert!(matches!(result, Err(WebauthnError::ParseNOMFailure)));
