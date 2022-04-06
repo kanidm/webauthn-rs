@@ -11,6 +11,7 @@ use webauthn_rs_proto::options::*;
 use base64urlsafedata::Base64UrlSafeData;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use openssl::x509;
 
@@ -427,13 +428,6 @@ impl Ceremony for Authentication {
 #[serde(try_from = "u8", into = "u8")]
 pub struct CredProtectResponse(pub CredentialProtectionPolicy);
 
-/// The response from the client regarding setting the `credBlob` extension
-///
-/// This is just a wrapper around a [bool] indicating whether the authenticator
-/// was able to set the desired `credBlob` data.
-#[derive(Debug, Serialize, Clone, Deserialize)]
-pub struct SetCredBlobResponse(bool);
-
 /// The output for registration ceremony extensions.
 ///
 /// Implements the registration bits of \[AuthenticatorExtensionsClientOutputs\]
@@ -443,16 +437,12 @@ pub struct SetCredBlobResponse(bool);
 pub struct RegistrationSignedExtensions {
     /// The `credProtect` extension
     pub cred_protect: Option<CredProtectResponse>,
-    /// The `credBlob` extension
-    pub cred_blob: Option<SetCredBlobResponse>,
+    // /// The `credBlob` extension
+    // pub cred_blob: Option<bool>,
+    /// Extension key-values that we have parsed, but don't strictly recognise.
+    #[serde(flatten)]
+    pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
 }
-
-/// The response from the client regarding querying the `credBlob` extension
-///
-/// This is just a wrapper around a byte array containing the `credBlob`
-/// data.
-#[derive(Debug, Serialize, Clone, Deserialize)]
-pub struct GetCredBlobResponse(Base64UrlSafeData);
 
 /// The output for authentication cermeony extensions.
 ///
@@ -461,8 +451,13 @@ pub struct GetCredBlobResponse(Base64UrlSafeData);
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticationSignedExtensions {
-    /// The credBlob extension
-    pub cred_blob: Option<GetCredBlobResponse>,
+    // I haven't been able to work out what type cred blob wants, and it seems
+    // to have been removed from the standard? Not much implements it ...
+    // /// The credBlob extension
+    // pub cred_blob: Option<Vec<u8>>,
+    /// Extension key-values that we have parsed, but don't strictly recognise.
+    #[serde(flatten)]
+    pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
 }
 
 /// Attested Credential Data

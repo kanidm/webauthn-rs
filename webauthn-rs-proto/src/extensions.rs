@@ -75,6 +75,14 @@ pub struct RequestRegistrationExtensions {
     /// The `credBlob` extension options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cred_blob: Option<CredBlobSet>,
+
+    /// Uvm
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uvm: Option<bool>,
+
+    /// CredProps
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cred_props: Option<bool>,
 }
 
 impl Default for RequestRegistrationExtensions {
@@ -82,6 +90,8 @@ impl Default for RequestRegistrationExtensions {
         RequestRegistrationExtensions {
             cred_protect: None,
             cred_blob: None,
+            uvm: None,
+            cred_props: None,
         }
     }
 }
@@ -106,6 +116,10 @@ pub struct RequestAuthenticationExtensions {
     /// The `appid` extension options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub appid: Option<String>,
+
+    /// Uvm
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uvm: Option<bool>,
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
@@ -113,7 +127,19 @@ pub struct RequestAuthenticationExtensions {
 pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
-    pub appid: bool,
+    pub appid: Option<bool>,
+
+    /// Indicates if the client used the provided cred_blob extensions.
+    pub cred_blob: Option<bool>,
+}
+
+impl Default for AuthenticationExtensionsClientOutputs {
+    fn default() -> Self {
+        AuthenticationExtensionsClientOutputs {
+            appid: None,
+            cred_blob: None,
+        }
+    }
 }
 
 #[cfg(feature = "wasm")]
@@ -125,9 +151,73 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
     ) -> AuthenticationExtensionsClientOutputs {
         let appid = js_sys::Reflect::get(&ext, &"appid".into())
             .ok()
-            .and_then(|jv| jv.as_bool())
-            .unwrap_or(false);
+            .and_then(|jv| jv.as_bool());
 
-        AuthenticationExtensionsClientOutputs { appid }
+        let cred_blob = js_sys::Reflect::get(&ext, &"credBlob".into())
+            .ok()
+            .and_then(|jv| jv.as_bool());
+
+        AuthenticationExtensionsClientOutputs { appid, cred_blob }
+    }
+}
+
+/// https://www.w3.org/TR/webauthn-3/#sctn-authenticator-credential-properties-extension
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct CredProps {
+    rk: bool,
+}
+
+/// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RegistrationExtensionsClientOutputs {
+    /// Indicates whether the client used the provided appid extension
+    #[serde(default)]
+    pub appid: Option<bool>,
+
+    /// Indicates if the client used the provided cred_blob extensions.
+    pub cred_blob: Option<bool>,
+
+    /// Indicates if the client believes it created a resident key.
+    pub cred_props: Option<CredProps>,
+}
+
+impl Default for RegistrationExtensionsClientOutputs {
+    fn default() -> Self {
+        RegistrationExtensionsClientOutputs {
+            appid: None,
+            cred_blob: None,
+            cred_props: None,
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtensionsClientOutputs {
+    fn from(
+        ext: web_sys::AuthenticationExtensionsClientOutputs,
+    ) -> RegistrationExtensionsClientOutputs {
+        let appid = js_sys::Reflect::get(&ext, &"appid".into())
+            .ok()
+            .and_then(|jv| jv.as_bool());
+
+        let cred_blob = js_sys::Reflect::get(&ext, &"credBlob".into())
+            .ok()
+            .and_then(|jv| jv.as_bool());
+
+        // Destructure "credProps":{"rk":false} from within a map.
+        let cred_props = js_sys::Reflect::get(&ext, &"credProps".into())
+            .ok()
+            .and_then(|cred_props_struct| {
+                js_sys::Reflect::get(&cred_props_struct, &"rk".into())
+                    .ok()
+                    .and_then(|jv| jv.as_bool())
+                    .map(|rk| CredProps { rk })
+            });
+
+        RegistrationExtensionsClientOutputs {
+            appid,
+            cred_blob,
+            cred_props,
+        }
     }
 }

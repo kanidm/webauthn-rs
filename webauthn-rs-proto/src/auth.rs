@@ -113,8 +113,9 @@ pub struct PublicKeyCredential {
     pub raw_id: Base64UrlSafeData,
     /// The authenticator response.
     pub response: AuthenticatorAssertionResponseRaw,
-    /// The extensions sent by the client
-    pub extensions: Option<AuthenticationExtensionsClientOutputs>,
+    /// Unsigned Client processed extensions.
+    #[serde(default)]
+    pub extensions: AuthenticationExtensionsClientOutputs,
     /// The authenticator type.
     #[serde(rename = "type")]
     pub type_: String,
@@ -173,7 +174,7 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
                 signature: data_response_signature_b64,
                 user_handle: data_response_user_handle_b64,
             },
-            extensions: Some(data_extensions.into()),
+            extensions: data_extensions.into(),
             type_: "public-key".to_string(),
         }
     }

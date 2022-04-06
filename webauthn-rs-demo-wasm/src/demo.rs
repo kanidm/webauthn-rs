@@ -98,6 +98,12 @@ impl Demo {
         data: web_sys::PublicKeyCredential,
         username: String,
     ) -> Result<AppMsg, FetchError> {
+
+        let client_extensions = data.get_client_extension_results();
+        console::log!(
+            format!("client_extensions -> {:?}", client_extensions)
+        );
+
         let rpkc = RegisterPublicKeyCredential::from(data);
         console::log!(format!("rpkc -> {:?}", rpkc).as_str());
 
@@ -496,6 +502,7 @@ impl Component for Demo {
             }
             (_, AppMsg::Register) => DemoState::Register,
             (DemoState::Waiting, AppMsg::BeginRegisterChallenge(ccr, username)) => {
+                console::log!(format!("ccr -> {:?}", ccr));
                 let promise = utils::window()
                     .navigator()
                     .credentials()
