@@ -12,6 +12,8 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 use super::error::*;
 use crate::proto::*;
 
+use crate::internals::TpmVendor;
+
 // Why OpenSSL over another rust crate?
 // - The openssl crate allows us to reconstruct a public key from the
 //   x/y group coords, where most others want a pkcs formatted structure. As
@@ -110,29 +112,168 @@ pub(crate) fn verify_signature(
     pkey_verify_signature(&pkey, alg, signature, verification_data)
 }
 
-pub(crate) fn assert_tpm_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+use x509_parser::prelude::{GeneralName, X509Error, X509Name};
+
+fn check_extension<T, F>(extension: &Result<Option<T>, X509Error>, f: F) -> WebauthnResult<()>
+where
+    F: Fn(&T) -> bool,
+{
+    match extension {
+        Ok(Some(extension)) => {
+            if f(&extension) {
+                Ok(())
+            } else {
+                Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+            }
+        }
+        Ok(None) => Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+        Err(_) => {
+            debug!("extension present multiple times or invalid");
+            Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+        }
+    }
+}
+
+pub struct TpmSanData<'a> {
+    pub manufacturer: &'a str,
+    pub model: &'a str,
+    pub version: &'a str,
+}
+
+#[derive(Default)]
+struct TpmSanDataBuilder<'a> {
+    manufacturer: Option<&'a str>,
+    model: Option<&'a str>,
+    version: Option<&'a str>,
+}
+
+impl<'a> TpmSanDataBuilder<'a> {
+    pub(crate) fn new() -> Self {
+        Default::default()
+    }
+
+    pub(crate) fn manufacturer(mut self, value: &'a str) -> Self {
+        self.manufacturer = Some(value);
+        self
+    }
+
+    pub(crate) fn model(mut self, value: &'a str) -> Self {
+        self.model = Some(value);
+        self
+    }
+
+    pub(crate) fn version(mut self, value: &'a str) -> Self {
+        self.version = Some(value);
+        self
+    }
+
+    pub(crate) fn build(self) -> WebauthnResult<TpmSanData<'a>> {
+        self.manufacturer
+            .zip(self.model)
+            .zip(self.version)
+            .map(|((manufacturer, model), version)| TpmSanData {
+                manufacturer,
+                model,
+                version,
+            })
+            .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)
+    }
+}
+
+// pub(crate) const TCG_AT_TPM_MANUFACTURER: Oid = der_parser::oid!(2.23.133 .2 .1);
+// pub(crate) const TCG_AT_TPM_MODEL: Oid = der_parser::oid!(2.23.133 .2 .2);
+// pub(crate) const TCG_AT_TPM_VERSION: Oid = der_parser::oid!(2.23.133 .2 .3);
+
+pub(crate) const TCG_AT_TPM_MANUFACTURER_RAW: &[u8] = &der_parser::oid!(raw 2.23.133 .2 .1);
+pub(crate) const TCG_AT_TPM_MODEL_RAW: &[u8] = &der_parser::oid!(raw 2.23.133 .2 .2);
+pub(crate) const TCG_AT_TPM_VERSION_RAW: &[u8] = &der_parser::oid!(raw 2.23.133 .2 .3);
+
+impl<'a> TryFrom<&'a X509Name<'a>> for TpmSanData<'a> {
+    type Error = WebauthnError;
+
+    fn try_from(x509_name: &'a X509Name<'a>) -> Result<Self, Self::Error> {
+        x509_name
+            .iter_attributes()
+            .try_fold(TpmSanDataBuilder::new(), |builder, attribute| {
+                Ok(match attribute.attr_type().as_bytes() {
+                    TCG_AT_TPM_MANUFACTURER_RAW => {
+                        builder.manufacturer(attribute.attr_value().as_str()?)
+                    }
+                    TCG_AT_TPM_MODEL_RAW => builder.model(attribute.attr_value().as_str()?),
+                    TCG_AT_TPM_VERSION_RAW => builder.version(attribute.attr_value().as_str()?),
+                    _ => builder,
+                })
+            })
+            .map_err(|_: der_parser::error::Error| WebauthnError::ParseNOMFailure)
+            .and_then(TpmSanDataBuilder::build)
+    }
+}
+
+pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnError> {
     // TPM attestation certificate MUST have the following fields/extensions:
 
     // Version MUST be set to 3.
     // version is not an attribute in openssl rust so I can't verify this
 
     // Subject field MUST be set to empty.
-    let subject_name_ref = pubk.subject_name();
+    let subject_name_ref = x509.subject_name();
     if subject_name_ref.entries().count() != 0 {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
+    let der_bytes = x509.to_der()?;
+    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1;
+
     // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
     // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
-    //
-    // I actually have no idea how to parse or process this ...
-    // self.pubk.subject_alt_names
+    check_extension(
+        &x509_cert.subject_alternative_name(),
+        |subject_alternative_name| {
+            // From [TPMv2-EK-Profile]:
+            // In accordance with RFC 5280[11], this extension MUST be critical if
+            // subject is empty and SHOULD be non-critical if subject is non-empty.
+            //
+            // We've already returned if the subject is non-empty, so we can just
+            // check that the extension is critical.
+            if !subject_alternative_name.critical {
+                return false;
+            };
 
-    // Today there is no way to view eku/bc from openssl rust
+            // The issuer MUST include TPM manufacturer, TPM part number and TPM
+            // firmware version, using the directoryName form within the GeneralName
+            // structure.
+            subject_alternative_name
+                .value
+                .general_names
+                .iter()
+                .any(|general_name| {
+                    if let GeneralName::DirectoryName(x509_name) = general_name {
+                        TpmSanData::try_from(x509_name)
+                            .and_then(|san_data| {
+                                TpmVendor::try_from(san_data.manufacturer.as_bytes())
+                            })
+                            .is_ok()
+                    } else {
+                        false
+                    }
+                })
+        },
+    )?;
 
     // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
+    check_extension(&x509_cert.extended_key_usage(), |extended_key_usage| {
+        extended_key_usage
+            .value
+            .other
+            .contains(&der_parser::oid!(2.23.133 .8 .3))
+    })?;
 
     // The Basic Constraints extension MUST have the CA component set to false.
+    check_extension(&x509_cert.basic_constraints(), |basic_constraints| {
+        !basic_constraints.value.ca
+    })?;
 
     // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
     // Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
