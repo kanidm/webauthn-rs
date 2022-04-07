@@ -228,8 +228,6 @@ fn aaguid_parser(i: &[u8]) -> nom::IResult<&[u8], Aaguid> {
 fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     let (i, aaguid) = aaguid_parser(i)?;
     let (i, cred_id_len) = be_u16(i)?;
-    let (i, cred_id) = take(cred_id_len as usize)(i)?;
-    let (i, cred_pk) = cbor_parser(i)?;
 
     if usize::from(cred_id_len) > i.len() {
         warn!(
@@ -238,6 +236,9 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
             i.len()
         );
     }
+
+    let (i, cred_id) = take(cred_id_len as usize)(i)?;
+    let (i, cred_pk) = cbor_parser(i)?;
 
     Ok((
         i,
@@ -968,6 +969,7 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 
 /// From the [TPM Vendor ID Registry][1]
 /// [1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-VendorIDRegistry-v1p06-r0p91-pub.pdf,
+#[derive(Debug)]
 pub enum TpmVendor {
     AMD,
     Atmel,
@@ -997,37 +999,37 @@ pub enum TpmVendor {
 
 // The value of the TPMManufacturer attribute MUST be the ASCII representation
 // of the hexadecimal value of the 4 byte vendor identifier defined in the TCG
-// Vendor ID Registry[3]. Each byte is represented individually as a two digit
+// Vendor ID Registry. Each byte is represented individually as a two digit
 // unsigned hexadecimal number using the characters 0-9 and A-F.
-impl TryFrom<&[u8; 4]> for TpmVendor {
+impl TryFrom<&[u8; 8]> for TpmVendor {
     type Error = WebauthnError;
 
-    fn try_from(v: &[u8; 4]) -> Result<Self, Self::Error> {
-        match *v {
-            [0x41, 0x4d, 0x44, 0x00] => Ok(Self::AMD),
-            [0x41, 0x54, 0x4d, 0x4c] => Ok(Self::Atmel),
-            [0x42, 0x52, 0x43, 0x4d] => Ok(Self::Broadcom),
-            [0x43, 0x53, 0x43, 0x4f] => Ok(Self::Cisco),
-            [0x46, 0x4c, 0x59, 0x53] => Ok(Self::FlySliceTechnologies),
-            [0x52, 0x4f, 0x43, 0x43] => Ok(Self::FuzhouRockchip),
-            [0x47, 0x4f, 0x4f, 0x47] => Ok(Self::Google),
-            [0x48, 0x50, 0x45, 0x00] => Ok(Self::HPE),
-            [0x48, 0x49, 0x53, 0x49] => Ok(Self::Huawei),
-            [0x49, 0x42, 0x4d, 0x00] => Ok(Self::IBM),
-            [0x49, 0x46, 0x58, 0x00] => Ok(Self::Infineon),
-            [0x49, 0x4E, 0x54, 0x43] => Ok(Self::Intel),
-            [0x4C, 0x45, 0x4E, 0x00] => Ok(Self::Lenovo),
-            [0x4D, 0x53, 0x46, 0x54] => Ok(Self::Microsoft),
-            [0x4E, 0x53, 0x4D, 0x20] => Ok(Self::NationalSemi),
-            [0x4E, 0x54, 0x5A, 0x00] => Ok(Self::Nationz),
-            [0x4E, 0x54, 0x43, 0x00] => Ok(Self::NuvotonTechnology),
-            [0x51, 0x43, 0x4F, 0x4D] => Ok(Self::Qualcomm),
-            [0x53, 0x4D, 0x53, 0x4E] => Ok(Self::Samsung),
-            [0x53, 0x4E, 0x53, 0x00] => Ok(Self::Sinosun),
-            [0x53, 0x4D, 0x53, 0x43] => Ok(Self::SMSC),
-            [0x53, 0x54, 0x4D, 0x20] => Ok(Self::StMicroelectronics),
-            [0x54, 0x58, 0x4E, 0x00] => Ok(Self::TexasInstruments),
-            [0x57, 0x45, 0x43, 0x00] => Ok(Self::Winbond),
+    fn try_from(v: &[u8; 8]) -> Result<Self, Self::Error> {
+        match v {
+            b"414d4400" => Ok(Self::AMD),
+            b"41544D4C" => Ok(Self::Atmel),
+            b"4252434D" => Ok(Self::Broadcom),
+            b"4353434F" => Ok(Self::Cisco),
+            b"464C5953" => Ok(Self::FlySliceTechnologies),
+            b"524F4343" => Ok(Self::FuzhouRockchip),
+            b"474F4F47" => Ok(Self::Google),
+            b"48504500" => Ok(Self::HPE),
+            b"48495349" => Ok(Self::Huawei),
+            b"49424D00" => Ok(Self::IBM),
+            b"49465800" => Ok(Self::Infineon),
+            b"494E5443" => Ok(Self::Intel),
+            b"4C454E00" => Ok(Self::Lenovo),
+            b"4D534654" => Ok(Self::Microsoft),
+            b"4E534D20" => Ok(Self::NationalSemi),
+            b"4E545A00" => Ok(Self::Nationz),
+            b"4E544300" => Ok(Self::NuvotonTechnology),
+            b"51434F4D" => Ok(Self::Qualcomm),
+            b"534D534E" => Ok(Self::Samsung),
+            b"534E5300" => Ok(Self::Sinosun),
+            b"534D5343" => Ok(Self::SMSC),
+            b"53544D20" => Ok(Self::StMicroelectronics),
+            b"54584E00" => Ok(Self::TexasInstruments),
+            b"57454300" => Ok(Self::Winbond),
             _ => Err(WebauthnError::ParseNOMFailure),
         }
     }
@@ -1035,9 +1037,10 @@ impl TryFrom<&[u8; 4]> for TpmVendor {
 
 // The result is concatenated together to form an 8 character name which is
 // appended after the lower-case ASCII characters “id:”.
-fn tpm_device_attribute_parser(i: &[u8]) -> nom::IResult<&[u8], &[u8; 4]> {
+pub(crate) fn tpm_device_attribute_parser(i: &[u8]) -> nom::IResult<&[u8], &[u8; 8]> {
     let (i, _) = tag("id:")(i)?;
-    let (i, vendor_code) = take(4usize)(i)?;
+    let (i, vendor_code) = take(8usize)(i)?;
+
     Ok((i, vendor_code.try_into().expect("took exactly 4 bytes")))
 }
 

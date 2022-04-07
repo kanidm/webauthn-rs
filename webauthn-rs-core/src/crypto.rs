@@ -12,7 +12,7 @@ use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 use super::error::*;
 use crate::proto::*;
 
-use crate::internals::TpmVendor;
+use crate::internals::{tpm_device_attribute_parser, TpmVendor};
 
 // Why OpenSSL over another rust crate?
 // - The openssl crate allows us to reconstruct a public key from the
@@ -252,7 +252,11 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
                     if let GeneralName::DirectoryName(x509_name) = general_name {
                         TpmSanData::try_from(x509_name)
                             .and_then(|san_data| {
-                                TpmVendor::try_from(san_data.manufacturer.as_bytes())
+                                tpm_device_attribute_parser(san_data.manufacturer.as_bytes())
+                                    .map_err(|_| WebauthnError::ParseNOMFailure)
+                            })
+                            .and_then(|(_, manufacturer_bytes)| {
+                                TpmVendor::try_from(manufacturer_bytes)
                             })
                             .is_ok()
                     } else {
