@@ -1235,6 +1235,6 @@ mod tests {
             99, 114, 101, 100, 66, 108, 111, 98, 64,
         ];
 
-        let _auth_data = AuthenticatorData::<Authentication>::try_from(raw.as_slice()).unwrap();
+        assert!(AuthenticatorData::<Authentication>::try_from(raw.as_slice()).is_ok());
     }
 }
