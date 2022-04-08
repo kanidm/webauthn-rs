@@ -437,8 +437,6 @@ pub struct CredProtectResponse(pub CredentialProtectionPolicy);
 pub struct RegistrationSignedExtensions {
     /// The `credProtect` extension
     pub cred_protect: Option<CredProtectResponse>,
-    // /// The `credBlob` extension
-    // pub cred_blob: Option<bool>,
     /// Extension key-values that we have parsed, but don't strictly recognise.
     #[serde(flatten)]
     pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
@@ -451,10 +449,6 @@ pub struct RegistrationSignedExtensions {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticationSignedExtensions {
-    // I haven't been able to work out what type cred blob wants, and it seems
-    // to have been removed from the standard? Not much implements it ...
-    // /// The credBlob extension
-    // pub cred_blob: Option<Vec<u8>>,
     /// Extension key-values that we have parsed, but don't strictly recognise.
     #[serde(flatten)]
     pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
