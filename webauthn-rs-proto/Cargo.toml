@@ -26,5 +26,8 @@ features = [
     "CredentialCreationOptions",
     "CredentialRequestOptions",
     "PublicKeyCredential",
-    "AuthenticationExtensionsClientOutputs"
+    "PublicKeyCredentialCreationOptions",
+    "AuthenticationExtensionsClientInputs",
+    "AuthenticationExtensionsClientOutputs",
+    "console",
 ]

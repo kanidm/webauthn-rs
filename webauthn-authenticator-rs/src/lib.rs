@@ -4,6 +4,9 @@ extern crate tracing;
 
 use crate::error::WebauthnCError;
 use base64urlsafedata::Base64UrlSafeData;
+use webauthn_rs_proto::{
+    AuthenticationExtensionsClientOutputs, RegistrationExtensionsClientOutputs,
+};
 
 use serde_cbor::value::Value;
 use std::collections::BTreeMap;
@@ -438,6 +441,7 @@ where
                 client_data_json: Base64UrlSafeData(client_data_json.as_bytes().to_vec()),
             },
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         trace!("rego  -> {:x?}", rego);
@@ -573,8 +577,8 @@ where
                 signature: Base64UrlSafeData(u2sd.signature),
                 user_handle: None,
             },
-            extensions: None,
             type_: "public-key".to_string(),
+            extensions: AuthenticationExtensionsClientOutputs::default(),
         })
     }
 }

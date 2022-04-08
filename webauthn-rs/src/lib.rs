@@ -438,7 +438,6 @@ impl Webauthn {
 
         // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
         // UVM
-
         // If rk - credProps
 
         // credProtect
@@ -449,6 +448,8 @@ impl Webauthn {
                 enforce_credential_protection_policy: Some(false),
             }),
             cred_blob: None,
+            uvm: Some(true),
+            cred_props: Some(true),
         });
 
         // min pin
@@ -505,8 +506,13 @@ impl Webauthn {
         &self,
         creds: &[&PasswordlessKey],
     ) -> WebauthnResult<(RequestChallengeResponse, PasswordlessKeyAuthentication)> {
-        let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+
+        let extensions = Some(RequestAuthenticationExtensions {
+            get_cred_blob: Some(CredBlobGet(true)),
+            appid: None,
+            uvm: Some(true),
+        });
 
         self.core
             .generate_challenge_authenticate_options(creds, extensions)

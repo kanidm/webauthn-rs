@@ -627,7 +627,7 @@ impl WebauthnCore {
         // Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
         // Note that if we have an appid stored in the state and the client indicates it has used the appid extension,
         // we also check the hash against this appid in addition to the Relying Party
-        let has_appid_enabled = rsp.extensions.as_ref().map(|e| e.appid).unwrap_or(false);
+        let has_appid_enabled = rsp.extensions.appid.unwrap_or(false);
 
         let appid_hash = if has_appid_enabled {
             appid.as_ref().map(|id| compute_sha256(id.as_bytes()))
@@ -1701,6 +1701,7 @@ mod tests {
                 ),
             },
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         let result = wan.register_credential_internal(
@@ -1782,6 +1783,7 @@ mod tests {
                 ]),
             },
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         let result = wan.register_credential_internal(
@@ -1846,7 +1848,7 @@ mod tests {
                 ]),
                 user_handle: Some(Base64UrlSafeData(vec![109, 99, 104, 97, 110])),
             },
-            extensions: None,
+            extensions: AuthenticationExtensionsClientOutputs::default(),
             type_: "public-key".to_string(),
         };
 
@@ -2148,6 +2150,7 @@ mod tests {
                 ]),
             },
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         let result = wan.register_credential_internal(
@@ -2307,6 +2310,7 @@ mod tests {
                 ]),
             },
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         let result = wan.register_credential_internal(
@@ -2447,6 +2451,7 @@ mod tests {
                 ]),
             },
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         let result = wan.register_credential_internal(
@@ -2719,8 +2724,8 @@ mod tests {
                     108, 115, 101, 125,
                 ]),
             },
-
             type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs::default(),
         };
 
         let cred = wan
@@ -2773,7 +2778,7 @@ mod tests {
                 ]),
                 user_handle: Some(Base64UrlSafeData(vec![])),
             },
-            extensions: None,
+            extensions: AuthenticationExtensionsClientOutputs::default(),
             type_: "public-key".to_string(),
         };
 

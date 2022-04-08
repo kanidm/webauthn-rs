@@ -8,7 +8,7 @@ use std::convert::TryFrom;
 use std::ops::Deref;
 
 use nom::bytes::complete::{tag, take};
-use nom::combinator::{cond, map_res};
+use nom::combinator::cond;
 use nom::combinator::{map_opt, verify};
 use nom::error::ParseError;
 use nom::number::complete::{be_u16, be_u32, be_u64};
@@ -214,10 +214,17 @@ fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
 }
 
 fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExtensions> {
-    map_res(
-        cbor_parser,
-        serde_cbor::value::from_value::<T::SignedExtensions>,
-    )(i)
+    let (i, v) = cbor_parser(i)?;
+    trace!(?v, "OK!");
+
+    let v: T::SignedExtensions = serde_cbor::value::from_value(v).map_err(|e| {
+        error!(?e);
+        nom::Err::Failure(nom::error::Error::from_error_kind(
+            i,
+            nom::error::ErrorKind::Fail,
+        ))
+    })?;
+    Ok((i, v))
 }
 
 fn aaguid_parser(i: &[u8]) -> nom::IResult<&[u8], Aaguid> {
@@ -255,8 +262,19 @@ fn authenticator_data_flags(i: &[u8]) -> nom::IResult<&[u8], (bool, bool, bool, 
     let (i, ctrl) = nom::number::complete::u8(i)?;
     let exten_pres = (ctrl & 0b1000_0000) != 0;
     let acd_pres = (ctrl & 0b0100_0000) != 0;
+    let res_1 = (ctrl & 0b0010_0000) != 0;
+    let res_2 = (ctrl & 0b0001_0000) != 0;
+    let res_3 = (ctrl & 0b0000_1000) != 0;
     let u_ver = (ctrl & 0b0000_0100) != 0;
+    let res_4 = (ctrl & 0b0000_0010) != 0;
     let u_pres = (ctrl & 0b0000_0001) != 0;
+
+    if res_1 || res_2 || res_3 || res_4 {
+        warn!(
+            "Usage of unknown authenticator data flags detected! {:b}",
+            ctrl
+        );
+    }
 
     Ok((i, (exten_pres, acd_pres, u_ver, u_pres)))
 }
@@ -267,6 +285,7 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
     let (i, counter) = be_u32(i)?;
     let (i, acd) = cond(data_flags.1, acd_parser)(i)?;
     let (i, extensions) = cond(data_flags.0, extensions_parser::<T>)(i)?;
+    trace!(?extensions);
     let extensions = extensions.unwrap_or_else(|| T::SignedExtensions::default());
 
     Ok((
@@ -1059,8 +1078,9 @@ impl TryFrom<&[u8]> for TpmVendor {
 #[cfg(test)]
 mod tests {
     use super::{
-        AttestationObject, CredentialProtectionPolicy, RegisterPublicKeyCredential, Registration,
-        RegistrationSignedExtensions, TpmsAttest, TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
+        AttestationObject, Authentication, AuthenticatorData, CredentialProtectionPolicy,
+        RegisterPublicKeyCredential, Registration, RegistrationSignedExtensions, TpmsAttest,
+        TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use serde_json;
     use std::convert::TryFrom;
@@ -1204,5 +1224,17 @@ mod tests {
             UserVerificationRequired,
             CredentialProtectionPolicy::try_from(UserVerificationRequired as u8).unwrap()
         );
+    }
+
+    #[test]
+    fn authenticator_data_parser_extensions() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let raw = [
+            73, 150, 13, 229, 136, 14, 140, 104, 116, 52, 23, 15, 100, 118, 96, 91, 143, 228, 174,
+            185, 162, 134, 50, 199, 153, 92, 243, 186, 131, 29, 151, 99, 133, 0, 0, 0, 6, 161, 104,
+            99, 114, 101, 100, 66, 108, 111, 98, 64,
+        ];
+
+        let _auth_data = AuthenticatorData::<Authentication>::try_from(raw.as_slice()).unwrap();
     }
 }

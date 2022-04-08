@@ -3,7 +3,7 @@
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
-use crate::extensions::RequestRegistrationExtensions;
+use crate::extensions::{RegistrationExtensionsClientOutputs, RequestRegistrationExtensions};
 use crate::options::*;
 
 /// <https://w3c.github.io/webauthn/#dictionary-makecredentialoptions>
@@ -102,23 +102,27 @@ pub struct AuthenticatorAttestationResponseRaw {
 pub struct RegisterPublicKeyCredential {
     /// The id of the PublicKey credential, likely in base64
     pub id: String,
-
     /// The id of the credential, as binary.
     #[serde(rename = "rawId")]
     pub raw_id: Base64UrlSafeData,
-
     /// <https://w3c.github.io/webauthn/#dom-publickeycredential-response>
     pub response: AuthenticatorAttestationResponseRaw,
-
     /// The type of credential.
     #[serde(rename = "type")]
     pub type_: String,
+    /// Unsigned Client processed extensions.
+    #[serde(default)]
+    pub extensions: RegistrationExtensionsClientOutputs,
 }
 
 #[cfg(feature = "wasm")]
 impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
     fn from(data: web_sys::PublicKeyCredential) -> RegisterPublicKeyCredential {
         use js_sys::Uint8Array;
+
+        // is_user_verifying_platform_authenticator_available
+
+        // AuthenticatorAttestationResponse has getTransports but web_sys isn't exposing it?
 
         // First, we have to b64 some data here.
         // data.raw_id
@@ -136,6 +140,8 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
         )
         .to_vec();
 
+        let data_extensions = data.get_client_extension_results();
+
         // Now we can convert to the base64 values for json.
         let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
 
@@ -146,11 +152,12 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
         RegisterPublicKeyCredential {
             id: format!("{}", data_raw_id_b64),
             raw_id: data_raw_id_b64,
-            type_: "public-key".to_string(),
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: data_response_attestation_object_b64,
                 client_data_json: data_response_client_data_json_b64,
             },
+            type_: "public-key".to_string(),
+            extensions: data_extensions.into(),
         }
     }
 }
