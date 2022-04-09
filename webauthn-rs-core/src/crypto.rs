@@ -290,9 +290,16 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
     // Statement Certificate Requirements.
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
+    let der_bytes = pubk.to_der()?;
+    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1;
 
     // The attestation certificate MUST have the following fields/extensions:
     // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
+    if x509_cert.version != X509Version::V3 {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
 
     // Subject field MUST be set to:
     //
@@ -304,33 +311,21 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     //  Literal string “Authenticator Attestation” (UTF8String)
     // Subject-CN
     //  A UTF8String of the vendor’s choosing
-    let subject_name_ref = pubk.subject_name();
+    let subject = &x509_cert.subject;
 
-    let subject_c = subject_name_ref
-        .entries_by_nid(nid::Nid::from_raw(14))
-        .take(1)
-        .next();
-    let subject_o = subject_name_ref
-        .entries_by_nid(nid::Nid::from_raw(17))
-        .take(1)
-        .next();
-    let subject_ou = subject_name_ref
-        .entries_by_nid(nid::Nid::from_raw(18))
-        .take(1)
-        .next();
-    let subject_cn = subject_name_ref
-        .entries_by_nid(nid::Nid::from_raw(13))
-        .take(1)
-        .next();
+    let subject_c = subject.iter_country().take(1).next();
+    let subject_o = subject.iter_organization().take(1).next();
+    let subject_ou = subject.iter_organizational_unit().take(1).next();
+    let subject_cn = subject.iter_common_name().take(1).next();
 
     if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
     match subject_ou {
-        Some(ou) => match ou.data().as_utf8() {
+        Some(ou) => match ou.attr_value().as_str() {
             Ok(ou_d) => {
-                if ou_d.to_string() != "Authenticator Attestation" {
+                if ou_d != "Authenticator Attestation" {
                     return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
                 }
             }
@@ -342,13 +337,19 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     // If the related attestation root certificate is used for multiple authenticator models,
     // the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
     // containing the AAGUID as a 16-byte OCTET STRING. The extension MUST NOT be marked as critical.
+    //
+    // We check this alreaddy in the attestation procedure
 
     // The Basic Constraints extension MUST have the CA component set to false.
+    check_extension(&x509_cert.basic_constraints(), |basic_constraints| {
+        !basic_constraints.value.ca
+    })?;
 
     // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL
     // Distribution Point extension [RFC5280] are both OPTIONAL as the status of many
     // attestation certificates is available through authenticator metadata services. See, for
     // example, the FIDO Metadata Service [FIDOMetadataService].
+
     Ok(())
 }
 
