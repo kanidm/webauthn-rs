@@ -195,6 +195,12 @@ pub enum WebauthnError {
     #[error("The COSEKey contains invalid cryptographic algorithm request")]
     COSEKeyInvalidAlgorithm,
 
+    #[error("The credential may be a passkey and not truly bound to hardware.")]
+    CredentialMayNotBeHardwareBound,
+
+    #[error("The credential uses insecure cryptographic routines and is not trusted")]
+    CredentialInsecureCryptography,
+
     #[error("The credential exist check failed")]
     CredentialExistCheckError,
 

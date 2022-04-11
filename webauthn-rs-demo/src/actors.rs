@@ -218,6 +218,7 @@ impl WebauthnActor {
             algorithm.unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
             false,
             attachment,
+            false,
         )?;
 
         debug!("complete ChallengeRegister -> {:?}", ccr);

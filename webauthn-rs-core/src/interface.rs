@@ -30,6 +30,7 @@ pub struct RegistrationState {
     pub(crate) require_resident_key: bool,
     pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
     pub(crate) extensions: RequestRegistrationExtensions,
+    pub(crate) experimental_allow_passkeys: bool,
 }
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
