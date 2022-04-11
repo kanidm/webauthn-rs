@@ -3257,6 +3257,7 @@ mod tests {
             // }),
             true,
             &RequestRegistrationExtensions::default(),
+            true
         );
         debug!("{:?}", result);
         let cred = result.unwrap();
