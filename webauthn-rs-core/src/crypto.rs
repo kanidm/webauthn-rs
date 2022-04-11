@@ -7,6 +7,7 @@
 
 use core::convert::TryFrom;
 use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
+use x509_parser::x509::X509Version;
 
 // use super::constants::*;
 use super::error::*;
@@ -210,21 +211,23 @@ impl<'a> TryFrom<&'a X509Name<'a>> for TpmSanData<'a> {
 }
 
 pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnError> {
+    let der_bytes = x509.to_der()?;
+    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1;
+
     // TPM attestation certificate MUST have the following fields/extensions:
 
     // Version MUST be set to 3.
-    // version is not an attribute in openssl rust so I can't verify this
+    if x509_cert.version != X509Version::V3 {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
 
     // Subject field MUST be set to empty.
     let subject_name_ref = x509.subject_name();
     if subject_name_ref.entries().count() != 0 {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
-
-    let der_bytes = x509.to_der()?;
-    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
-        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
-        .1;
 
     // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
     // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
