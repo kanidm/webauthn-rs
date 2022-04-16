@@ -7,8 +7,6 @@
 //! This library aims to provide a secure Webauthn implementation that you can
 //! plug into your application, so that you can provide Webauthn to your users.
 //!
-//! For examples, see our examples folder.
-//!
 //! To use this library yourself, you will want to reference the `WebauthnConfig` trait to
 //! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
 //! interactions.
