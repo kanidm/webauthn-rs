@@ -261,7 +261,7 @@ impl Webauthn {
                 credential_algorithms,
                 require_resident_key,
                 authenticator_attachment,
-                true,
+                false,
             )
             .map(|(ccr, rs)| {
                 (
@@ -466,7 +466,7 @@ impl Webauthn {
                 credential_algorithms,
                 require_resident_key,
                 authenticator_attachment,
-                true,
+                false,
             )
             .map(|(ccr, rs)| {
                 (

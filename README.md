@@ -21,26 +21,43 @@ Documentation
 
 Our docs are available on [docs rs](https://docs.rs/webauthn-rs/latest/webauthn_rs/)
 
+Demonstration
+-------------
+
+You can test this library via our [demonstration site](https://webauthn.firstyear.id.au/)
+
+Or you can run the demonstration your self locally with:
+
+    cd webauthn-rs-demo
+    cargo run
+    # For options
+    cargo run -- --help
+
 Known Supported Keys/Harwdare
 -----------------------------
 
-* Yubico 5c + MacOS 10.14 + Firefox/Edge
-* Yubico 5ci + iPadOS 14 + Safari/Brave
-* TouchID + iPadOS + Safari
-* FaceID + iPhone + Safari
-* TouchID + MacOS + Edge
-* Windows Hello + Windows 10 + Chrome
+We have extensively tested a variety of keys and devices, not limited to:
+
+* Yubico 5c / 5ci / FIPS / Bio
+* TouchID / FaceID (iPhone, iPad, MacBook Pro)
+* Windows Hello (TPM)
+* Softtokens
 
 If your key/browser combination don't work (generally due to missing crypto routines)
-please conduct a [compatability test](https://webauthn.firstyear.id.au/compat_test) and then open an issue so that we can resolve the issue!
+please conduct a [compatability test](https://webauthn.firstyear.id.au/compat_test) and then open
+an issue so that we can resolve the issue!
 
 Known BROKEN Keys/Harwdare
 --------------------------
 
 * Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates,
-  and ignores requested algorithms.
+  and ignores requested algorithms. Not resolved.
 * Windows 10 / Windows 11 + Firefox 98 - When aaguid is meant
-  to be 16 bytes of 0, it emits a single 0 byte.
+  to be 16 bytes of 0, it emits a single 0 byte. This should be resolved as of 2022-04-17
+* Apple Passkeys do not identify themself as a transferable credential, and should be considered
+  to be floating.
+* CTAP2.0/CTAP2.1 compliant devices - Incorrectly request UV on registration, but do not prompt for
+  it during authentication, leading to possible social engineering and UV bypass attacks
 
 Standards Compliance
 --------------------
@@ -49,9 +66,10 @@ This library has been carefully implemented to follow the w3c standard for webau
 to ensure secure and correct behaviour. We support most major extensions and key types, but we do not claim
 to be standards complaint because:
 
+* We have enforced extra constraints in the library that go above and beyond the security guarantees the standard offers.
 * We do not support certain esoteric options.
 * We do not support all cryptographic primitive types (only limited to secure ones).
-* We have enforced extra constraints in the library that go above and beyond the security guarantees the standard offers.
+* A large number of advertised features in webauthn do not function in the real world.
 
 This library has passed a security review performed by SUSE product security. Other security reviews
 are welcome!

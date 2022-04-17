@@ -163,7 +163,6 @@ impl WebauthnCore {
         experimental_reject_passkeys: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
-
         if policy == UserVerificationPolicy::Discouraged_DO_NOT_USE {
             warn!("UserVerificationPolicy::Discouraged_DO_NOT_USE is misleading! You should select Preferred or Required!");
         }
@@ -273,6 +272,8 @@ impl WebauthnCore {
         // does_exist_fn: impl Fn(&CredentialID) -> Result<bool, ()>,
     ) -> Result<Credential, WebauthnError> {
         // Decompose our registration state which contains everything we need to proceed.
+        trace!(?state);
+        trace!(?reg);
 
         let RegistrationState {
             policy,
