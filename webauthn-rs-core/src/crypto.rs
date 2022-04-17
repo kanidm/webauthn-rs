@@ -7,9 +7,11 @@
 
 use core::convert::TryFrom;
 use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
+use x509_parser::x509::X509Version;
 
 // use super::constants::*;
 use super::error::*;
+use crate::attestation::{AttestationX509Extension, FidoGenCeAaguid};
 use crate::proto::*;
 
 use crate::internals::{tpm_device_attribute_parser, TpmVendor};
@@ -338,7 +340,12 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     // the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
     // containing the AAGUID as a 16-byte OCTET STRING. The extension MUST NOT be marked as critical.
     //
-    // We check this alreaddy in the attestation procedure
+    // We already check that the value matches the AAGUID in attestation
+    // verification, so we only have to check the critical requirement here.
+    check_extension(
+        &x509_cert.get_extension_unique(&FidoGenCeAaguid::OID),
+        |fido_gen_ce_aaguid| !fido_gen_ce_aaguid.critical,
+    )?;
 
     // The Basic Constraints extension MUST have the CA component set to false.
     check_extension(&x509_cert.basic_constraints(), |basic_constraints| {
