@@ -98,6 +98,7 @@ impl Demo {
         data: web_sys::PublicKeyCredential,
         username: String,
     ) -> Result<AppMsg, FetchError> {
+        console::log!("register_complete()");
 
         let client_extensions = data.get_client_extension_results();
         console::log!(
@@ -126,6 +127,7 @@ impl Demo {
 
         let window = utils::window();
         let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        console::log!(format!("resp_value -> {:?}", resp_value).as_str());
         let resp: Response = resp_value.dyn_into().unwrap_throw();
         let status = resp.status();
 
