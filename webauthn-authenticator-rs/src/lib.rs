@@ -1,3 +1,7 @@
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
+// #![warn(missing_docs)]
+
 extern crate nom;
 #[macro_use]
 extern crate tracing;
@@ -112,11 +116,11 @@ impl<T> WebauthnAuthenticator<T>
 where
     T: U2FToken,
 {
-    /// 5.1.3. Create a New Credential - PublicKeyCredential’s [[Create]](origin, options, sameOriginWithAncestors) Method
-    /// https://www.w3.org/TR/webauthn/#createCredential
+    /// 5.1.3. Create a New Credential - PublicKeyCredential’s Create (origin, options, sameOriginWithAncestors) Method
+    /// <https://www.w3.org/TR/webauthn/#createCredential>
     ///
     /// 6.3.2. The authenticatorMakeCredential Operation
-    /// https://www.w3.org/TR/webauthn/#op-make-cred
+    /// <https://www.w3.org/TR/webauthn/#op-make-cred>
     pub fn do_registration(
         &mut self,
         origin: &str,
@@ -448,7 +452,7 @@ where
         Ok(rego)
     }
 
-    /// https://www.w3.org/TR/webauthn/#getAssertion
+    /// <https://www.w3.org/TR/webauthn/#getAssertion>
     pub fn do_authentication(
         &mut self,
         origin: &str,

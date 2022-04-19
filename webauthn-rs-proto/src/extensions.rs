@@ -161,7 +161,7 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
     }
 }
 
-/// https://www.w3.org/TR/webauthn-3/#sctn-authenticator-credential-properties-extension
+/// <https://www.w3.org/TR/webauthn-3/#sctn-authenticator-credential-properties-extension>
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CredProps {
     rk: bool,

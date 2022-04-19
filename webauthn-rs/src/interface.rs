@@ -1,4 +1,4 @@
-//! Types that are expected to be serialised in applications using [Webauthn]
+//! Types that are expected to be serialised in applications using [crate::Webauthn]
 
 use serde::{Deserialize, Serialize};
 

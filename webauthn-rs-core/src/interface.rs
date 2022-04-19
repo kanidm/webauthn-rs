@@ -276,7 +276,7 @@ pub enum SerialisableAttestationData {
     AttCa(Vec<Base64UrlSafeData>),
     /// See [ParsedAttestationData::AnonCa]
     AnonCa(Vec<Base64UrlSafeData>),
-    /// See [ParsedAttestationData::EDCAA]
+    /// See [ParsedAttestationData::ECDAA]
     ECDAA,
     /// See [ParsedAttestationData::None]
     None,
