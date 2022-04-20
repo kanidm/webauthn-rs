@@ -17,7 +17,7 @@ FROM build_base AS builder
 
 COPY . /home/webauthn-rs/
 RUN mkdir /home/webauthn-rs/.cargo
-WORKDIR /home/webauthn-rs/webauthn-rs-demo/
+WORKDIR /home/webauthn-rs/demo_site/webauthn-rs-demo/
 
 # RUN cp cargo_vendor.config .cargo/config
 RUN cargo build --release
@@ -32,7 +32,7 @@ RUN cd /etc && \
     ln -sf ../usr/share/zoneinfo/Australia/Brisbane localtime
 
 COPY --from=builder /home/webauthn-rs/target/release/webauthn-rs-demo /bin/
-COPY --from=builder /home/webauthn-rs/webauthn-rs-demo/pkg /pkg
+COPY --from=builder /home/webauthn-rs/demo_site/webauthn-rs-demo/pkg /pkg
 
 ENV RUST_BACKTRACE 1
 CMD ["/bin/webauthn-rs-demo"]

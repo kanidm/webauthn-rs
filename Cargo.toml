@@ -6,11 +6,14 @@ members = [
     "webauthn-rs-proto",
     "webauthn-rs-core",
     "webauthn-rs",
-    "webauthn-rs-demo",
-    "webauthn-rs-demo-shared",
+    "demo_site/webauthn-rs-demo",
+    "demo_site/webauthn-rs-demo-shared",
     "webauthn-authenticator-rs",
+    "tutorial/site",
+    "tutorial/wasm"
 ]
 
+# Due to --cfg=web_sys_unstable_apis
 exclude = [
-    "webauthn-rs-demo-wasm"
+    "demo_site/webauthn-rs-demo-wasm",
 ]
