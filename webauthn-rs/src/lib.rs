@@ -9,7 +9,35 @@
 //! plug into your application, so that you can provide Webauthn to your users.
 //!
 //! There are a number of focused use cases that this library provides, which are described in
-//! the [Webauthn] struct.
+//! the [WebauthnBuilder] and [Webauthn] struct.
+//!
+//! # Getting started
+//!
+//! ```
+//! use webauthn_rs::prelude::*;
+//!
+//! let rp_id = "example.com";
+//! let rp_origin = Url::parse("https://idm.example.com")
+//!     .expect("Invalid URL");
+//! let mut builder = WebauthnBuilder::new(rp_id, &rp_origin)
+//!     .expect("Invalid configuration");
+//! let webauthn = builder.build()
+//!     .expect("Invalid configuration");
+//!
+//! // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
+//! let (ccr, skr) = webauthn
+//!     .start_securitykey_registration(
+//!         "claire",
+//!         None,
+//!         None,
+//!         None,
+//!     )
+//!     .expect("Failed to start registration.");
+//! ```
+//!
+//! After this point you then need to use `finish_securitykey_registration`, followed by
+//! `start_securitykey_authentication` and `finish_securitykey_authentication`
+//!
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
@@ -119,7 +147,7 @@ impl<'a> WebauthnBuilder<'a> {
     /// when you have a centralised IDM system, but location specific systems with DNS based
     /// redirection or routing.
     ///
-    /// If in doubt, do not change this value. Defaults to "false".
+    /// If in doubt, do NOT change this value. Defaults to "false".
     pub fn allow_subdomains(mut self, allow: bool) -> Self {
         self.allow_subdomains = allow;
         self
@@ -173,7 +201,7 @@ impl Webauthn {
     ///
     /// Some examples of security keys include Yubikeys, TouchID, FaceID, Windows Hello and others.
     ///
-    /// You *should* pair this authentication with another factor. A security may opportunistically
+    /// You *should* pair this authentication with another factor. A security key may opportunistically
     /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
     ///
     /// `user_name` and `user_display_name` *may* be stored in the authenticator, and presented to
@@ -189,13 +217,13 @@ impl Webauthn {
     /// your site, then you can provide the Yubico Root CA in this list, to validate that all
     /// registered devices are manufactured by Yubico.
     ///
-    /// extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they can
+    /// Extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they can
     /// NOT be trusted.
     ///
     /// # Returns
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
-    /// send to the user agent (IE a browser) for it to conduct the registration. You must persist
+    /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the `SecurityKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
@@ -274,12 +302,12 @@ impl Webauthn {
             })
     }
 
-    /// Complete the registration of the credential. The user agent will return the data of `RegisterPublicKeyCredential`,
+    /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
     /// and the server provides it's paired `SecurityKeyRegistration`. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
-    /// If any part of the registration is incorrect or invalid, an error will be returned. See `WebauthnError`.
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
     ///
@@ -299,7 +327,7 @@ impl Webauthn {
     }
 
     /// Given a set of `SecurityKey`'s, begin an authentication of the user. This returns
-    /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent.
+    /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the `SecurityKeyAuthentication` state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     pub fn start_securitykey_authentication(
@@ -314,17 +342,17 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent, and the stored `SecurityKeyAuthentication`
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `SecurityKeyAuthentication`
     /// complete the authentication of the user.
     ///
     /// # Errors
-    /// If any part of the registration is incorrect or invalid, an error will be returned. See `WebauthnError`.
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
     /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
     /// process.
     ///
-    /// As per https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion 21:
+    /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
     ///
     /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
     /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
@@ -382,7 +410,7 @@ impl Webauthn {
     /// # Returns
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
-    /// send to the user agent (IE a browser) for it to conduct the registration. You must persist
+    /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the `PasswordlessKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
@@ -479,12 +507,12 @@ impl Webauthn {
             })
     }
 
-    /// Complete the registration of the credential. The user agent will return the data of `RegisterPublicKeyCredential`,
+    /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
     /// and the server provides it's paired `PasswordlessKeyRegistration`. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
-    /// If any part of the registration is incorrect or invalid, an error will be returned. See `WebauthnError`.
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
     /// The returned `PasswordlessKey` must be associated to the users account, and is used for future
@@ -501,7 +529,7 @@ impl Webauthn {
     }
 
     /// Given a set of `PasswordlessKey`'s, begin an authentication of the user. This returns
-    /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent.
+    /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the `PasswordlessKeyAuthentication` state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     pub fn start_passwordlesskey_authentication(
@@ -521,18 +549,18 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent, and the stored `PasswordlessKeyAuthentication`
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
     /// complete the authentication of the user. This asserts that user verification must have been correctly
     /// performed allowing you to trust this as a MFA interfaction.
     ///
     /// # Errors
-    /// If any part of the registration is incorrect or invalid, an error will be returned. See `WebauthnError`.
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
     /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
     /// process.
     ///
-    /// As per https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion 21:
+    /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
     ///
     /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
     /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
