@@ -62,6 +62,7 @@ pub mod prelude {
     pub use url::Url;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
+    pub use webauthn_rs_core::proto::{RegisterPublicKeyCredential, PublicKeyCredential};
 }
 
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
@@ -332,7 +333,7 @@ impl Webauthn {
     /// `RequestChallengeResponse` and required to complete the authentication.
     pub fn start_securitykey_authentication(
         &self,
-        creds: &[&SecurityKey],
+        creds: &[SecurityKey],
     ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
@@ -534,7 +535,7 @@ impl Webauthn {
     /// `RequestChallengeResponse` and required to complete the authentication.
     pub fn start_passwordlesskey_authentication(
         &self,
-        creds: &[&PasswordlessKey],
+        creds: &[PasswordlessKey],
     ) -> WebauthnResult<(RequestChallengeResponse, PasswordlessKeyAuthentication)> {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
