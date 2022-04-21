@@ -2,7 +2,7 @@
 name = "webauthn_rs_demo_wasm"
 version = "0.1.0"
 authors = ["William Brown <william@blackhats.net.au>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", default-features = false }
-webauthn-rs-proto = { path = "../webauthn-rs-proto", default-features = false, features = ["wasm"] }
+webauthn-rs-proto = { path = "../../webauthn-rs-proto", default-features = false, features = ["wasm"] }
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
 wasm-bindgen-futures = { version = "0.4" }
 yew-router = "0.16.0"

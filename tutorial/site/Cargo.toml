@@ -1,0 +1,19 @@
+[package]
+name = "site"
+version = "0.1.0"
+edition = "2021"
+authors = ["William Brown <william@blackhats.net.au>"]
+license = "MPL-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+webauthn-rs = { path = "../../webauthn-rs" }
+tide = "0.16"
+async-std = { version = "1.6", features = ["attributes"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+serde = { version = "1", features = ["derive"] }
+rand = "0.8"
+anyhow = "1.0"
+

@@ -1,0 +1,30 @@
+[package]
+name = "wasm"
+version = "0.1.0"
+edition = "2021"
+authors = ["William Brown <william@blackhats.net.au>"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+webauthn-rs-proto = { path = "../../webauthn-rs-proto", default-features = false, features = ["wasm"] }
+
+wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+wasm-bindgen-futures = { version = "0.4" }
+yew = "0.19"
+js-sys = "0.3"
+gloo = "0.6"
+url = "2"
+serde_json = "1.0"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "CredentialCreationOptions",
+    "CredentialRequestOptions",
+    "CredentialsContainer",
+    "Navigator",
+    "PublicKeyCredential",
+    "PublicKeyCredentialCreationOptions",
+]

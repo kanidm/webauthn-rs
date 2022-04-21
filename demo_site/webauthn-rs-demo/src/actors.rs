@@ -137,7 +137,7 @@ impl WebauthnActor {
                 let creds: Vec<_> = creds
                     .iter()
                     .filter_map(|c| match c {
-                        TypedCredential::SecurityKey(sk) => Some(sk),
+                        TypedCredential::SecurityKey(sk) => Some(sk.clone()),
                         _ => None,
                     })
                     .collect();
@@ -149,7 +149,7 @@ impl WebauthnActor {
                 let creds: Vec<_> = creds
                     .iter()
                     .filter_map(|c| match c {
-                        TypedCredential::Passwordless(sk) => Some(sk),
+                        TypedCredential::Passwordless(sk) => Some(sk.clone()),
                         _ => None,
                     })
                     .collect();

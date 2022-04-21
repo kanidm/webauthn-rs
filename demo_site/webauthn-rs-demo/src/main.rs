@@ -543,8 +543,8 @@ async fn main() -> tide::Result<()> {
     let app_state = Arc::new(wan);
 
     let mut app = tide::with_state(app_state);
-    let cookie_sig = StdRng::from_entropy().gen::<[u8; 32]>();
 
+    let cookie_sig = StdRng::from_entropy().gen::<[u8; 32]>();
     let memory_store = tide::sessions::MemoryStore::new();
 
     let sessions = tide::sessions::SessionMiddleware::new(memory_store.clone(), &cookie_sig)
