@@ -54,10 +54,11 @@ Known BROKEN Keys/Harwdare
   and ignores requested algorithms. Not resolved.
 * Windows 10 / Windows 11 + Firefox 98 - When aaguid is meant
   to be 16 bytes of 0, it emits a single 0 byte. This should be resolved as of 2022-04-17
-* Apple Passkeys do not identify themself as a transferable credential, and should be considered
-  to be floating.
 * CTAP2.0/CTAP2.1 compliant devices - Incorrectly request UV on registration, but do not prompt for
   it during authentication, leading to possible social engineering and UV bypass attacks
+* Windows Hello with TPM - Often use RSA-SHA1 signatures over attestation which may allow credential compromise/falsification
+
+* BUG in safare, NOT Apple Passkeys (was, passkeys do not identify themself as a transferable credential, and should be considered to be floating.)
 
 Standards Compliance
 --------------------
