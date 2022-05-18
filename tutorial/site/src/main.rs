@@ -7,8 +7,8 @@ use webauthn_rs::prelude::*;
 
 // These are other imports needed to make the site generally work.
 use std::collections::HashMap;
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_std::sync::Mutex;
 
@@ -39,10 +39,8 @@ impl AppState {
         let rp_id = "localhost";
         // Url containing the effective domain name
         // MUST include the port number!
-        let rp_origin = Url::parse("http://localhost:8080")
-            .expect("Invalid URL");
-        let builder = WebauthnBuilder::new(rp_id, &rp_origin)
-            .expect("Invalid configuration");
+        let rp_origin = Url::parse("http://localhost:8080").expect("Invalid URL");
+        let builder = WebauthnBuilder::new(rp_id, &rp_origin).expect("Invalid configuration");
 
         // Now, with the builder you can define other options.
         // Set a "nice" relying party name. Has no security properties and
@@ -50,48 +48,44 @@ impl AppState {
         let builder = builder.rp_name("LocalHost");
 
         // Consume the builder and create our webauthn instance.
-        let webauthn = Arc::new(builder.build()
-            .expect("Invalid configuration"));
+        let webauthn = Arc::new(builder.build().expect("Invalid configuration"));
 
         let users = Arc::new(Mutex::new(HashMap::new()));
 
-        AppState {
-            webauthn,
-            users,
-        }
+        AppState { webauthn, users }
     }
 }
 
 // 3. The first step a client (user) will carry out is requesting a credential to be
 // registered. We need to provide a challenge for this. The work flow will be:
 //
-//          ┌───────────────┐     ┌───────────────┐      ┌───────────────┐          
-//          │ Authenticator │     │    Browser    │      │     Site      │          
-//          └───────────────┘     └───────────────┘      └───────────────┘          
-//                  │                     │                      │                  
-//                  │                     │     1. Start Reg     │                  
-//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│                  
-//                  │                     │                      │                  
-//                  │                     │     2. Challenge     │                  
-//                  │                     │◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤                  
-//                  │                     │                      │                  
-//                  │  3. Select Token    │                      │                  
-//             ─ ─ ─│◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│                      │                  
-//  4. Verify │     │                     │                      │                  
-//                  │  4. Yield PubKey    │                      │                  
-//            └ ─ ─▶│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶                      │                  
-//                  │                     │                      │                  
-//                  │                     │  5. Send Reg Opts    │                  
-//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│─ ─ ─             
-//                  │                     │                      │     │ 5. Verify  
-//                  │                     │                      │         PubKey   
-//                  │                     │                      │◀─ ─ ┘            
-//                  │                     │                      │─ ─ ─             
-//                  │                     │                      │     │ 6. Persist 
-//                  │                     │                      │       Credential 
-//                  │                     │                      │◀─ ─ ┘            
-//                  │                     │                      │                  
-//                  │                     │                      │                  
+//          ┌───────────────┐     ┌───────────────┐      ┌───────────────┐
+//          │ Authenticator │     │    Browser    │      │     Site      │
+//          └───────────────┘     └───────────────┘      └───────────────┘
+//                  │                     │                      │
+//                  │                     │     1. Start Reg     │
+//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│
+//                  │                     │                      │
+//                  │                     │     2. Challenge     │
+//                  │                     │◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+//                  │                     │                      │
+//                  │  3. Select Token    │                      │
+//             ─ ─ ─│◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│                      │
+//  4. Verify │     │                     │                      │
+//                  │  4. Yield PubKey    │                      │
+//            └ ─ ─▶│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶                      │
+//                  │                     │                      │
+//                  │                     │  5. Send Reg Opts    │
+//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│─ ─ ─
+//                  │                     │                      │     │ 5. Verify
+//                  │                     │                      │         PubKey
+//                  │                     │                      │◀─ ─ ┘
+//                  │                     │                      │─ ─ ─
+//                  │                     │                      │     │ 6. Persist
+//                  │                     │                      │       Credential
+//                  │                     │                      │◀─ ─ ┘
+//                  │                     │                      │
+//                  │                     │                      │
 //
 // In this step, we are responding to the start reg(istration) request, and providing
 // the challenge to the browser.
@@ -109,16 +103,20 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
     // If the user has any other credentials, we exclude these here so they can't be duplicate registered.
     let exclude_credentials = {
         let users_guard = request.state().users.lock().await;
-        users_guard.get(&username)
-            .map(|keys| {
-                keys.iter().map(|sk| sk.cred_id().clone()).collect()
-            })
+        users_guard
+            .get(&username)
+            .map(|keys| keys.iter().map(|sk| sk.cred_id().clone()).collect())
     };
 
     let user_display_name = None;
     let attestation_ca_list = None;
 
-    let res = match request.state().webauthn.start_securitykey_registration(&username, user_display_name, exclude_credentials, attestation_ca_list) {
+    let res = match request.state().webauthn.start_securitykey_registration(
+        &username,
+        user_display_name,
+        exclude_credentials,
+        attestation_ca_list,
+    ) {
         Ok((ccr, reg_state)) => {
             request
                 .session_mut()
@@ -134,8 +132,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
         }
         Err(e) => {
             debug!("challenge_register -> {:?}", e);
-            tide::Response::builder(tide::StatusCode::BadRequest)
-                .build()
+            tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
     Ok(res)
@@ -150,30 +147,35 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let session = request.session_mut();
 
-    let username: String = session.get("username")
+    let username: String = session
+        .get("username")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
-    let reg_state = session.get("reg_state")
+    let reg_state = session
+        .get("reg_state")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
     session.remove("username");
     session.remove("reg_state");
 
-    let res = match request.state().webauthn.finish_securitykey_registration(&reg, &reg_state) {
+    let res = match request
+        .state()
+        .webauthn
+        .finish_securitykey_registration(&reg, &reg_state)
+    {
         Ok(sk) => {
             let mut users_guard = request.state().users.lock().await;
 
-            users_guard.entry(username.clone())
+            users_guard
+                .entry(username.clone())
                 .and_modify(|keys| keys.push(sk.clone()))
                 .or_insert(vec![sk.clone()]);
 
-            tide::Response::builder(tide::StatusCode::Ok)
-                .build()
+            tide::Response::builder(tide::StatusCode::Ok).build()
         }
         Err(e) => {
             debug!("challenge_register -> {:?}", e);
-            tide::Response::builder(tide::StatusCode::BadRequest)
-                .build()
+            tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
 
@@ -183,29 +185,29 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
 // 5. Now that our public key has been registered, we can authenticate a user and verify
 // that they are the holder of that security token. The work flow is similar to registration.
 //
-//          ┌───────────────┐     ┌───────────────┐      ┌───────────────┐         
-//          │ Authenticator │     │    Browser    │      │     Site      │         
-//          └───────────────┘     └───────────────┘      └───────────────┘         
-//                  │                     │                      │                 
-//                  │                     │     1. Start Auth    │                 
-//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│                 
-//                  │                     │                      │                 
-//                  │                     │     2. Challenge     │                 
-//                  │                     │◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤                 
-//                  │                     │                      │                 
-//                  │  3. Select Token    │                      │                 
-//             ─ ─ ─│◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│                      │                 
-//  4. Verify │     │                     │                      │                 
-//                  │    4. Yield Sig     │                      │                 
-//            └ ─ ─▶│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶                      │                 
-//                  │                     │    5. Send Auth      │                 
-//                  │                     │        Opts          │                 
-//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│─ ─ ─            
-//                  │                     │                      │     │ 5. Verify 
-//                  │                     │                      │          Sig    
-//                  │                     │                      │◀─ ─ ┘           
-//                  │                     │                      │                 
-//                  │                     │                      │                 
+//          ┌───────────────┐     ┌───────────────┐      ┌───────────────┐
+//          │ Authenticator │     │    Browser    │      │     Site      │
+//          └───────────────┘     └───────────────┘      └───────────────┘
+//                  │                     │                      │
+//                  │                     │     1. Start Auth    │
+//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│
+//                  │                     │                      │
+//                  │                     │     2. Challenge     │
+//                  │                     │◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+//                  │                     │                      │
+//                  │  3. Select Token    │                      │
+//             ─ ─ ─│◀ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│                      │
+//  4. Verify │     │                     │                      │
+//                  │    4. Yield Sig     │                      │
+//            └ ─ ─▶│─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶                      │
+//                  │                     │    5. Send Auth      │
+//                  │                     │        Opts          │
+//                  │                     │─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─▶│─ ─ ─
+//                  │                     │                      │     │ 5. Verify
+//                  │                     │                      │          Sig
+//                  │                     │                      │◀─ ─ ┘
+//                  │                     │                      │
+//                  │                     │                      │
 //
 // The user indicates the wish to start authentication and we need to provide a challenge.
 
@@ -221,11 +223,15 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
 
     // Get the set of keys that the user possesses
     let users_guard = request.state().users.lock().await;
-    let allow_credentials =
-        users_guard.get(&username)
-            .ok_or_else(|| tide::Error::new(400u16, anyhow::Error::msg("User has no credentials")))?;
+    let allow_credentials = users_guard
+        .get(&username)
+        .ok_or_else(|| tide::Error::new(400u16, anyhow::Error::msg("User has no credentials")))?;
 
-    let res = match request.state().webauthn.start_securitykey_authentication(allow_credentials) {
+    let res = match request
+        .state()
+        .webauthn
+        .start_securitykey_authentication(allow_credentials)
+    {
         Ok((rcr, auth_state)) => {
             // Drop the mutex to allow the mut borrows below to proceed
             drop(users_guard);
@@ -244,8 +250,7 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
         }
         Err(e) => {
             debug!("challenge_authenticate -> {:?}", e);
-            tide::Response::builder(tide::StatusCode::BadRequest)
-                .build()
+            tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
     Ok(res)
@@ -261,34 +266,45 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
 
     let session = request.session_mut();
 
-    let username: String = session.get("username")
+    let username: String = session
+        .get("username")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
-    let auth_state = session.get("auth_state")
+    let auth_state = session
+        .get("auth_state")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
     session.remove("username");
     session.remove("auth_state");
 
-    let res = match request.state().webauthn.finish_securitykey_authentication(&auth, &auth_state) {
+    let res = match request
+        .state()
+        .webauthn
+        .finish_securitykey_authentication(&auth, &auth_state)
+    {
         Ok(auth_result) => {
             let mut users_guard = request.state().users.lock().await;
 
             // Update the credential counter, if possible.
 
-            users_guard.get_mut(&username)
+            users_guard
+                .get_mut(&username)
                 .map(|keys| {
-                    keys.iter_mut().for_each(|sk| { if sk.cred_id() == &auth_result.cred_id { sk.update_credential_counter(auth_result.counter) } } )
+                    keys.iter_mut().for_each(|sk| {
+                        if sk.cred_id() == &auth_result.cred_id {
+                            sk.update_credential_counter(auth_result.counter)
+                        }
+                    })
                 })
-                .ok_or_else(|| tide::Error::new(400u16, anyhow::Error::msg("User has no credentials")))?;
+                .ok_or_else(|| {
+                    tide::Error::new(400u16, anyhow::Error::msg("User has no credentials"))
+                })?;
 
-            tide::Response::builder(tide::StatusCode::Ok)
-                .build()
+            tide::Response::builder(tide::StatusCode::Ok).build()
         }
         Err(e) => {
             debug!("challenge_register -> {:?}", e);
-            tide::Response::builder(tide::StatusCode::BadRequest)
-                .build()
+            tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
 
@@ -359,13 +375,10 @@ async fn main() -> tide::Result<()> {
     app.at("/pkg").serve_dir("../wasm/pkg")?;
 
     // Bind our apis to our functions.
-    app.at("/register_start/:username")
-        .post(start_register);
-    app.at("/register_finish")
-        .post(finish_register);
+    app.at("/register_start/:username").post(start_register);
+    app.at("/register_finish").post(finish_register);
     app.at("/login_start/:username").post(start_authentication);
-    app.at("/login_finish")
-        .post(finish_authentication);
+    app.at("/login_finish").post(finish_authentication);
 
     // Serve our base html that bootstraps the wasm context.
     app.at("/").get(index_view);

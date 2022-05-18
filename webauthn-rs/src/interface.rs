@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use webauthn_rs_core::interface::{AttestationCaList, AuthenticationState, RegistrationState};
-use webauthn_rs_core::proto::{Credential, CredentialID};
+use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestationData};
 
 /// An in progress registration session for a [SecurityKey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,9 +30,30 @@ impl SecurityKey {
         &self.cred.cred_id
     }
 
+    /// Retrieve the type of cryptographic algorithm used by this key
+    pub fn cred_algorithm(&self) -> &COSEAlgorithm {
+        &self.cred.cred.type_
+    }
+
+    /// Retrieve a referenge to the attestation used during this Credentials
+    /// registration. This can tell you information about the manufacterer and
+    /// what type of credential it is.
+    pub fn attestation(&self) -> &ParsedAttestationData {
+        &self.cred.attestation
+    }
+
     /// Post authentication, update this credentials counter.
     pub fn update_credential_counter(&mut self, counter: u32) {
-        self.cred.counter = counter
+        if counter > self.cred.counter {
+            self.cred.counter = counter
+        }
+    }
+}
+
+impl From<Credential> for SecurityKey {
+    /// Convert a generic webauthn credential into a security key
+    fn from(cred: Credential) -> Self {
+        SecurityKey { cred }
     }
 }
 
@@ -63,8 +84,22 @@ impl PasswordlessKey {
         &self.cred.cred_id
     }
 
+    /// Retrieve the type of cryptographic algorithm used by this key
+    pub fn cred_algorithm(&self) -> &COSEAlgorithm {
+        &self.cred.cred.type_
+    }
+
+    /// Retrieve a referenge to the attestation used during this Credentials
+    /// registration. This can tell you information about the manufacterer and
+    /// what type of credential it is.
+    pub fn attestation(&self) -> &ParsedAttestationData {
+        &self.cred.attestation
+    }
+
     /// Post authentication, update this credentials counter.
     pub fn update_credential_counter(&mut self, counter: u32) {
-        self.cred.counter = counter
+        if counter > self.cred.counter {
+            self.cred.counter = counter
+        }
     }
 }

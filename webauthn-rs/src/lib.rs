@@ -62,7 +62,7 @@ pub mod prelude {
     pub use url::Url;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
-    pub use webauthn_rs_core::proto::{RegisterPublicKeyCredential, PublicKeyCredential};
+    pub use webauthn_rs_core::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
 }
 
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
@@ -458,7 +458,7 @@ impl Webauthn {
         user_display_name: Option<&str>,
         exclude_credentials: Option<Vec<CredentialID>>,
         attestation_ca_list: Option<AttestationCaList>,
-        authenticator_attachment: Option<AuthenticatorAttachment>,
+        ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
         // extensions
     ) -> WebauthnResult<(CreationChallengeResponse, PasswordlessKeyRegistration)> {
         let attestation = AttestationConveyancePreference::Direct;
@@ -471,6 +471,8 @@ impl Webauthn {
         // If rk - credProps
 
         // credProtect
+        let extensions = None;
+        /*
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
                 credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
@@ -481,6 +483,7 @@ impl Webauthn {
             uvm: Some(true),
             cred_props: Some(true),
         });
+        */
 
         // min pin
 
@@ -494,7 +497,7 @@ impl Webauthn {
                 extensions,
                 credential_algorithms,
                 require_resident_key,
-                authenticator_attachment,
+                ui_hint_authenticator_attachment,
                 false,
             )
             .map(|(ccr, rs)| {
@@ -580,14 +583,6 @@ impl Webauthn {
     }
 
     /*
-    // Register a password-less credential, needs attestation
-    /// * Must be verified
-    /// * Must be attested
-    /// * May request a pin length
-    /// * Must return what TYPE of UV (?)
-    /// * Any attachment type
-    /// * Optional - RK
-
     // Register a trusted device credential
     /// * Must be verified
     /// * Must be attested
@@ -597,8 +592,7 @@ impl Webauthn {
     /// * Must be platform attached
     /// * Need to use credProps
     /// * Optional - RK
-
-    */
+     */
 
     // Authenticate ^
 }
