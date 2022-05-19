@@ -1082,6 +1082,7 @@ mod tests {
         RegisterPublicKeyCredential, Registration, RegistrationSignedExtensions, TpmsAttest,
         TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
+    use crate::interface::*;
     use serde_json;
     use std::convert::TryFrom;
 
@@ -1236,5 +1237,18 @@ mod tests {
         ];
 
         assert!(AuthenticatorData::<Authentication>::try_from(raw.as_slice()).is_ok());
+    }
+
+    #[test]
+    fn migrate_credentialv3() {
+        let legacy_cred = r#"{"cred_id":[185,151,21,12,21,82,235,193,63,50,208,32,121,10,68,148,156,101,116,95,250,113,143,108,74,246,214,171,31,234,70,31,48,138,238,54,151,36,65,70,104,121,200,87,131,254,191,100,215,125,29,49,177,71,4,114,61,69,49,96,116,148,8,205],"cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"verified":false,"registration_policy":"preferred"}"#;
+
+        let cred: CredentialV3 = serde_json::from_str(&legacy_cred).unwrap();
+
+        println!("{:?}", cred);
+
+        let cred_migrated: Credential = cred.into();
+
+        println!("{:?}", cred_migrated);
     }
 }

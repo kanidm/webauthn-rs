@@ -15,7 +15,7 @@ license = "MPL-2.0"
 [features]
 insecure_rs1 = []
 
-default = ["insecure_rs1"]
+default = []
 
 [dependencies]
 base64urlsafedata = { path = "../base64urlsafedata" }
