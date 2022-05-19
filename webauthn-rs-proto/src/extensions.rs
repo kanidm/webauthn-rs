@@ -83,6 +83,14 @@ pub struct RequestRegistrationExtensions {
     /// CredProps
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cred_props: Option<bool>,
+
+    /// CTAP2.1 Minumum pin length
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_pin_length: Option<bool>,
+
+    /// CTAP2.1 create hmac secret
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hmac_create_secret: Option<bool>,
 }
 
 impl Default for RequestRegistrationExtensions {
@@ -92,6 +100,8 @@ impl Default for RequestRegistrationExtensions {
             cred_blob: None,
             uvm: None,
             cred_props: None,
+            min_pin_length: None,
+            hmac_create_secret: None,
         }
     }
 }
@@ -177,7 +187,8 @@ pub struct RegistrationExtensionsClientOutputs {
     /// Indicates if the client used the provided cred_blob extensions.
     pub cred_blob: Option<bool>,
 
-    /// Indicates if the client believes it created a resident key.
+    /// Indicates if the client believes it created a resident key. This
+    /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
     pub cred_props: Option<CredProps>,
 }
 
@@ -221,3 +232,44 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
         }
     }
 }
+
+/// The result state of an extension as returned from the authenticator.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ExtnState<T>
+where
+    T: Clone + std::fmt::Debug,
+{
+    /// This extension was not requested, and so no result was provided.
+    NotRequested,
+    /// The extension was requested, and the authenticator did NOT act on it.
+    Ignored,
+    /// The extension was requested, and the authenticator correctly responded.
+    Set(T),
+    /// The extension was not requested, and the authenticator sent an unsolicited extension value.
+    Unsolicited(T),
+    /// ⚠️  WARNING: The data in this extension is not signed cryptographically, and can not be trusted.
+    Unsigned(T),
+}
+
+/// The set of extensions that were registered by this credential.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisteredExtensions {
+    /// The state of the cred_protect extension
+    pub cred_protect: ExtnState<CredentialProtectionPolicy>,
+    /// The state of the hmac-secret extension, if it was created
+    pub hmac_create_secret: ExtnState<bool>,
+}
+
+impl RegisteredExtensions {
+    /// Yield an empty set of registered extensions
+    pub fn none() -> Self {
+        RegisteredExtensions {
+            cred_protect: ExtnState::NotRequested,
+            hmac_create_secret: ExtnState::NotRequested,
+        }
+    }
+}
+
+/// The set of extensions that were provided by the client during authentication
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AuthenticationExtensions {}

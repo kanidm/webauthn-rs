@@ -133,11 +133,25 @@ impl Credential {
                 (None, false) => ExtnState::NotRequested,
             };
 
-            RegisteredExtensions { cred_protect }
+            let hmac_create_secret = match (
+                auth_data.extensions.hmac_secret.as_ref(),
+                req_extn.hmac_create_secret.is_some(),
+            ) {
+                (Some(hmac_create_secret), false) => ExtnState::Unsolicited(*hmac_create_secret),
+                (Some(hmac_create_secret), true) => ExtnState::Set(*hmac_create_secret),
+                (None, true) => ExtnState::Ignored,
+                (None, false) => ExtnState::NotRequested,
+            };
+
+            RegisteredExtensions {
+                cred_protect,
+                hmac_create_secret,
+            }
         } else {
-            RegisteredExtensions::unsigned()
+            RegisteredExtensions::none()
         };
 
+        trace!(?extensions);
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
 
@@ -151,6 +165,13 @@ impl Credential {
             attestation: attestation.into(),
         }
     }
+}
+
+pub(crate) fn process_authentication_extensions(
+    auth_extn: AuthenticationSignedExtensions,
+) -> AuthenticationExtensions {
+    trace!(?auth_extn);
+    AuthenticationExtensions {}
 }
 
 /*

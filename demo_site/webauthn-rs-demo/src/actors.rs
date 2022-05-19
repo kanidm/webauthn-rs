@@ -197,7 +197,7 @@ impl WebauthnActor {
             attachment,
             algorithm,
             attestation,
-            extensions: _,
+            extensions,
         } = reg_settings;
 
         debug!("handle ChallengeRegister -> {:?}", username);
@@ -214,7 +214,7 @@ impl WebauthnActor {
             attestation.unwrap_or(AttestationConveyancePreference::None),
             uv,
             None,
-            None,
+            extensions,
             algorithm.unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
             false,
             attachment,
@@ -234,7 +234,7 @@ impl WebauthnActor {
             username,
             use_cred_id,
             uv,
-            extensions: _,
+            extensions,
         } = auth_settings;
 
         debug!("handle ChallengeAuthenticate -> {:?}", username);
@@ -257,11 +257,11 @@ impl WebauthnActor {
                     .ok_or(WebauthnError::CredentialNotFound)?;
 
                 self.wan
-                    .generate_challenge_authenticate_credential(cred, uv, None)
+                    .generate_challenge_authenticate_credential(cred, uv, extensions)
             }
             None => self
                 .wan
-                .generate_challenge_authenticate_options(creds, None),
+                .generate_challenge_authenticate_options(creds, extensions),
         }?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);

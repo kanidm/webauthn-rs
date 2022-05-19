@@ -53,7 +53,10 @@ enum CompatTestStep {
     AuthPreferredConsistent = 11,
     UvRequired = 12,
     AuthRequired = 13,
-    Complete = 14,
+    ExtnUvmSupported = 14,
+    ExtnCredProtectSupported = 15,
+    ExtnHmacSecretSupported = 16,
+    Complete = 17,
 }
 
 impl From<u32> for CompatTestStep {
@@ -72,7 +75,10 @@ impl From<u32> for CompatTestStep {
             11 => CompatTestStep::AuthPreferredConsistent,
             12 => CompatTestStep::UvRequired,
             13 => CompatTestStep::AuthRequired,
-            14 => CompatTestStep::Complete,
+            14 => CompatTestStep::ExtnUvmSupported,
+            15 => CompatTestStep::ExtnCredProtectSupported,
+            16 => CompatTestStep::ExtnHmacSecretSupported,
+            17 => CompatTestStep::Complete,
             _ => panic!("Unknown variant!"),
         }
     }
@@ -85,6 +91,29 @@ impl CompatTestStep {
         } else {
             Self::from((*self as u32) + 1)
         }
+    }
+}
+
+fn reg_extensions_full() -> RequestRegistrationExtensions {
+    RequestRegistrationExtensions {
+        cred_protect: Some(CredProtect {
+            credential_protection_policy:
+                CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIDList,
+            enforce_credential_protection_policy: Some(false),
+        }),
+        cred_blob: None,
+        uvm: Some(true),
+        cred_props: Some(true),
+        min_pin_length: Some(true),
+        hmac_create_secret: Some(true),
+    }
+}
+
+fn auth_extensions_full() -> RequestAuthenticationExtensions {
+    RequestAuthenticationExtensions {
+        appid: None,
+        get_cred_blob: None,
+        uvm: Some(true),
     }
 }
 
@@ -139,6 +168,7 @@ impl Component for CompatTest {
     }
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
+        console::log!(&format!("{:?} {:?}", self.step, msg));
         match msg {
             AppMsg::Ignore => {
                 match self.step {
@@ -148,7 +178,6 @@ impl Component for CompatTest {
                     }
                     _ => {
                         self.show_next = true;
-                        console::log!(&format!("{:?}", self.step));
                     }
                 }
             }
@@ -164,11 +193,9 @@ impl Component for CompatTest {
                     match fut.await {
                         Ok(_) => {
                             console::log!("Wrote to clipboard!");
-                        },
+                        }
                         Err(e) => {
-                            console::log!(
-                                &format!("Unable to access clipboard -> {:?}", e)
-                            );
+                            console::log!(&format!("Unable to access clipboard -> {:?}", e));
                         }
                     };
                     AppMsg::Ignore
@@ -181,73 +208,81 @@ impl Component for CompatTest {
                         // Set the initial test results to failure.
                         self.results.direct_attest_1 = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "compatuser".to_string(),
-                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
-                            attestation: Some(AttestationConveyancePreference::Direct),
-                            attachment: None,
-                            extensions: None,
-                        }
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "compatuser".to_string(),
+                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                attestation: Some(AttestationConveyancePreference::Direct),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
                         );
                     }
                     CompatTestStep::IndirectAttest1 => {
                         // Set the initial test results to failure.
                         self.results.indirect_attest_1 = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "compatuser".to_string(),
-                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
-                            attestation: Some(AttestationConveyancePreference::Indirect),
-                            attachment: None,
-                            extensions: None,
-                        });
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "compatuser".to_string(),
+                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                attestation: Some(AttestationConveyancePreference::Indirect),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
+                        );
                     }
                     CompatTestStep::NoneAttest1 => {
                         // Set the initial test results to failure.
                         self.results.none_attest_1 = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "compatuser".to_string(),
-                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
-                            attestation: Some(AttestationConveyancePreference::None),
-                            attachment: None,
-                            extensions: None,
-                        });
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "compatuser".to_string(),
+                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                attestation: Some(AttestationConveyancePreference::None),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
+                        );
                     }
                     CompatTestStep::NoneAttest2 => {
                         // Set the initial test results to failure.
                         self.results.none_attest_2 = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "another_user".to_string(),
-                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
-                            attestation: Some(AttestationConveyancePreference::None),
-                            attachment: None,
-                            extensions: None,
-                        });
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "another_user".to_string(),
+                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                attestation: Some(AttestationConveyancePreference::None),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
+                        );
                     }
                     CompatTestStep::FallBackAlg => {
                         // Look back at the previous test
-                        let algs = if let Some(alg) = self.results.none_attest_1.get_credential_alg() {
-                            // What alg was used?
-                            // Remove it from the list.
-                            let mut algs = COSEAlgorithm::all_possible_algs();
-                            algs.retain(|a| a != alg);
-                            algs
-                        } else {
-                            // Skip
-                            self.step = self.step.next();
-                            ctx.link().send_message(AppMsg::Begin);
-                            return false;
-                        };
+                        let algs =
+                            if let Some(alg) = self.results.none_attest_1.get_credential_alg() {
+                                // What alg was used?
+                                // Remove it from the list.
+                                let mut algs = COSEAlgorithm::all_possible_algs();
+                                algs.retain(|a| a != alg);
+                                algs
+                            } else {
+                                // Skip
+                                self.step = self.step.next();
+                                ctx.link().send_message(AppMsg::Begin);
+                                return false;
+                            };
 
                         /*
                         if true {
@@ -259,54 +294,63 @@ impl Component for CompatTest {
 
                         self.results.fallback_alg = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "compatuser".to_string(),
-                            uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                            algorithm: Some(algs),
-                            attestation: Some(AttestationConveyancePreference::None),
-                            attachment: None,
-                            extensions: None,
-                        });
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "compatuser".to_string(),
+                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                algorithm: Some(algs),
+                                attestation: Some(AttestationConveyancePreference::None),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
+                        );
                     }
                     CompatTestStep::UvPreferred => {
                         // Set the initial test results to failure.
                         self.results.uvpreferred = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "compatuser".to_string(),
-                            uv: Some(UserVerificationPolicy::Preferred),
-                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
-                            attestation: Some(AttestationConveyancePreference::None),
-                            attachment: None,
-                            extensions: None,
-                        });
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "compatuser".to_string(),
+                                uv: Some(UserVerificationPolicy::Preferred),
+                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                attestation: Some(AttestationConveyancePreference::None),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
+                        );
                     }
                     CompatTestStep::UvRequired => {
                         // Set the initial test results to failure.
                         self.results.uvrequired = CTestAttestState::failed();
                         // Start the process!
-                        self.do_registration(ctx, 
-                        RegisterWithSettings {
-                            username: "compatuser".to_string(),
-                            uv: Some(UserVerificationPolicy::Required),
-                            algorithm: Some(COSEAlgorithm::all_possible_algs()),
-                            attestation: Some(AttestationConveyancePreference::None),
-                            attachment: None,
-                            extensions: None,
-                        });
+                        self.do_registration(
+                            ctx,
+                            RegisterWithSettings {
+                                username: "compatuser".to_string(),
+                                uv: Some(UserVerificationPolicy::Required),
+                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                attestation: Some(AttestationConveyancePreference::None),
+                                attachment: None,
+                                extensions: Some(reg_extensions_full()),
+                            },
+                        );
                     }
                     CompatTestStep::AuthDiscouraged => {
                         if let Some(cred_id) = self.results.none_attest_1.get_credential_id() {
                             self.results.authdiscouraged = CTestAuthState::failed();
                             let use_cred_id = Some(cred_id.clone());
-                            self.do_auth(ctx, AuthenticateWithSettings {
-                                username: "compatuser".to_string(),
-                                use_cred_id,
-                                uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                                extensions: None,
-                            });
+                            self.do_auth(
+                                ctx,
+                                AuthenticateWithSettings {
+                                    username: "compatuser".to_string(),
+                                    use_cred_id,
+                                    uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
+                                    extensions: Some(auth_extensions_full()),
+                                },
+                            );
                         } else {
                             // Skip
                             self.results.authdiscouraged = CTestAuthState::FailedPrerequisite;
@@ -319,19 +363,25 @@ impl Component for CompatTest {
                         let mut skip = true;
 
                         if let Some(cred_1_id) = self.results.none_attest_1.get_credential_id() {
-                            if let Some(cred_2_id) = self.results.none_attest_2.get_credential_id() {
+                            if let Some(cred_2_id) = self.results.none_attest_2.get_credential_id()
+                            {
                                 self.results.authmultiple = CTestAuthState::failed();
                                 if cred_1_id != cred_2_id {
                                     let use_cred_id = Some(cred_1_id.clone());
-                                    self.do_auth(ctx, AuthenticateWithSettings {
-                                        username: "compatuser".to_string(),
-                                        use_cred_id,
-                                        uv: None,
-                                        extensions: None,
-                                    });
+                                    self.do_auth(
+                                        ctx,
+                                        AuthenticateWithSettings {
+                                            username: "compatuser".to_string(),
+                                            use_cred_id,
+                                            uv: None,
+                                            extensions: Some(auth_extensions_full()),
+                                        },
+                                    );
                                     skip = false;
                                 } else {
-                                    self.results.authmultiple.set_err(ResponseError::CredentialIdAreIdentical);
+                                    self.results
+                                        .authmultiple
+                                        .set_err(ResponseError::CredentialIdAreIdentical);
                                 }
                             }
                         }
@@ -347,9 +397,11 @@ impl Component for CompatTest {
                         if let Some(rs) = self.results.none_attest_1.get_reg_result() {
                             if let Some(aus) = self.results.authdiscouraged.get_auth_result() {
                                 if aus.uv == rs.uv {
-                                    self.results.authdiscouraged_consistent = CTestSimpleState::Passed;
+                                    self.results.authdiscouraged_consistent =
+                                        CTestSimpleState::Passed;
                                 } else {
-                                    self.results.authdiscouraged_consistent = CTestSimpleState::Warning;
+                                    self.results.authdiscouraged_consistent =
+                                        CTestSimpleState::Warning;
                                 }
                                 self.step = self.step.next();
                                 ctx.link().send_message(AppMsg::Begin);
@@ -357,7 +409,8 @@ impl Component for CompatTest {
                             }
                         }
                         // Skip
-                        self.results.authdiscouraged_consistent = CTestSimpleState::FailedPrerequisite;
+                        self.results.authdiscouraged_consistent =
+                            CTestSimpleState::FailedPrerequisite;
                         self.step = self.step.next();
                         ctx.link().send_message(AppMsg::Begin);
                         return false;
@@ -366,12 +419,15 @@ impl Component for CompatTest {
                         if let Some(cred_id) = self.results.uvpreferred.get_credential_id() {
                             self.results.authpreferred = CTestAuthState::failed();
                             let use_cred_id = Some(cred_id.clone());
-                            self.do_auth(ctx, AuthenticateWithSettings {
-                                username: "compatuser".to_string(),
-                                use_cred_id,
-                                uv: Some(UserVerificationPolicy::Preferred),
-                                extensions: None,
-                            });
+                            self.do_auth(
+                                ctx,
+                                AuthenticateWithSettings {
+                                    username: "compatuser".to_string(),
+                                    use_cred_id,
+                                    uv: Some(UserVerificationPolicy::Preferred),
+                                    extensions: Some(auth_extensions_full()),
+                                },
+                            );
                         } else {
                             // Skip
                             self.results.authpreferred = CTestAuthState::FailedPrerequisite;
@@ -384,9 +440,11 @@ impl Component for CompatTest {
                         if let Some(rs) = self.results.uvpreferred.get_reg_result() {
                             if let Some(aus) = self.results.authpreferred.get_auth_result() {
                                 if aus.uv == rs.uv {
-                                    self.results.authpreferred_consistent = CTestSimpleState::Passed;
+                                    self.results.authpreferred_consistent =
+                                        CTestSimpleState::Passed;
                                 } else {
-                                    self.results.authpreferred_consistent = CTestSimpleState::Failed;
+                                    self.results.authpreferred_consistent =
+                                        CTestSimpleState::Failed;
                                 }
                                 self.step = self.step.next();
                                 ctx.link().send_message(AppMsg::Begin);
@@ -394,7 +452,8 @@ impl Component for CompatTest {
                             }
                         }
                         // Skip
-                        self.results.authpreferred_consistent = CTestSimpleState::FailedPrerequisite;
+                        self.results.authpreferred_consistent =
+                            CTestSimpleState::FailedPrerequisite;
                         self.step = self.step.next();
                         ctx.link().send_message(AppMsg::Begin);
                         return false;
@@ -403,12 +462,15 @@ impl Component for CompatTest {
                         if let Some(cred_id) = self.results.uvrequired.get_credential_id() {
                             self.results.authrequired = CTestAuthState::failed();
                             let use_cred_id = Some(cred_id.clone());
-                            self.do_auth(ctx, AuthenticateWithSettings {
-                                username: "compatuser".to_string(),
-                                use_cred_id,
-                                uv: Some(UserVerificationPolicy::Required),
-                                extensions: None,
-                            });
+                            self.do_auth(
+                                ctx,
+                                AuthenticateWithSettings {
+                                    username: "compatuser".to_string(),
+                                    use_cred_id,
+                                    uv: Some(UserVerificationPolicy::Required),
+                                    extensions: Some(auth_extensions_full()),
+                                },
+                            );
                         } else {
                             // Skip
                             self.results.authrequired = CTestAuthState::FailedPrerequisite;
@@ -416,6 +478,47 @@ impl Component for CompatTest {
                             ctx.link().send_message(AppMsg::Begin);
                             return false;
                         };
+                    }
+                    CompatTestStep::ExtnUvmSupported => {
+                        self.results.extn_uvm_supported = CTestSimpleState::FailedPrerequisite;
+                        self.step = self.step.next();
+                        ctx.link().send_message(AppMsg::Begin);
+                        return false;
+                    }
+                    CompatTestStep::ExtnCredProtectSupported => {
+                        if let Some(rs) = self.results.direct_attest_1.get_reg_result() {
+                            console::log!(&format!("{:?}", rs.extensions));
+
+                            if matches!(rs.extensions.cred_protect, ExtnState::Set(_)) {
+                                self.results.extn_credprotect_supported = CTestSimpleState::Passed
+                            } else {
+                                self.results.extn_credprotect_supported = CTestSimpleState::Failed
+                            }
+                        } else {
+                            self.results.extn_credprotect_supported =
+                                CTestSimpleState::FailedPrerequisite;
+                        }
+
+                        self.step = self.step.next();
+                        ctx.link().send_message(AppMsg::Begin);
+                        return false;
+                    }
+                    CompatTestStep::ExtnHmacSecretSupported => {
+                        if let Some(rs) = self.results.direct_attest_1.get_reg_result() {
+                            console::log!(&format!("{:?}", rs.extensions));
+                            if matches!(rs.extensions.hmac_create_secret, ExtnState::Set(true)) {
+                                self.results.extn_hmacsecret_supported = CTestSimpleState::Passed
+                            } else {
+                                self.results.extn_hmacsecret_supported = CTestSimpleState::Failed
+                            }
+                        } else {
+                            self.results.extn_hmacsecret_supported =
+                                CTestSimpleState::FailedPrerequisite;
+                        }
+
+                        self.step = self.step.next();
+                        ctx.link().send_message(AppMsg::Begin);
+                        return false;
                     }
                     CompatTestStep::Complete => {
                         self.state = CompatTestState::Complete;
@@ -449,13 +552,16 @@ impl Component for CompatTest {
                     CompatTestStep::UvRequired => {
                         self.results.uvrequired.save_ccr(&ccr);
                     }
-                    CompatTestStep::AuthDiscouraged |
-                    CompatTestStep::AuthPreferred |
-                    CompatTestStep::AuthRequired |
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::AuthMultipleCredentials |
-                    CompatTestStep::Complete => {
+                    CompatTestStep::AuthDiscouraged
+                    | CompatTestStep::AuthPreferred
+                    | CompatTestStep::AuthRequired
+                    | CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::AuthMultipleCredentials
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
                 };
@@ -477,10 +583,7 @@ impl Component for CompatTest {
                         }
                         Err(e) => {
                             console::log!(format!("error -> {:?}", e).as_str());
-                            AppMsg::ErrorCode(ResponseError::NavigatorError(format!(
-                                "{:?}",
-                                e
-                            )))
+                            AppMsg::ErrorCode(ResponseError::NavigatorError(format!("{:?}", e)))
                         }
                     }
                 });
@@ -508,13 +611,16 @@ impl Component for CompatTest {
                     CompatTestStep::UvRequired => {
                         self.results.uvrequired.save_rpkc(&rpkc);
                     }
-                    CompatTestStep::AuthDiscouraged |
-                    CompatTestStep::AuthPreferred |
-                    CompatTestStep::AuthRequired |
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::AuthMultipleCredentials |
-                    CompatTestStep::Complete => {
+                    CompatTestStep::AuthDiscouraged
+                    | CompatTestStep::AuthPreferred
+                    | CompatTestStep::AuthRequired
+                    | CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::AuthMultipleCredentials
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
                 };
@@ -550,16 +656,21 @@ impl Component for CompatTest {
                         if rs.uv {
                             self.results.uvrequired.set_success(rs);
                         } else {
-                            self.results.uvrequired.set_err(ResponseError::UserNotVerified);
+                            self.results
+                                .uvrequired
+                                .set_err(ResponseError::UserNotVerified);
                         }
                     }
-                    CompatTestStep::AuthDiscouraged |
-                    CompatTestStep::AuthPreferred |
-                    CompatTestStep::AuthRequired |
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::AuthMultipleCredentials |
-                    CompatTestStep::Complete => {
+                    CompatTestStep::AuthDiscouraged
+                    | CompatTestStep::AuthPreferred
+                    | CompatTestStep::AuthRequired
+                    | CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::AuthMultipleCredentials
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
                 };
@@ -580,16 +691,19 @@ impl Component for CompatTest {
                     CompatTestStep::AuthMultipleCredentials => {
                         self.results.authmultiple.save_rcr(&rcr);
                     }
-                    CompatTestStep::DirectAttest1 |
-                    CompatTestStep::IndirectAttest1 |
-                    CompatTestStep::NoneAttest1  |
-                    CompatTestStep::NoneAttest2  |
-                    CompatTestStep::FallBackAlg |
-                    CompatTestStep::UvPreferred |
-                    CompatTestStep::UvRequired |
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::Complete => {
+                    CompatTestStep::DirectAttest1
+                    | CompatTestStep::IndirectAttest1
+                    | CompatTestStep::NoneAttest1
+                    | CompatTestStep::NoneAttest2
+                    | CompatTestStep::FallBackAlg
+                    | CompatTestStep::UvPreferred
+                    | CompatTestStep::UvRequired
+                    | CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
                 }
@@ -611,10 +725,7 @@ impl Component for CompatTest {
                         }
                         Err(e) => {
                             console::log!(format!("error -> {:?}", e).as_str());
-                            AppMsg::ErrorCode(ResponseError::NavigatorError(format!(
-                                "{:?}",
-                                e
-                            )))
+                            AppMsg::ErrorCode(ResponseError::NavigatorError(format!("{:?}", e)))
                         }
                     }
                 });
@@ -633,16 +744,19 @@ impl Component for CompatTest {
                     CompatTestStep::AuthMultipleCredentials => {
                         self.results.authmultiple.save_pkc(&pkc);
                     }
-                    CompatTestStep::DirectAttest1 |
-                    CompatTestStep::IndirectAttest1 | 
-                    CompatTestStep::NoneAttest1  |
-                    CompatTestStep::NoneAttest2  |
-                    CompatTestStep::FallBackAlg |
-                    CompatTestStep::UvPreferred |
-                    CompatTestStep::UvRequired |
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::Complete => {
+                    CompatTestStep::DirectAttest1
+                    | CompatTestStep::IndirectAttest1
+                    | CompatTestStep::NoneAttest1
+                    | CompatTestStep::NoneAttest2
+                    | CompatTestStep::FallBackAlg
+                    | CompatTestStep::UvPreferred
+                    | CompatTestStep::UvRequired
+                    | CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
                 }
@@ -667,16 +781,19 @@ impl Component for CompatTest {
                     CompatTestStep::AuthMultipleCredentials => {
                         self.results.authmultiple.set_success(aus);
                     }
-                    CompatTestStep::DirectAttest1 |
-                    CompatTestStep::IndirectAttest1 | 
-                    CompatTestStep::NoneAttest1  |
-                    CompatTestStep::NoneAttest2  |
-                    CompatTestStep::FallBackAlg |
-                    CompatTestStep::UvPreferred |
-                    CompatTestStep::UvRequired |
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::Complete => {
+                    CompatTestStep::DirectAttest1
+                    | CompatTestStep::IndirectAttest1
+                    | CompatTestStep::NoneAttest1
+                    | CompatTestStep::NoneAttest2
+                    | CompatTestStep::FallBackAlg
+                    | CompatTestStep::UvPreferred
+                    | CompatTestStep::UvRequired
+                    | CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {
                         console::log!("INVALID STATE!!!");
                     }
                 }
@@ -742,9 +859,12 @@ impl Component for CompatTest {
                     CompatTestStep::AuthRequired => {
                         self.results.authrequired.set_err(err);
                     }
-                    CompatTestStep::AuthDiscouragedConsistent |
-                    CompatTestStep::AuthPreferredConsistent |
-                    CompatTestStep::Complete => {}
+                    CompatTestStep::AuthDiscouragedConsistent
+                    | CompatTestStep::AuthPreferredConsistent
+                    | CompatTestStep::ExtnUvmSupported
+                    | CompatTestStep::ExtnCredProtectSupported
+                    | CompatTestStep::ExtnHmacSecretSupported
+                    | CompatTestStep::Complete => {}
                 };
                 self.step = self.step.next();
                 ctx.link().send_message(AppMsg::Ignore);
@@ -792,7 +912,9 @@ impl CompatTest {
 
         url.query_pairs_mut()
             .append_pair("title", "Compatibility Test Failure")
-            .append_pair("body", r#"
+            .append_pair(
+                "body",
+                r#"
 Please add any extra details here:
 
 * Browser version
@@ -802,7 +924,8 @@ Please add any extra details here:
 ```
 <please paste the details json here>
 ```
-            "#);
+            "#,
+            );
 
         html! {
           <div class="vert-center w-100">
@@ -815,8 +938,8 @@ Please add any extra details here:
     }
 
     fn view_complete(&self, ctx: &Context<Self>) -> Html {
-        let data = serde_json::to_string_pretty(&self.results)
-            .expect_throw("Failed to serialise results");
+        let data =
+            serde_json::to_string_pretty(&self.results).expect_throw("Failed to serialise results");
 
         console::log!(&format!("{:?}", self.results));
         html! {
@@ -907,6 +1030,22 @@ Please add any extra details here:
                       <td>{ "Auth UV Required" }</td>
                       <td>{ self.results.authrequired.to_result() }</td>
                     </tr>
+                    <tr>
+                      <th scope="row">{ "14" }</th>
+                      <td>{ "Extension uvm supported (Attestation Only)" }</td>
+                      <td>{ self.results.extn_uvm_supported.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "15" }</th>
+                      <td>{ "Extension credProtect supported (Attestation Only)" }</td>
+                      <td>{ self.results.extn_credprotect_supported.to_result() }</td>
+                    </tr>
+                    <tr>
+                      <th scope="row">{ "16" }</th>
+                      <td>{ "Extension hmac-secret supported (Attestation Only)" }</td>
+                      <td>{ self.results.extn_hmacsecret_supported.to_result() }</td>
+                    </tr>
+
                     </tbody>
                   </table>
                 </div>
@@ -1084,9 +1223,7 @@ Please add any extra details here:
         }
     }
 
-    async fn login_begin(
-        settings: AuthenticateWithSettings,
-    ) -> Result<AppMsg, FetchError> {
+    async fn login_begin(settings: AuthenticateWithSettings) -> Result<AppMsg, FetchError> {
         let req_jsvalue = serde_json::to_string(&settings)
             .map(|s| JsValue::from(&s))
             .expect_throw("Failed to serialise settings");
@@ -1124,9 +1261,7 @@ Please add any extra details here:
         }
     }
 
-    async fn login_complete(
-        pkc: PublicKeyCredential,
-    ) -> Result<AppMsg, FetchError> {
+    async fn login_complete(pkc: PublicKeyCredential) -> Result<AppMsg, FetchError> {
         console::log!(format!("pkc -> {:?}", pkc).as_str());
 
         let req_jsvalue = serde_json::to_string(&pkc)

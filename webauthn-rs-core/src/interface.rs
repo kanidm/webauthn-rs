@@ -191,45 +191,6 @@ pub struct COSEKey {
     pub key: COSEKeyType,
 }
 
-/// The result state of an extension as returned from the authenticator.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum ExtnState<T>
-where
-    T: Clone + std::fmt::Debug,
-{
-    /// The data in this extension is not signed cryptographically, and can not be trusted.
-    Unsigned,
-    /// This extension was not requested, and so no result was provided.
-    NotRequested,
-    /// The extension was requested, and the authenticator did NOT act on it.
-    Ignored,
-    /// The extension was requested, and the authenticator correctly responded.
-    Set(T),
-    /// The extension was not requested, and the authenticator sent an unsolicited extension value.
-    Unsolicited(T),
-}
-
-/// The set of extensions that were registered by this credential.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RegisteredExtensions {
-    /// The state of the cred_protect extension
-    pub cred_protect: ExtnState<CredentialProtectionPolicy>,
-}
-
-impl RegisteredExtensions {
-    pub(crate) fn none() -> Self {
-        RegisteredExtensions {
-            cred_protect: ExtnState::NotRequested,
-        }
-    }
-
-    pub(crate) fn unsigned() -> Self {
-        RegisteredExtensions {
-            cred_protect: ExtnState::Unsigned,
-        }
-    }
-}
-
 /// A user's authenticator credential. It contains an id, the public key
 /// and a counter of how many times the authenticator has been used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -482,10 +443,13 @@ pub struct CredProtectResponse(pub CredentialProtectionPolicy);
 /// Implements the registration bits of \[AuthenticatorExtensionsClientOutputs\]
 /// from the spec
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct RegistrationSignedExtensions {
     /// The `credProtect` extension
+    #[serde(rename = "credProtect")]
     pub cred_protect: Option<CredProtectResponse>,
+    /// The `hmac-secret` extension response to a create request
+    #[serde(rename = "hmac-secret")]
+    pub hmac_secret: Option<bool>,
     /// Extension key-values that we have parsed, but don't strictly recognise.
     #[serde(flatten)]
     pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
@@ -523,8 +487,8 @@ pub struct AuthenticationResult {
     pub user_verified: bool,
     /// The state of the counter
     pub counter: u32,
-    // /// The response from associated extensions.
-    // pub extensions:
+    /// The response from associated extensions.
+    pub extensions: AuthenticationExtensions,
 }
 
 /// A serialised Attestation CA.

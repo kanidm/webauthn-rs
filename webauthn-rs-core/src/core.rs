@@ -948,6 +948,8 @@ impl WebauthnCore {
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
 
+        let extensions = process_authentication_extensions(auth_data.extensions);
+
         // If the signature counter value authData.signCount is nonzero or the value stored in
         // conjunction with credential’s id attribute is nonzero, then run the following sub-step:
         if counter > 0 || cred.counter > 0 {
@@ -971,6 +973,7 @@ impl WebauthnCore {
             cred_id: cred.cred_id.clone(),
             user_verified,
             counter,
+            extensions,
         })
     }
 
