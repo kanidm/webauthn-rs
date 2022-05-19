@@ -35,7 +35,7 @@ impl SecurityKey {
         &self.cred.cred.type_
     }
 
-    /// Retrieve a referenge to the attestation used during this Credentials
+    /// Retrieve a reference to the attestation used during this [`Credential`]'s
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestationData {
@@ -89,7 +89,7 @@ impl PasswordlessKey {
         &self.cred.cred.type_
     }
 
-    /// Retrieve a referenge to the attestation used during this Credentials
+    /// Retrieve a reference to the attestation used during this [`Credential`]'s
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestationData {

@@ -548,7 +548,7 @@ pub enum KeyStorageClass {
     /// related third party account is compromised.
     MultiDevice,
     /// This credential is bound to a single hardware cryptographic device and may not be used
-    /// without that specific hardware. However
+    /// without that specific hardware.
     ///
     /// This keystorage class is secure in the majority of use cases. In some extremely rare
     /// environments it may not be considered secure as an attacker who possesses the
@@ -575,10 +575,10 @@ pub enum KeyStorageClass {
     into = "SerialisableAttestationCa"
 )]
 pub struct AttestationCa {
-    /// The x509 root CA of the attestation chain that a security key will be attested too.
+    /// The x509 root CA of the attestation chain that a security key will be attested to.
     pub ca: x509::X509,
     /// If a credential signed by this attestation CA is provided, then this boolean determines
-    /// if it is platform only (IE part of the device, and can never leave it) or is roaming and
+    /// if it is platform only (i.e. part of the device and can never leave it) or is roaming and
     /// can be used between multiple devices through transports like USB, Bluetooth or NFC.
     pub platform_only: bool,
     /// If a credential signed by this attestation CA is provided, this shows the minimum level
@@ -587,7 +587,7 @@ pub struct AttestationCa {
     /// registration leaving us to make the safe and conservative choice to pick the lowest
     /// common method for that manufacturer.
     pub key_storage: KeyStorageClass,
-    /// A flag determining if this credential meets the Webauthn-RS's projects high level of
+    /// A flag determining if this credential meets the Webauthn-RS project's high level of
     /// quality. Considerations are not just the supply chain and cryptographic soundness, but
     /// also the user experience, hardware quality, manufacturer response to issues, and more.
     pub strict: bool,
