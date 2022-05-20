@@ -559,9 +559,8 @@ impl WebauthnCore {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
         }
 
-        // OUT OF SPEC - if the credential counter is 0, it *may* be a passkey, so we can experimentally
-        // reject it.
-        if !experimental_allow_passkeys && credential.counter == 0 {
+        // OUT OF SPEC - Allow rejection of passkeys if desired by the caller.
+        if !experimental_allow_passkeys && credential.backup_elligible {
             error!("Credential counter is 0 - may indicate that it is a passkey and not bound to hardware.");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
@@ -684,6 +683,16 @@ impl WebauthnCore {
             // This means we can't know what it's behaviour is at the moment.
             // We must allow unverified tokens now.
             _ => {}
+        }
+
+        // OUT OF SPEC - if the backup elligibility of this device has changed, this may represent
+        // a compromise of the credential, tampering with the device, or some other change to its
+        // risk profile from when it was originally enrolled. Reject the authentication if this
+        // situation occurs.
+
+        if cred.backup_elligible != data.authenticator_data.backup_elligible {
+            debug!("Credential backup elligibility has changed!");
+            return Err(WebauthnError::CredentialBackupElligibilityInconsistent);
         }
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
@@ -947,6 +956,7 @@ impl WebauthnCore {
         let auth_data = self.verify_credential_internal(rsp, *policy, chal, cred, appid)?;
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
+        let backup_state = auth_data.backup_state;
 
         let extensions = process_authentication_extensions(auth_data.extensions);
 
@@ -972,6 +982,7 @@ impl WebauthnCore {
         Ok(AuthenticationResult {
             cred_id: cred.cred_id.clone(),
             user_verified,
+            backup_state,
             counter,
             extensions,
         })
@@ -1516,6 +1527,8 @@ mod tests {
             },
             counter: 1,
             user_verified: false,
+            backup_elligible: false,
+            backup_state: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
             attestation: ParsedAttestationData::None,
@@ -1626,6 +1639,8 @@ mod tests {
                 }),
             },
             user_verified: false,
+            backup_elligible: false,
+            backup_state: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
             attestation: ParsedAttestationData::None,
@@ -2373,10 +2388,7 @@ mod tests {
             false,
         );
         debug!("{:?}", result);
-        assert!(matches!(
-            result,
-            Err(WebauthnError::CredentialMayNotBeHardwareBound)
-        ));
+        assert!(result.is_ok());
 
         let result = wan.register_credential_internal(
             &rsp_d,
@@ -2595,6 +2607,8 @@ mod tests {
                 },
                 counter: 0,
                 user_verified: false,
+                backup_elligible: false,
+                backup_state: false,
                 registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
                 extensions: RegisteredExtensions::none(),
                 attestation: ParsedAttestationData::None,
@@ -2625,6 +2639,8 @@ mod tests {
                 },
                 counter: 1,
                 user_verified: true,
+                backup_elligible: false,
+                backup_state: false,
                 registration_policy: UserVerificationPolicy::Required,
                 extensions: RegisteredExtensions::none(),
                 attestation: ParsedAttestationData::None,

@@ -154,12 +154,16 @@ impl Credential {
         trace!(?extensions);
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
+        let backup_elligible = auth_data.backup_elligible;
+        let backup_state = auth_data.backup_state;
 
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
             counter,
             user_verified,
+            backup_elligible,
+            backup_state,
             registration_policy,
             extensions,
             attestation: attestation.into(),
@@ -278,26 +282,26 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     ))
 }
 
-fn authenticator_data_flags(i: &[u8]) -> nom::IResult<&[u8], (bool, bool, bool, bool)> {
+fn authenticator_data_flags(i: &[u8]) -> nom::IResult<&[u8], (bool, bool, bool, bool, bool, bool)> {
     // Using nom for bit fields is shit, do it by hand.
     let (i, ctrl) = nom::number::complete::u8(i)?;
     let exten_pres = (ctrl & 0b1000_0000) != 0;
     let acd_pres = (ctrl & 0b0100_0000) != 0;
     let res_1 = (ctrl & 0b0010_0000) != 0;
-    let res_2 = (ctrl & 0b0001_0000) != 0;
-    let res_3 = (ctrl & 0b0000_1000) != 0;
+    let bak_st = (ctrl & 0b0001_0000) != 0;
+    let bak_el = (ctrl & 0b0000_1000) != 0;
     let u_ver = (ctrl & 0b0000_0100) != 0;
     let res_4 = (ctrl & 0b0000_0010) != 0;
     let u_pres = (ctrl & 0b0000_0001) != 0;
 
-    if res_1 || res_2 || res_3 || res_4 {
+    if res_1 || res_4 {
         warn!(
             "Usage of unknown authenticator data flags detected! {:b}",
             ctrl
         );
     }
 
-    Ok((i, (exten_pres, acd_pres, u_ver, u_pres)))
+    Ok((i, (exten_pres, acd_pres, u_ver, u_pres, bak_el, bak_st)))
 }
 
 fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], AuthenticatorData<T>> {
@@ -316,6 +320,8 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
             counter,
             user_verified: data_flags.2,
             user_present: data_flags.3,
+            backup_elligible: data_flags.4,
+            backup_state: data_flags.5,
             acd,
             extensions,
         },
@@ -333,6 +339,12 @@ pub struct AuthenticatorData<T: Ceremony> {
     pub user_present: bool,
     /// Flag is the user verified to the device. Implies presence.
     pub user_verified: bool,
+    /// Flag defining if the authenticator *could* be backed up OR transferred
+    /// between multiple devices.
+    pub backup_elligible: bool,
+    /// Flag defining if the authenticator *knows* it is currently backed up or
+    /// present on multiple devices.
+    pub backup_state: bool,
     /// The optional attestation.
     pub(crate) acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
