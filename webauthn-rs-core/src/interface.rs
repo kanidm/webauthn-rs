@@ -212,6 +212,15 @@ pub struct Credential {
     /// a credential as un-verified but then to use verification with it
     /// in the future.
     pub user_verified: bool,
+    /// During registration, this credential indicated that it *may* be possible
+    /// for it to exist between multiple hardware authenticators, or be backed up.
+    ///
+    /// This means the private key is NOT sealed within a hardware cryptograhic
+    /// processor, and may have impacts on your risk assessments and modeling.
+    pub backup_elligible: bool,
+    /// This credential has indicated that it is currently backed up OR that it
+    /// is shared between mulitple devices.
+    pub backup_state: bool,
     /// During registration, the policy that was requested from this
     /// credential. This is used to understand if the how the verified
     /// component interacts with the device, IE an always verified authenticator
@@ -235,11 +244,14 @@ impl From<CredentialV3> for Credential {
             registration_policy,
         } = other;
 
+        // prior to 20220520 no multi-device credentials existed to migrate from.
         Credential {
             cred_id: Base64UrlSafeData(cred_id),
             cred,
             counter,
             user_verified: verified,
+            backup_elligible: false,
+            backup_state: false,
             registration_policy,
             extensions: RegisteredExtensions::none(),
             attestation: ParsedAttestationData::None,
@@ -485,6 +497,9 @@ pub struct AuthenticationResult {
     pub cred_id: CredentialID,
     /// If the authentication provided user_verification.
     pub user_verified: bool,
+    /// The current backup state of the authenticator. It may have
+    /// changed since registration.
+    pub backup_state: bool,
     /// The state of the counter
     pub counter: u32,
     /// The response from associated extensions.

@@ -278,6 +278,7 @@ impl Webauthn {
         let require_resident_key = false;
         let authenticator_attachment = None;
         let policy = Some(UserVerificationPolicy::Preferred);
+        let reject_passkeys = false;
 
         self.core
             .generate_challenge_register_options(
@@ -290,7 +291,7 @@ impl Webauthn {
                 credential_algorithms,
                 require_resident_key,
                 authenticator_attachment,
-                false,
+                reject_passkeys,
             )
             .map(|(ccr, rs)| {
                 (
@@ -465,6 +466,7 @@ impl Webauthn {
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
         let policy = Some(UserVerificationPolicy::Required);
+        let reject_passkeys = true;
 
         // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
         // UVM
@@ -498,7 +500,7 @@ impl Webauthn {
                 credential_algorithms,
                 require_resident_key,
                 ui_hint_authenticator_attachment,
-                false,
+                reject_passkeys,
             )
             .map(|(ccr, rs)| {
                 (
