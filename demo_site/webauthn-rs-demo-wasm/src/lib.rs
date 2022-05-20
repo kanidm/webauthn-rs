@@ -1,6 +1,5 @@
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
-
 #![recursion_limit = "512"]
 use wasm_bindgen::prelude::*;
 

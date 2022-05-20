@@ -8,10 +8,11 @@ use webauthn_rs_core::error::WebauthnError;
 use webauthn_rs_core::proto::AttestationCaList;
 
 pub use webauthn_rs_proto::{
-    AttestationConveyancePreference, AuthenticatorAttachment, COSEAlgorithm,
-    CreationChallengeResponse, CredentialID, PublicKeyCredential, RegisterPublicKeyCredential,
-    RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
-    UserVerificationPolicy,
+    AttestationConveyancePreference, AuthenticationExtensions, AuthenticatorAttachment,
+    COSEAlgorithm, CreationChallengeResponse, CredProtect, CredentialID,
+    CredentialProtectionPolicy, ExtnState, PublicKeyCredential, RegisterPublicKeyCredential,
+    RegisteredExtensions, RequestAuthenticationExtensions, RequestChallengeResponse,
+    RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
@@ -73,7 +74,7 @@ pub struct RegistrationSuccess {
     pub uv: bool,
     pub alg: COSEAlgorithm,
     // pub counter: u32,
-    // pub extensions: RegistrationSignedExtensions,
+    pub extensions: RegisteredExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
@@ -105,7 +106,7 @@ pub struct AuthenticationSuccess {
     pub cred_id: CredentialID,
     pub uv: bool,
     // pub counter: u32,
-    // pub extensions: AuthenticationSignedExtensions,
+    pub extensions: AuthenticationExtensions,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -395,6 +396,9 @@ pub struct CompatTestResults {
     pub authpreferred_consistent: CTestSimpleState,
     pub uvrequired: CTestAttestState,
     pub authrequired: CTestAuthState,
+    pub extn_uvm_supported: CTestSimpleState,
+    pub extn_credprotect_supported: CTestSimpleState,
+    pub extn_hmacsecret_supported: CTestSimpleState,
 }
 
 impl CompatTestResults {

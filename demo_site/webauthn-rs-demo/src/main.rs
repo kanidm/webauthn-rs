@@ -426,12 +426,10 @@ async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::R
                 uv: cred.user_verified,
                 alg: cred.cred.type_,
                 // counter: auth_data.counter,
-                /*
-                extensions: auth_data
-                    .extensions
-                    .unwrap_or_else(|| RegistrationSignedExtensions::default()),
-                */
+                extensions: cred.extensions.clone(),
             };
+
+            trace!(?reg_response);
 
             tide::Response::builder(tide::StatusCode::Ok)
                 .body(tide::Body::from_json(&reg_response)?)
@@ -500,11 +498,7 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
                 cred_id: auth_result.cred_id,
                 uv: auth_result.user_verified,
                 // counter: auth_data.counter,
-                /*
-                extensions: auth_data
-                    .extensions
-                    .unwrap_or_else(|| AuthenticationSignedExtensions::default()),
-                */
+                extensions: auth_result.extensions.clone(),
             };
 
             tide::Response::builder(tide::StatusCode::Ok)

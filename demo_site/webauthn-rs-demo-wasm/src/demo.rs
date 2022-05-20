@@ -101,9 +101,7 @@ impl Demo {
         console::log!("register_complete()");
 
         let client_extensions = data.get_client_extension_results();
-        console::log!(
-            format!("client_extensions -> {:?}", client_extensions)
-        );
+        console::log!(format!("client_extensions -> {:?}", client_extensions));
 
         let rpkc = RegisterPublicKeyCredential::from(data);
         console::log!(format!("rpkc -> {:?}", rpkc).as_str());
@@ -471,14 +469,15 @@ impl Component for Demo {
                 self.last_username = username.clone();
                 // Build the settings that we'll be using.
 
-                let attest_req = utils::get_select_value_from_element_id("strict_attestation_required")
-                    .and_then(|v| match v.as_str() {
-                        "s" => Some(AttestationLevel::Strict),
-                        "a" => Some(AttestationLevel::AnyKnown),
-                        // "dv" => Some(RegisterWithType::Device(attest_req)),
-                        _ => None,
-                    })
-                    .unwrap_or(AttestationLevel::None);
+                let attest_req =
+                    utils::get_select_value_from_element_id("strict_attestation_required")
+                        .and_then(|v| match v.as_str() {
+                            "s" => Some(AttestationLevel::Strict),
+                            "a" => Some(AttestationLevel::AnyKnown),
+                            // "dv" => Some(RegisterWithType::Device(attest_req)),
+                            _ => None,
+                        })
+                        .unwrap_or(AttestationLevel::None);
 
                 let settings = utils::get_select_value_from_element_id("credential_type")
                     .and_then(|v| match v.as_str() {

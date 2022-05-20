@@ -1,7 +1,7 @@
 use gloo::console;
 use wasm_bindgen::JsCast;
-use web_sys::Document;
 use web_sys::Clipboard;
+use web_sys::Document;
 use web_sys::Navigator;
 use web_sys::Window;
 
