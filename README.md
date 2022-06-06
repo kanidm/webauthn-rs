@@ -5,7 +5,7 @@ Webauthn-rs
 Webauthn is a modern approach to hardware based authentication, consisting of
 a user with an authenticator device, a browser or client that interacts with the
 device, and a server that is able to generate challenges and verify the
-authenticators validity.
+authenticator's validity.
 
 Users are able to enroll their own tokens through a registration process to
 be associated to their accounts, and then are able to login using the token
@@ -28,9 +28,11 @@ You can test this library via our [demonstration site](https://webauthn.firstyea
 
 Or you can run the demonstration your self locally with:
 
-    cd webauthn-rs-demo
+    cd demo_site/webauthn-rs-demo
     cargo run
-    # For options
+
+For additional configuration options:
+
     cargo run -- --help
 
 Known Supported Keys/Harwdare
@@ -58,7 +60,7 @@ Known BROKEN Keys/Harwdare
   it during authentication, leading to possible social engineering and UV bypass attacks
 * Windows Hello with TPM - Often use RSA-SHA1 signatures over attestation which may allow credential compromise/falsification
 
-* BUG in safare, NOT Apple Passkeys (was, passkeys do not identify themself as a transferable credential, and should be considered to be floating.)
+* BUG in Safari, NOT Apple Passkeys (was: passkeys do not identify themself as a transferable credential, and should be considered to be floating.)
 
 Standards Compliance
 --------------------
@@ -95,7 +97,7 @@ using a series of Rust crates which (while still great!) have not seen the same
 level of scrutiny.
 
 The second is that OpenSSL is the only library I have found that allows us to
-reconstruct an EC public key from it's X/Y points or an RSA public key from it's
+reconstruct an EC public key from its X/Y points or an RSA public key from its
 n/e for use with signature verification.
 Without this, we are not able to parse authenticator credentials to perform authentication.
 
