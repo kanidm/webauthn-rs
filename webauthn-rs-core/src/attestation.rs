@@ -111,7 +111,7 @@ pub(crate) mod android_key_attestation {
     }
 
     impl AuthorizationList {
-        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Self> {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Option<Self>> {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
@@ -123,10 +123,16 @@ pub(crate) mod android_key_attestation {
                     .ok()
                     .unwrap_or((i, None));
 
-                let (i, origin) = parse_der_tagged_explicit(702, parse_der_integer)(i)?;
+                let (i, origin) = parse_der_explicit_optional(i, Tag(702), parse_der_integer)?;
+                if !origin.is_constructed() {
+                    return Ok((i, None));
+                }
                 let origin = origin.as_u32()?;
 
-                let (i, purpose) = parse_der_tagged_explicit(1, parse_der_integer)(i)?;
+                let (i, purpose) = parse_der_explicit_optional(i, Tag(1), parse_der_integer)?;
+                if !purpose.is_constructed() {
+                    return Ok((i, None));
+                }
                 let purpose = purpose.as_u32()?;
 
                 let al = AuthorizationList {
@@ -135,7 +141,7 @@ pub(crate) mod android_key_attestation {
                     purpose,
                 };
 
-                Ok((i, al))
+                Ok((i, Some(al)))
             })(i)
         }
     }
@@ -161,16 +167,20 @@ pub(crate) mod android_key_attestation {
 
                 let (i, _unique_id) = parse_der_octetstring(i)?;
 
-                let (i, software_enforced) = if let Ok((i, _)) = parse_der_sequence(i) {
+                let (i, software_enforced) = if let Ok((i, _)) =
+                    parse_der_explicit_optional(i, Tag::Sequence, parse_der_sequence)
+                {
                     let (i, out) = AuthorizationList::parse(i)?;
-                    (i, Some(out))
+                    (i, out)
                 } else {
                     (i, None)
                 };
 
-                let (i, tee_enforced) = if let Ok((i, _)) = parse_der_sequence(i) {
+                let (i, tee_enforced) = if let Ok((i, _)) =
+                    parse_der_explicit_optional(i, Tag::Sequence, parse_der_sequence)
+                {
                     let (i, out) = AuthorizationList::parse(i)?;
-                    (i, Some(out))
+                    (i, out)
                 } else {
                     (i, None)
                 };
@@ -203,7 +213,7 @@ pub(crate) mod android_key_attestation {
 
 impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
     // If cert contains an extension with OID 1.3.6.1.4.1.11129.2.1.17 (android key attestation)
-    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45724 .1 .1 .4);
+    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .11129 .2 .1 .17);
 
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = android_key_attestation::Data;
@@ -1059,7 +1069,7 @@ pub(crate) fn verify_android_safetynet_attestation(
     > {
         // dbg!(&token);
         let meta = jwt_simple::token::Token::decode_metadata(response_str)?;
-    
+
         let certs = meta
             .certificate_chain()
             .ok_or(SafetyNetError::MissingCertChain)?
