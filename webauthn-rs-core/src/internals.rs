@@ -1,3 +1,4 @@
+use crate::attestation::AttestationFormat;
 use crate::error::WebauthnError;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
@@ -121,6 +122,7 @@ impl Credential {
         registration_policy: UserVerificationPolicy,
         attestation: ParsedAttestationData,
         req_extn: Option<&RequestRegistrationExtensions>,
+        attestation_format: Option<AttestationFormat>
     ) -> Self {
         let extensions = if let Some(req_extn) = req_extn {
             let cred_protect = match (
@@ -167,6 +169,7 @@ impl Credential {
             registration_policy,
             extensions,
             attestation: attestation.into(),
+            attestation_format
         }
     }
 }

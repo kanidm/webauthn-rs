@@ -58,6 +58,12 @@ pub enum WebauthnError {
     #[error("The attestation statement map is not valid")]
     AttestationStatementMapInvalid,
 
+    #[error("The attestation statement response is not present")]
+    AttestationStatementResponseMissing,
+
+    #[error("The attestation statement response is not valid")]
+    AttestationStatementResponseInvalid,
+
     #[error("The attestation statement signature is not present")]
     AttestationStatementSigMissing,
 

@@ -33,6 +33,8 @@ rand = { version = "0.8" }
 url = { version = "2", features = ["serde"] }
 x509-parser = "0.13.0"
 der-parser = "7.0.0"
+jwt-simple = "0.11.0"
+
 
 [dev-dependencies]
 hex-literal = "0.3"

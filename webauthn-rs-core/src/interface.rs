@@ -1,6 +1,7 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
+use crate::attestation::AttestationFormat;
 use crate::constants::*;
 use crate::error::*;
 use std::fmt;
@@ -232,6 +233,8 @@ pub struct Credential {
     /// The attestation certificate of this credential.
     pub attestation: ParsedAttestationData,
     // pub attestation: SerialisableAttestationData,
+    /// the format of the attestation
+    pub attestation_format: Option<AttestationFormat>,
 }
 
 impl From<CredentialV3> for Credential {
@@ -255,6 +258,7 @@ impl From<CredentialV3> for Credential {
             registration_policy,
             extensions: RegisteredExtensions::none(),
             attestation: ParsedAttestationData::None,
+            attestation_format: None,
         }
     }
 }
@@ -659,6 +663,57 @@ impl AttestationCa {
             strict: false,
         }
     }
+
+    /// Android ROOT CA 1
+    pub fn android_root_ca_1() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: true,
+        }
+    }
+
+    /// Android ROOT CA 2
+    pub fn android_root_ca_2() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: true,
+        }
+    }
+
+    /// Android ROOT CA 3
+    pub fn android_root_ca_3() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: true,
+        }
+    }
+
+    /// Google SafetyNet CA (for android)
+    pub fn google_safetynet_ca() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: true,
+        }
+    }
+
+    /// Google SafetyNet CA (for android) -- OLD EXPIRED
+    #[allow(unused)]
+    pub(crate) fn google_safetynet_ca_old() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: true,
+        }
+    }
 }
 
 /// A list of AttestationCas and associated options.
@@ -680,6 +735,19 @@ impl AttestationCaList {
         }
     }
 
+    /// Apple iOS/macOS and Android CAs
+    pub fn apple_and_android() -> Self {
+        AttestationCaList {
+            cas: vec![
+                AttestationCa::apple_webauthn_root_ca(),
+                AttestationCa::android_root_ca_1(),
+                AttestationCa::android_root_ca_2(),
+                AttestationCa::android_root_ca_3(),
+                AttestationCa::google_safetynet_ca(),
+            ],
+        }
+    }
+
     /// All CA's known to the Webauthn-RS project.
     pub fn all_known_cas() -> Self {
         AttestationCaList {
@@ -689,6 +757,10 @@ impl AttestationCaList {
                 AttestationCa::microsoft_tpm_root_certificate_authority_2014(),
                 AttestationCa::nitrokey_fido2_root_ca(),
                 AttestationCa::nitrokey_u2f_root_ca(),
+                AttestationCa::android_root_ca_1(),
+                AttestationCa::android_root_ca_2(),
+                AttestationCa::android_root_ca_3(),
+                AttestationCa::google_safetynet_ca(),
             ],
         }
     }
