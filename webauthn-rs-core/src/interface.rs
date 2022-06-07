@@ -754,7 +754,15 @@ impl AttestationCaList {
                 AttestationCa::android_root_ca_2(),
                 AttestationCa::android_root_ca_3(),
                 AttestationCa::google_safetynet_ca(),
+                AttestationCa::android_software_ca()
             ],
+        }
+    }
+
+    /// Apple iOS/macOS
+    pub fn apple() -> Self {
+        AttestationCaList {
+            cas: vec![AttestationCa::apple_webauthn_root_ca()],
         }
     }
 
@@ -771,6 +779,7 @@ impl AttestationCaList {
                 AttestationCa::android_root_ca_2(),
                 AttestationCa::android_root_ca_3(),
                 AttestationCa::google_safetynet_ca(),
+                AttestationCa::android_software_ca()
             ],
         }
     }
