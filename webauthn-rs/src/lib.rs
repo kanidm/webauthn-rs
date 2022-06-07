@@ -59,6 +59,7 @@ use crate::interface::*;
 pub mod prelude {
     pub use crate::interface::*;
     pub use crate::{Webauthn, WebauthnBuilder};
+    pub use base64urlsafedata::Base64UrlSafeData;
     pub use url::Url;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
