@@ -694,6 +694,16 @@ impl AttestationCa {
         }
     }
 
+    /// Android SOFTWARE ONLY root CA
+    pub fn android_software_ca() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: true,
+        }
+    }
+
     /// Google SafetyNet CA (for android)
     pub fn google_safetynet_ca() -> Self {
         AttestationCa {

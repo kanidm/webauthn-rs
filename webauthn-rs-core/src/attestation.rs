@@ -71,21 +71,22 @@ impl AttestationX509Extension for FidoGenCeAaguid {
 }
 
 pub(crate) mod android_key_attestation {
+    use der_parser::ber::BerObjectContent;
 
     #[derive(Clone, PartialEq, Eq)]
     pub struct Data {
         pub attestation_challenge: Vec<u8>,
         pub attest_enforcement: EnforcementType,
         pub km_enforcement: EnforcementType,
-        pub software_enforced: Option<AuthorizationList>,
-        pub tee_enforced: Option<AuthorizationList>,
+        pub software_enforced: AuthorizationList,
+        pub tee_enforced: AuthorizationList,
     }
 
     #[derive(Clone, PartialEq, Eq, Copy)]
     pub struct AuthorizationList {
         pub all_applications: bool,
-        pub origin: u32,
-        pub purpose: u32,
+        pub origin: Option<u32>,
+        pub purpose: Option<u32>,
     }
 
     pub const KM_ORIGIN_GENERATED: u32 = 0;
@@ -96,13 +97,13 @@ pub(crate) mod android_key_attestation {
         Software,
         Tee,
         #[allow(unused)]
-        Any,
+        Either,
     }
 
     impl PartialEq for EnforcementType {
         fn eq(&self, other: &Self) -> bool {
             match (self, other) {
-                (Self::Any, _) | (_, Self::Any) => true,
+                (Self::Either, _) | (_, Self::Either) => true,
                 (Self::Software, Self::Software) => true,
                 (Self::Tee, Self::Tee) => true,
                 _ => false,
@@ -111,37 +112,53 @@ pub(crate) mod android_key_attestation {
     }
 
     impl AuthorizationList {
-        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Option<Self>> {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Self> {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
                     return Err(nom::Err::Error(BerError::BerTypeError.into()));
                 }
 
-                let (i, all_applications) = parse_der_tagged_explicit(600, parse_der)(i)
-                    .map(|(i, v)| (i, Some(v)))
-                    .ok()
-                    .unwrap_or((i, None));
+                let mut all_applications = false;
+                let mut origin = None;
+                let mut purpose = None;
 
-                let (i, origin) = parse_der_explicit_optional(i, Tag(702), parse_der_integer)?;
-                if !origin.is_constructed() {
-                    return Ok((i, None));
-                }
-                let origin = origin.as_u32()?;
+                let mut i = i;
+                while let Ok((k, obj)) = parse_der(i) {
+                    i = k;
+                    // dbg!(&obj);
+                    if obj.content == BerObjectContent::Optional(None) {
+                        continue;
+                    }
 
-                let (i, purpose) = parse_der_explicit_optional(i, Tag(1), parse_der_integer)?;
-                if !purpose.is_constructed() {
-                    return Ok((i, None));
+                    match obj.tag() {
+                        Tag(600) => {
+                            all_applications = true;
+                        }
+                        Tag(702) => {
+                            if let BerObjectContent::Unknown(o) = obj.content {
+                                let (_, val) = parse_der_integer(&o.data)?;
+                                origin = Some(val.as_u32()?);
+                            }
+                        }
+                        Tag(1) => {
+                            if let BerObjectContent::Unknown(o) = obj.content {
+                                let (_, val) =
+                                    parse_der_container(|i, _| parse_der_integer(i))(&o.data)?;
+                                purpose = Some(val.as_u32()?);
+                            }
+                        }
+                        _ => continue,
+                    };
                 }
-                let purpose = purpose.as_u32()?;
 
                 let al = AuthorizationList {
-                    all_applications: all_applications.is_some(),
+                    all_applications,
                     origin,
                     purpose,
                 };
 
-                Ok((i, Some(al)))
+                Ok((i, al))
             })(i)
         }
     }
@@ -167,23 +184,8 @@ pub(crate) mod android_key_attestation {
 
                 let (i, _unique_id) = parse_der_octetstring(i)?;
 
-                let (i, software_enforced) = if let Ok((i, _)) =
-                    parse_der_explicit_optional(i, Tag::Sequence, parse_der_sequence)
-                {
-                    let (i, out) = AuthorizationList::parse(i)?;
-                    (i, out)
-                } else {
-                    (i, None)
-                };
-
-                let (i, tee_enforced) = if let Ok((i, _)) =
-                    parse_der_explicit_optional(i, Tag::Sequence, parse_der_sequence)
-                {
-                    let (i, out) = AuthorizationList::parse(i)?;
-                    (i, out)
-                } else {
-                    (i, None)
-                };
+                let (i, software_enforced) = AuthorizationList::parse(i)?;
+                let (i, tee_enforced) = AuthorizationList::parse(i)?;
 
                 let attest_enforcement = match attest_sec_level {
                     0 => EnforcementType::Software,
@@ -943,22 +945,32 @@ pub(crate) fn verify_android_key_attestation(
         AuthorizationList, EnforcementType, KM_ORIGIN_GENERATED, KM_PURPOSE_SIGN,
     };
 
-    let auth_list = AuthorizationList {
-        all_applications: false,
-        origin: KM_ORIGIN_GENERATED,
-        purpose: KM_PURPOSE_SIGN,
-    };
+    // let pem = attestn_cert.to_pem()?;
+    // dbg!(std::str::from_utf8(&pem).unwrap());
 
     validate_extension::<AndroidKeyAttestationExtensionData>(
         &attestn_cert,
         &android_key_attestation::Data {
             attestation_challenge: client_data_hash.to_vec(),
-            attest_enforcement: EnforcementType::Tee,
+            attest_enforcement: EnforcementType::Either,
             km_enforcement: EnforcementType::Tee,
-            software_enforced: Some(auth_list),
-            tee_enforced: Some(auth_list),
+            software_enforced: AuthorizationList {
+                all_applications: false,
+                origin: None,
+                purpose: None,
+            },
+            tee_enforced: AuthorizationList {
+                all_applications: false,
+                origin: Some(KM_ORIGIN_GENERATED),
+                purpose: Some(KM_PURPOSE_SIGN),
+            },
         },
     )?;
+
+    // arr_x509.iter().for_each(|c| {
+    //     let pem = c.to_pem().unwrap();
+    //     dbg!(std::str::from_utf8(&pem).unwrap());
+    // });
 
     // 5. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
     Ok(ParsedAttestationData::Basic(arr_x509))

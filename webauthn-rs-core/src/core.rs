@@ -3413,7 +3413,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-     #[test]
+    #[test]
     fn test_google_android_key() {
         let chal: Base64UrlSafeData =
             serde_json::from_str("\"Tf65bS6D5temh2BwvptqgBPb25iZDRxjwC5ans91IIJDrcrOpnWTK4LVgFjeUV4GDMe44w8SI5NsZssIXTUvDg\"").unwrap();
@@ -3450,7 +3450,9 @@ mod tests {
             &chal,
             &[],
             &[COSEAlgorithm::ES256],
-            Some(&AttestationCaList::apple_and_android()),
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::android_software_ca()],
+            }),
             true,
             &RequestRegistrationExtensions::default(),
             true,
