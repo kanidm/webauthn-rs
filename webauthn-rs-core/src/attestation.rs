@@ -294,14 +294,22 @@ where
         })
 }
 
+/// The type of attestation on the credential
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum AttestationFormat {
+    /// Packed attestation
     Packed,
+    /// TPM attestation (like Micrsoft)
     Tpm,
+    /// Android hardware attestation
     AndroidKey,
+    /// Older Android Safety Net
     AndroidSafetyNet,
+    /// Old U2F attestation type
     FIDOU2F,
+    /// Apple touchID/faceID
     AppleAnonymous,
+    /// No attestation
     None,
 }
 
