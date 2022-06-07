@@ -54,7 +54,7 @@ use webauthn_rs_core::proto::*;
 use webauthn_rs_core::WebauthnCore;
 
 use crate::interface::*;
-
+;
 /// A prelude of types that are used by `Webauthn`
 pub mod prelude {
     pub use crate::interface::*;
@@ -63,9 +63,10 @@ pub mod prelude {
     pub use url::Url;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
+    pub use webauthn_rs_core::AttestationFormat;
     pub use webauthn_rs_core::proto::{
         AuthenticationState, Credential, CredentialID, ParsedAttestationData, PublicKeyCredential,
-        RegisterPublicKeyCredential,
+        RegisterPublicKeyCredential, 
     };
 }
 
