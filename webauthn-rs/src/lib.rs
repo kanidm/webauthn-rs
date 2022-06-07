@@ -62,7 +62,9 @@ pub mod prelude {
     pub use url::Url;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
-    pub use webauthn_rs_core::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
+    pub use webauthn_rs_core::proto::{
+        Credential, PublicKeyCredential, RegisterPublicKeyCredential,
+    };
 }
 
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
