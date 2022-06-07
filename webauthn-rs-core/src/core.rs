@@ -3108,9 +3108,8 @@ mod tests {
             &RequestRegistrationExtensions::default(),
             false,
         );
-        debug!("{:?}", result);
-        // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
-        assert!(result.is_err());
+        dbg!("{:?}", &result);
+        assert!(result.is_ok());
     }
 
     #[test]
