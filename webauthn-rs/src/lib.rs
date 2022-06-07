@@ -73,6 +73,7 @@ pub struct WebauthnBuilder<'a> {
     rp_id: &'a str,
     rp_origin: &'a Url,
     allow_subdomains: bool,
+    allow_any_port: bool,
     algorithms: Vec<COSEAlgorithm>,
 }
 
@@ -80,7 +81,7 @@ pub struct WebauthnBuilder<'a> {
 /// authenticating credentials for users.
 #[derive(Debug)]
 pub struct Webauthn {
-    core: WebauthnCore,
+    pub core: WebauthnCore,
     algorithms: Vec<COSEAlgorithm>,
 }
 
@@ -134,6 +135,7 @@ impl<'a> WebauthnBuilder<'a> {
                 rp_id,
                 rp_origin,
                 allow_subdomains: false,
+                allow_any_port: false,
                 algorithms: COSEAlgorithm::secure_algs(),
             })
         } else {
@@ -151,6 +153,12 @@ impl<'a> WebauthnBuilder<'a> {
     /// If in doubt, do NOT change this value. Defaults to "false".
     pub fn allow_subdomains(mut self, allow: bool) -> Self {
         self.allow_subdomains = allow;
+        self
+    }
+
+    /// Setting this flag skips port checks on origin matches
+    pub fn allow_any_port(mut self, allow: bool) -> Self {
+        self.allow_any_port = allow;
         self
     }
 
@@ -188,6 +196,7 @@ impl<'a> WebauthnBuilder<'a> {
                     self.rp_origin,
                     None,
                     Some(self.allow_subdomains),
+                    Some(self.allow_any_port),
                 )
             },
             algorithms: self.algorithms,
