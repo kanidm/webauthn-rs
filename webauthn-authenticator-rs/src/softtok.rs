@@ -275,6 +275,7 @@ mod tests {
                 &url::Url::parse("https://localhost:8080").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 

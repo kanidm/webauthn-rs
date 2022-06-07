@@ -20,6 +20,7 @@ use std::convert::TryFrom;
 use url::Url;
 
 use crate::attestation::{
+    verify_android_key_attestation, verify_android_safetynet_attestation,
     verify_apple_anonymous_attestation, verify_attestation_ca_chain, verify_fidou2f_attestation,
     verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
 };
@@ -54,9 +55,11 @@ pub struct WebauthnCore {
     rp_origin: Url,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,
+    #[allow(unused)]
     ignore_unsupported_attestation_formats: bool,
     allow_cross_origin: bool,
     allow_subdomains_origin: bool,
+    allow_any_port: bool,
 }
 
 impl WebauthnCore {
@@ -82,6 +85,7 @@ impl WebauthnCore {
         rp_origin: &Url,
         authenticator_timeout: Option<u32>,
         allow_subdomains_origin: Option<bool>,
+        allow_any_port: Option<bool>,
     ) -> Self {
         let rp_id_hash = compute_sha256(rp_id.as_bytes());
         WebauthnCore {
@@ -94,6 +98,7 @@ impl WebauthnCore {
             ignore_unsupported_attestation_formats: true,
             allow_cross_origin: false,
             allow_subdomains_origin: allow_subdomains_origin.unwrap_or(false),
+            allow_any_port: allow_any_port.unwrap_or(false),
         }
     }
 
@@ -363,6 +368,7 @@ impl WebauthnCore {
         // Verify that the value of C.origin matches the Relying Party's origin.
         Self::validate_origin(
             self.allow_subdomains_origin,
+            self.allow_any_port,
             &data.client_data_json.origin,
             &self.rp_origin,
         )?;
@@ -497,16 +503,18 @@ impl WebauthnCore {
                 &data.attestation_object,
                 &client_data_json_hash,
             ),
+            AttestationFormat::AndroidKey => verify_android_key_attestation(
+                acd,
+                &data.attestation_object,
+                &client_data_json_hash,
+            ),
+            AttestationFormat::AndroidSafetyNet => verify_android_safetynet_attestation(
+                acd,
+                &data.attestation_object,
+                &client_data_json_hash,
+                danger_disable_certificate_time_checks,
+            ),
             AttestationFormat::None => Ok(ParsedAttestationData::None),
-            attest => {
-                if self.ignore_unsupported_attestation_formats {
-                    debug!(?attest);
-                    // No other types are currently implemented
-                    Err(WebauthnError::AttestationNotSupported)
-                } else {
-                    Ok(ParsedAttestationData::Uncertain)
-                }
-            }
         }?;
 
         let credential: Credential = Credential::new(
@@ -516,6 +524,7 @@ impl WebauthnCore {
             policy,
             attestation_data,
             opt_req_extn,
+            Some(attest_format),
         );
 
         // Now based on result ...
@@ -630,7 +639,12 @@ impl WebauthnCore {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        Self::validate_origin(self.allow_subdomains_origin, &c.origin, &self.rp_origin)?;
+        Self::validate_origin(
+            self.allow_subdomains_origin,
+            self.allow_any_port,
+            &c.origin,
+            &self.rp_origin,
+        )?;
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
         // TLS connection over which the attestation was obtained. If Token Binding was used on that
@@ -990,6 +1004,7 @@ impl WebauthnCore {
 
     fn validate_origin(
         allow_subdomains_origin: bool,
+        allow_any_port: bool,
         ccd_url: &url::Url,
         cnf_url: &url::Url,
     ) -> Result<(), WebauthnError> {
@@ -999,10 +1014,16 @@ impl WebauthnCore {
                     url::Origin::Tuple(ccd_scheme, ccd_host, ccd_port),
                     url::Origin::Tuple(cnf_scheme, cnf_host, cnf_port),
                 ) => {
-                    if ccd_scheme != cnf_scheme || ccd_port != cnf_port {
+                    if ccd_scheme != cnf_scheme {
                         debug!("{} != {}", ccd_url, cnf_url);
                         return Err(WebauthnError::InvalidRPOrigin);
                     }
+
+                    if !allow_any_port && ccd_port != cnf_port {
+                        debug!("{} != {}", ccd_url, cnf_url);
+                        return Err(WebauthnError::InvalidRPOrigin);
+                    }
+
                     let valid = match (ccd_host, cnf_host) {
                         (url::Host::Domain(ccd_domain), url::Host::Domain(cnf_domain)) => {
                             ccd_domain.ends_with(&cnf_domain)
@@ -1023,8 +1044,15 @@ impl WebauthnCore {
                 }
             }
         } else if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
-            debug!("{} != {}", ccd_url, cnf_url);
-            Err(WebauthnError::InvalidRPOrigin)
+            if ccd_url.host() == cnf_url.host()
+                && ccd_url.scheme() == cnf_url.scheme()
+                && allow_any_port
+            {
+                Ok(())
+            } else {
+                debug!("{} != {}", ccd_url, cnf_url);
+                Err(WebauthnError::InvalidRPOrigin)
+            }
         } else {
             Ok(())
         }
@@ -1209,6 +1237,7 @@ mod tests {
                 &Url::parse("http://127.0.0.1:8080").unwrap(),
                 None,
                 None,
+                None,
             )
         };
         // Generated by a yubico 5
@@ -1263,6 +1292,7 @@ mod tests {
                 &Url::parse("https://webauthn.io").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -1306,6 +1336,7 @@ mod tests {
                 &Url::parse("https://localhost:8443").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -1347,6 +1378,7 @@ mod tests {
                 "localhost:8080/auth",
                 "localhost",
                 &Url::parse("http://localhost:8080").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -1395,6 +1427,7 @@ mod tests {
                 &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -1439,6 +1472,7 @@ mod tests {
                 "webauthn.firstyear.id.au",
                 "webauthn.firstyear.id.au",
                 &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -1490,6 +1524,7 @@ mod tests {
                 &Url::parse("http://localhost:8080").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -1532,6 +1567,7 @@ mod tests {
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
             attestation: ParsedAttestationData::None,
+            attestation_format: None,
         };
 
         // Persist it to our fake db.
@@ -1604,6 +1640,7 @@ mod tests {
                 &Url::parse("https://testing.local").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -1644,6 +1681,7 @@ mod tests {
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
             attestation: ParsedAttestationData::None,
+            attestation_format: None,
         };
 
         // Persist it to our fake db.
@@ -1719,6 +1757,7 @@ mod tests {
                 &Url::parse("https://172.20.0.141:8443").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -1767,6 +1806,7 @@ mod tests {
                 "https://etools-dev.example.com:8080/auth",
                 "etools-dev.example.com",
                 &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -1911,6 +1951,7 @@ mod tests {
                 "https://etools-dev.example.com:8080/auth",
                 "etools-dev.example.com",
                 &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -2227,6 +2268,7 @@ mod tests {
                 &Url::parse("https://etools-dev.example.com:8080").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -2255,6 +2297,7 @@ mod tests {
                 "https://spectral.local:8443/auth",
                 "spectral.local",
                 &Url::parse("https://spectral.local:8443").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -2430,6 +2473,7 @@ mod tests {
                 &Url::parse("https://spectral.local:8443").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -2575,6 +2619,7 @@ mod tests {
                 &Url::parse("http://127.0.0.1:8080").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -2612,6 +2657,7 @@ mod tests {
                 registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
                 extensions: RegisteredExtensions::none(),
                 attestation: ParsedAttestationData::None,
+                attestation_format: None,
             },
             Credential {
                 cred_id: Base64UrlSafeData(vec![
@@ -2644,6 +2690,7 @@ mod tests {
                 registration_policy: UserVerificationPolicy::Required,
                 extensions: RegisteredExtensions::none(),
                 attestation: ParsedAttestationData::None,
+                attestation_format: None,
             },
         ];
         // Ensure we get a bad result.
@@ -2717,6 +2764,7 @@ mod tests {
                 &Url::parse("https://idm.example.com:8080").unwrap(),
                 None,
                 Some(true),
+                None,
             )
         };
 
@@ -2888,6 +2936,7 @@ mod tests {
                 &Url::parse("http://localhost:8080").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -2931,6 +2980,7 @@ mod tests {
                 "https://webauthn.firstyear.id.au",
                 "webauthn.firstyear.id.au",
                 &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -2980,6 +3030,7 @@ mod tests {
                 &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -3024,6 +3075,7 @@ mod tests {
                 "https://webauthn.firstyear.id.au",
                 "webauthn.firstyear.id.au",
                 &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -3071,6 +3123,7 @@ mod tests {
                 &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -3113,6 +3166,7 @@ mod tests {
                 "https://webauthn.firstyear.id.au",
                 "webauthn.firstyear.id.au",
                 &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -3164,6 +3218,7 @@ mod tests {
                 &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
                 None,
                 None,
+                None,
             )
         };
 
@@ -3210,6 +3265,7 @@ mod tests {
                 "http://localhost:8080/auth",
                 "localhost",
                 &Url::parse("http://localhost:8080").unwrap(),
+                None,
                 None,
                 None,
             )
@@ -3282,5 +3338,189 @@ mod tests {
         debug!("{:?}", result);
         let cred = result.unwrap();
         assert!(matches!(cred.attestation, ParsedAttestationData::Self_));
+    }
+
+    #[test]
+    fn test_google_safetynet() {
+        #[allow(unused)]
+        let _request = r#"{"publicKey": {
+            "challenge": "dfo+HlqJp3MLK+J5TLxxmvXJieS3zGwdk9G9H9bPezg=",
+            "rp": {
+                "name": "webauthn.io",
+                "id": "webauthn.io"
+            },
+            "user": {
+                "name": "safetynetter",
+                "displayName": "safetynetter",
+                "id": "wDkAAAAAAAAAAA=="
+            },
+            "pubKeyCredParams": [
+                {
+                "type": "public-key",
+                "alg": -7
+                }              
+            ],
+            "authenticatorSelection": {
+                "authenticatorAttachment": "platform",
+                "userVerification": "preferred"
+            },
+            "timeout": 60000,
+            "attestation": "direct"
+            }
+        }"#;
+
+        let response = r#"{
+            "id":"AUiVU3Mk3uJomfHcJcu6ScwUHRysE2e6IgaTNAzQ34TP0OPifi2LgGD_5hzxRhOfQTB1fW6k63C8tk-MwywpNVI",
+            "rawId":"AUiVU3Mk3uJomfHcJcu6ScwUHRysE2e6IgaTNAzQ34TP0OPifi2LgGD_5hzxRhOfQTB1fW6k63C8tk-MwywpNVI",
+            "type":"public-key",
+            "response":{
+                "attestationObject":"o2NmbXRxYW5kcm9pZC1zYWZldHluZXRnYXR0U3RtdKJjdmVyaDE1MTgwMDM3aHJlc3BvbnNlWRS9ZXlKaGJHY2lPaUpTVXpJMU5pSXNJbmcxWXlJNld5Sk5TVWxHYTJwRFEwSkljV2RCZDBsQ1FXZEpVVkpZY205T01GcFBaRkpyUWtGQlFVRkJRVkIxYm5wQlRrSm5hM0ZvYTJsSE9YY3dRa0ZSYzBaQlJFSkRUVkZ6ZDBOUldVUldVVkZIUlhkS1ZsVjZSV1ZOUW5kSFFURlZSVU5vVFZaU01qbDJXako0YkVsR1VubGtXRTR3U1VaT2JHTnVXbkJaTWxaNlRWSk5kMFZSV1VSV1VWRkVSWGR3U0ZaR1RXZFJNRVZuVFZVNGVFMUNORmhFVkVVMFRWUkJlRTFFUVROTlZHc3dUbFp2V0VSVVJUVk5WRUYzVDFSQk0wMVVhekJPVm05M1lrUkZURTFCYTBkQk1WVkZRbWhOUTFaV1RYaEZla0ZTUW1kT1ZrSkJaMVJEYTA1b1lrZHNiV0l6U25WaFYwVjRSbXBCVlVKblRsWkNRV05VUkZVeGRtUlhOVEJaVjJ4MVNVWmFjRnBZWTNoRmVrRlNRbWRPVmtKQmIxUkRhMlIyWWpKa2MxcFRRazFVUlUxNFIzcEJXa0puVGxaQ1FVMVVSVzFHTUdSSFZucGtRelZvWW0xU2VXSXliR3RNYlU1MllsUkRRMEZUU1hkRVVWbEtTMjlhU1doMlkwNUJVVVZDUWxGQlJHZG5SVkJCUkVORFFWRnZRMmRuUlVKQlRtcFlhM293WlVzeFUwVTBiU3N2UnpWM1QyOHJXRWRUUlVOeWNXUnVPRGh6UTNCU04yWnpNVFJtU3pCU2FETmFRMWxhVEVaSWNVSnJOa0Z0V2xaM01rczVSa2N3VHpseVVsQmxVVVJKVmxKNVJUTXdVWFZ1VXpsMVowaEROR1ZuT1c5MmRrOXRLMUZrV2pKd09UTllhSHAxYmxGRmFGVlhXRU40UVVSSlJVZEtTek5UTW1GQlpucGxPVGxRVEZNeU9XaE1ZMUYxV1ZoSVJHRkROMDlhY1U1dWIzTnBUMGRwWm5NNGRqRnFhVFpJTDNob2JIUkRXbVV5YkVvck4wZDFkSHBsZUV0d2VIWndSUzkwV2xObVlsazVNRFZ4VTJ4Q2FEbG1jR293TVRWamFtNVJSbXRWYzBGVmQyMUxWa0ZWZFdWVmVqUjBTMk5HU3pSd1pYWk9UR0Y0UlVGc0swOXJhV3hOZEVsWlJHRmpSRFZ1Wld3MGVFcHBlWE0wTVROb1lXZHhWekJYYUdnMVJsQXpPV2hIYXpsRkwwSjNVVlJxWVhwVGVFZGtkbGd3YlRaNFJsbG9hQzh5VmsxNVdtcFVORXQ2VUVwRlEwRjNSVUZCWVU5RFFXeG5kMmRuU2xWTlFUUkhRVEZWWkVSM1JVSXZkMUZGUVhkSlJtOUVRVlJDWjA1V1NGTlZSVVJFUVV0Q1oyZHlRbWRGUmtKUlkwUkJWRUZOUW1kT1ZraFNUVUpCWmpoRlFXcEJRVTFDTUVkQk1WVmtSR2RSVjBKQ1VYRkNVWGRIVjI5S1FtRXhiMVJMY1hWd2J6UlhObmhVTm1veVJFRm1RbWRPVmtoVFRVVkhSRUZYWjBKVFdUQm1hSFZGVDNaUWJTdDRaMjU0YVZGSE5rUnlabEZ1T1V0NlFtdENaMmR5UW1kRlJrSlJZMEpCVVZKWlRVWlpkMHAzV1VsTGQxbENRbEZWU0UxQlIwZEhNbWd3WkVoQk5reDVPWFpaTTA1M1RHNUNjbUZUTlc1aU1qbHVUREprTUdONlJuWk5WRUZ5UW1kbmNrSm5SVVpDVVdOM1FXOVpabUZJVWpCalJHOTJURE5DY21GVE5XNWlNamx1VERKa2VtTnFTWFpTTVZKVVRWVTRlRXh0VG5sa1JFRmtRbWRPVmtoU1JVVkdha0ZWWjJoS2FHUklVbXhqTTFGMVdWYzFhMk50T1hCYVF6VnFZakl3ZDBsUldVUldVakJuUWtKdmQwZEVRVWxDWjFwdVoxRjNRa0ZuU1hkRVFWbExTM2RaUWtKQlNGZGxVVWxHUVhwQmRrSm5UbFpJVWpoRlMwUkJiVTFEVTJkSmNVRm5hR2cxYjJSSVVuZFBhVGgyV1ROS2MweHVRbkpoVXpWdVlqSTVia3d3WkZWVmVrWlFUVk0xYW1OdGQzZG5aMFZGUW1kdmNrSm5SVVZCWkZvMVFXZFJRMEpKU0RGQ1NVaDVRVkJCUVdSM1EydDFVVzFSZEVKb1dVWkpaVGRGTmt4TldqTkJTMUJFVjFsQ1VHdGlNemRxYW1RNE1FOTVRVE5qUlVGQlFVRlhXbVJFTTFCTVFVRkJSVUYzUWtsTlJWbERTVkZEVTFwRFYyVk1Tblp6YVZaWE5rTm5LMmRxTHpsM1dWUktVbnAxTkVocGNXVTBaVmswWXk5dGVYcHFaMGxvUVV4VFlta3ZWR2g2WTNweGRHbHFNMlJyTTNaaVRHTkpWek5NYkRKQ01HODNOVWRSWkdoTmFXZGlRbWRCU0ZWQlZtaFJSMjFwTDFoM2RYcFVPV1ZIT1ZKTVNTdDRNRm95ZFdKNVdrVldla0UzTlZOWlZtUmhTakJPTUVGQlFVWnRXRkU1ZWpWQlFVRkNRVTFCVW1wQ1JVRnBRbU5EZDBFNWFqZE9WRWRZVURJM09IbzBhSEl2ZFVOSWFVRkdUSGx2UTNFeVN6QXJlVXhTZDBwVlltZEpaMlk0WjBocWRuQjNNbTFDTVVWVGFuRXlUMll6UVRCQlJVRjNRMnR1UTJGRlMwWlZlVm8zWmk5UmRFbDNSRkZaU2t0dldrbG9kbU5PUVZGRlRFSlJRVVJuWjBWQ1FVazVibFJtVWt0SlYyZDBiRmRzTTNkQ1REVTFSVlJXTm10aGVuTndhRmN4ZVVGak5VUjFiVFpZVHpReGExcDZkMG8yTVhkS2JXUlNVbFF2VlhORFNYa3hTMFYwTW1Nd1JXcG5iRzVLUTBZeVpXRjNZMFZYYkV4UldUSllVRXg1Um1wclYxRk9ZbE5vUWpGcE5GY3lUbEpIZWxCb2RETnRNV0kwT1doaWMzUjFXRTAyZEZnMVEzbEZTRzVVYURoQ2IyMDBMMWRzUm1sb2VtaG5iamd4Ukd4a2IyZDZMMHN5VlhkTk5sTTJRMEl2VTBWNGEybFdabllyZW1KS01ISnFkbWM1TkVGc1pHcFZabFYzYTBrNVZrNU5ha1ZRTldVNGVXUkNNMjlNYkRabmJIQkRaVVkxWkdkbVUxZzBWVGw0TXpWdmFpOUpTV1F6VlVVdlpGQndZaTl4WjBkMmMydG1aR1Y2ZEcxVmRHVXZTMU50Y21sM1kyZFZWMWRsV0daVVlra3plbk5wYTNkYVltdHdiVkpaUzIxcVVHMW9kalJ5YkdsNlIwTkhkRGhRYmpod2NUaE5Na3RFWmk5UU0ydFdiM1F6WlRFNFVUMGlMQ0pOU1VsRlUycERRMEY2UzJkQmQwbENRV2RKVGtGbFR6QnRjVWRPYVhGdFFrcFhiRkYxUkVGT1FtZHJjV2hyYVVjNWR6QkNRVkZ6UmtGRVFrMU5VMEYzU0dkWlJGWlJVVXhGZUdSSVlrYzVhVmxYZUZSaFYyUjFTVVpLZG1JelVXZFJNRVZuVEZOQ1UwMXFSVlJOUWtWSFFURlZSVU5vVFV0U01uaDJXVzFHYzFVeWJHNWlha1ZVVFVKRlIwRXhWVVZCZUUxTFVqSjRkbGx0Um5OVk1teHVZbXBCWlVaM01IaE9la0V5VFZSVmQwMUVRWGRPUkVwaFJuY3dlVTFVUlhsTlZGVjNUVVJCZDA1RVNtRk5SVWw0UTNwQlNrSm5UbFpDUVZsVVFXeFdWRTFTTkhkSVFWbEVWbEZSUzBWNFZraGlNamx1WWtkVloxWklTakZqTTFGblZUSldlV1J0YkdwYVdFMTRSWHBCVWtKblRsWkNRVTFVUTJ0a1ZWVjVRa1JSVTBGNFZIcEZkMmRuUldsTlFUQkhRMU54UjFOSllqTkVVVVZDUVZGVlFVRTBTVUpFZDBGM1oyZEZTMEZ2U1VKQlVVUlJSMDA1UmpGSmRrNHdOWHByVVU4NUszUk9NWEJKVW5aS2VucDVUMVJJVnpWRWVrVmFhRVF5WlZCRGJuWlZRVEJSYXpJNFJtZEpRMlpMY1VNNVJXdHpRelJVTW1aWFFsbHJMMnBEWmtNelVqTldXazFrVXk5a1RqUmFTME5GVUZwU2NrRjZSSE5wUzFWRWVsSnliVUpDU2pWM2RXUm5lbTVrU1UxWlkweGxMMUpIUjBac05YbFBSRWxMWjJwRmRpOVRTa2d2VlV3clpFVmhiSFJPTVRGQ2JYTkxLMlZSYlUxR0t5dEJZM2hIVG1oeU5UbHhUUzg1YVd3M01Va3laRTQ0UmtkbVkyUmtkM1ZoWldvMFlsaG9jREJNWTFGQ1ltcDRUV05KTjBwUU1HRk5NMVEwU1N0RWMyRjRiVXRHYzJKcWVtRlVUa001ZFhwd1JteG5UMGxuTjNKU01qVjRiM2x1VlhoMk9IWk9iV3R4TjNwa1VFZElXR3Q0VjFrM2IwYzVhaXRLYTFKNVFrRkNhemRZY2twbWIzVmpRbHBGY1VaS1NsTlFhemRZUVRCTVMxY3dXVE42Tlc5Nk1rUXdZekYwU2t0M1NFRm5UVUpCUVVkcVoyZEZlazFKU1VKTWVrRlBRbWRPVmtoUk9FSkJaamhGUWtGTlEwRlpXWGRJVVZsRVZsSXdiRUpDV1hkR1FWbEpTM2RaUWtKUlZVaEJkMFZIUTBOelIwRlJWVVpDZDAxRFRVSkpSMEV4VldSRmQwVkNMM2RSU1UxQldVSkJaamhEUVZGQmQwaFJXVVJXVWpCUFFrSlpSVVpLYWxJclJ6UlJOamdyWWpkSFEyWkhTa0ZpYjA5ME9VTm1NSEpOUWpoSFFURlZaRWwzVVZsTlFtRkJSa3AyYVVJeFpHNUlRamRCWVdkaVpWZGlVMkZNWkM5alIxbFpkVTFFVlVkRFEzTkhRVkZWUmtKM1JVSkNRMnQzU25wQmJFSm5aM0pDWjBWR1FsRmpkMEZaV1ZwaFNGSXdZMFJ2ZGt3eU9XcGpNMEYxWTBkMGNFeHRaSFppTW1OMldqTk9lVTFxUVhsQ1owNVdTRkk0UlV0NlFYQk5RMlZuU21GQmFtaHBSbTlrU0ZKM1QyazRkbGt6U25OTWJrSnlZVk0xYm1JeU9XNU1NbVI2WTJwSmRsb3pUbmxOYVRWcVkyMTNkMUIzV1VSV1VqQm5Ra1JuZDA1cVFUQkNaMXB1WjFGM1FrRm5TWGRMYWtGdlFtZG5ja0puUlVaQ1VXTkRRVkpaWTJGSVVqQmpTRTAyVEhrNWQyRXlhM1ZhTWpsMlduazVlVnBZUW5aak1td3dZak5LTlV4NlFVNUNaMnR4YUd0cFJ6bDNNRUpCVVhOR1FVRlBRMEZSUlVGSGIwRXJUbTV1TnpoNU5uQlNhbVE1V0d4UlYwNWhOMGhVWjJsYUwzSXpVazVIYTIxVmJWbElVRkZ4TmxOamRHazVVRVZoYW5aM1VsUXlhVmRVU0ZGeU1ESm1aWE54VDNGQ1dUSkZWRlYzWjFwUksyeHNkRzlPUm5ab2MwODVkSFpDUTA5SllYcHdjM2RYUXpsaFNqbDRhblUwZEZkRVVVZzRUbFpWTmxsYVdpOVlkR1ZFVTBkVk9WbDZTbkZRYWxrNGNUTk5SSGh5ZW0xeFpYQkNRMlkxYnpodGR5OTNTalJoTWtjMmVIcFZjalpHWWpaVU9FMWpSRTh5TWxCTVVrdzJkVE5OTkZSNmN6TkJNazB4YWpaaWVXdEtXV2s0ZDFkSlVtUkJka3RNVjFwMUwyRjRRbFppZWxsdGNXMTNhMjAxZWt4VFJGYzFia2xCU21KRlRFTlJRMXAzVFVnMU5uUXlSSFp4YjJaNGN6WkNRbU5EUmtsYVZWTndlSFUyZURaMFpEQldOMU4yU2tORGIzTnBjbE50U1dGMGFpODVaRk5UVmtSUmFXSmxkRGh4THpkVlN6UjJORnBWVGpnd1lYUnVXbm94ZVdjOVBTSmRmUS5leUp1YjI1alpTSTZJazlGTDJkV09FYzRXazFKTW1ORUsyRk1lRzB2VGt4a1dVMHdjemxsVDB0V1NYUlhOblZTVDI5d1prRTlJaXdpZEdsdFpYTjBZVzF3VFhNaU9qRTFOVE13TWpnd05ETTFNamtzSW1Gd2ExQmhZMnRoWjJWT1lXMWxJam9pWTI5dExtZHZiMmRzWlM1aGJtUnliMmxrTG1kdGN5SXNJbUZ3YTBScFoyVnpkRk5vWVRJMU5pSTZJbGRVYkd4aVVuVXhZbFEyYlZoeWRXRmlXVWQ1WmtvMFJGUTVVR1I0YnpGUFMwb3ZWRTQzTVZWU1lXODlJaXdpWTNSelVISnZabWxzWlUxaGRHTm9JanAwY25WbExDSmhjR3REWlhKMGFXWnBZMkYwWlVScFoyVnpkRk5vWVRJMU5pSTZXeUk0VURGelZ6QkZVRXBqYzJ4M04xVjZVbk5wV0V3Mk5IY3JUelV3UldRclVrSkpRM1JoZVRGbk1qUk5QU0pkTENKaVlYTnBZMGx1ZEdWbmNtbDBlU0k2ZEhKMVpYMC56V3ViaWlraGt5alhETUJpV080ajZEdnVBZWdpSUh1WGhaNWQtTEh3Z1VBZFVSMWxNTU0tZ0Y4VklmSEdYcFZNZ1hhN3plR0l5NEROU19uNTdBZ2c0eE5lTVhQMHRpMVJ4QktVVlJKeUc1OXVoejJJbDBtZkl1UVZNckRpSHBiWjdYb2tKcG1jZlUyWU9QbmppcjlWUjlsVlRZUHVHV1phT01ua1kyRnlvbTRGZzhrNFA3dEtWWllzTXNERWR3ZVdOdTM5MS1mcXdKWUxQUWNjQ0ZiNURCRWc0SlMwa05pWG8zLWc3MTFWVGd2Z284WDMyMS03NWw5MnN6UWpDeDQ3aDFzY243ZmE1TkJhTkdfanVPZjV0QnhFbl9uY3N1TjR3RVRnT0JJVHFVN0xZWmxTVEtUX2lYODFncUJOOWtuWGMtQ0NVZUh1LThvLUdmekh1Y1BsSEFoYXV0aERhdGFYxXSm6pITyZwvdLIkkrMgz0AmKpTBqVCgOX8pJQtghB7wRQAAAAC5P9lh8uZGL7EiggAiR954AEEBSJVTcyTe4miZ8dwly7pJzBQdHKwTZ7oiBpM0DNDfhM_Q4-J-LYuAYP_mHPFGE59BMHV9bqTrcLy2T4zDLCk1UqUBAgMmIAEhWCC0eleNTLgwWxaVBqV139T6hONseRz7HgXRIVS9bPxIjSJYIJ1MfwUhvkSEjeiNJ6y5-w8PuuwMAvfgpN7F4Q2EW79v",
+                "clientDataJSON":"eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiZGZvLUhscUpwM01MSy1KNVRMeHhtdlhKaWVTM3pHd2RrOUc5SDliUGV6ZyIsIm9yaWdpbiI6Imh0dHBzOlwvXC93ZWJhdXRobi5pbyIsImFuZHJvaWRQYWNrYWdlTmFtZSI6ImNvbS5hbmRyb2lkLmNocm9tZSJ9"}}"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.io",
+                "webauthn.io",
+                &Url::parse("https://webauthn.io").unwrap(),
+                None,
+                None,
+                None,
+            )
+        };
+
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"dfo+HlqJp3MLK+J5TLxxmvXJieS3zGwdk9G9H9bPezg=\"").unwrap();
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::google_safetynet_ca_old()],
+            }),
+            true,
+            &RequestRegistrationExtensions::default(),
+            true,
+        );
+        dbg!(&result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_google_safetynet_2() {
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"B3q5igjVbIpBwqnK18k0mgAOLnXTK/Mmv3JTsSMyEKg=\"").unwrap();
+
+        let response = r#"{
+            "id":"AfVUnBGvi8ZeETla19A8JtyIuxBsQRyp8FQDfDNC-C_PL0rAKUghHiDB7Aekoh0CYymUVJdd6Z5HA2btQL1aNOg",
+            "rawId":"AfVUnBGvi8ZeETla19A8JtyIuxBsQRyp8FQDfDNC-C_PL0rAKUghHiDB7Aekoh0CYymUVJdd6Z5HA2btQL1aNOg",
+            "type":"public-key",
+            "response":{
+                "attestationObject":"o2NmbXRxYW5kcm9pZC1zYWZldHluZXRnYXR0U3RtdKJjdmVyaTIwNTAxNjAzN2hyZXNwb25zZVkgd2V5SmhiR2NpT2lKU1V6STFOaUlzSW5nMVl5STZXeUpOU1VsR1ltcERRMEpHWVdkQmQwbENRV2RKVVVGaE0wOUxUMlJ2VkZrMFVVRkJRVUZCUVROWVdFUkJUa0puYTNGb2EybEhPWGN3UWtGUmMwWkJSRUpIVFZGemQwTlJXVVJXVVZGSFJYZEtWbFY2UldsTlEwRkhRVEZWUlVOb1RWcFNNamwyV2pKNGJFbEdVbmxrV0U0d1NVWk9iR051V25CWk1sWjZTVVY0VFZGNlJWUk5Ra1ZIUVRGVlJVRjRUVXRTTVZKVVNVVk9Ra2xFUmtWT1JFRmxSbmN3ZVUxcVFYcE5ha0Y1VFZSRk1VMXFSbUZHZHpCNVRXcEJNazFVWjNsTlZFVXhUV3BDWVUxQ01IaEhla0ZhUW1kT1ZrSkJUVlJGYlVZd1pFZFdlbVJETldoaWJWSjVZakpzYTB4dFRuWmlWRU5EUVZOSmQwUlJXVXBMYjFwSmFIWmpUa0ZSUlVKQ1VVRkVaMmRGVUVGRVEwTkJVVzlEWjJkRlFrRk1iWEZNUWxoV05FTmFRVFZ6VkRWalZHWjFXR04zTVRGWFJESlpWVmN6WlVGS2RtUnhLMWhKWWtoRVowMU9UVUp5YzNndldFUjROa3h0T1U5dFNrTlZOSFpEY0ZkSlRqUlhRMGd5TUZRNVQyWmxOa2hrZVU1MlJXVnBNM3BvYkhwT01Gb3ZXVlI1YjFSbGNGZHdOVWd2YlhKdVIyOXpVM050Y0VwMU5EVjNPVkpZYm01S2JFbHJSelU1ZEROMFYxSm9ZWE5aWlc1R1kwaGxZMFpvYkcxb2RtNVVRblJIYTAxVmIwVkdSRVpuYW5sdFoydHdVVWRrTW14b2FVOVlXR0p3TXpFMVNYbEdiRWRVVkZwdk5FUkJZVFppTUhwMlZHWlFPWFY2UjFGSlpIaG1hM041VFVsR1ptSkRZVmQ2VGpOUGFuQjFiVkl3TUhnMlNWWmpaRGR5T1V4dk9WQmxWV3c1YTI5NmNqaEZhRFJEV1M5UFFpdEVPVkV2VmpaNFJWcGlWSE5IZVhjMGFVRnhRMHR2TVRSRFJYcERSVkZJTUVaV1dUUTFjRmczYjJJcmJXaG1MMXBLYldOekwwMTRibFpHYmt4NmJEQkRRWGRGUVVGaFQwTkJiamgzWjJkS04wMUJORWRCTVZWa1JIZEZRaTkzVVVWQmQwbEdiMFJCVkVKblRsWklVMVZGUkVSQlMwSm5aM0pDWjBWR1FsRmpSRUZVUVUxQ1owNVdTRkpOUWtGbU9FVkJha0ZCVFVJd1IwRXhWV1JFWjFGWFFrSlVPVkkzWjIxUFpVUXhkbHBSVmtOSVl6QlVkR2gyVDFscE16bEVRV1pDWjA1V1NGTk5SVWRFUVZkblFsRnNOR2huVDNOc1pWSnNRM0pzTVVZeVIydEpVR1ZWTjA4MGEycENOMEpuWjNKQ1owVkdRbEZqUWtGUlVuWk5SekIzVDBGWlNVdDNXVUpDVVZWSVRVRkhSMHhIYURCa1NFRTJUSGs1ZGxrelRuZE1ia0p5WVZNMWJtSXlPVzVNTTAxMldqTlNlazFYVVRCaFZ6VXdURE5vVDB4V09IZGtSRTR6VjFScmQwMUVSVWREUTNOSFFWRlZSa0o2UVVOb2FWWnZaRWhTZDA5cE9IWmpSM1J3VEcxa2RtSXlZM1pqYlZaM1luazVhbHBZU2pCamVUbHVaRWhOZUZwRVVYVmFSMVo1VFVJd1IwRXhWV1JGVVZGWFRVSlRRMFZ0UmpCa1IxWjZaRU0xYUdKdFVubGlNbXhyVEcxT2RtSlVRV2hDWjA1V1NGTkJSVWRxUVZsTlFXZEhRbTFsUWtSQlJVTkJWRUZOUW1kdmNrSm5SVVZCWkZvMVFXZFZSRTFFT0VkQk1WVmtTSGRSTkUxRVdYZE9TMEY1YjBSRFIweHRhREJrU0VFMlRIazVhbU50ZUhwTWJrSnlZVk0xYm1JeU9XNU1NbVF3WTNwR2EwNUhiSFZrUXpsWlRXdHZlVk5JU21aT01VSndWRk0xYW1OdGQzZG5aMFZGUW1kdmNrSm5SVVZCWkZvMVFXZFJRMEpKU0RGQ1NVaDVRVkJCUVdSblFsSnZOMFF4TDFGR05XNUdXblIxUkdRMGFuZDVhMlZ6ZDJKS09IWXpibTlvUTIxbk15c3hTWE5HTlZGQlFVRllLM0JhYTBweVFVRkJSVUYzUWtoTlJWVkRTVkZEYjJSV1JucFBRMVZ1YkhWUlV6QjBNRzlIZFVFemRsWkZSMFp4YjJJNFNWSmlRM0JaZVRkVlptTkJVVWxuUmk5TlpWVlNkRzlFTjFGcmFGaENUakIxY21sRGRFd3ZURU5zTVcxelJFNW9XakZ0TVVoS2VFcFJiMEZrWjBGd1pXSTNkMjVxYXpWSlprSlhZelU1YW5CWVpteDJiR1E1YmtkQlN5dFFiRTVZVTFwalNsWXpTR2hCUVVGQldDdHdXbXRLV1VGQlFVVkJkMEpJVFVWVlEwbFJRMXB2UlcxQmJ6YzBVaXRHVDBwUWVWSkxZa2t5UlNzMlMwTllOa0YxV0cxb1puTlhhMmgwYVVGTFlXZEpaMXAxZG1aSWNVRTJVRTlzTTBKa1YzUmxVMWw0VHpBMlFtTndUM2RVWVRWNk5qVnFTa3cwZEV4RWNrbDNSRkZaU2t0dldrbG9kbU5PUVZGRlRFSlJRVVJuWjBWQ1FVUkpjQzkzYmxGc1puRTNkVlo2ZERVM01IbFJSVEpPUVZBMWFqaDVPR0Z6V1doS1RYY3JVVEJZWjNNMmEzcHFabnBHTDJnM09WcG1SbGhMT1RoM1FWSmhWbkkyYW1WU1FYbzJZM0U0Y1VWSU1VOHlRa1E1ZURWRVEwOVVaekp4Y2xOblNsZGlUVTVWV2tSNVRYVjZSbVZ5UTJFeU56bG9Ra2xRVlhCcU56ZzBZVWRzWVdwNFkyTTNWSFJZU0hwYWNuaG1iR00wZDFCeloySm5RMnR3ZDNWcU5tb3dhbmRETmpkUk5HSnJPVlZZS3pOeGNHdzNNbUZLTW5wV2J6Rm1UMnMzVTBad1NUVTRSak5KTDFjNGJra3ZhMk53YjFCdmNESkNOa294UjNSeFRVUklSbkJ5YzNSblpVcE1iRmt6UVdWbVpXb3llVzlGZDNVeWFqSXJZekV2U2paM1NEVjRZV1JFUzNobk0wNTJhRElyZUdoYVVrWmFiMEZVWWpKbE5sbHplRFJTTUVKMGVXVllORWhhVFdjME9GRmhRazQwTjJ4QmVFRmpaelIxWVZOcVJ5OHZRa2hYVGpNMGNFMUZZV05KZUVkT01EMGlMQ0pOU1VsR2FrUkRRMEV6VTJkQmQwbENRV2RKVGtGblEwOXpaMGw2VG0xWFRGcE5NMkp0ZWtGT1FtZHJjV2hyYVVjNWR6QkNRVkZ6UmtGRVFraE5VWE4zUTFGWlJGWlJVVWRGZDBwV1ZYcEZhVTFEUVVkQk1WVkZRMmhOV2xJeU9YWmFNbmhzU1VaU2VXUllUakJKUms1c1kyNWFjRmt5Vm5wSlJYaE5VWHBGVlUxQ1NVZEJNVlZGUVhoTlRGSXhVbFJKUmtwMllqTlJaMVZxUlhkSWFHTk9UV3BCZDA5RVJYcE5SRUYzVFVSUmVWZG9ZMDVOYW1OM1QxUk5kMDFFUVhkTlJGRjVWMnBDUjAxUmMzZERVVmxFVmxGUlIwVjNTbFpWZWtWcFRVTkJSMEV4VlVWRGFFMWFVakk1ZGxveWVHeEpSbEo1WkZoT01FbEdUbXhqYmxwd1dUSldla2xGZUUxUmVrVlVUVUpGUjBFeFZVVkJlRTFMVWpGU1ZFbEZUa0pKUkVaRlRrUkRRMEZUU1hkRVVWbEtTMjlhU1doMlkwNUJVVVZDUWxGQlJHZG5SVkJCUkVORFFWRnZRMmRuUlVKQlMzWkJjWEZRUTBVeU4yd3dkemw2UXpoa1ZGQkpSVGc1WWtFcmVGUnRSR0ZITjNrM1ZtWlJOR01yYlU5WGFHeFZaV0pWVVhCTE1IbDJNbkkyTnpoU1NrVjRTekJJVjBScVpYRXJia3hKU0U0eFJXMDFhalp5UVZKYWFYaHRlVkpUYW1oSlVqQkxUMUZRUjBKTlZXeGtjMkY2ZEVsSlNqZFBNR2N2T0RKeGFpOTJSMFJzTHk4emREUjBWSEY0YVZKb1RGRnVWRXhZU21SbFFpc3lSR2hyWkZVMlNVbG5lRFozVGpkRk5VNWpWVWd6VW1OelpXcGpjV280Y0RWVGFqRTVka0p0Tm1reFJtaHhURWQ1YldoTlJuSnZWMVpWUjA4emVIUkpTRGt4WkhObmVUUmxSa3RqWmt0V1RGZExNMjh5TVRrd1VUQk1iUzlUYVV0dFRHSlNTalZCZFRSNU1XVjFSa3B0TWtwTk9XVkNPRFJHYTNGaE0ybDJjbGhYVldWV2RIbGxNRU5SWkV0MmMxa3lSbXRoZW5aNGRIaDJkWE5NU25wTVYxbElhelUxZW1OU1FXRmpSRUV5VTJWRmRFSmlVV1pFTVhGelEwRjNSVUZCWVU5RFFWaFpkMmRuUm5sTlFUUkhRVEZWWkVSM1JVSXZkMUZGUVhkSlFtaHFRV1JDWjA1V1NGTlZSVVpxUVZWQ1oyZHlRbWRGUmtKUlkwUkJVVmxKUzNkWlFrSlJWVWhCZDBsM1JXZFpSRlpTTUZSQlVVZ3ZRa0ZuZDBKblJVSXZkMGxDUVVSQlpFSm5UbFpJVVRSRlJtZFJWVXBsU1ZsRWNrcFlhMXBSY1RWa1VtUm9jRU5FTTJ4UGVuVktTWGRJZDFsRVZsSXdha0pDWjNkR2IwRlZOVXM0Y2twdVJXRkxNR2R1YUZNNVUxcHBlblk0U1d0VVkxUTBkMkZCV1VsTGQxbENRbEZWU0VGUlJVVllSRUpoVFVOWlIwTkRjMGRCVVZWR1FucEJRbWhvY0c5a1NGSjNUMms0ZG1JeVRucGpRelYzWVRKcmRWb3lPWFphZVRsdVpFaE9lVTFVUVhkQ1oyZHlRbWRGUmtKUlkzZEJiMWxyWVVoU01HTkViM1pNTTBKeVlWTTFibUl5T1c1TU0wcHNZMGM0ZGxreVZubGtTRTEyV2pOU2VtTnFSWFZhUjFaNVRVUlJSMEV4VldSSWQxRjBUVU56ZDB0aFFXNXZRMWRIU1RKb01HUklRVFpNZVRscVkyMTNkV05IZEhCTWJXUjJZakpqZGxvelVucGpha1YyV2pOU2VtTnFSWFZaTTBwelRVVXdSMEV4VldSSlFWSkhUVVZSZDBOQldVZGFORVZOUVZGSlFrMUVaMGREYVhOSFFWRlJRakZ1YTBOQ1VVMTNTMnBCYjBKblozSkNaMFZHUWxGalEwRlNXV05oU0ZJd1kwaE5Oa3g1T1hkaE1tdDFXakk1ZGxwNU9YbGFXRUoyWXpKc01HSXpTalZNZWtGT1FtZHJjV2hyYVVjNWR6QkNRVkZ6UmtGQlQwTkJaMFZCU1ZaVWIza3lOR3AzV0ZWeU1ISkJVR001TWpSMmRWTldZa3RSZFZsM00yNU1abXhNWmt4b05VRlpWMFZsVm13dlJIVXhPRkZCVjFWTlpHTktObTh2Y1VaYVltaFlhMEpJTUZCT1kzYzVOM1JvWVdZeVFtVnZSRmxaT1VOckwySXJWVWRzZFdoNE1EWjZaRFJGUW1ZM1NEbFFPRFJ1Ym5KM2NGSXJORWRDUkZwTEsxaG9NMGt3ZEhGS2VUSnlaMDl4VGtSbWJISTFTVTFST0ZwVVYwRXplV3gwWVd0NlUwSkxXalpZY0VZd1VIQnhlVU5TZG5BdlRrTkhkakpMV0RKVWRWQkRTblp6WTNBeEwyMHljRlpVZEhsQ2FsbFFVbEVyVVhWRFVVZEJTa3RxZEU0M1VqVkVSbkptVkhGTlYzWlpaMVpzY0VOS1FtdDNiSFUzS3pkTFdUTmpWRWxtZWtVM1kyMUJUSE5yVFV0T1RIVkVlaXRTZWtOamMxbFVjMVpoVlRkV2NETjRURFl3VDFsb2NVWnJkVUZQVDNoRVdqWndTRTlxT1N0UFNtMVpaMUJ0VDFRMFdETXJOMHcxTVdaWVNubFNTRGxMWmt4U1VEWnVWRE14UkRWdWJYTkhRVTluV2pJMkx6aFVPV2h6UWxjeGRXODVhblUxWmxwTVdsaFdWbE0xU0RCSWVVbENUVVZMZVVkTlNWQm9SbGR5YkhRdmFFWlRNamhPTVhwaFMwa3dXa0pIUkRObldXZEVUR0pwUkZRNVprZFljM1J3YXl0R2JXTTBiMnhXYkZkUWVsaGxPREYyWkc5RmJrWmljalZOTWpjeVNHUm5TbGR2SzFkb1ZEbENXVTB3U21rcmQyUldiVzVTWm1aWVoyeHZSVzlzZFZST1kxZDZZelF4WkVad1owcDFPR1pHTTB4SE1HZHNNbWxpVTFscFEyazVZVFpvZGxVd1ZIQndha3A1U1ZkWWFHdEtWR05OU214UWNsZDRNVlo1ZEVWVlIzSllNbXd3U2tSM1VtcFhMelkxTm5Jd1MxWkNNREo0U0ZKTGRtMHlXa3RKTUROVVoyeE1TWEJ0VmtOTE0ydENTMnRMVG5CQ1RtdEdkRGh5YUdGbVkwTkxUMkk1U25ndk9YUndUa1pzVVZSc04wSXpPWEpLYkVwWGExSXhOMUZ1V25GV2NIUkdaVkJHVDFKdldtMUdlazA5SWl3aVRVbEpSbGxxUTBOQ1JYRm5RWGRKUWtGblNWRmtOekJPWWs1ek1pdFNjbkZKVVM5Rk9FWnFWRVJVUVU1Q1oydHhhR3RwUnpsM01FSkJVWE5HUVVSQ1dFMVJjM2REVVZsRVZsRlJSMFYzU2tOU1ZFVmFUVUpqUjBFeFZVVkRhRTFSVWpKNGRsbHRSbk5WTW14dVltbENkV1JwTVhwWlZFVlJUVUUwUjBFeFZVVkRlRTFJVlcwNWRtUkRRa1JSVkVWaVRVSnJSMEV4VlVWQmVFMVRVako0ZGxsdFJuTlZNbXh1WW1sQ1UySXlPVEJKUlU1Q1RVSTBXRVJVU1hkTlJGbDRUMVJCZDAxRVFUQk5iRzlZUkZSSk5FMUVSWGxQUkVGM1RVUkJNRTFzYjNkU2VrVk1UVUZyUjBFeFZVVkNhRTFEVmxaTmVFbHFRV2RDWjA1V1FrRnZWRWRWWkhaaU1tUnpXbE5DVldOdVZucGtRMEpVV2xoS01tRlhUbXhqZVVKTlZFVk5lRVpFUVZOQ1owNVdRa0ZOVkVNd1pGVlZlVUpUWWpJNU1FbEdTWGhOU1VsRFNXcEJUa0puYTNGb2EybEhPWGN3UWtGUlJVWkJRVTlEUVdjNFFVMUpTVU5EWjB0RFFXZEZRWFJvUlVOcGVEZHFiMWhsWWs4NWVTOXNSRFl6YkdGa1FWQkxTRGxuZG13NVRXZGhRMk5tWWpKcVNDODNOazUxT0dGcE5saHNOazlOVXk5cmNqbHlTRFY2YjFGa2MyWnVSbXc1TjNaMVprdHFObUozVTJsV05tNXhiRXR5SzBOTmJuazJVM2h1UjFCaU1UVnNLemhCY0dVMk1tbHRPVTFhWVZKM01VNUZSRkJxVkhKRlZHODRaMWxpUlhaekwwRnRVVE0xTVd0TFUxVnFRalpITURCcU1IVlpUMFJRTUdkdFNIVTRNVWs0UlRORGQyNXhTV2x5ZFRaNk1XdGFNWEVyVUhOQlpYZHVha2g0WjNOSVFUTjVObTFpVjNkYVJISllXV1pwV1dGU1VVMDVjMGh0YTJ4RGFYUkVNemh0TldGblNTOXdZbTlRUjJsVlZTczJSRTl2WjNKR1dsbEtjM1ZDTm1wRE5URXhjSHB5Y0RGYWEybzFXbEJoU3pRNWJEaExSV280UXpoUlRVRk1XRXd6TW1nM1RURmlTM2RaVlVnclJUUkZlazVyZEUxbk5sUlBPRlZ3YlhaTmNsVndjM2xWY1hSRmFqVmpkVWhMV2xCbWJXZG9RMDQyU2pORGFXOXFOazlIWVVzdlIxQTFRV1pzTkM5WWRHTmtMM0F5YUM5eWN6TTNSVTlsV2xaWWRFd3diVGM1V1VJd1pYTlhRM0oxVDBNM1dFWjRXWEJXY1RsUGN6WndSa3hMWTNkYWNFUkpiRlJwY25oYVZWUlJRWE0yY1hwcmJUQTJjRGs0WnpkQ1FXVXJaRVJ4Tm1SemJ6UTVPV2xaU0RaVVMxZ3ZNVmszUkhwcmRtZDBaR2w2YW10WVVHUnpSSFJSUTNZNVZYY3JkM0E1VlRkRVlrZExiMmRRWlUxaE0wMWtLM0IyWlhvM1Z6TTFSV2xGZFdFckszUm5lUzlDUW1wR1JrWjVNMnd6VjBad1R6bExWMmQ2TjNwd2JUZEJaVXRLZERoVU1URmtiR1ZEWm1WWWEydFZRVXRKUVdZMWNXOUpZbUZ3YzFwWGQzQmlhMDVHYUVoaGVESjRTVkJGUkdkbVp6RmhlbFpaT0RCYVkwWjFZM1JNTjFSc1RHNU5VUzh3YkZWVVltbFRkekZ1U0RZNVRVYzJlazh3WWpsbU5rSlJaR2RCYlVRd05ubExOVFp0UkdOWlFscFZRMEYzUlVGQllVOURRVlJuZDJkblJUQk5RVFJIUVRGVlpFUjNSVUl2ZDFGRlFYZEpRbWhxUVZCQ1owNVdTRkpOUWtGbU9FVkNWRUZFUVZGSUwwMUNNRWRCTVZWa1JHZFJWMEpDVkd0eWVYTnRZMUp2Y2xORFpVWk1NVXB0VEU4dmQybFNUbmhRYWtGbVFtZE9Wa2hUVFVWSFJFRlhaMEpTWjJVeVdXRlNVVEpZZVc5c1VVd3pNRVY2VkZOdkx5OTZPVk42UW1kQ1oyZHlRbWRGUmtKUlkwSkJVVkpWVFVaSmQwcFJXVWxMZDFsQ1FsRlZTRTFCUjBkSFYyZ3daRWhCTmt4NU9YWlpNMDUzVEc1Q2NtRlROVzVpTWpsdVRESmtlbU5xUlhkTFVWbEpTM2RaUWtKUlZVaE5RVXRIU0Zkb01HUklRVFpNZVRsM1lUSnJkVm95T1haYWVUbHVZek5KZUV3eVpIcGpha1YxV1ROS01FMUVTVWRCTVZWa1NIZFJjazFEYTNkS05rRnNiME5QUjBsWGFEQmtTRUUyVEhrNWFtTnRkM1ZqUjNSd1RHMWtkbUl5WTNaYU0wNTVUVk01Ym1NelNYaE1iVTU1WWtSQk4wSm5UbFpJVTBGRlRrUkJlVTFCWjBkQ2JXVkNSRUZGUTBGVVFVbENaMXB1WjFGM1FrRm5TWGRFVVZsTVMzZFpRa0pCU0ZkbFVVbEdRWGRKZDBSUldVeExkMWxDUWtGSVYyVlJTVVpCZDAxM1JGRlpTa3R2V2tsb2RtTk9RVkZGVEVKUlFVUm5aMFZDUVVSVGEwaHlSVzl2T1VNd1pHaGxiVTFZYjJnMlpFWlRVSE5xWW1SQ1drSnBUR2M1VGxJemREVlFLMVEwVm5obWNUZDJjV1pOTDJJMVFUTlNhVEZtZVVwdE9XSjJhR1JIWVVwUk0ySXlkRFo1VFVGWlRpOXZiRlZoZW5OaFRDdDVlVVZ1T1Zkd2NrdEJVMDl6YUVsQmNrRnZlVnBzSzNSS1lXOTRNVEU0Wm1WemMyMVliakZvU1ZaM05ERnZaVkZoTVhZeGRtYzBSblkzTkhwUWJEWXZRV2hUY25jNVZUVndRMXBGZERSWGFUUjNVM1I2Tm1SVVdpOURURUZPZURoTVdtZ3hTamRSU2xacU1tWm9UWFJtVkVweU9YYzBlak13V2pJd09XWlBWVEJwVDAxNUszRmtkVUp0Y0haMldYVlNOMmhhVERaRWRYQnplbVp1ZHpCVGEyWjBhSE14T0dSSE9WcExZalU1VldoMmJXRlRSMXBTVm1KT1VYQnpaek5DV214MmFXUXdiRWxMVHpKa01YaHZlbU5zVDNwbmFsaFFXVzkyU2twSmRXeDBlbXROZFRNMGNWRmlPVk42TDNscGJISmlRMmRxT0QwaVhYMC5leUp1YjI1alpTSTZJa3ByYmxwVGIxcDFUbkU0SzA5eWRGQjRNRVJtYzB4VldFWldja296UTBNNVUyMTZSVVJqYkdKSGJtczlJaXdpZEdsdFpYTjBZVzF3VFhNaU9qRTJOVFExTWprek5UWXdNVGNzSW1Gd2ExQmhZMnRoWjJWT1lXMWxJam9pWTI5dExtZHZiMmRzWlM1aGJtUnliMmxrTG1kdGN5SXNJbUZ3YTBScFoyVnpkRk5vWVRJMU5pSTZJbEpaZGt4M1ZtMW5SakpZWVhNeE1VUkVPVEkxU1hWemMwcDFlRXRFTDNkQ04ycGpUMDFxYlUxVVIwRTlJaXdpWTNSelVISnZabWxzWlUxaGRHTm9JanAwY25WbExDSmhjR3REWlhKMGFXWnBZMkYwWlVScFoyVnpkRk5vWVRJMU5pSTZXeUk0VURGelZ6QkZVRXBqYzJ4M04xVjZVbk5wV0V3Mk5IY3JUelV3UldRclVrSkpRM1JoZVRGbk1qUk5QU0pkTENKaVlYTnBZMGx1ZEdWbmNtbDBlU0k2ZEhKMVpTd2laWFpoYkhWaGRHbHZibFI1Y0dVaU9pSkNRVk5KUXlKOS5RR205QjhwdzZ3d3kwWnlseV9sa0xQd181Nnk5dnpGZ2dTN3o2SjB1OW5MZ2xGQmMtVm5EVWdlWkVCellpU3JVNWJYc0tGbjlsRjZNYmp2bXBWZ25ZZ0JGTEVZQWxORkRlLTJDUGYwVWROUjF3Uy1jTWVwMUlLc2RraENRR0w3TFZ6dWNMdlNNUEp0NFF2cUVTY1Fyc2p3OVgtekNLaUt1RXNyRGZyQm9WaHZZRUpqU056TXRJRzhrMWdBdEpKLVFjZGNvTFUxSW1KRXZtVS01VmRZZm9pT3V4eUdVTGFCYmpJUTdvMTkwRkVYdFF1eUhJeFVVa25Wc0FEdkRLOWxvUUEwbHAzOHNsMUVjNGRkYnN5Tk1GQ2N0bk5GZENyb3NwOVBTbVFMTk12MV9iaElnY3RkWVZUa3I5Q1I1OUxKdXI0UFdHbU9HU18zYmpvdDVJQjVRcmdoYXV0aERhdGFYxXSm6pITyZwvdLIkkrMgz0AmKpTBqVCgOX8pJQtghB7wRQAAAAC5P9lh8uZGL7EiggAiR954AEEB9VScEa-Lxl4ROVrX0Dwm3Ii7EGxBHKnwVAN8M0L4L88vSsApSCEeIMHsB6SiHQJjKZRUl13pnkcDZu1AvVo06KUBAgMmIAEhWCAb_i86wuvr28SKU7O5BGr-ZWXDSMkTKnOYqn0etIRCfCJYIOu0ebhB4kJiQuriOSU_2-NEf7tKnsDjhjinH6-IQ6To",
+                "clientDataJSON":"eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiQjNxNWlnalZiSXBCd3FuSzE4azBtZ0FPTG5YVEtfTW12M0pUc1NNeUVLZyIsIm9yaWdpbiI6Imh0dHBzOlwvXC93ZWJhdXRobi5pbyIsImFuZHJvaWRQYWNrYWdlTmFtZSI6ImNvbS5hbmRyb2lkLmNocm9tZSJ9"}}"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.io",
+                "webauthn.io",
+                &Url::parse("https://webauthn.io").unwrap(),
+                None,
+                None,
+                None,
+            )
+        };
+
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::google_safetynet_ca()],
+            }),
+            true,
+            &RequestRegistrationExtensions::default(),
+            true,
+        );
+        dbg!(&result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_google_android_key() {
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"Tf65bS6D5temh2BwvptqgBPb25iZDRxjwC5ans91IIJDrcrOpnWTK4LVgFjeUV4GDMe44w8SI5NsZssIXTUvDg\"").unwrap();
+
+        let response = r#"{
+                "rawId": "AZD7huwZVx7aW1efRa6Uq3JTQNorj3qA9yrLINXEcgvCQYtWiSQa1eOIVrXfCmip6MzP8KaITOvRLjy3TUHO7_c",
+                "id": "AZD7huwZVx7aW1efRa6Uq3JTQNorj3qA9yrLINXEcgvCQYtWiSQa1eOIVrXfCmip6MzP8KaITOvRLjy3TUHO7_c",
+                "response": {
+                    "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiVGY2NWJTNkQ1dGVtaDJCd3ZwdHFnQlBiMjVpWkRSeGp3QzVhbnM5MUlJSkRyY3JPcG5XVEs0TFZnRmplVVY0R0RNZTQ0dzhTSTVOc1pzc0lYVFV2RGciLCJvcmlnaW4iOiJodHRwczpcL1wvd2ViYXV0aG4ub3JnIiwiYW5kcm9pZFBhY2thZ2VOYW1lIjoiY29tLmFuZHJvaWQuY2hyb21lIn0",
+                    "attestationObject": "o2NmbXRrYW5kcm9pZC1rZXlnYXR0U3RtdKNjYWxnJmNzaWdYRjBEAiAsp6jPtimcSgc-fgIsVwgqRsZX6eU7KKbkVGWa0CRJlgIgH5yuf_laPyNy4PlS6e8ZHjs57iztxGiTqO7G91sdlWBjeDVjg1kCzjCCAsowggJwoAMCAQICAQEwCgYIKoZIzj0EAwIwgYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxpZm9ybmlhMRUwEwYDVQQKDAxHb29nbGUsIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQxOzA5BgNVBAMMMkFuZHJvaWQgS2V5c3RvcmUgU29mdHdhcmUgQXR0ZXN0YXRpb24gSW50ZXJtZWRpYXRlMB4XDTE4MTIwMjA5MTAyNVoXDTI4MTIwMjA5MTAyNVowHzEdMBsGA1UEAwwUQW5kcm9pZCBLZXlzdG9yZSBLZXkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQ4SaIP3ibDSwCIORpYJ3g9_5OICxZUCIqt-vV6JZVJoXQ8S1JFzyaFz5EFQ2fNT6-5SE5wWTZRAR_A3M52IcaPo4IBMTCCAS0wCwYDVR0PBAQDAgeAMIH8BgorBgEEAdZ5AgERBIHtMIHqAgECCgEAAgEBCgEBBCAqQ4LXu9idi1vfF3LP7MoUOSSHuf1XHy63K9-X3gbUtgQAMIGCv4MQCAIGAWduLuFwv4MRCAIGAbDqja1wv4MSCAIGAbDqja1wv4U9CAIGAWduLt_ov4VFTgRMMEoxJDAiBB1jb20uZ29vZ2xlLmF0dGVzdGF0aW9uZXhhbXBsZQIBATEiBCBa0F7CIcj4OiJhJ97FV1AMPldLxgElqdwhywvkoAZglTAzoQUxAwIBAqIDAgEDowQCAgEApQUxAwIBBKoDAgEBv4N4AwIBF7-DeQMCAR6_hT4DAgEAMB8GA1UdIwQYMBaAFD_8rNYasTqegSC41SUcxWW7HpGpMAoGCCqGSM49BAMCA0gAMEUCIGd3OQiTgFX9Y07kE-qvwh2Kx6lEG9-Xr2ORT5s7AK_-AiEAucDIlFjCUo4rJfqIxNY93HXhvID7lNzGIolS0E-BJBhZAnwwggJ4MIICHqADAgECAgIQATAKBggqhkjOPQQDAjCBmDELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcMDU1vdW50YWluIFZpZXcxFTATBgNVBAoMDEdvb2dsZSwgSW5jLjEQMA4GA1UECwwHQW5kcm9pZDEzMDEGA1UEAwwqQW5kcm9pZCBLZXlzdG9yZSBTb2Z0d2FyZSBBdHRlc3RhdGlvbiBSb290MB4XDTE2MDExMTAwNDYwOVoXDTI2MDEwODAwNDYwOVowgYgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxpZm9ybmlhMRUwEwYDVQQKDAxHb29nbGUsIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQxOzA5BgNVBAMMMkFuZHJvaWQgS2V5c3RvcmUgU29mdHdhcmUgQXR0ZXN0YXRpb24gSW50ZXJtZWRpYXRlMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE6555-EJjWazLKpFMiYbMcK2QZpOCqXMmE_6sy_ghJ0whdJdKKv6luU1_ZtTgZRBmNbxTt6CjpnFYPts-Ea4QFKNmMGQwHQYDVR0OBBYEFD_8rNYasTqegSC41SUcxWW7HpGpMB8GA1UdIwQYMBaAFMit6XdMRcOjzw0WEOR5QzohWjDPMBIGA1UdEwEB_wQIMAYBAf8CAQAwDgYDVR0PAQH_BAQDAgKEMAoGCCqGSM49BAMCA0gAMEUCIEuKm3vugrzAM4euL8CJmLTdw42rJypFn2kMx8OS1A-OAiEA7toBXbb0MunUhDtiTJQE7zp8zL1e-yK75_65dz9ZP_tZAo8wggKLMIICMqADAgECAgkAogWe0Q5DW1cwCgYIKoZIzj0EAwIwgZgxCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxpZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRUwEwYDVQQKDAxHb29nbGUsIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQxMzAxBgNVBAMMKkFuZHJvaWQgS2V5c3RvcmUgU29mdHdhcmUgQXR0ZXN0YXRpb24gUm9vdDAeFw0xNjAxMTEwMDQzNTBaFw0zNjAxMDYwMDQzNTBaMIGYMQswCQYDVQQGEwJVUzETMBEGA1UECAwKQ2FsaWZvcm5pYTEWMBQGA1UEBwwNTW91bnRhaW4gVmlldzEVMBMGA1UECgwMR29vZ2xlLCBJbmMuMRAwDgYDVQQLDAdBbmRyb2lkMTMwMQYDVQQDDCpBbmRyb2lkIEtleXN0b3JlIFNvZnR3YXJlIEF0dGVzdGF0aW9uIFJvb3QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATuXV7H4cDbbQOmfua2G-xNal1qaC4P_39JDn13H0Qibb2xr_oWy8etxXfSVpyqt7AtVAFdPkMrKo7XTuxIdUGko2MwYTAdBgNVHQ4EFgQUyK3pd0xFw6PPDRYQ5HlDOiFaMM8wHwYDVR0jBBgwFoAUyK3pd0xFw6PPDRYQ5HlDOiFaMM8wDwYDVR0TAQH_BAUwAwEB_zAOBgNVHQ8BAf8EBAMCAoQwCgYIKoZIzj0EAwIDRwAwRAIgNSGj74s0Rh6c1WDzHViJIGrco2VB9g2ezooZjGZIYHsCIE0L81HZMHx9W9o1NB2oRxtjpYVlPK1PJKfnTa9BffG_aGF1dGhEYXRhWMWVaQiPHs7jIylUA129ENfK45EwWidRtVm7j9fLsim91EUAAAAAKPN9K5K4QcSwKoYM73zANABBAVUvAmX241vMKYd7ZBdmkNWaYcNYhoSZCJjFRGmROb6I4ygQUVmH6k9IMwcbZGeAQ4v4WMNphORudwje5h7ty9ClAQIDJiABIVggOEmiD94mw0sAiDkaWCd4Pf-TiAsWVAiKrfr1eiWVSaEiWCB0PEtSRc8mhc-RBUNnzU-vuUhOcFk2UQEfwNzOdiHGjw"
+                },
+                "type": "public-key"}"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = unsafe {
+            Webauthn::new(
+                "webauthn.org",
+                "webauthn.org",
+                &Url::parse("https://webauthn.org").unwrap(),
+                None,
+                None,
+                None,
+            )
+        };
+
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            Some(&AttestationCaList {
+                cas: vec![AttestationCa::android_software_ca()],
+            }),
+            true,
+            &RequestRegistrationExtensions::default(),
+            true,
+        );
+        dbg!(&result);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_origin_localhost_port() {
+        let collected = url::Url::parse("http://localhost:3000").unwrap();
+        let config = url::Url::parse("http://localhost:8000").unwrap();
+
+        let result = super::WebauthnCore::validate_origin(false, true, &collected, &config);
+        dbg!(&result);
+        assert!(result.is_ok());
+
+        let result = super::WebauthnCore::validate_origin(true, false, &collected, &config);
+        assert!(result.is_err());
     }
 }
