@@ -81,8 +81,15 @@ pub struct WebauthnBuilder<'a> {
 /// authenticating credentials for users.
 #[derive(Debug)]
 pub struct Webauthn {
-    pub core: WebauthnCore,
+    core: WebauthnCore,
     algorithms: Vec<COSEAlgorithm>,
+}
+
+impl Webauthn {
+    /// For advanced users allow direct access to the core reg/auth methods
+    pub fn advanced(&self) -> &WebauthnCore {
+        &self.core
+    }
 }
 
 impl<'a> WebauthnBuilder<'a> {

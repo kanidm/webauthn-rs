@@ -50,7 +50,7 @@ impl WebauthnActor {
         let rp_name = rp_name.to_string();
         let rp_id = rp_id.to_string();
         let rp_origin = Url::parse(rp_origin).expect("Failed to parse origin");
-        let wan = unsafe { WebauthnCore::new(&rp_name, &rp_id, &rp_origin, None, None) };
+        let wan = unsafe { WebauthnCore::new(&rp_name, &rp_id, &rp_origin, None, None, None) };
 
         let swan = WebauthnBuilder::new(&rp_id, &rp_origin)
             .expect("Invalid rp id or origin")

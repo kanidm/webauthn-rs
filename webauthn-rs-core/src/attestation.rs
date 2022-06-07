@@ -1181,7 +1181,7 @@ pub(crate) fn verify_android_safetynet_attestation(
     Ok(ParsedAttestationData::Basic(x5c))
 }
 
-pub(crate) fn verify_attestation_ca_chain(
+pub fn verify_attestation_ca_chain(
     att_data: &ParsedAttestationData,
     ca_list: &AttestationCaList,
     danger_disable_certificate_time_checks: bool,
