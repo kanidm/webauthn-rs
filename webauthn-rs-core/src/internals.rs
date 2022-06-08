@@ -122,7 +122,7 @@ impl Credential {
         registration_policy: UserVerificationPolicy,
         attestation: ParsedAttestationData,
         req_extn: Option<&RequestRegistrationExtensions>,
-        attestation_format: Option<AttestationFormat>
+        attestation_format: Option<AttestationFormat>,
     ) -> Self {
         let extensions = if let Some(req_extn) = req_extn {
             let cred_protect = match (
@@ -164,12 +164,12 @@ impl Credential {
             cred: ck,
             counter,
             user_verified,
-            backup_elligible,
+            backup_eligible: backup_elligible,
             backup_state,
             registration_policy,
             extensions,
             attestation: attestation.into(),
-            attestation_format
+            attestation_format,
         }
     }
 }

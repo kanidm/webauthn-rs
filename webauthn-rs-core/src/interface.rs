@@ -218,7 +218,7 @@ pub struct Credential {
     ///
     /// This means the private key is NOT sealed within a hardware cryptograhic
     /// processor, and may have impacts on your risk assessments and modeling.
-    pub backup_elligible: bool,
+    pub backup_eligible: bool,
     /// This credential has indicated that it is currently backed up OR that it
     /// is shared between mulitple devices.
     pub backup_state: bool,
@@ -253,7 +253,7 @@ impl From<CredentialV3> for Credential {
             cred,
             counter,
             user_verified: verified,
-            backup_elligible: false,
+            backup_eligible: false,
             backup_state: false,
             registration_policy,
             extensions: RegisteredExtensions::none(),
@@ -754,7 +754,7 @@ impl AttestationCaList {
                 AttestationCa::android_root_ca_2(),
                 AttestationCa::android_root_ca_3(),
                 AttestationCa::google_safetynet_ca(),
-                AttestationCa::android_software_ca()
+                AttestationCa::android_software_ca(),
             ],
         }
     }
@@ -779,7 +779,7 @@ impl AttestationCaList {
                 AttestationCa::android_root_ca_2(),
                 AttestationCa::android_root_ca_3(),
                 AttestationCa::google_safetynet_ca(),
-                AttestationCa::android_software_ca()
+                AttestationCa::android_software_ca(),
             ],
         }
     }

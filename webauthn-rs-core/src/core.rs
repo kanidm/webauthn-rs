@@ -569,7 +569,7 @@ impl WebauthnCore {
         }
 
         // OUT OF SPEC - Allow rejection of passkeys if desired by the caller.
-        if !experimental_allow_passkeys && credential.backup_elligible {
+        if !experimental_allow_passkeys && credential.backup_eligible {
             error!("Credential counter is 0 - may indicate that it is a passkey and not bound to hardware.");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
@@ -704,7 +704,7 @@ impl WebauthnCore {
         // risk profile from when it was originally enrolled. Reject the authentication if this
         // situation occurs.
 
-        if cred.backup_elligible != data.authenticator_data.backup_elligible {
+        if cred.backup_eligible != data.authenticator_data.backup_elligible {
             debug!("Credential backup elligibility has changed!");
             return Err(WebauthnError::CredentialBackupElligibilityInconsistent);
         }
@@ -1548,7 +1548,7 @@ mod tests {
             },
             counter: 1,
             user_verified: false,
-            backup_elligible: false,
+            backup_eligible: false,
             backup_state: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
@@ -1660,7 +1660,7 @@ mod tests {
                 }),
             },
             user_verified: false,
-            backup_elligible: false,
+            backup_eligible: false,
             backup_state: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
@@ -2621,7 +2621,7 @@ mod tests {
                 },
                 counter: 0,
                 user_verified: false,
-                backup_elligible: false,
+                backup_eligible: false,
                 backup_state: false,
                 registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
                 extensions: RegisteredExtensions::none(),
@@ -2654,7 +2654,7 @@ mod tests {
                 },
                 counter: 1,
                 user_verified: true,
-                backup_elligible: false,
+                backup_eligible: false,
                 backup_state: false,
                 registration_policy: UserVerificationPolicy::Required,
                 extensions: RegisteredExtensions::none(),
