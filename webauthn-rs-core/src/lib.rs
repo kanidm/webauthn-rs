@@ -39,5 +39,6 @@ pub mod proto {
 }
 
 pub use attestation::AttestationFormat;
+pub use attestation::verify_attestation_ca_chain;
 
 pub use crate::core::*;

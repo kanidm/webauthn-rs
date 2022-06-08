@@ -2,7 +2,7 @@
 #![warn(unused_extern_crates)]
 // #![warn(missing_docs)]
 
-extern crate nom;
+
 #[macro_use]
 extern crate tracing;
 

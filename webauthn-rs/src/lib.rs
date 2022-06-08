@@ -201,16 +201,14 @@ impl<'a> WebauthnBuilder<'a> {
     /// ```
     pub fn build(self) -> WebauthnResult<Webauthn> {
         Ok(Webauthn {
-            core: unsafe {
-                WebauthnCore::new(
-                    self.rp_name.unwrap_or(self.rp_id),
-                    self.rp_id,
-                    self.rp_origin,
-                    None,
-                    Some(self.allow_subdomains),
-                    Some(self.allow_any_port),
-                )
-            },
+            core: WebauthnCore::new(
+                self.rp_name.unwrap_or(self.rp_id),
+                self.rp_id,
+                self.rp_origin,
+                None,
+                Some(self.allow_subdomains),
+                Some(self.allow_any_port),
+            ),
             algorithms: self.algorithms,
         })
     }

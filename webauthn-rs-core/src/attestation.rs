@@ -1189,6 +1189,7 @@ pub(crate) fn verify_android_safetynet_attestation(
     Ok(ParsedAttestationData::Basic(x5c))
 }
 
+/// Verify the attestation chain
 pub fn verify_attestation_ca_chain(
     att_data: &ParsedAttestationData,
     ca_list: &AttestationCaList,
@@ -1204,10 +1205,11 @@ pub fn verify_attestation_ca_chain(
         ParsedAttestationData::Basic(chain) => chain,
         ParsedAttestationData::AttCa(chain) => chain,
         ParsedAttestationData::AnonCa(chain) => chain,
-        ParsedAttestationData::Self_
-        | ParsedAttestationData::ECDAA
-        | ParsedAttestationData::None
-        | ParsedAttestationData::Uncertain => {
+        ParsedAttestationData::Self_ | ParsedAttestationData::None => {
+            // nothing to check
+            return Ok(())
+        }
+        ParsedAttestationData::ECDAA | ParsedAttestationData::Uncertain => {
             return Err(WebauthnError::AttestationNotVerifiable);
         }
     };
