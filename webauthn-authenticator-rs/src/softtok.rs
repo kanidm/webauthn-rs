@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn webauthn_authenticator_wan_softtoken() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://localhost:8080/auth",
             "localhost",
             &url::Url::parse("https://localhost:8080").unwrap(),

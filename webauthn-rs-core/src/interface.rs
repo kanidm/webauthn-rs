@@ -231,10 +231,9 @@ pub struct Credential {
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
     /// The attestation certificate of this credential.
-    pub attestation: ParsedAttestationData,
-    // pub attestation: SerialisableAttestationData,
+    pub attestation: ParsedAttestation,
     /// the format of the attestation
-    pub attestation_format: Option<AttestationFormat>,
+    pub attestation_format: AttestationFormat,
 }
 
 impl From<CredentialV3> for Credential {
@@ -257,8 +256,11 @@ impl From<CredentialV3> for Credential {
             backup_state: false,
             registration_policy,
             extensions: RegisteredExtensions::none(),
-            attestation: ParsedAttestationData::None,
-            attestation_format: None,
+            attestation: ParsedAttestation {
+                data: ParsedAttestationData::None,
+                metadata: AttestationMetadata::None,
+            },
+            attestation_format: AttestationFormat::None,
         }
     }
 }
@@ -329,6 +331,52 @@ impl fmt::Debug for SerialisableAttestationData {
             }
         }
     }
+}
+
+/// The processed attestation and its metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedAttestation {
+    /// the attestation chain data
+    pub data: ParsedAttestationData,
+    /// possible metadata (i.e. flags set) about the attestation
+    pub metadata: AttestationMetadata,
+}
+
+impl Default for ParsedAttestation {
+    fn default() -> Self {
+        ParsedAttestation {
+            data: ParsedAttestationData::None,
+            metadata: AttestationMetadata::None,
+        }
+    }
+}
+
+/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AttestationMetadata {
+    /// no metadata available
+    None,
+    /// various attestation flags set by the device (attested by OS)
+    AndroidKey {
+        /// is the key master running in a Trusted Execution Environment
+        is_km_tee: bool,
+        /// did the attestation come from a Trusted Execution Environment
+        is_attest_tee: bool,
+    },
+    /// various attestation flags set by the device (attested via safety-net)
+    /// https://developer.android.com/training/safetynet/attestation#use-response-server
+    AndroidSafetyNet {
+        /// the name of apk that originated this key operation
+        apk_package_name: String,
+        /// cert chain for this apk
+        apk_certificate_digest_sha256: Vec<Base64UrlSafeData>,
+        /// A stricter verdict of device integrity. If the value of ctsProfileMatch is true, then the profile of the device running your app matches the profile of a device that has passed Android compatibility testing and has been approved as a Google-certified Android device.
+        cts_profile_match: bool,
+        /// A more lenient verdict of device integrity. If only the value of basicIntegrity is true, then the device running your app likely wasn't tampered with. However, the device hasn't necessarily passed Android compatibility testing.
+        basic_integrity: bool,
+        /// Types of measurements that contributed to the current API response
+        evaluation_type: Option<String>,
+    },
 }
 
 /// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
@@ -670,7 +718,7 @@ impl AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
             platform_only: false,
             key_storage: KeyStorageClass::SingleDeviceWrappedKey,
-            strict: true,
+            strict: false,
         }
     }
 
@@ -680,7 +728,7 @@ impl AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
             platform_only: false,
             key_storage: KeyStorageClass::SingleDeviceWrappedKey,
-            strict: true,
+            strict: false,
         }
     }
 
@@ -690,7 +738,7 @@ impl AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
             platform_only: false,
             key_storage: KeyStorageClass::SingleDeviceWrappedKey,
-            strict: true,
+            strict: false,
         }
     }
 
@@ -700,7 +748,7 @@ impl AttestationCa {
             ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
             platform_only: false,
             key_storage: KeyStorageClass::SingleDeviceWrappedKey,
-            strict: true,
+            strict: false,
         }
     }
 
@@ -710,7 +758,7 @@ impl AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
             platform_only: false,
             key_storage: KeyStorageClass::SingleDeviceWrappedKey,
-            strict: true,
+            strict: false,
         }
     }
 
@@ -721,7 +769,7 @@ impl AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
             platform_only: false,
             key_storage: KeyStorageClass::SingleDeviceWrappedKey,
-            strict: true,
+            strict: false,
         }
     }
 }

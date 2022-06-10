@@ -31,7 +31,7 @@ pub(crate) trait AttestationX509Extension {
     const OID: Oid<'static>;
 
     /// how to parse the value out of the certificate extension
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<Self::Output>;
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)>;
 
     /// if `true`, then validating this certificate fails if this extension is
     /// missing
@@ -54,7 +54,7 @@ impl AttestationX509Extension for FidoGenCeAaguid {
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = Aaguid;
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<Self::Output> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
         let (rem, aaguid) = der_parser::der::parse_der_octetstring(i)?;
         let aaguid: Aaguid = aaguid
             .as_slice()
@@ -62,7 +62,7 @@ impl AttestationX509Extension for FidoGenCeAaguid {
             .try_into()
             .map_err(|_| der_parser::error::BerError::InvalidLength)?;
 
-        Ok((rem, aaguid))
+        Ok((rem, (aaguid, AttestationMetadata::None)))
     }
 
     const IS_REQUIRED: bool = false;
@@ -72,6 +72,8 @@ impl AttestationX509Extension for FidoGenCeAaguid {
 
 pub(crate) mod android_key_attestation {
     use der_parser::ber::BerObjectContent;
+
+    use crate::proto::AttestationMetadata;
 
     #[derive(Clone, PartialEq, Eq)]
     pub struct Data {
@@ -164,7 +166,7 @@ pub(crate) mod android_key_attestation {
     }
 
     impl Data {
-        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Self> {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<(Vec<u8>, AttestationMetadata)> {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
@@ -199,15 +201,58 @@ pub(crate) mod android_key_attestation {
                     _ => return Err(der_parser::error::BerError::InvalidTag)?,
                 };
 
-                let data = Data {
-                    attestation_challenge,
-                    attest_enforcement,
-                    km_enforcement,
-                    software_enforced,
-                    tee_enforced,
+                // ensure it is origin bound
+                if software_enforced.all_applications || tee_enforced.all_applications {
+                    return Err(der_parser::error::BerError::InvalidValue {
+                        tag: Tag(600),
+                        msg: format!("all_applications must not be set"),
+                    })?;
+                }
+
+                // ensure key master values are set properly
+                let software_set = match (software_enforced.origin, software_enforced.purpose) {
+                    (Some(origin), Some(purpose))
+                        if origin == KM_ORIGIN_GENERATED && purpose == KM_PURPOSE_SIGN =>
+                    {
+                        true
+                    }
+                    (None, None) => false,
+                    _ => {
+                        return Err(der_parser::error::BerError::InvalidValue {
+                            tag: Tag(701),
+                            msg: format!("invalid key master values (software)"),
+                        })?;
+                    }
                 };
 
-                Ok((i, data))
+                let tee_set = match (tee_enforced.origin, tee_enforced.purpose) {
+                    (Some(origin), Some(purpose))
+                        if origin == KM_ORIGIN_GENERATED && purpose == KM_PURPOSE_SIGN =>
+                    {
+                        true
+                    }
+                    (None, None) => false,
+                    _ => {
+                        return Err(der_parser::error::BerError::InvalidValue {
+                            tag: Tag(701),
+                            msg: format!("invalid key master values (tee)"),
+                        })?;
+                    }
+                };
+
+                if !tee_set && !software_set {
+                    return Err(der_parser::error::BerError::InvalidValue {
+                        tag: Tag(701),
+                        msg: format!("both software and tee not set (keymaster values)"),
+                    })?;
+                }
+
+                let metadata = AttestationMetadata::AndroidKey {
+                    is_km_tee: km_enforcement == EnforcementType::Tee,
+                    is_attest_tee: attest_enforcement == EnforcementType::Tee,
+                };
+
+                Ok((i, (attestation_challenge, metadata)))
             })(i)
         }
     }
@@ -218,10 +263,10 @@ impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
     const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .11129 .2 .1 .17);
 
     // verify that the value of this extension matches the aaguid in authenticatorData.
-    type Output = android_key_attestation::Data;
+    type Output = Vec<u8>;
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<Self::Output> {
-        Self::Output::parse(i)
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
+        android_key_attestation::Data::parse(i)
     }
 
     const IS_REQUIRED: bool = true;
@@ -235,7 +280,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
     const OID: Oid<'static> = der_parser::oid!(1.2.840 .113635 .100 .8 .2);
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<Self::Output> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
         use der_parser::{der::*, error::BerError};
         parse_der_container(|i: &[u8], hdr: Header| {
             if hdr.tag() != Tag::Sequence {
@@ -250,7 +295,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
                 .as_slice()?
                 .try_into()
                 .map_err(|_| der_parser::error::BerError::InvalidLength)?;
-            Ok((i, nonce))
+            Ok((i, (nonce, AttestationMetadata::None)))
         })(i)
     }
 
@@ -262,7 +307,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
 pub(crate) fn validate_extension<T>(
     x509: &x509::X509,
     data: &<T as AttestationX509Extension>::Output,
-) -> Result<(), WebauthnError>
+) -> Result<AttestationMetadata, WebauthnError>
 where
     T: AttestationX509Extension,
 {
@@ -276,9 +321,9 @@ where
             (extension.oid == T::OID).then(|| {
                 T::parse(extension.value)
                     .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                    .and_then(|(_, output)| {
+                    .and_then(|(_, (output, metadata))| {
                         if &output == data {
-                            Ok(())
+                            Ok(metadata)
                         } else {
                             Err(T::VALIDATION_ERROR)
                         }
@@ -289,13 +334,13 @@ where
             if T::IS_REQUIRED {
                 Err(WebauthnError::AttestationStatementMissingExtension)
             } else {
-                Ok(())
+                Ok(AttestationMetadata::None)
             }
         })
 }
 
 /// The type of attestation on the credential
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash)]
 pub enum AttestationFormat {
     /// Packed attestation
     Packed,
@@ -864,7 +909,7 @@ pub(crate) fn verify_android_key_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-) -> Result<ParsedAttestationData, WebauthnError> {
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
 
@@ -947,32 +992,12 @@ pub(crate) fn verify_android_key_attestation(
     // The AuthorizationList.allApplications field is not present on either authorization list (softwareEnforced nor teeEnforced), since PublicKeyCredential MUST be scoped to the RP ID.
     // For the following, use only the teeEnforced authorization list if the RP wants to accept only keys from a trusted execution environment, otherwise use the union of teeEnforced and softwareEnforced.
 
-    // The value in the AuthorizationList.origin field is equal to KM_ORIGIN_GENERATED.
-    // The value in the AuthorizationList.purpose field is equal to KM_PURPOSE_SIGN.
-    use android_key_attestation::{
-        AuthorizationList, EnforcementType, KM_ORIGIN_GENERATED, KM_PURPOSE_SIGN,
-    };
-
     // let pem = attestn_cert.to_pem()?;
     // dbg!(std::str::from_utf8(&pem).unwrap());
 
-    validate_extension::<AndroidKeyAttestationExtensionData>(
+    let meta = validate_extension::<AndroidKeyAttestationExtensionData>(
         &attestn_cert,
-        &android_key_attestation::Data {
-            attestation_challenge: client_data_hash.to_vec(),
-            attest_enforcement: EnforcementType::Either,
-            km_enforcement: EnforcementType::Tee,
-            software_enforced: AuthorizationList {
-                all_applications: false,
-                origin: None,
-                purpose: None,
-            },
-            tee_enforced: AuthorizationList {
-                all_applications: false,
-                origin: Some(KM_ORIGIN_GENERATED),
-                purpose: Some(KM_PURPOSE_SIGN),
-            },
-        },
+        &client_data_hash.to_vec(),
     )?;
 
     // arr_x509.iter().for_each(|c| {
@@ -981,7 +1006,7 @@ pub(crate) fn verify_android_key_attestation(
     // });
 
     // 5. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-    Ok(ParsedAttestationData::Basic(arr_x509))
+    Ok((ParsedAttestationData::Basic(arr_x509), meta))
 }
 
 /// https://www.w3.org/TR/webauthn/#sctn-android-safetynet-attestation
@@ -990,7 +1015,7 @@ pub(crate) fn verify_android_safetynet_attestation(
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
     danger_ignore_timestamp: bool,
-) -> Result<ParsedAttestationData, WebauthnError> {
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
 
@@ -1083,7 +1108,7 @@ pub(crate) fn verify_android_safetynet_attestation(
 
     use jwt_simple::prelude::*;
 
-    let (x5c, _response) = |token: &str| -> Result<
+    let (x5c, safetynet_response) = |token: &str| -> Result<
         (Vec<x509::X509>, SafteyNetAttestResponse),
         SafetyNetError,
     > {
@@ -1185,8 +1210,25 @@ pub(crate) fn verify_android_safetynet_attestation(
         WebauthnError::AttestationStatementResponseInvalid
     })?;
 
+    let SafteyNetAttestResponse {
+        timestamp_ms: _,
+        apk_package_name,
+        apk_certificate_digest_sha256,
+        cts_profile_match,
+        basic_integrity,
+        evaluation_type,
+    } = safetynet_response;
+
+    let metadata = AttestationMetadata::AndroidSafetyNet {
+        apk_package_name,
+        apk_certificate_digest_sha256,
+        cts_profile_match,
+        basic_integrity,
+        evaluation_type,
+    };
+
     // 5. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-    Ok(ParsedAttestationData::Basic(x5c))
+    Ok((ParsedAttestationData::Basic(x5c), metadata))
 }
 
 /// Verify the attestation chain
@@ -1207,7 +1249,7 @@ pub fn verify_attestation_ca_chain(
         ParsedAttestationData::AnonCa(chain) => chain,
         ParsedAttestationData::Self_ | ParsedAttestationData::None => {
             // nothing to check
-            return Ok(())
+            return Ok(());
         }
         ParsedAttestationData::ECDAA | ParsedAttestationData::Uncertain => {
             return Err(WebauthnError::AttestationNotVerifiable);

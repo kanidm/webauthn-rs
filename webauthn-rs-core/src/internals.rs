@@ -120,9 +120,9 @@ impl Credential {
         auth_data: &AuthenticatorData<Registration>,
         ck: COSEKey,
         registration_policy: UserVerificationPolicy,
-        attestation: ParsedAttestationData,
+        attestation: ParsedAttestation,
         req_extn: Option<&RequestRegistrationExtensions>,
-        attestation_format: Option<AttestationFormat>,
+        attestation_format: AttestationFormat,
     ) -> Self {
         let extensions = if let Some(req_extn) = req_extn {
             let cred_protect = match (

@@ -79,7 +79,7 @@ impl WebauthnCore {
     /// * You MUST understand the webauthn specification in excruciating detail to understand the traps within it
     ///
     /// Seriously. Use `webauthn-rs` instead.
-    pub fn new(
+    pub fn new_unsafe_experts_only(
         rp_name: &str,
         rp_id: &str,
         rp_origin: &Url,
@@ -488,43 +488,52 @@ impl WebauthnCore {
             _ => None,
         };
 
-        let attestation_data = match attest_format {
-            AttestationFormat::FIDOU2F => {
-                verify_fidou2f_attestation(acd, &data.attestation_object, &client_data_json_hash)
-            }
-            AttestationFormat::Packed => {
-                verify_packed_attestation(acd, &data.attestation_object, &client_data_json_hash)
-            }
-            AttestationFormat::Tpm => {
-                verify_tpm_attestation(acd, &data.attestation_object, &client_data_json_hash)
-            }
-            AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
-                acd,
-                &data.attestation_object,
-                &client_data_json_hash,
+        let (attestation_data, attestation_metadata) = match attest_format {
+            AttestationFormat::FIDOU2F => (
+                verify_fidou2f_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
+                AttestationMetadata::None,
+            ),
+            AttestationFormat::Packed => (
+                verify_packed_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
+                AttestationMetadata::None,
+            ),
+            AttestationFormat::Tpm => (
+                verify_tpm_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
+                AttestationMetadata::None,
+            ),
+            AttestationFormat::AppleAnonymous => (
+                verify_apple_anonymous_attestation(
+                    acd,
+                    &data.attestation_object,
+                    &client_data_json_hash,
+                )?,
+                AttestationMetadata::None,
             ),
             AttestationFormat::AndroidKey => verify_android_key_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
-            ),
+            )?,
             AttestationFormat::AndroidSafetyNet => verify_android_safetynet_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
                 danger_disable_certificate_time_checks,
-            ),
-            AttestationFormat::None => Ok(ParsedAttestationData::None),
-        }?;
+            )?,
+            AttestationFormat::None => (ParsedAttestationData::None, AttestationMetadata::None),
+        };
 
         let credential: Credential = Credential::new(
             acd,
             &data.attestation_object.auth_data,
             COSEKey::try_from(&acd.credential_pk)?,
             policy,
-            attestation_data,
+            ParsedAttestation {
+                data: attestation_data,
+                metadata: attestation_metadata,
+            },
             opt_req_extn,
-            Some(attest_format),
+            attest_format,
         );
 
         // Now based on result ...
@@ -549,7 +558,7 @@ impl WebauthnCore {
 
         if let Some(ca_list) = attestation_cas {
             verify_attestation_ca_chain(
-                &credential.attestation,
+                &credential.attestation.data,
                 &ca_list,
                 danger_disable_certificate_time_checks,
             )?;
@@ -1219,9 +1228,9 @@ pub trait WebauthnConfig {
 mod tests {
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
-    use crate::internals::*;
     use crate::proto::*;
     use crate::WebauthnCore as Webauthn;
+    use crate::{internals::*, AttestationFormat};
     use base64urlsafedata::Base64UrlSafeData;
     use url::Url;
 
@@ -1230,7 +1239,7 @@ mod tests {
     #[test]
     fn test_registration_yk() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "http://127.0.0.1:8080/auth",
             "127.0.0.1",
             &Url::parse("http://127.0.0.1:8080").unwrap(),
@@ -1283,7 +1292,7 @@ mod tests {
     #[test]
     fn test_registration_duo_go() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
             &Url::parse("https://webauthn.io").unwrap(),
@@ -1325,7 +1334,7 @@ mod tests {
     #[test]
     fn test_registration_packed_attestation() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8443/auth",
             "localhost",
             &Url::parse("https://localhost:8443").unwrap(),
@@ -1367,7 +1376,7 @@ mod tests {
     #[test]
     fn test_registration_packed_attestaion_fails_with_bad_cred_protect() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8080/auth",
             "localhost",
             &Url::parse("http://localhost:8080").unwrap(),
@@ -1412,7 +1421,7 @@ mod tests {
     #[test]
     fn test_registration_packed_attestaion_works_with_valid_fido_aaguid_extension() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
@@ -1457,7 +1466,7 @@ mod tests {
     #[test]
     fn test_registration_packed_attestaion_fails_with_invalid_fido_aaguid_extension() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
@@ -1505,7 +1514,7 @@ mod tests {
     #[test]
     fn test_authentication() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8080/auth",
             "localhost",
             &Url::parse("http://localhost:8080").unwrap(),
@@ -1552,8 +1561,11 @@ mod tests {
             backup_state: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
-            attestation: ParsedAttestationData::None,
-            attestation_format: None,
+            attestation: ParsedAttestation {
+                data: ParsedAttestationData::None,
+                metadata: AttestationMetadata::None,
+            },
+            attestation_format: AttestationFormat::None,
         };
 
         // Persist it to our fake db.
@@ -1619,7 +1631,7 @@ mod tests {
     #[test]
     fn test_authentication_appid() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://testing.local",
             "testing.local",
             &Url::parse("https://testing.local").unwrap(),
@@ -1664,8 +1676,11 @@ mod tests {
             backup_state: false,
             registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
             extensions: RegisteredExtensions::none(),
-            attestation: ParsedAttestationData::None,
-            attestation_format: None,
+            attestation: ParsedAttestation {
+                data: ParsedAttestationData::None,
+                metadata: AttestationMetadata::None,
+            },
+            attestation_format: AttestationFormat::None,
         };
 
         // Persist it to our fake db.
@@ -1734,7 +1749,7 @@ mod tests {
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://172.20.0.141:8443/auth",
             "172.20.0.141",
             &Url::parse("https://172.20.0.141:8443").unwrap(),
@@ -1783,7 +1798,7 @@ mod tests {
     #[test]
     fn test_win_hello_attest_none() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
             &Url::parse("https://etools-dev.example.com:8080").unwrap(),
@@ -1925,7 +1940,7 @@ mod tests {
     #[test]
     fn test_win_hello_attest_tpm() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
             &Url::parse("https://etools-dev.example.com:8080").unwrap(),
@@ -2238,7 +2253,7 @@ mod tests {
     fn register_userid(
         user_name: &str,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
             &Url::parse("https://etools-dev.example.com:8080").unwrap(),
@@ -2267,7 +2282,7 @@ mod tests {
     #[test]
     fn test_touchid_attest_apple_anonymous() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
             "spectral.local",
             &Url::parse("https://spectral.local:8443").unwrap(),
@@ -2439,7 +2454,7 @@ mod tests {
     #[test]
     fn test_touchid_attest_apple_anonymous_fails_with_invalid_nonce_extension() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
             "spectral.local",
             &Url::parse("https://spectral.local:8443").unwrap(),
@@ -2583,7 +2598,7 @@ mod tests {
     #[test]
     fn test_uv_consistency() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "http://127.0.0.1:8080/auth",
             "127.0.0.1",
             &Url::parse("http://127.0.0.1:8080").unwrap(),
@@ -2625,8 +2640,11 @@ mod tests {
                 backup_state: false,
                 registration_policy: UserVerificationPolicy::Discouraged_DO_NOT_USE,
                 extensions: RegisteredExtensions::none(),
-                attestation: ParsedAttestationData::None,
-                attestation_format: None,
+                attestation: ParsedAttestation {
+                    data: ParsedAttestationData::None,
+                    metadata: AttestationMetadata::None,
+                },
+                attestation_format: AttestationFormat::None,
             },
             Credential {
                 cred_id: Base64UrlSafeData(vec![
@@ -2658,8 +2676,11 @@ mod tests {
                 backup_state: false,
                 registration_policy: UserVerificationPolicy::Required,
                 extensions: RegisteredExtensions::none(),
-                attestation: ParsedAttestationData::None,
-                attestation_format: None,
+                attestation: ParsedAttestation {
+                    data: ParsedAttestationData::None,
+                    metadata: AttestationMetadata::None,
+                },
+                attestation_format: AttestationFormat::None,
             },
         ];
         // Ensure we get a bad result.
@@ -2726,7 +2747,7 @@ mod tests {
     #[test]
     fn test_subdomain_origin() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "rp_name",
             "idm.example.com",
             &Url::parse("https://idm.example.com:8080").unwrap(),
@@ -2896,7 +2917,7 @@ mod tests {
     #[test]
     fn test_yk5bio_fallback_alg_attest_none() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "http://localhost:8080/auth",
             "localhost",
             &Url::parse("http://localhost:8080").unwrap(),
@@ -2940,7 +2961,7 @@ mod tests {
     #[test]
     fn test_solokey_fallback_alg_attest_none() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
@@ -2986,7 +3007,7 @@ mod tests {
     #[ignore]
     fn test_google_pixel_3a_direct_attestation() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
@@ -3030,7 +3051,7 @@ mod tests {
     #[test]
     fn test_google_pixel_3a_indirect_attestation() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
@@ -3072,7 +3093,7 @@ mod tests {
     #[test]
     fn test_google_pixel_3a_none_attestation() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
@@ -3115,7 +3136,7 @@ mod tests {
     #[test]
     fn test_google_pixel_3a_ignores_requested_algo() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
@@ -3163,7 +3184,7 @@ mod tests {
     #[test]
     fn test_firefox_98_hello_incorrectly_truncates_aaguid() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
             &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
@@ -3210,7 +3231,7 @@ mod tests {
     #[test]
     fn test_edge_touchid_rk_verified() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "http://localhost:8080/auth",
             "localhost",
             &Url::parse("http://localhost:8080").unwrap(),
@@ -3285,7 +3306,10 @@ mod tests {
         );
         debug!("{:?}", result);
         let cred = result.unwrap();
-        assert!(matches!(cred.attestation, ParsedAttestationData::Self_));
+        assert!(matches!(
+            cred.attestation.data,
+            ParsedAttestationData::Self_
+        ));
     }
 
     #[test]
@@ -3326,7 +3350,7 @@ mod tests {
                 "clientDataJSON":"eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiZGZvLUhscUpwM01MSy1KNVRMeHhtdlhKaWVTM3pHd2RrOUc5SDliUGV6ZyIsIm9yaWdpbiI6Imh0dHBzOlwvXC93ZWJhdXRobi5pbyIsImFuZHJvaWRQYWNrYWdlTmFtZSI6ImNvbS5hbmRyb2lkLmNocm9tZSJ9"}}"#;
 
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
             &Url::parse("https://webauthn.io").unwrap(),
@@ -3358,6 +3382,20 @@ mod tests {
         );
         dbg!(&result);
         assert!(result.is_ok());
+
+        match result.unwrap().attestation.metadata {
+            AttestationMetadata::AndroidSafetyNet {
+                apk_package_name: _,
+                apk_certificate_digest_sha256: _,
+                cts_profile_match,
+                basic_integrity,
+                evaluation_type: _,
+            } => {
+                assert!(cts_profile_match);
+                assert!(basic_integrity);
+            }
+            _ => panic!("invalid attestation metadata"),
+        };
     }
 
     #[test]
@@ -3374,7 +3412,7 @@ mod tests {
                 "clientDataJSON":"eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiQjNxNWlnalZiSXBCd3FuSzE4azBtZ0FPTG5YVEtfTW12M0pUc1NNeUVLZyIsIm9yaWdpbiI6Imh0dHBzOlwvXC93ZWJhdXRobi5pbyIsImFuZHJvaWRQYWNrYWdlTmFtZSI6ImNvbS5hbmRyb2lkLmNocm9tZSJ9"}}"#;
 
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
             &Url::parse("https://webauthn.io").unwrap(),
@@ -3404,6 +3442,20 @@ mod tests {
         );
         dbg!(&result);
         assert!(result.is_ok());
+
+        match result.unwrap().attestation.metadata {
+            AttestationMetadata::AndroidSafetyNet {
+                apk_package_name: _,
+                apk_certificate_digest_sha256: _,
+                cts_profile_match,
+                basic_integrity,
+                evaluation_type: _,
+            } => {
+                assert!(cts_profile_match);
+                assert!(basic_integrity);
+            }
+            _ => panic!("invalid attestation metadata"),
+        };
     }
 
     #[test]
@@ -3421,7 +3473,7 @@ mod tests {
                 "type": "public-key"}"#;
 
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new(
+        let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.org",
             "webauthn.org",
             &Url::parse("https://webauthn.org").unwrap(),
@@ -3451,6 +3503,17 @@ mod tests {
         );
         dbg!(&result);
         assert!(result.is_ok());
+
+        match result.unwrap().attestation.metadata {
+            AttestationMetadata::AndroidKey {
+                is_km_tee,
+                is_attest_tee,
+            } => {
+                assert!(is_km_tee);
+                assert!(!is_attest_tee);
+            }
+            _ => panic!("invalid metadata"),
+        }
     }
 
     #[test]

@@ -201,7 +201,7 @@ impl<'a> WebauthnBuilder<'a> {
     /// ```
     pub fn build(self) -> WebauthnResult<Webauthn> {
         Ok(Webauthn {
-            core: WebauthnCore::new(
+            core: WebauthnCore::new_unsafe_experts_only(
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
                 self.rp_origin,
