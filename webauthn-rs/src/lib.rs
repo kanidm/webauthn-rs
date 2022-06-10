@@ -59,10 +59,15 @@ use crate::interface::*;
 pub mod prelude {
     pub use crate::interface::*;
     pub use crate::{Webauthn, WebauthnBuilder};
+    pub use base64urlsafedata::Base64UrlSafeData;
     pub use url::Url;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
-    pub use webauthn_rs_core::proto::{PublicKeyCredential, RegisterPublicKeyCredential};
+    pub use webauthn_rs_core::proto::{
+        AuthenticationState, Credential, CredentialID, ParsedAttestationData, PublicKeyCredential,
+        RegisterPublicKeyCredential,
+    };
+    pub use webauthn_rs_core::AttestationFormat;
 }
 
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
@@ -73,6 +78,7 @@ pub struct WebauthnBuilder<'a> {
     rp_id: &'a str,
     rp_origin: &'a Url,
     allow_subdomains: bool,
+    allow_any_port: bool,
     algorithms: Vec<COSEAlgorithm>,
 }
 
@@ -82,6 +88,13 @@ pub struct WebauthnBuilder<'a> {
 pub struct Webauthn {
     core: WebauthnCore,
     algorithms: Vec<COSEAlgorithm>,
+}
+
+impl Webauthn {
+    /// For advanced users allow direct access to the core reg/auth methods
+    pub fn advanced(&self) -> &WebauthnCore {
+        &self.core
+    }
 }
 
 impl<'a> WebauthnBuilder<'a> {
@@ -134,6 +147,7 @@ impl<'a> WebauthnBuilder<'a> {
                 rp_id,
                 rp_origin,
                 allow_subdomains: false,
+                allow_any_port: false,
                 algorithms: COSEAlgorithm::secure_algs(),
             })
         } else {
@@ -151,6 +165,12 @@ impl<'a> WebauthnBuilder<'a> {
     /// If in doubt, do NOT change this value. Defaults to "false".
     pub fn allow_subdomains(mut self, allow: bool) -> Self {
         self.allow_subdomains = allow;
+        self
+    }
+
+    /// Setting this flag skips port checks on origin matches
+    pub fn allow_any_port(mut self, allow: bool) -> Self {
+        self.allow_any_port = allow;
         self
     }
 
@@ -181,15 +201,14 @@ impl<'a> WebauthnBuilder<'a> {
     /// ```
     pub fn build(self) -> WebauthnResult<Webauthn> {
         Ok(Webauthn {
-            core: unsafe {
-                WebauthnCore::new(
-                    self.rp_name.unwrap_or(self.rp_id),
-                    self.rp_id,
-                    self.rp_origin,
-                    None,
-                    Some(self.allow_subdomains),
-                )
-            },
+            core: WebauthnCore::new_unsafe_experts_only(
+                self.rp_name.unwrap_or(self.rp_id),
+                self.rp_id,
+                self.rp_origin,
+                None,
+                Some(self.allow_subdomains),
+                Some(self.allow_any_port),
+            ),
             algorithms: self.algorithms,
         })
     }

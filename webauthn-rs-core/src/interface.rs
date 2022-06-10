@@ -1,6 +1,7 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
+use crate::attestation::AttestationFormat;
 use crate::constants::*;
 use crate::error::*;
 use std::fmt;
@@ -217,7 +218,7 @@ pub struct Credential {
     ///
     /// This means the private key is NOT sealed within a hardware cryptograhic
     /// processor, and may have impacts on your risk assessments and modeling.
-    pub backup_elligible: bool,
+    pub backup_eligible: bool,
     /// This credential has indicated that it is currently backed up OR that it
     /// is shared between mulitple devices.
     pub backup_state: bool,
@@ -230,8 +231,9 @@ pub struct Credential {
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
     /// The attestation certificate of this credential.
-    pub attestation: ParsedAttestationData,
-    // pub attestation: SerialisableAttestationData,
+    pub attestation: ParsedAttestation,
+    /// the format of the attestation
+    pub attestation_format: AttestationFormat,
 }
 
 impl From<CredentialV3> for Credential {
@@ -250,11 +252,15 @@ impl From<CredentialV3> for Credential {
             cred,
             counter,
             user_verified: verified,
-            backup_elligible: false,
+            backup_eligible: false,
             backup_state: false,
             registration_policy,
             extensions: RegisteredExtensions::none(),
-            attestation: ParsedAttestationData::None,
+            attestation: ParsedAttestation {
+                data: ParsedAttestationData::None,
+                metadata: AttestationMetadata::None,
+            },
+            attestation_format: AttestationFormat::None,
         }
     }
 }
@@ -325,6 +331,52 @@ impl fmt::Debug for SerialisableAttestationData {
             }
         }
     }
+}
+
+/// The processed attestation and its metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedAttestation {
+    /// the attestation chain data
+    pub data: ParsedAttestationData,
+    /// possible metadata (i.e. flags set) about the attestation
+    pub metadata: AttestationMetadata,
+}
+
+impl Default for ParsedAttestation {
+    fn default() -> Self {
+        ParsedAttestation {
+            data: ParsedAttestationData::None,
+            metadata: AttestationMetadata::None,
+        }
+    }
+}
+
+/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AttestationMetadata {
+    /// no metadata available
+    None,
+    /// various attestation flags set by the device (attested by OS)
+    AndroidKey {
+        /// is the key master running in a Trusted Execution Environment
+        is_km_tee: bool,
+        /// did the attestation come from a Trusted Execution Environment
+        is_attest_tee: bool,
+    },
+    /// various attestation flags set by the device (attested via safety-net)
+    /// https://developer.android.com/training/safetynet/attestation#use-response-server
+    AndroidSafetyNet {
+        /// the name of apk that originated this key operation
+        apk_package_name: String,
+        /// cert chain for this apk
+        apk_certificate_digest_sha256: Vec<Base64UrlSafeData>,
+        /// A stricter verdict of device integrity. If the value of ctsProfileMatch is true, then the profile of the device running your app matches the profile of a device that has passed Android compatibility testing and has been approved as a Google-certified Android device.
+        cts_profile_match: bool,
+        /// A more lenient verdict of device integrity. If only the value of basicIntegrity is true, then the device running your app likely wasn't tampered with. However, the device hasn't necessarily passed Android compatibility testing.
+        basic_integrity: bool,
+        /// Types of measurements that contributed to the current API response
+        evaluation_type: Option<String>,
+    },
 }
 
 /// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
@@ -659,6 +711,67 @@ impl AttestationCa {
             strict: false,
         }
     }
+
+    /// Android ROOT CA 1
+    pub fn android_root_ca_1() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: false,
+        }
+    }
+
+    /// Android ROOT CA 2
+    pub fn android_root_ca_2() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: false,
+        }
+    }
+
+    /// Android ROOT CA 3
+    pub fn android_root_ca_3() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: false,
+        }
+    }
+
+    /// Android SOFTWARE ONLY root CA
+    pub fn android_software_ca() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: false,
+        }
+    }
+
+    /// Google SafetyNet CA (for android)
+    pub fn google_safetynet_ca() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: false,
+        }
+    }
+
+    /// Google SafetyNet CA (for android) -- OLD EXPIRED
+    #[allow(unused)]
+    pub(crate) fn google_safetynet_ca_old() -> Self {
+        AttestationCa {
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
+            platform_only: false,
+            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            strict: false,
+        }
+    }
 }
 
 /// A list of AttestationCas and associated options.
@@ -680,6 +793,27 @@ impl AttestationCaList {
         }
     }
 
+    /// Apple iOS/macOS and Android CAs
+    pub fn apple_and_android() -> Self {
+        AttestationCaList {
+            cas: vec![
+                AttestationCa::apple_webauthn_root_ca(),
+                AttestationCa::android_root_ca_1(),
+                AttestationCa::android_root_ca_2(),
+                AttestationCa::android_root_ca_3(),
+                AttestationCa::google_safetynet_ca(),
+                AttestationCa::android_software_ca(),
+            ],
+        }
+    }
+
+    /// Apple iOS/macOS
+    pub fn apple() -> Self {
+        AttestationCaList {
+            cas: vec![AttestationCa::apple_webauthn_root_ca()],
+        }
+    }
+
     /// All CA's known to the Webauthn-RS project.
     pub fn all_known_cas() -> Self {
         AttestationCaList {
@@ -689,6 +823,11 @@ impl AttestationCaList {
                 AttestationCa::microsoft_tpm_root_certificate_authority_2014(),
                 AttestationCa::nitrokey_fido2_root_ca(),
                 AttestationCa::nitrokey_u2f_root_ca(),
+                AttestationCa::android_root_ca_1(),
+                AttestationCa::android_root_ca_2(),
+                AttestationCa::android_root_ca_3(),
+                AttestationCa::google_safetynet_ca(),
+                AttestationCa::android_software_ca(),
             ],
         }
     }

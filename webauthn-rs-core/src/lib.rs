@@ -35,7 +35,11 @@ mod internals;
 /// Protocol bindings
 pub mod proto {
     pub use crate::interface::*;
+    pub use base64urlsafedata::Base64UrlSafeData;
     pub use webauthn_rs_proto::*;
 }
+
+pub use attestation::verify_attestation_ca_chain;
+pub use attestation::AttestationFormat;
 
 pub use crate::core::*;

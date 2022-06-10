@@ -39,7 +39,7 @@ impl SecurityKey {
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestationData {
-        &self.cred.attestation
+        &self.cred.attestation.data
     }
 
     /// Post authentication, update this credentials counter.
@@ -93,7 +93,7 @@ impl PasswordlessKey {
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestationData {
-        &self.cred.attestation
+        &self.cred.attestation.data
     }
 
     /// Post authentication, update this credentials counter.

@@ -12,7 +12,9 @@ use crate::crypto::{
 use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
+use base64urlsafedata::Base64UrlSafeData;
 use debug;
+use openssl::sha::sha256;
 use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
@@ -29,7 +31,7 @@ pub(crate) trait AttestationX509Extension {
     const OID: Oid<'static>;
 
     /// how to parse the value out of the certificate extension
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output>;
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)>;
 
     /// if `true`, then validating this certificate fails if this extension is
     /// missing
@@ -43,6 +45,8 @@ pub(crate) trait AttestationX509Extension {
 pub(crate) struct FidoGenCeAaguid;
 pub(crate) struct AppleAnonymousNonce;
 
+pub(crate) struct AndroidKeyAttestationExtensionData;
+
 impl AttestationX509Extension for FidoGenCeAaguid {
     // If cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45724 .1 .1 .4);
@@ -50,20 +54,224 @@ impl AttestationX509Extension for FidoGenCeAaguid {
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = Aaguid;
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
         let (rem, aaguid) = der_parser::der::parse_der_octetstring(i)?;
-        let aaguid: &Aaguid = aaguid
+        let aaguid: Aaguid = aaguid
             .as_slice()
             .expect("octet string can be used as a slice")
             .try_into()
             .map_err(|_| der_parser::error::BerError::InvalidLength)?;
 
-        Ok((rem, aaguid))
+        Ok((rem, (aaguid, AttestationMetadata::None)))
     }
 
     const IS_REQUIRED: bool = false;
 
     const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateAAGUIDMismatch;
+}
+
+pub(crate) mod android_key_attestation {
+    use der_parser::ber::BerObjectContent;
+
+    use crate::proto::AttestationMetadata;
+
+    #[derive(Clone, PartialEq, Eq)]
+    pub struct Data {
+        pub attestation_challenge: Vec<u8>,
+        pub attest_enforcement: EnforcementType,
+        pub km_enforcement: EnforcementType,
+        pub software_enforced: AuthorizationList,
+        pub tee_enforced: AuthorizationList,
+    }
+
+    #[derive(Clone, PartialEq, Eq, Copy)]
+    pub struct AuthorizationList {
+        pub all_applications: bool,
+        pub origin: Option<u32>,
+        pub purpose: Option<u32>,
+    }
+
+    pub const KM_ORIGIN_GENERATED: u32 = 0;
+    pub const KM_PURPOSE_SIGN: u32 = 2;
+
+    #[derive(Clone, Eq)]
+    pub enum EnforcementType {
+        Software,
+        Tee,
+        #[allow(unused)]
+        Either,
+    }
+
+    impl PartialEq for EnforcementType {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Self::Either, _) | (_, Self::Either) => true,
+                (Self::Software, Self::Software) => true,
+                (Self::Tee, Self::Tee) => true,
+                _ => false,
+            }
+        }
+    }
+
+    impl AuthorizationList {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Self> {
+            use der_parser::{der::*, error::BerError};
+            parse_der_container(|i: &[u8], hdr: Header| {
+                if hdr.tag() != Tag::Sequence {
+                    return Err(nom::Err::Error(BerError::BerTypeError.into()));
+                }
+
+                let mut all_applications = false;
+                let mut origin = None;
+                let mut purpose = None;
+
+                let mut i = i;
+                while let Ok((k, obj)) = parse_der(i) {
+                    i = k;
+                    // dbg!(&obj);
+                    if obj.content == BerObjectContent::Optional(None) {
+                        continue;
+                    }
+
+                    match obj.tag() {
+                        Tag(600) => {
+                            all_applications = true;
+                        }
+                        Tag(702) => {
+                            if let BerObjectContent::Unknown(o) = obj.content {
+                                let (_, val) = parse_der_integer(&o.data)?;
+                                origin = Some(val.as_u32()?);
+                            }
+                        }
+                        Tag(1) => {
+                            if let BerObjectContent::Unknown(o) = obj.content {
+                                let (_, val) =
+                                    parse_der_container(|i, _| parse_der_integer(i))(&o.data)?;
+                                purpose = Some(val.as_u32()?);
+                            }
+                        }
+                        _ => continue,
+                    };
+                }
+
+                let al = AuthorizationList {
+                    all_applications,
+                    origin,
+                    purpose,
+                };
+
+                Ok((i, al))
+            })(i)
+        }
+    }
+
+    impl Data {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<(Vec<u8>, AttestationMetadata)> {
+            use der_parser::{der::*, error::BerError};
+            parse_der_container(|i: &[u8], hdr: Header| {
+                if hdr.tag() != Tag::Sequence {
+                    return Err(nom::Err::Error(BerError::BerTypeError.into()));
+                }
+                let (i, attestation_version) = parse_der_integer(i)?;
+                let _attestation_version = attestation_version.as_i64()?;
+
+                let (i, attest_sec_level) = parse_der_enum(i)?; // security level
+                let attest_sec_level = attest_sec_level.as_u32()?;
+                let (i, _) = parse_der_integer(i)?; // kVers
+                let (i, km_sec_level) = parse_der_enum(i)?; // kSeclev
+                let km_sec_level = km_sec_level.as_u32()?;
+
+                let (i, attestation_challenge) = parse_der_octetstring(i)?;
+                let attestation_challenge = attestation_challenge.as_slice()?.to_vec();
+
+                let (i, _unique_id) = parse_der_octetstring(i)?;
+
+                let (i, software_enforced) = AuthorizationList::parse(i)?;
+                let (i, tee_enforced) = AuthorizationList::parse(i)?;
+
+                let attest_enforcement = match attest_sec_level {
+                    0 => EnforcementType::Software,
+                    1 => EnforcementType::Tee,
+                    _ => return Err(der_parser::error::BerError::InvalidTag)?,
+                };
+
+                let km_enforcement = match km_sec_level {
+                    0 => EnforcementType::Software,
+                    1 => EnforcementType::Tee,
+                    _ => return Err(der_parser::error::BerError::InvalidTag)?,
+                };
+
+                // ensure it is origin bound
+                if software_enforced.all_applications || tee_enforced.all_applications {
+                    return Err(der_parser::error::BerError::InvalidValue {
+                        tag: Tag(600),
+                        msg: format!("all_applications must not be set"),
+                    })?;
+                }
+
+                // ensure key master values are set properly
+                let software_set = match (software_enforced.origin, software_enforced.purpose) {
+                    (Some(origin), Some(purpose))
+                        if origin == KM_ORIGIN_GENERATED && purpose == KM_PURPOSE_SIGN =>
+                    {
+                        true
+                    }
+                    (None, None) => false,
+                    _ => {
+                        return Err(der_parser::error::BerError::InvalidValue {
+                            tag: Tag(701),
+                            msg: format!("invalid key master values (software)"),
+                        })?;
+                    }
+                };
+
+                let tee_set = match (tee_enforced.origin, tee_enforced.purpose) {
+                    (Some(origin), Some(purpose))
+                        if origin == KM_ORIGIN_GENERATED && purpose == KM_PURPOSE_SIGN =>
+                    {
+                        true
+                    }
+                    (None, None) => false,
+                    _ => {
+                        return Err(der_parser::error::BerError::InvalidValue {
+                            tag: Tag(701),
+                            msg: format!("invalid key master values (tee)"),
+                        })?;
+                    }
+                };
+
+                if !tee_set && !software_set {
+                    return Err(der_parser::error::BerError::InvalidValue {
+                        tag: Tag(701),
+                        msg: format!("both software and tee not set (keymaster values)"),
+                    })?;
+                }
+
+                let metadata = AttestationMetadata::AndroidKey {
+                    is_km_tee: km_enforcement == EnforcementType::Tee,
+                    is_attest_tee: attest_enforcement == EnforcementType::Tee,
+                };
+
+                Ok((i, (attestation_challenge, metadata)))
+            })(i)
+        }
+    }
+}
+
+impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
+    // If cert contains an extension with OID 1.3.6.1.4.1.11129.2.1.17 (android key attestation)
+    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .11129 .2 .1 .17);
+
+    // verify that the value of this extension matches the aaguid in authenticatorData.
+    type Output = Vec<u8>;
+
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
+        android_key_attestation::Data::parse(i)
+    }
+
+    const IS_REQUIRED: bool = true;
+
+    const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateNonceMismatch;
 }
 
 impl AttestationX509Extension for AppleAnonymousNonce {
@@ -72,7 +280,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
     const OID: Oid<'static> = der_parser::oid!(1.2.840 .113635 .100 .8 .2);
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<&Self::Output> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
         use der_parser::{der::*, error::BerError};
         parse_der_container(|i: &[u8], hdr: Header| {
             if hdr.tag() != Tag::Sequence {
@@ -87,7 +295,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
                 .as_slice()?
                 .try_into()
                 .map_err(|_| der_parser::error::BerError::InvalidLength)?;
-            Ok((i, nonce))
+            Ok((i, (nonce, AttestationMetadata::None)))
         })(i)
     }
 
@@ -99,7 +307,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
 pub(crate) fn validate_extension<T>(
     x509: &x509::X509,
     data: &<T as AttestationX509Extension>::Output,
-) -> Result<(), WebauthnError>
+) -> Result<AttestationMetadata, WebauthnError>
 where
     T: AttestationX509Extension,
 {
@@ -113,9 +321,9 @@ where
             (extension.oid == T::OID).then(|| {
                 T::parse(extension.value)
                     .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                    .and_then(|(_, output)| {
-                        if output == data {
-                            Ok(())
+                    .and_then(|(_, (output, metadata))| {
+                        if &output == data {
+                            Ok(metadata)
                         } else {
                             Err(T::VALIDATION_ERROR)
                         }
@@ -126,19 +334,27 @@ where
             if T::IS_REQUIRED {
                 Err(WebauthnError::AttestationStatementMissingExtension)
             } else {
-                Ok(())
+                Ok(AttestationMetadata::None)
             }
         })
 }
 
-#[derive(Debug)]
-pub(crate) enum AttestationFormat {
+/// The type of attestation on the credential
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash)]
+pub enum AttestationFormat {
+    /// Packed attestation
     Packed,
+    /// TPM attestation (like Micrsoft)
     Tpm,
+    /// Android hardware attestation
     AndroidKey,
+    /// Older Android Safety Net
     AndroidSafetyNet,
+    /// Old U2F attestation type
     FIDOU2F,
+    /// Apple touchID/faceID
     AppleAnonymous,
+    /// No attestation
     None,
 }
 
@@ -688,7 +904,335 @@ pub(crate) fn verify_apple_anonymous_attestation(
     Ok(ParsedAttestationData::AnonCa(arr_x509))
 }
 
-pub(crate) fn verify_attestation_ca_chain(
+/// https://www.w3.org/TR/webauthn-3/#sctn-android-key-attestation
+pub(crate) fn verify_android_key_attestation(
+    acd: &AttestedCredentialData,
+    att_obj: &AttestationObject<Registration>,
+    client_data_hash: &[u8],
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
+    let att_stmt = &att_obj.att_stmt;
+    let auth_data_bytes = &att_obj.auth_data_bytes;
+
+    // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
+
+    let alg = {
+        let alg_value = att_stmt_map
+            .get(&serde_cbor::Value::Text("alg".to_string()))
+            .ok_or(WebauthnError::AttestationStatementAlgMissing)?;
+
+        cbor_try_i128!(alg_value)
+            .map_err(|_| WebauthnError::AttestationStatementAlgInvalid)
+            .and_then(|v| {
+                COSEAlgorithm::try_from(v).map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)
+            })?
+    };
+
+    let sig = {
+        let sig_value = att_stmt_map
+            .get(&serde_cbor::Value::Text("sig".to_string()))
+            .ok_or(WebauthnError::AttestationStatementSigMissing)?;
+
+        cbor_try_bytes!(sig_value).map_err(|_| WebauthnError::AttestationStatementSigMissing)?
+    };
+
+    let arr_x509 = {
+        let x5c_key = &serde_cbor::Value::Text("x5c".to_string());
+
+        let x5c_value = att_stmt_map
+            .get(x5c_key)
+            .ok_or(WebauthnError::AttestationStatementX5CMissing)?;
+
+        let x5c_array_ref = cbor_try_array!(x5c_value)
+            .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?;
+
+        let arr_x509: Result<Vec<_>, _> = x5c_array_ref
+            .iter()
+            .map(|values| {
+                cbor_try_bytes!(values)
+                    .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                    .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+            })
+            .collect();
+
+        arr_x509?
+    };
+
+    // Must have at least one cert
+    let attestn_cert = arr_x509
+        .first()
+        .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
+
+    // Concatenate authenticatorData and clientDataHash to form the data to verify.
+    let data_to_verify: Vec<u8> = auth_data_bytes
+        .iter()
+        .chain(client_data_hash.iter())
+        .copied()
+        .collect();
+
+    // 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the public key in the first certificate in x5c with the algorithm specified in alg.
+
+    let verified = verify_signature(alg, &attestn_cert, sig, &data_to_verify)?;
+
+    if !verified {
+        error!("signature verification failed!");
+        return Err(WebauthnError::AttestationStatementSigInvalid);
+    }
+
+    // 3. Verify that the public key in the first certificate in x5c matches the credentialPublicKey in the attestedCredentialData in authenticatorData.
+    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
+    let subject_public_key = COSEKey::try_from((credential_public_key.type_, attestn_cert))?;
+
+    if credential_public_key != subject_public_key {
+        return Err(WebauthnError::AttestationCredentialSubjectKeyMismatch);
+    }
+
+    // 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to clientDataHash.
+    // The AuthorizationList.allApplications field is not present on either authorization list (softwareEnforced nor teeEnforced), since PublicKeyCredential MUST be scoped to the RP ID.
+    // For the following, use only the teeEnforced authorization list if the RP wants to accept only keys from a trusted execution environment, otherwise use the union of teeEnforced and softwareEnforced.
+
+    // let pem = attestn_cert.to_pem()?;
+    // dbg!(std::str::from_utf8(&pem).unwrap());
+
+    let meta = validate_extension::<AndroidKeyAttestationExtensionData>(
+        &attestn_cert,
+        &client_data_hash.to_vec(),
+    )?;
+
+    // arr_x509.iter().for_each(|c| {
+    //     let pem = c.to_pem().unwrap();
+    //     dbg!(std::str::from_utf8(&pem).unwrap());
+    // });
+
+    // 5. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
+    Ok((ParsedAttestationData::Basic(arr_x509), meta))
+}
+
+/// https://www.w3.org/TR/webauthn/#sctn-android-safetynet-attestation
+pub(crate) fn verify_android_safetynet_attestation(
+    _acd: &AttestedCredentialData,
+    att_obj: &AttestationObject<Registration>,
+    client_data_hash: &[u8],
+    danger_ignore_timestamp: bool,
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
+    let att_stmt = &att_obj.att_stmt;
+    let auth_data_bytes = &att_obj.auth_data_bytes;
+
+    // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
+    let att_stmt_map =
+        cbor_try_map!(att_stmt).map_err(|_| WebauthnError::AttestationStatementMapInvalid)?;
+
+    // there's only 1 version now
+    let _ver = {
+        let ver = att_stmt_map
+            .get(&serde_cbor::Value::Text("ver".to_string()))
+            .ok_or(WebauthnError::AttestationStatementVerMissing)?;
+
+        cbor_try_string!(ver).map_err(|_| WebauthnError::AttestationStatementVerInvalid)?
+    };
+
+    let response = {
+        let response = att_stmt_map
+            .get(&serde_cbor::Value::Text("response".to_string()))
+            .ok_or(WebauthnError::AttestationStatementResponseMissing)?;
+
+        cbor_try_bytes!(response).map_err(|_| WebauthnError::AttestationStatementResponseMissing)?
+    };
+
+    // Concatenate authenticatorData and clientDataHash to form the data to verify.
+    let data_to_verify: Vec<u8> = auth_data_bytes
+        .iter()
+        .chain(client_data_hash.iter())
+        .copied()
+        .collect();
+    let data_to_verify = sha256(&data_to_verify);
+
+    // 2. Verify that response is a valid SafetyNet response of version ver by following the steps indicated by the SafetyNet online documentation. As of this writing, there is only one format of the SafetyNet response and ver is reserved for future use.
+    #[derive(Debug, serde::Deserialize, serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SafteyNetAttestResponse {
+        timestamp_ms: u64,
+        apk_package_name: String,
+        apk_certificate_digest_sha256: Vec<Base64UrlSafeData>,
+        cts_profile_match: bool,
+        basic_integrity: bool,
+        evaluation_type: Option<String>,
+    }
+
+    let response_str = std::str::from_utf8(response.as_slice())
+        .map_err(|_| WebauthnError::AttestationStatementResponseInvalid)?;
+
+    #[derive(Debug, thiserror::Error)]
+    #[allow(missing_docs)]
+    enum SafetyNetError {
+        #[error("JWT error: {0}")]
+        Jwt(#[from] jwt_simple::Error),
+
+        #[error("No cert in chain")]
+        MissingCertChain,
+
+        #[error("Invalid Cert")]
+        BadCert,
+
+        #[error("Base64 error: {0}")]
+        Base64(#[from] base64::DecodeError),
+
+        #[error("openssl")]
+        OpenSSL(#[from] openssl::error::ErrorStack),
+
+        #[error("unsupported jwt alg")]
+        BadAlg,
+
+        #[error("missing nonce")]
+        MissingNonce,
+
+        #[error("nonce invalid")]
+        BadNonce,
+
+        #[error("nonce mismatch")]
+        NonceMismatch,
+
+        #[error("hostname invalid")]
+        InvalidHostname,
+
+        #[error("False CTS Profile Match")]
+        CtsProfileMatchFailed,
+
+        #[error("Timestamp too old")]
+        Expired,
+
+        #[error("Time error: {0}")]
+        Time(#[from] std::time::SystemTimeError),
+    }
+
+    use jwt_simple::prelude::*;
+
+    let (x5c, safetynet_response) = |token: &str| -> Result<
+        (Vec<x509::X509>, SafteyNetAttestResponse),
+        SafetyNetError,
+    > {
+        // dbg!(&token);
+        let meta = jwt_simple::token::Token::decode_metadata(response_str)?;
+
+        let certs = meta
+            .certificate_chain()
+            .ok_or(SafetyNetError::MissingCertChain)?
+            .iter()
+            .map(|cert| {
+                let cert = base64::decode(cert)?;
+                x509::X509::from_der(&cert).map_err(|_| SafetyNetError::BadCert)
+            })
+            .collect::<Result<Vec<x509::X509>, SafetyNetError>>()?;
+
+        let cert = certs.iter().next().ok_or(SafetyNetError::BadCert)?;
+        let public_key = cert.public_key()?;
+
+        let opts = Some(VerificationOptions::default());
+
+        let verified_claims: jwt_simple::prelude::JWTClaims<SafteyNetAttestResponse> =
+            match public_key.id() {
+                openssl::pkey::Id::RSA => {
+                    let der = public_key.public_key_to_der()?;
+                    use openssl::nid::Nid;
+
+                    match (cert.signature_algorithm().object().nid(), meta.algorithm()) {
+                        (Nid::SHA256WITHRSAENCRYPTION, "RS256") => {
+                            RS256PublicKey::from_der(&der)?.verify_token(token, opts)?
+                        }
+                        (Nid::SHA384WITHRSAENCRYPTION, "RS384") => {
+                            RS384PublicKey::from_der(&der)?.verify_token(token, opts)?
+                        }
+                        (Nid::SHA512WITHRSAENCRYPTION, "RS512") => {
+                            RS512PublicKey::from_der(&der)?.verify_token(token, opts)?
+                        }
+                        _ => return Err(SafetyNetError::BadAlg),
+                    }
+                }
+                openssl::pkey::Id::EC => {
+                    let ec_key = public_key.ec_key()?;
+                    let mut ctxt = openssl::bn::BigNumContext::new()?;
+                    let raw = ec_key.public_key().to_bytes(
+                        ec_key.group(),
+                        openssl::ec::PointConversionForm::UNCOMPRESSED,
+                        &mut ctxt,
+                    )?;
+
+                    match meta.algorithm() {
+                        "ES256" => ES256PublicKey::from_bytes(&raw)?.verify_token(token, opts)?,
+                        _ => return Err(SafetyNetError::BadAlg),
+                    }
+                }
+                _ => return Err(SafetyNetError::BadAlg),
+            };
+
+        // 3. Verify that the nonce attribute in the payload of response is identical to the Base64 encoding of the SHA-256 hash of the concatenation of authenticatorData and clientDataHash.
+        let nonce = verified_claims.nonce.ok_or(SafetyNetError::MissingNonce)?;
+        let nonce = base64::decode(&nonce).map_err(|_| SafetyNetError::BadNonce)?;
+        if nonce != data_to_verify.to_vec() {
+            return Err(SafetyNetError::NonceMismatch);
+        }
+
+        // 4. Verify that the SafetyNet response actually came from the SafetyNet service by following the steps in the SafetyNet online documentation.
+        let common_name = {
+            let name = cert
+                .subject_name()
+                .entries_by_nid(openssl::nid::Nid::COMMONNAME)
+                .next()
+                .ok_or(SafetyNetError::InvalidHostname)?;
+            name.data().as_utf8()?.to_string()
+        };
+
+        // §8.5.5 Verify that attestationCert is issued to the hostname "attest.android.com"
+        if common_name.as_str() != "attest.android.com" {
+            return Err(SafetyNetError::InvalidHostname);
+        }
+
+        // §8.5.6 Verify that the ctsProfileMatch attribute in the payload of response is true.
+        if !verified_claims.custom.cts_profile_match {
+            return Err(SafetyNetError::CtsProfileMatchFailed);
+        }
+
+        // Verify sanity of timestamp in the payload
+        if !danger_ignore_timestamp {
+            let expires: std::time::Duration = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                + std::time::Duration::from_secs(60);
+            if verified_claims.custom.timestamp_ms as u128 > expires.as_millis() {
+                return Err(SafetyNetError::Expired);
+            }
+        }
+
+        Ok((certs, verified_claims.custom))
+    }(response_str)
+    .map_err(|e| {
+        error!("jwt saftey-net error: {:?}", e);
+        WebauthnError::AttestationStatementResponseInvalid
+    })?;
+
+    let SafteyNetAttestResponse {
+        timestamp_ms: _,
+        apk_package_name,
+        apk_certificate_digest_sha256,
+        cts_profile_match,
+        basic_integrity,
+        evaluation_type,
+    } = safetynet_response;
+
+    let metadata = AttestationMetadata::AndroidSafetyNet {
+        apk_package_name,
+        apk_certificate_digest_sha256,
+        cts_profile_match,
+        basic_integrity,
+        evaluation_type,
+    };
+
+    // 5. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
+    Ok((ParsedAttestationData::Basic(x5c), metadata))
+}
+
+/// Verify the attestation chain
+pub fn verify_attestation_ca_chain(
     att_data: &ParsedAttestationData,
     ca_list: &AttestationCaList,
     danger_disable_certificate_time_checks: bool,
@@ -703,10 +1247,11 @@ pub(crate) fn verify_attestation_ca_chain(
         ParsedAttestationData::Basic(chain) => chain,
         ParsedAttestationData::AttCa(chain) => chain,
         ParsedAttestationData::AnonCa(chain) => chain,
-        ParsedAttestationData::Self_
-        | ParsedAttestationData::ECDAA
-        | ParsedAttestationData::None
-        | ParsedAttestationData::Uncertain => {
+        ParsedAttestationData::Self_ | ParsedAttestationData::None => {
+            // nothing to check
+            return Ok(());
+        }
+        ParsedAttestationData::ECDAA | ParsedAttestationData::Uncertain => {
             return Err(WebauthnError::AttestationNotVerifiable);
         }
     };
