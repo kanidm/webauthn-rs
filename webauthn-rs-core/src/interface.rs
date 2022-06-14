@@ -1,7 +1,7 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
-use crate::attestation::{AttestationFormat, verify_attestation_ca_chain};
+use crate::attestation::{verify_attestation_ca_chain, AttestationFormat};
 use crate::constants::*;
 use crate::error::*;
 use std::fmt;
@@ -259,7 +259,7 @@ impl Credential {
         verify_attestation_ca_chain(
             &self.attestation.data,
             &ca_list,
-            danger_disable_certificate_time_checks
+            danger_disable_certificate_time_checks,
         )
     }
 }

@@ -14,12 +14,12 @@ use crate::internals::*;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
 use debug;
+use openssl::hash::MessageDigest;
 use openssl::sha::sha256;
 use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
 use openssl::x509::verify;
-use openssl::hash::MessageDigest;
 use x509_parser::oid_registry::Oid;
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
@@ -1305,18 +1305,20 @@ pub fn verify_attestation_ca_chain<'a>(
                 let res = ca_ctx_ref.error();
                 debug!("{:?}", res);
                 if res == x509::X509VerifyResult::OK {
-                    ca_ctx_ref.chain().and_then(|chain| {
-                        // If there is a chain here, we get the root.
-                        let idx = chain.len() - 1;
-                        chain.get(idx)
-                    })
-                    .and_then(|ca_cert| {
-                        // If we got it from the stack, we can now digest it.
-                        ca_cert.digest(MessageDigest::sha256()).ok()
-                        // We let the digest bubble out now, we've done too much here
-                        // already!
-                    })
-                    .ok_or(WebauthnError::AttestationTrustFailure)
+                    ca_ctx_ref
+                        .chain()
+                        .and_then(|chain| {
+                            // If there is a chain here, we get the root.
+                            let idx = chain.len() - 1;
+                            chain.get(idx)
+                        })
+                        .and_then(|ca_cert| {
+                            // If we got it from the stack, we can now digest it.
+                            ca_cert.digest(MessageDigest::sha256()).ok()
+                            // We let the digest bubble out now, we've done too much here
+                            // already!
+                        })
+                        .ok_or(WebauthnError::AttestationTrustFailure)
                 } else {
                     debug!(
                         "ca_ctx_ref verify cert - error depth={}, sn={:?}",
@@ -1336,9 +1338,13 @@ pub fn verify_attestation_ca_chain<'a>(
     // Now we have a result<DigestOfCaUsed, Error> and we want to attach our related
     // attestation CA.
     res.and_then(|dgst| {
-        ca_list.cas.iter()
+        ca_list
+            .cas
+            .iter()
             .filter_map(|ca_crt| {
-                ca_crt.ca.digest(MessageDigest::sha256())
+                ca_crt
+                    .ca
+                    .digest(MessageDigest::sha256())
                     .ok()
                     .and_then(|ca_crt_dgst| {
                         if ca_crt_dgst.as_ref() == dgst.as_ref() {
@@ -1351,6 +1357,8 @@ pub fn verify_attestation_ca_chain<'a>(
             .take(1)
             .next()
             .map(|ca_crt| Some(ca_crt))
-            .ok_or_else(|| WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string()))
+            .ok_or_else(|| {
+                WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string())
+            })
     })
 }
