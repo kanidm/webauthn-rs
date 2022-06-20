@@ -1564,12 +1564,14 @@ mod tests {
                         46, 121, 76, 233, 118, 208, 250, 74, 227, 182, 8, 145, 45, 46, 5, 9, 199,
                         186, 84, 83, 7, 237, 130, 73, 16, 90, 17, 54, 33, 255, 54, 56,
                     ]
-                    .to_vec(),
+                    .to_vec()
+                    .into(),
                     y: [
                         117, 105, 1, 23, 253, 223, 67, 135, 253, 219, 253, 223, 17, 247, 91, 197,
                         205, 225, 143, 59, 47, 138, 70, 120, 74, 155, 177, 177, 166, 233, 48, 71,
                     ]
-                    .to_vec(),
+                    .to_vec()
+                    .into(),
                 }),
             },
             counter: 1,
@@ -1680,12 +1682,14 @@ mod tests {
                         187, 71, 18, 101, 166, 110, 166, 38, 116, 119, 74, 4, 183, 104, 24, 46,
                         245, 24, 227, 143, 161, 136, 37, 186, 140, 221, 228, 115, 81, 175, 50, 51,
                     ]
-                    .to_vec(),
+                    .to_vec()
+                    .into(),
                     y: [
                         13, 59, 59, 158, 149, 197, 116, 228, 99, 12, 235, 185, 190, 110, 251, 154,
                         226, 143, 75, 26, 44, 136, 244, 245, 243, 4, 40, 223, 22, 253, 224, 95,
                     ]
-                    .to_vec(),
+                    .to_vec()
+                    .into(),
                 }),
             },
             user_verified: false,
@@ -1814,6 +1818,17 @@ mod tests {
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_deserialise_ipados_5ci() {
+        // This is to test migration between the x/y byte array to base64 format.
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .try_init();
+        let ser_cred = r#"{"cred_id":"uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ","cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"user_verified":false,"backup_eligible":false,"backup_state":false,"registration_policy":"preferred","extensions":{"cred_protect":"NotRequested","hmac_create_secret":"NotRequested"},"attestation":{"data":{"Basic":["MIICvTCCAaWgAwIBAgIEK_F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt-pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V_62aS5-1gK3rr-Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn_Cd-S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE-aFa4kTe6NQQfi8-yiZrQ8N-JL4f7gNdQPSrH-r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa-5cqNF4G1fPCofvw9W4lKnObuPakr0x_icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2-0m1f1mwQS8yRD5-_aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ_mXnUQ6TTsgRqPvPXgQPbSyGMf2z_DIPbQqCD_Bmc4dj9o6LozheBdDtcZCAjSPTAd_ui"]},"metadata":"None"},"attestation_format":"Packed"}"#;
+        let cred: Credential = serde_json::from_str(ser_cred).unwrap();
+        trace!("{:?}", cred);
     }
 
     #[test]
@@ -2646,13 +2661,15 @@ mod tests {
                             239, 235, 216, 80, 109, 26, 218, 187, 146, 77, 5, 173, 143, 33, 126,
                             119, 197, 116,
                         ]
-                        .to_vec(),
+                        .to_vec()
+                        .into(),
                         y: [
                             59, 202, 240, 192, 92, 25, 186, 100, 135, 111, 53, 194, 234, 134, 249,
                             249, 30, 22, 70, 58, 81, 250, 141, 38, 217, 9, 44, 121, 162, 230, 197,
                             87,
                         ]
-                        .to_vec(),
+                        .to_vec()
+                        .into(),
                     }),
                 },
                 counter: 0,
@@ -2683,12 +2700,14 @@ mod tests {
                             155, 234, 151, 203, 142, 136, 87, 77, 177, 27, 67, 248, 104, 233, 156,
                             15, 51,
                         ]
-                        .to_vec(),
+                        .to_vec()
+                        .into(),
                         y: [
                             21, 29, 94, 187, 68, 148, 156, 253, 117, 226, 40, 88, 53, 61, 209, 227,
                             12, 164, 136, 185, 148, 125, 86, 21, 22, 52, 195, 192, 6, 6, 176, 179,
                         ]
-                        .to_vec(),
+                        .to_vec()
+                        .into(),
                     }),
                 },
                 counter: 1,

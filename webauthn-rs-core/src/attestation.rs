@@ -730,7 +730,7 @@ pub(crate) fn verify_tpm_attestation(
             // cose_rsa.e != tpm_parms.exponent ||
 
             // check the pkey is the same.
-            if &cose_rsa.n != tpm_modulus {
+            if cose_rsa.n.as_ref() != tpm_modulus {
                 return Err(WebauthnError::AttestationTpmPubAreaMismatch);
             }
         }

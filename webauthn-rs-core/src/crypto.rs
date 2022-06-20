@@ -490,8 +490,8 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
                 type_,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
                     curve,
-                    x: x.to_vec(),
-                    y: y.to_vec(),
+                    x: x.to_vec().into(),
+                    y: y.to_vec().into(),
                 }),
             };
 
@@ -534,7 +534,7 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             let cose_key = COSEKey {
                 type_,
                 key: COSEKeyType::RSA(COSERSAKey {
-                    n: n.to_vec(),
+                    n: n.to_vec().into(),
                     e: e_temp,
                 }),
             };
@@ -623,8 +623,8 @@ impl TryFrom<(COSEAlgorithm, &x509::X509)> for COSEKey {
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key {
                     curve,
-                    x: xbn.to_vec(),
-                    y: ybn.to_vec(),
+                    x: xbn.to_vec().into(),
+                    y: ybn.to_vec().into(),
                 }))
             }
             COSEAlgorithm::RS256
@@ -655,8 +655,8 @@ impl COSEKey {
             COSEKeyType::EC_EC2(ecpk) => {
                 let r: [u8; 1] = [0x04];
                 Ok(r.iter()
-                    .chain(ecpk.x.iter())
-                    .chain(ecpk.y.iter())
+                    .chain(ecpk.x.0.iter())
+                    .chain(ecpk.y.0.iter())
                     .copied()
                     .collect())
             }
@@ -675,8 +675,10 @@ impl COSEKey {
                 let ec_group =
                     ec::EcGroup::from_curve_name(curve).map_err(WebauthnError::OpenSSLError)?;
 
-                let xbn = bn::BigNum::from_slice(&ec2k.x).map_err(WebauthnError::OpenSSLError)?;
-                let ybn = bn::BigNum::from_slice(&ec2k.y).map_err(WebauthnError::OpenSSLError)?;
+                let xbn =
+                    bn::BigNum::from_slice(ec2k.x.as_ref()).map_err(WebauthnError::OpenSSLError)?;
+                let ybn =
+                    bn::BigNum::from_slice(ec2k.y.as_ref()).map_err(WebauthnError::OpenSSLError)?;
 
                 let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
                     .map_err(WebauthnError::OpenSSLError)?;
@@ -684,7 +686,8 @@ impl COSEKey {
                 ec_key.check_key().map_err(WebauthnError::OpenSSLError)
             }
             COSEKeyType::RSA(rsak) => {
-                let nbn = bn::BigNum::from_slice(&rsak.n).map_err(WebauthnError::OpenSSLError)?;
+                let nbn =
+                    bn::BigNum::from_slice(rsak.n.as_ref()).map_err(WebauthnError::OpenSSLError)?;
                 let ebn = bn::BigNum::from_slice(&rsak.e).map_err(WebauthnError::OpenSSLError)?;
 
                 let _rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
@@ -712,8 +715,10 @@ impl COSEKey {
                 let ec_group =
                     ec::EcGroup::from_curve_name(curve).map_err(WebauthnError::OpenSSLError)?;
 
-                let xbn = bn::BigNum::from_slice(&ec2k.x).map_err(WebauthnError::OpenSSLError)?;
-                let ybn = bn::BigNum::from_slice(&ec2k.y).map_err(WebauthnError::OpenSSLError)?;
+                let xbn =
+                    bn::BigNum::from_slice(ec2k.x.as_ref()).map_err(WebauthnError::OpenSSLError)?;
+                let ybn =
+                    bn::BigNum::from_slice(ec2k.y.as_ref()).map_err(WebauthnError::OpenSSLError)?;
 
                 let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
                     .map_err(WebauthnError::OpenSSLError)?;
@@ -726,7 +731,8 @@ impl COSEKey {
                 Ok(p)
             }
             COSEKeyType::RSA(rsak) => {
-                let nbn = bn::BigNum::from_slice(&rsak.n).map_err(WebauthnError::OpenSSLError)?;
+                let nbn =
+                    bn::BigNum::from_slice(rsak.n.as_ref()).map_err(WebauthnError::OpenSSLError)?;
                 let ebn = bn::BigNum::from_slice(&rsak.e).map_err(WebauthnError::OpenSSLError)?;
 
                 let rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
@@ -790,11 +796,11 @@ mod tests {
         match key.key {
             COSEKeyType::EC_EC2(pkey) => {
                 assert_eq!(
-                    pkey.x,
+                    pkey.x.as_ref(),
                     hex!("65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d")
                 );
                 assert_eq!(
-                    pkey.y,
+                    pkey.y.as_ref(),
                     hex!("1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c")
                 );
                 assert_eq!(pkey.curve, ECDSACurve::SECP256R1);
@@ -824,14 +830,14 @@ mod tests {
         match key.key {
             COSEKeyType::EC_EC2(pkey) => {
                 assert_eq!(
-                    pkey.x,
+                    pkey.x.as_ref(),
                     hex!(
                         "ceeaf818731db7af2d02e029854823d71bdbf65fb0c6ff69
                          42c9cf891efe18ea81430517d777f5c43550da801be5bf2f"
                     )
                 );
                 assert_eq!(
-                    pkey.y,
+                    pkey.y.as_ref(),
                     hex!(
                         "dda1d0ead72e042efb7c36a38cc021abb2ca1a2e38159edd
                          a8c25f391e9a38d79dd56b9427d1c7c70cfa778ab849b087"
@@ -863,14 +869,14 @@ mod tests {
         match key.key {
             COSEKeyType::EC_EC2(pkey) => {
                 assert_eq!(
-                    pkey.x,
+                    pkey.x.as_ref(),
                     hex!(
                         "0106cfaacf34b13f24bbb2f806fd9cfacff9a2a5ef9ecfcd85664609a0b2f6d4fd
                          b8e1d58630905f13f38d8eed8714eceb716920a3a235581623261fed961f7b7d72"
                     )
                 );
                 assert_eq!(
-                    pkey.y,
+                    pkey.y.as_ref(),
                     hex!(
                         "0089597a052a8d3c8b2b5692d467dea19f8e1b9ca17fa563a1a826855dade04811
                          b2881819e72f1706daeaf7d3773b2e284983a0eec33c2fe3ff5697722e95b29536"

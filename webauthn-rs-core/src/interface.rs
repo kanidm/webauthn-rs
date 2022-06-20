@@ -112,9 +112,9 @@ pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
     /// The key's public X coordinate.
-    pub x: Vec<u8>,
+    pub x: Base64UrlSafeData,
     /// The key's public Y coordinate.
-    pub y: Vec<u8>,
+    pub y: Base64UrlSafeData,
 }
 
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
@@ -136,7 +136,7 @@ pub struct COSEOKPKey {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSERSAKey {
     /// An RSA modulus
-    pub n: Vec<u8>,
+    pub n: Base64UrlSafeData,
     /// An RSA exponent
     pub e: [u8; 3],
 }

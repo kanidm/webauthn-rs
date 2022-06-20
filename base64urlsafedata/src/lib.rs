@@ -2,7 +2,7 @@
 //! base64 implementations to account for various clients and libraries. Compatible
 //! with serde.
 
-use serde::de::{Error, Unexpected, Visitor};
+use serde::de::{Error, SeqAccess, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt;
@@ -26,6 +26,12 @@ impl fmt::Display for Base64UrlSafeData {
             "{}",
             base64::encode_config(&self, base64::URL_SAFE_NO_PAD)
         )
+    }
+}
+
+impl From<Vec<u8>> for Base64UrlSafeData {
+    fn from(v: Vec<u8>) -> Base64UrlSafeData {
+        Base64UrlSafeData(v)
     }
 }
 
@@ -76,6 +82,22 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
 
         Err(serde::de::Error::invalid_value(Unexpected::Str(v), &self))
     }
+
+    fn visit_seq<A>(self, mut v: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut data = if let Some(sz) = v.size_hint() {
+            Vec::with_capacity(sz)
+        } else {
+            Vec::new()
+        };
+
+        while let Some(i) = v.next_element()? {
+            data.push(i)
+        }
+        Ok(Base64UrlSafeData(data))
+    }
 }
 
 impl<'de> Deserialize<'de> for Base64UrlSafeData {
@@ -83,7 +105,8 @@ impl<'de> Deserialize<'de> for Base64UrlSafeData {
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_str(Base64UrlSafeDataVisitor)
+        // Was previously _str
+        deserializer.deserialize_any(Base64UrlSafeDataVisitor)
     }
 }
 
@@ -106,5 +129,12 @@ mod tests {
     fn test_try_from() {
         assert!(Base64UrlSafeData::try_from("aGVsbG8=").is_ok());
         assert!(Base64UrlSafeData::try_from("abcdefghij").is_err());
+    }
+
+    #[test]
+    fn test_try_from_json() {
+        // let _: Base64UrlSafeData = serde_json::from_str("\"aGVsbG8=\"")
+        // .expect("Invalid Data");
+        let _: Base64UrlSafeData = serde_json::from_str("[0,1,2,3]").expect("Invalid Data");
     }
 }
