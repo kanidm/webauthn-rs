@@ -1,7 +1,7 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
 //! to allow persistance and should not change.
 
-use crate::attestation::AttestationFormat;
+use crate::attestation::{verify_attestation_ca_chain, AttestationFormat};
 use crate::constants::*;
 use crate::error::*;
 use std::fmt;
@@ -234,6 +234,34 @@ pub struct Credential {
     pub attestation: ParsedAttestation,
     /// the format of the attestation
     pub attestation_format: AttestationFormat,
+}
+
+impl Credential {
+    /// Re-verify this Credential's attestation chain. This re-applies the same process
+    /// for certificate authority verification that occured at registration. This can
+    /// be useful if you want to re-assert your credentials match an updated or changed
+    /// ca_list from the time that registration occured. This can also be useful to
+    /// re-determine certain properties of your device that may exist.
+    ///
+    /// # Safety
+    /// Due to the design of CA infrastructure by certain providers, it is NOT possible
+    /// to verify the CA expiry time. Certain vendors use CA intermediates that have
+    /// expiries that are only valid for approximately 10 minutes, meaning that if we
+    /// enforced time validity, these would false negative for their validity.
+    pub fn verify_attestation<'a>(
+        &'_ self,
+        ca_list: &'a AttestationCaList,
+    ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
+        // Why do we disable this? Because of Apple. They issue dynamic short lived
+        // attestation certs, that last for about 5 minutes. This means that
+        // post-registration validation will always fail if we validate time.
+        let danger_disable_certificate_time_checks = true;
+        verify_attestation_ca_chain(
+            &self.attestation.data,
+            &ca_list,
+            danger_disable_certificate_time_checks,
+        )
+    }
 }
 
 impl From<CredentialV3> for Credential {

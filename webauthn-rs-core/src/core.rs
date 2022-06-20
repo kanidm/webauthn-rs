@@ -556,13 +556,17 @@ impl WebauthnCore {
         // If the attestation statement attStmt successfully verified but is not trustworthy per step 21 above,
         // the Relying Party SHOULD fail the registration ceremony.
 
-        if let Some(ca_list) = attestation_cas {
+        let attested_ca_crt = if let Some(ca_list) = attestation_cas {
             verify_attestation_ca_chain(
                 &credential.attestation.data,
                 &ca_list,
                 danger_disable_certificate_time_checks,
-            )?;
-        }
+            )?
+        } else {
+            None
+        };
+
+        debug!("attested_ca_crt = {:?}", attested_ca_crt);
 
         // Verify that the credential public key alg is one of the allowed algorithms.
         let alg_valid = credential_algorithms
@@ -580,6 +584,13 @@ impl WebauthnCore {
         // OUT OF SPEC - Allow rejection of passkeys if desired by the caller.
         if !experimental_allow_passkeys && credential.backup_eligible {
             error!("Credential counter is 0 - may indicate that it is a passkey and not bound to hardware.");
+            return Err(WebauthnError::CredentialMayNotBeHardwareBound);
+        }
+
+        // OUT OF SPEC - It is invalid for a credential to indicate it is backed up
+        // but not that it is elligible for backup
+        if credential.backup_state && !credential.backup_eligible {
+            error!("Credential indicates it is backed up, but has not declared valid backup elligibility");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
 
@@ -712,10 +723,16 @@ impl WebauthnCore {
         // a compromise of the credential, tampering with the device, or some other change to its
         // risk profile from when it was originally enrolled. Reject the authentication if this
         // situation occurs.
-
         if cred.backup_eligible != data.authenticator_data.backup_elligible {
             debug!("Credential backup elligibility has changed!");
             return Err(WebauthnError::CredentialBackupElligibilityInconsistent);
+        }
+
+        // OUT OF SPEC - It is invalid for a credential to indicate it is backed up
+        // but not that it is elligible for backup
+        if data.authenticator_data.backup_state && !cred.backup_eligible {
+            error!("Credential indicates it is backed up, but has not declared valid backup elligibility");
+            return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
 
         // Verify that the values of the client extension outputs in clientExtensionResults and the
@@ -1785,7 +1802,11 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&AttestationCaList {
-                cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
+                cas: vec![
+                    AttestationCa::apple_webauthn_root_ca(),
+                    AttestationCa::yubico_u2f_root_ca_serial_457200631(),
+                    AttestationCa::microsoft_tpm_root_certificate_authority_2014(),
+                ],
             }),
             false,
             &RequestRegistrationExtensions::default(),

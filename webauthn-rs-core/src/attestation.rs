@@ -14,6 +14,7 @@ use crate::internals::*;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
 use debug;
+use openssl::hash::MessageDigest;
 use openssl::sha::sha256;
 use openssl::stack;
 use openssl::x509;
@@ -1232,11 +1233,11 @@ pub(crate) fn verify_android_safetynet_attestation(
 }
 
 /// Verify the attestation chain
-pub fn verify_attestation_ca_chain(
-    att_data: &ParsedAttestationData,
-    ca_list: &AttestationCaList,
+pub fn verify_attestation_ca_chain<'a>(
+    att_data: &'_ ParsedAttestationData,
+    ca_list: &'a AttestationCaList,
     danger_disable_certificate_time_checks: bool,
-) -> Result<(), WebauthnError> {
+) -> Result<Option<&'a AttestationCa>, WebauthnError> {
     // If the ca_list is empty, Immediately fail since no valid attestation can be created.
     if ca_list.cas.is_empty() {
         return Err(WebauthnError::AttestationCertificateTrustStoreEmpty);
@@ -1249,7 +1250,7 @@ pub fn verify_attestation_ca_chain(
         ParsedAttestationData::AnonCa(chain) => chain,
         ParsedAttestationData::Self_ | ParsedAttestationData::None => {
             // nothing to check
-            return Ok(());
+            return Ok(None);
         }
         ParsedAttestationData::ECDAA | ParsedAttestationData::Uncertain => {
             return Err(WebauthnError::AttestationNotVerifiable);
@@ -1295,29 +1296,69 @@ pub fn verify_attestation_ca_chain(
     let mut ca_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
 
     // Providing the cert and chain, validate we have a ref to our store.
-    let res = ca_ctx
+    // Note this is a result<result ... because the inner .init must return an errorstack
+    // for openssl.
+    let res: Result<_, _> = ca_ctx
         .init(&ca_store, &leaf, &chain_stack, |ca_ctx_ref| {
             ca_ctx_ref.verify_cert().map(|_| {
                 // The value as passed in is a boolean that we ignore in favour of the richer error type.
-                debug!("{:?}", ca_ctx_ref.error());
-                debug!(
-                    "ca_ctx_ref verify cert - error depth={}, sn={:?}",
-                    ca_ctx_ref.error_depth(),
-                    ca_ctx_ref.current_cert().map(|crt| crt.subject_name())
-                );
-                ca_ctx_ref.error()
+                let res = ca_ctx_ref.error();
+                debug!("{:?}", res);
+                if res == x509::X509VerifyResult::OK {
+                    ca_ctx_ref
+                        .chain()
+                        .and_then(|chain| {
+                            // If there is a chain here, we get the root.
+                            let idx = chain.len() - 1;
+                            chain.get(idx)
+                        })
+                        .and_then(|ca_cert| {
+                            // If we got it from the stack, we can now digest it.
+                            ca_cert.digest(MessageDigest::sha256()).ok()
+                            // We let the digest bubble out now, we've done too much here
+                            // already!
+                        })
+                        .ok_or(WebauthnError::AttestationTrustFailure)
+                } else {
+                    debug!(
+                        "ca_ctx_ref verify cert - error depth={}, sn={:?}",
+                        ca_ctx_ref.error_depth(),
+                        ca_ctx_ref.current_cert().map(|crt| crt.subject_name())
+                    );
+                    Err(WebauthnError::AttestationChainNotTrusted(res.to_string()))
+                }
             })
         })
         .map_err(|e| {
+            // If an openssl error occured, dump it here.
             error!(?e);
             e
         })?;
 
-    if res != x509::X509VerifyResult::OK {
-        return Err(WebauthnError::AttestationChainNotTrusted(res.to_string()));
-    }
-
-    debug!("Attestation Success");
-
-    Ok(())
+    // Now we have a result<DigestOfCaUsed, Error> and we want to attach our related
+    // attestation CA.
+    res.and_then(|dgst| {
+        ca_list
+            .cas
+            .iter()
+            .filter_map(|ca_crt| {
+                ca_crt
+                    .ca
+                    .digest(MessageDigest::sha256())
+                    .ok()
+                    .and_then(|ca_crt_dgst| {
+                        if ca_crt_dgst.as_ref() == dgst.as_ref() {
+                            Some(ca_crt)
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .take(1)
+            .next()
+            .map(|ca_crt| Some(ca_crt))
+            .ok_or_else(|| {
+                WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string())
+            })
+    })
 }
