@@ -710,7 +710,7 @@ impl Webauthn {
         let require_resident_key = false;
         let authenticator_attachment = None;
         let policy = Some(UserVerificationPolicy::Preferred);
-        let reject_passkeys = false;
+        let reject_passkeys = true;
 
         self.core
             .generate_challenge_register_options(
