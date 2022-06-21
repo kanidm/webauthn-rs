@@ -121,6 +121,14 @@ pub struct PublicKeyCredential {
     pub type_: String,
 }
 
+impl PublicKeyCredential {
+    /// Retrieve the user uniqueid that *may* have been provided by the authenticator during this
+    /// authentication.
+    pub fn get_user_unique_id(&self) -> Option<&[u8]> {
+        self.response.user_handle.as_ref().map(|b| b.as_ref())
+    }
+}
+
 #[cfg(feature = "wasm")]
 impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
     fn from(data: web_sys::PublicKeyCredential) -> PublicKeyCredential {

@@ -69,9 +69,11 @@ pub struct RelyingParty {
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    /// The user's id (commonly name) in base64 form.
+    /// The user's id in base64 form. This MUST be a unique id, and
+    /// must NOT contain personally identifying information, as this value can NEVER
+    /// be changed. If in doubt, use a UUID.
     pub id: Base64UrlSafeData,
-    /// The user's name.
+    /// The users preferred name for display.
     pub name: String,
     /// The users preferred name for display.
     pub display_name: String,

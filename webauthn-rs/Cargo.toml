@@ -11,3 +11,4 @@ webauthn-rs-core = { path = "../webauthn-rs-core" }
 url = { version = "2", features = ["serde"] }
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
+uuid = { version = "1", features = ["v4", "serde"] }
