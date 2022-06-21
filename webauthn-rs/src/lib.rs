@@ -218,6 +218,9 @@ impl<'a> WebauthnBuilder<'a> {
 ///
 /// If possible, consider `start_passwordlesskey_registration` instead - it's probably what you
 /// want! But if not, and you really want a security key, you should use `start_securitykey_registration`
+///
+/// In the future we will also add "devicekey"'s which both identify and authenticate the user without
+/// need to enter a username or other identity information.
 #[derive(Debug)]
 pub struct Webauthn {
     core: WebauthnCore,
@@ -578,6 +581,23 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
     }
 
+    /*
+    // I think I want to seperate this to a seperate usernameless flow since we need to bring in
+    // the valid credential ID's for the registration in a different way?
+
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
+    /// attempt to identify user's unique id. This does NOT authenticate the user, it only retrieve the
+    /// unique_user_id if present so that you can then lookup the user's account in a usernameless-flow.
+    pub fn identify_passwordlesskey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        _state: &PasswordlessKeyAuthentication,
+    ) -> Option<Uuid> {
+        reg.get_user_unique_id()
+            .and_then(|b| Uuid::from_bytes().ok())
+    }
+    */
+
     /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
     /// complete the authentication of the user. This asserts that user verification must have been correctly
     /// performed allowing you to trust this as a MFA interfaction.
@@ -599,6 +619,8 @@ impl Webauthn {
     /// valid per the above check. If you wish
     /// you *may* use the content of the `AuthenticationResult` for extended validations (such as the
     /// user verification flag).
+    ///
+    /// In *some* cases, you *may* be able to identify the user by examinin
     pub fn finish_passwordlesskey_authentication(
         &self,
         reg: &PublicKeyCredential,
