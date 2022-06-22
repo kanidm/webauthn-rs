@@ -83,13 +83,14 @@ impl WebauthnActor {
         let (ccr, rs) = match reg_settings {
             RegisterWithType::PassKey => self
                 .swan
-                .start_passkey_registration(user_unique_id, &username, None)
+                .start_passkey_registration(user_unique_id, &username, &username, None)
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::PassKey(rs)))?,
             RegisterWithType::Passwordless(strict) => {
                 let att_ca: Option<_> = strict.into();
                 self.swan
                     .start_passwordlesskey_registration(
                         user_unique_id,
+                        &username,
                         &username,
                         None,
                         false,
@@ -101,7 +102,13 @@ impl WebauthnActor {
             }
             RegisterWithType::SecurityKey(strict) => self
                 .swan
-                .start_securitykey_registration(user_unique_id, &username, None, strict.into())
+                .start_securitykey_registration(
+                    user_unique_id,
+                    &username,
+                    &username,
+                    None,
+                    strict.into(),
+                )
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::SecurityKey(rs)))?,
         };
 
@@ -242,6 +249,7 @@ impl WebauthnActor {
 
         let (ccr, rs) = self.wan.generate_challenge_register_options(
             user_unique_id.as_bytes(),
+            &username,
             &username,
             attestation.unwrap_or(AttestationConveyancePreference::None),
             uv,

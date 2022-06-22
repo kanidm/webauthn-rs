@@ -13,6 +13,8 @@
 //!
 //! # Getting started
 //!
+//! In the simplest case where you just want a password replacement, you should use our passkey flow.
+//!
 //! ```
 //! use webauthn_rs::prelude::*;
 //!
@@ -24,19 +26,19 @@
 //! let webauthn = builder.build()
 //!     .expect("Invalid configuration");
 //!
-//! // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
+//! // Initiate a basic registration flow to enroll a cryptographic authenticator
 //! let (ccr, skr) = webauthn
-//!     .start_securitykey_registration(
+//!     .start_passkey_registration(
 //!         Uuid::new_v4(),
 //!         "claire",
-//!         None,
+//!         "Claire",
 //!         None,
 //!     )
 //!     .expect("Failed to start registration.");
 //! ```
 //!
-//! After this point you then need to use `finish_securitykey_registration`, followed by
-//! `start_securitykey_authentication` and `finish_securitykey_authentication`
+//! After this point you then need to use `finish_passkey_registration`, followed by
+//! `start_passkey_authentication` and `finish_passkey_authentication`
 //!
 
 #![deny(warnings)]
@@ -237,9 +239,14 @@ impl Webauthn {
     /// You *should* NOT pair this authentication with another factor. A pass key may opportunistically
     /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
     ///
-    /// `user_unique_id` and `user_display_name` *may* be stored in the authenticator, and presented to
-    /// the user during authentication in the future. This may allow the credential to identify
-    /// the user in the future.
+    /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
+    ///  identify the user during certain client side work flows.
+    ///
+    /// `user_name` and `user_display_name` *may* be stored in the authenticator. `user_name` is a
+    /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
+    /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
+    /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
+    /// present to allow client work flows to display human friendly identifiers.
     ///
     /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
     /// You *should* provide the list of credentials that are already registered to this user's account
@@ -269,6 +276,7 @@ impl Webauthn {
     ///     .start_passkey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
+    ///         "Claire",
     ///         None, // No other credentials are registered yet.
     ///     )
     ///     .expect("Failed to start registration.");
@@ -279,6 +287,7 @@ impl Webauthn {
     ///     .start_passkey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
+    ///         "Claire",
     ///         None, // No other credentials are registered yet.
     ///     )
     ///     .expect("Failed to start registration.");
@@ -286,6 +295,7 @@ impl Webauthn {
     pub fn start_passkey_registration(
         &self,
         user_unique_id: Uuid,
+        user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
     ) -> WebauthnResult<(CreationChallengeResponse, PassKeyRegistration)> {
@@ -300,6 +310,7 @@ impl Webauthn {
         self.core
             .generate_challenge_register_options(
                 user_unique_id.as_bytes(),
+                user_name,
                 user_display_name,
                 attestation,
                 policy,
@@ -400,9 +411,14 @@ impl Webauthn {
     ///
     /// You *must* have a recovery workflow in case all devices are lost or destroyed.
     ///
-    /// `user_unique_id` and `user_display_name` *may* be stored in the authenticator, and presented to
-    /// the user during authentication in the future. This may allow the credential to identify
-    /// the user in the future.
+    /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
+    ///  identify the user during certain client side work flows.
+    ///
+    /// `user_name` and `user_display_name` *may* be stored in the authenticator. `user_name` is a
+    /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
+    /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
+    /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
+    /// present to allow client work flows to display human friendly identifiers.
     ///
     /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
     /// You *should* provide the list of credentials that are already registered to this user's account
@@ -452,6 +468,7 @@ impl Webauthn {
     ///     .start_passwordlesskey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
+    ///         "Claire",
     ///         None,
     ///         true,
     ///         AttestationCaList::strict(),
@@ -467,6 +484,7 @@ impl Webauthn {
     ///     .start_passwordlesskey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
+    ///         "Claire",
     ///         None,
     ///         true,
     ///         AttestationCaList::strict(),
@@ -477,6 +495,7 @@ impl Webauthn {
     pub fn start_passwordlesskey_registration(
         &self,
         user_unique_id: Uuid,
+        user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
         attestation_anonymise: bool,
@@ -518,6 +537,7 @@ impl Webauthn {
         self.core
             .generate_challenge_register_options(
                 user_unique_id.as_bytes(),
+                user_name,
                 user_display_name,
                 attestation,
                 policy,
@@ -638,9 +658,14 @@ impl Webauthn {
     /// You *should* pair this authentication with another factor. A security key may opportunistically
     /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
     ///
-    /// `user_unique_id` and `user_display_name` *may* be stored in the authenticator, and presented to
-    /// the user during authentication in the future. This may allow the credential to identify
-    /// the user in the future.
+    /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
+    ///  identify the user during certain client side work flows.
+    ///
+    /// `user_name` and `user_display_name` *may* be stored in the authenticator. `user_name` is a
+    /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
+    /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
+    /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
+    /// present to allow client work flows to display human friendly identifiers.
     ///
     /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
     /// You *should* provide the list of credentials that are already registered to this user's account
@@ -677,6 +702,7 @@ impl Webauthn {
     ///     .start_securitykey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
+    ///         "Claire",
     ///         None,
     ///         None,
     ///     )
@@ -688,6 +714,7 @@ impl Webauthn {
     ///     .start_securitykey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
+    ///         "Claire",
     ///         None,
     ///         Some(AttestationCaList::strict()),
     ///     )
@@ -696,6 +723,7 @@ impl Webauthn {
     pub fn start_securitykey_registration(
         &self,
         user_unique_id: Uuid,
+        user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
         attestation_ca_list: Option<AttestationCaList>,
@@ -715,6 +743,7 @@ impl Webauthn {
         self.core
             .generate_challenge_register_options(
                 user_unique_id.as_bytes(),
+                user_name,
                 user_display_name,
                 attestation,
                 policy,

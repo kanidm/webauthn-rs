@@ -108,10 +108,11 @@ impl WebauthnCore {
     }
 
     /// Generate a new challenge for client registration.
-    /// Same as `generate_challenge_register_options` but default options
+    /// Same as `generate_challenge_register_options` but with simple, default options
     pub fn generate_challenge_register(
         &self,
         user_unique_id: &[u8],
+        user_name: &str,
         user_display_name: &str,
         user_verification_required: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
@@ -131,6 +132,7 @@ impl WebauthnCore {
 
         self.generate_challenge_register_options(
             user_unique_id,
+            user_name,
             user_display_name,
             attestation,
             policy,
@@ -156,6 +158,7 @@ impl WebauthnCore {
     pub fn generate_challenge_register_options(
         &self,
         user_unique_id: &[u8],
+        user_name: &str,
         user_display_name: &str,
         attestation: AttestationConveyancePreference,
         policy: Option<UserVerificationPolicy>,
@@ -173,7 +176,7 @@ impl WebauthnCore {
             warn!("UserVerificationPolicy::Discouraged_DO_NOT_USE is misleading! You should select Preferred or Required!");
         }
 
-        if user_unique_id.is_empty() || user_display_name.is_empty() {
+        if user_unique_id.is_empty() || user_display_name.is_empty() || user_name.is_empty() {
             return Err(WebauthnError::InvalidUsername);
         }
 
@@ -210,7 +213,7 @@ impl WebauthnCore {
                 },
                 user: User {
                     id: Base64UrlSafeData(user_id.clone()),
-                    name: user_display_name.to_string(),
+                    name: user_name.to_string(),
                     display_name: user_display_name.to_string(),
                 },
                 challenge: challenge.clone().into(),
@@ -895,7 +898,6 @@ impl WebauthnCore {
             },
         };
         let st = AuthenticationState {
-            // username: username.clone(),
             credentials: creds,
             policy,
             challenge: chal.into(),
@@ -2289,6 +2291,7 @@ mod tests {
 
     fn register_userid(
         user_unique_id: &[u8],
+        name: &str,
         display_name: &str,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let wan = Webauthn::new_unsafe_experts_only(
@@ -2302,20 +2305,24 @@ mod tests {
 
         let policy = true;
 
-        wan.generate_challenge_register(user_unique_id, display_name, policy)
+        wan.generate_challenge_register(user_unique_id, name, display_name, policy)
     }
 
     #[test]
     fn test_registration_userid_states() {
         assert!(matches!(
-            register_userid(&[], "an name"),
+            register_userid(&[], "an name", "an name"),
             Err(WebauthnError::InvalidUsername)
         ));
         assert!(matches!(
-            register_userid(&[0, 1, 2, 3], ""),
+            register_userid(&[0, 1, 2, 3], "an name", ""),
             Err(WebauthnError::InvalidUsername)
         ));
-        assert!(register_userid(&[0, 1, 2, 3], "fizzbuzz").is_ok());
+        assert!(matches!(
+            register_userid(&[0, 1, 2, 3], "", "an_name"),
+            Err(WebauthnError::InvalidUsername)
+        ));
+        assert!(register_userid(&[0, 1, 2, 3], "fizzbuzz", "an name").is_ok());
     }
 
     #[test]

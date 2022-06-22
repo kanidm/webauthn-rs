@@ -280,10 +280,10 @@ mod tests {
         let unique_id = [
             158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
         ];
-        let display_name = "william";
+        let name = "william";
 
         let (chal, reg_state) = wan
-            .generate_challenge_register(&unique_id, display_name, false)
+            .generate_challenge_register(&unique_id, name, name, false)
             .unwrap();
 
         println!("🍿 challenge -> {:x?}", chal);

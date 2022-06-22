@@ -137,6 +137,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
     let res = match request.state().webauthn.start_passkey_registration(
         user_unique_id,
         &username,
+        &username,
         exclude_credentials,
     ) {
         Ok((ccr, reg_state)) => {
