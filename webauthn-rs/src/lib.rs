@@ -601,23 +601,6 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
     }
 
-    /*
-    // I think I want to seperate this to a seperate usernameless flow since we need to bring in
-    // the valid credential ID's for the registration in a different way?
-
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
-    /// attempt to identify user's unique id. This does NOT authenticate the user, it only retrieve the
-    /// unique_user_id if present so that you can then lookup the user's account in a usernameless-flow.
-    pub fn identify_passwordlesskey_authentication(
-        &self,
-        reg: &PublicKeyCredential,
-        _state: &PasswordlessKeyAuthentication,
-    ) -> Option<Uuid> {
-        reg.get_user_unique_id()
-            .and_then(|b| Uuid::from_bytes().ok())
-    }
-    */
-
     /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
     /// complete the authentication of the user. This asserts that user verification must have been correctly
     /// performed allowing you to trust this as a MFA interfaction.
@@ -831,5 +814,59 @@ impl Webauthn {
         state: &SecurityKeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
+    }
+}
+
+#[cfg(feature = "resident_key_support")]
+impl Webauthn {
+    /// TODO
+    pub fn start_residentkey_registration(
+        &self,
+        user_unique_id: Uuid,
+        user_name: &str,
+        user_display_name: &str,
+        exclude_credentials: Option<Vec<CredentialID>>,
+        attestation_ca_list: AttestationCaList,
+        ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
+    ) -> WebauthnResult<(CreationChallengeResponse, ResidentKeyRegistration)> {
+        todo!();
+    }
+
+    /// TODO
+    pub fn finish_residentkey_registration(
+        &self,
+        reg: &RegisterPublicKeyCredential,
+        state: &ResidentKeyRegistration,
+    ) -> WebauthnResult<ResidentKey> {
+        todo!();
+    }
+
+    /// TODO
+    pub fn start_residentkey_authentication(
+        &self,
+    ) -> WebauthnResult<(RequestChallengeResponse, ResidentKeyAuthentication)> {
+        todo!();
+    }
+
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
+    /// attempt to identify user's unique id. This does NOT authenticate the user, it only retrieve the
+    /// unique_user_id if present so that you can then lookup the user's account in a usernameless-flow.
+    pub fn identify_residentkey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        _state: &ResidentKeyAuthentication,
+    ) -> Option<Uuid> {
+        reg.get_user_unique_id()
+            .and_then(|b| Uuid::from_bytes().ok())
+    }
+
+    /// TODO
+    pub fn finish_passwordlesskey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        state: &ResidentKeyAuthentication,
+        creds: &[ResidentKey],
+    ) -> WebauthnResult<AuthenticationResult> {
+        todo!();
     }
 }

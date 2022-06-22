@@ -25,6 +25,31 @@ pub struct PublicKeyCredentialRequestOptions {
     pub extensions: Option<RequestAuthenticationExtensions>,
 }
 
+/// Request in residentkey workflows that conditional mediation should be used
+/// in the UI, or not.
+#[derive(Debug, Serialize, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Mediation {
+    /// No mediation is provided
+    None,
+    /// Conditional UI is used. See https://github.com/w3c/webauthn/wiki/Explainer:-WebAuthn-Conditional-UI
+    Conditional,
+}
+
+impl Default for Mediation {
+    /// Return the default value of None
+    fn default() -> Self {
+        Mediation::None
+    }
+}
+
+impl Mediation {
+    /// Test if the mediation is set to None.
+    pub fn is_none(m: &Mediation) -> bool {
+        matches!(m, Mediation::None)
+    }
+}
+
 /// A JSON serializable challenge which is issued to the user's webbrowser
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
@@ -34,6 +59,9 @@ pub struct PublicKeyCredentialRequestOptions {
 pub struct RequestChallengeResponse {
     /// The options.
     pub public_key: PublicKeyCredentialRequestOptions,
+    #[serde(skip_serializing_if = "Mediation::is_none")]
+    /// The mediation requested
+    pub mediation: Mediation,
 }
 
 #[cfg(feature = "wasm")]
