@@ -20,8 +20,9 @@ use openssl::x509;
 /// <https://www.w3.org/TR/webauthn/#aaguid>
 pub type Aaguid = [u8; 16];
 
-/// The in progress state of a credential registration attempt. You must persist this associated
-/// to the UserID requesting the registration.
+/// The in progress state of a credential registration attempt. You must persist this in a server
+/// side location associated to the active session requesting the registration. This contains the
+/// user unique id which you can use to reference the user requesting the registration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistrationState {
     pub(crate) policy: UserVerificationPolicy,

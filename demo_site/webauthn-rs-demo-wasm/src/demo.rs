@@ -231,6 +231,7 @@ impl Demo {
 
     fn view_register(&self, ctx: &Context<Self>) -> Html {
         let last_username = self.last_username.clone();
+
         html! {
           <>
             <div class="form-description">
@@ -287,8 +288,9 @@ impl Demo {
                               <td>{ "Credential Type" }</td>
                               <td>
                                 <select class="form-select" id="credential_type">
-                                  <option selected=true value="sk">{ "Security Key" }</option>
+                                  <option selected=true value="pk">{ "PassKey" }</option>
                                   <option value="pl">{ "Passwordless" }</option>
+                                  <option value="sk">{ "Security Key" }</option>
                                 </select>
                               </td>
                             </tr>
@@ -430,7 +432,7 @@ impl Component for Demo {
         console::log!(format!("create").as_str());
         Demo {
             state: DemoState::Register,
-            reg_settings: RegisterWithType::SecurityKey(AttestationLevel::None),
+            reg_settings: RegisterWithType::PassKey,
             last_username: String::default(),
         }
     }
@@ -474,19 +476,18 @@ impl Component for Demo {
                         .and_then(|v| match v.as_str() {
                             "s" => Some(AttestationLevel::Strict),
                             "a" => Some(AttestationLevel::AnyKnown),
-                            // "dv" => Some(RegisterWithType::Device(attest_req)),
                             _ => None,
                         })
                         .unwrap_or(AttestationLevel::None);
 
                 let settings = utils::get_select_value_from_element_id("credential_type")
                     .and_then(|v| match v.as_str() {
+                        "pk" => Some(RegisterWithType::PassKey),
                         "sk" => Some(RegisterWithType::SecurityKey(attest_req)),
                         "pl" => Some(RegisterWithType::Passwordless(attest_req)),
-                        // "dv" => Some(RegisterWithType::Device(attest_req)),
                         _ => None,
                     })
-                    .unwrap_or(RegisterWithType::SecurityKey(attest_req));
+                    .unwrap_or(RegisterWithType::PassKey);
 
                 console::log!(format!("cred_type  -> {:?}", settings).as_str());
                 console::log!(format!("username   -> {:?}", username).as_str());

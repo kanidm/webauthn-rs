@@ -5,9 +5,13 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+resident_key_support = []
+
 [dependencies]
 base64urlsafedata = { path = "../base64urlsafedata" }
 webauthn-rs-core = { path = "../webauthn-rs-core" }
 url = { version = "2", features = ["serde"] }
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
+uuid = { version = "1", features = ["v4", "serde"] }

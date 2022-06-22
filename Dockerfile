@@ -1,7 +1,9 @@
 FROM opensuse/tumbleweed:latest AS ref_repo
 
+#	sed -i -E 's/https?:\/\/download.opensuse.org/http:\/\/dl.suse.blackhats.net.au:8080/g' /etc/zypp/repos.d/*.repo && \
+
 RUN zypper ar obs://devel:languages:rust devel:languages:rust && \
-	sed -i -E 's/https?:\/\/download.opensuse.org/http:\/\/dl.suse.blackhats.net.au:8080/g' /etc/zypp/repos.d/*.repo && \
+	sed -i -E 's/https?:\/\/download.opensuse.org/https:\/\/mirror.firstyear.id.au/g' /etc/zypp/repos.d/*.repo && \
 	zypper --gpg-auto-import-keys ref --force
 
 # // setup the builder pkgs

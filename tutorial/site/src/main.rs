@@ -23,6 +23,11 @@ extern crate tracing;
 // webauthn credentials. Remember, rp_id is derived from your URL origin, meaning
 // that it is your effective domain name.
 
+struct Data {
+    name_to_id: HashMap<String, Uuid>,
+    keys: HashMap<Uuid, Vec<PassKey>>,
+}
+
 #[derive(Clone)]
 struct AppState {
     // Webauthn has no mutable inner state, so Arc and read only is sufficent.
@@ -30,7 +35,7 @@ struct AppState {
     // lifetimes.
     webauthn: Arc<Webauthn>,
     // This needs mutability, so does require a mutex.
-    users: Arc<Mutex<HashMap<String, Vec<SecurityKey>>>>,
+    users: Arc<Mutex<Data>>,
 }
 
 impl AppState {
@@ -50,7 +55,10 @@ impl AppState {
         // Consume the builder and create our webauthn instance.
         let webauthn = Arc::new(builder.build().expect("Invalid configuration"));
 
-        let users = Arc::new(Mutex::new(HashMap::new()));
+        let users = Arc::new(Mutex::new(Data {
+            name_to_id: HashMap::new(),
+            keys: HashMap::new(),
+        }));
 
         AppState { webauthn, users }
     }
@@ -93,38 +101,49 @@ impl AppState {
 async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
     info!("Start register");
     // We get the username from the URL, but you could get this via form submission or
-    // some other process.
+    // some other process. In some parts of Webauthn, you could also use this as a "display name"
+    // instead of a username. Generally you should consider that the user *can* and *will* change
+    // their username at any time.
     let username: String = request.param("username")?.parse()?;
+
+    // Since a user's username could change at anytime, we need to bind to a unique id.
+    // We use uuid's for this purpose, and you should generate these randomly. If the
+    // username does exist and is found, we can match back to our unique id. This is
+    // important in authentication, where presented credentials may *only* provide
+    // the unique id, and not the username!
+    let user_unique_id = {
+        let users_guard = request.state().users.lock().await;
+        users_guard
+            .name_to_id
+            .get(&username)
+            .copied()
+            .unwrap_or_else(|| Uuid::new_v4())
+    };
 
     // Remove any previous registrations that may have occured from the session.
     let session = request.session_mut();
     session.remove("reg_state");
 
     // If the user has any other credentials, we exclude these here so they can't be duplicate registered.
+    // It also hints to the browser that only new credentials should be "blinked" for interaction.
     let exclude_credentials = {
         let users_guard = request.state().users.lock().await;
         users_guard
-            .get(&username)
+            .keys
+            .get(&user_unique_id)
             .map(|keys| keys.iter().map(|sk| sk.cred_id().clone()).collect())
     };
 
-    let user_display_name = None;
-    let attestation_ca_list = None;
-
-    let res = match request.state().webauthn.start_securitykey_registration(
+    let res = match request.state().webauthn.start_passkey_registration(
+        user_unique_id,
         &username,
-        user_display_name,
+        &username,
         exclude_credentials,
-        attestation_ca_list,
     ) {
         Ok((ccr, reg_state)) => {
             request
                 .session_mut()
-                .insert("reg_state", reg_state)
-                .expect("Failed to insert");
-            request
-                .session_mut()
-                .insert("username", username)
+                .insert("reg_state", (username, user_unique_id, reg_state))
                 .expect("Failed to insert");
             tide::Response::builder(tide::StatusCode::Ok)
                 .body(tide::Body::from_json(&ccr)?)
@@ -147,29 +166,27 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let session = request.session_mut();
 
-    let username: String = session
-        .get("username")
-        .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
-
-    let reg_state = session
+    let (username, user_unique_id, reg_state): (String, Uuid, PassKeyRegistration) = session
         .get("reg_state")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
-    session.remove("username");
     session.remove("reg_state");
 
     let res = match request
         .state()
         .webauthn
-        .finish_securitykey_registration(&reg, &reg_state)
+        .finish_passkey_registration(&reg, &reg_state)
     {
         Ok(sk) => {
             let mut users_guard = request.state().users.lock().await;
 
             users_guard
-                .entry(username.clone())
+                .keys
+                .entry(user_unique_id)
                 .and_modify(|keys| keys.push(sk.clone()))
                 .or_insert(vec![sk.clone()]);
+
+            users_guard.name_to_id.insert(username, user_unique_id);
 
             tide::Response::builder(tide::StatusCode::Ok).build()
         }
@@ -223,14 +240,23 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
 
     // Get the set of keys that the user possesses
     let users_guard = request.state().users.lock().await;
-    let allow_credentials = users_guard
+
+    // Look up their unique id from the username
+    let user_unique_id = users_guard
+        .name_to_id
         .get(&username)
+        .copied()
+        .ok_or_else(|| tide::Error::new(400u16, anyhow::Error::msg("User not found")))?;
+
+    let allow_credentials = users_guard
+        .keys
+        .get(&user_unique_id)
         .ok_or_else(|| tide::Error::new(400u16, anyhow::Error::msg("User has no credentials")))?;
 
     let res = match request
         .state()
         .webauthn
-        .start_securitykey_authentication(allow_credentials)
+        .start_passkey_authentication(allow_credentials)
     {
         Ok((rcr, auth_state)) => {
             // Drop the mutex to allow the mut borrows below to proceed
@@ -238,11 +264,7 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
 
             request
                 .session_mut()
-                .insert("auth_state", auth_state)
-                .expect("Failed to insert");
-            request
-                .session_mut()
-                .insert("username", username)
+                .insert("auth_state", (user_unique_id, auth_state))
                 .expect("Failed to insert");
             tide::Response::builder(tide::StatusCode::Ok)
                 .body(tide::Body::from_json(&rcr)?)
@@ -266,21 +288,16 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
 
     let session = request.session_mut();
 
-    let username: String = session
-        .get("username")
-        .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
-
-    let auth_state = session
+    let (user_unique_id, auth_state): (Uuid, PassKeyAuthentication) = session
         .get("auth_state")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
-    session.remove("username");
     session.remove("auth_state");
 
     let res = match request
         .state()
         .webauthn
-        .finish_securitykey_authentication(&auth, &auth_state)
+        .finish_passkey_authentication(&auth, &auth_state)
     {
         Ok(auth_result) => {
             let mut users_guard = request.state().users.lock().await;
@@ -288,7 +305,8 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
             // Update the credential counter, if possible.
 
             users_guard
-                .get_mut(&username)
+                .keys
+                .get_mut(&user_unique_id)
                 .map(|keys| {
                     keys.iter_mut().for_each(|sk| {
                         if sk.cred_id() == &auth_result.cred_id {

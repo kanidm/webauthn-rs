@@ -108,10 +108,12 @@ impl WebauthnCore {
     }
 
     /// Generate a new challenge for client registration.
-    /// Same as `generate_challenge_register_options` but default options
+    /// Same as `generate_challenge_register_options` but with simple, default options
     pub fn generate_challenge_register(
         &self,
+        user_unique_id: &[u8],
         user_name: &str,
+        user_display_name: &str,
         user_verification_required: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let policy = if user_verification_required {
@@ -129,8 +131,9 @@ impl WebauthnCore {
         let authenticator_attachment = None;
 
         self.generate_challenge_register_options(
-            user_name.to_string(),
-            user_name.to_string(),
+            user_unique_id,
+            user_name,
+            user_display_name,
             attestation,
             policy,
             exclude_credentials,
@@ -154,8 +157,9 @@ impl WebauthnCore {
     /// UserId of the requester.
     pub fn generate_challenge_register_options(
         &self,
-        user_name: String,
-        user_display_name: String,
+        user_unique_id: &[u8],
+        user_name: &str,
+        user_display_name: &str,
         attestation: AttestationConveyancePreference,
         policy: Option<UserVerificationPolicy>,
         exclude_credentials: Option<Vec<CredentialID>>,
@@ -172,11 +176,11 @@ impl WebauthnCore {
             warn!("UserVerificationPolicy::Discouraged_DO_NOT_USE is misleading! You should select Preferred or Required!");
         }
 
-        let user_id: UserId = user_name.as_bytes().to_vec();
-
-        if user_id.is_empty() {
+        if user_unique_id.is_empty() || user_display_name.is_empty() || user_name.is_empty() {
             return Err(WebauthnError::InvalidUsername);
         }
+
+        let user_id: UserId = user_unique_id.to_vec();
 
         // Setup our extensions.
         // unimplemented!();
@@ -208,9 +212,9 @@ impl WebauthnCore {
                     id: self.rp_id.clone(),
                 },
                 user: User {
-                    id: Base64UrlSafeData(user_id),
-                    name: user_name,
-                    display_name: user_display_name,
+                    id: Base64UrlSafeData(user_id.clone()),
+                    name: user_name.to_string(),
+                    display_name: user_display_name.to_string(),
                 },
                 challenge: challenge.clone().into(),
                 pub_key_cred_params: credential_algorithms
@@ -892,9 +896,9 @@ impl WebauthnCore {
                 user_verification: policy,
                 extensions,
             },
+            mediation: Mediation::None,
         };
         let st = AuthenticationState {
-            // username: username.clone(),
             credentials: creds,
             policy,
             challenge: chal.into(),
@@ -2287,7 +2291,9 @@ mod tests {
     }
 
     fn register_userid(
-        user_name: &str,
+        user_unique_id: &[u8],
+        name: &str,
+        display_name: &str,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
@@ -2300,19 +2306,24 @@ mod tests {
 
         let policy = true;
 
-        wan.generate_challenge_register(user_name, policy)
+        wan.generate_challenge_register(user_unique_id, name, display_name, policy)
     }
 
     #[test]
-    fn test_registration_empty_userid() {
-        let result = register_userid("");
-        assert!(matches!(result, Err(WebauthnError::InvalidUsername)));
-    }
-
-    #[test]
-    fn test_registration_nonempty_userid() {
-        let result = register_userid("fizzbuzz");
-        assert!(result.is_ok());
+    fn test_registration_userid_states() {
+        assert!(matches!(
+            register_userid(&[], "an name", "an name"),
+            Err(WebauthnError::InvalidUsername)
+        ));
+        assert!(matches!(
+            register_userid(&[0, 1, 2, 3], "an name", ""),
+            Err(WebauthnError::InvalidUsername)
+        ));
+        assert!(matches!(
+            register_userid(&[0, 1, 2, 3], "", "an_name"),
+            Err(WebauthnError::InvalidUsername)
+        ));
+        assert!(register_userid(&[0, 1, 2, 3], "fizzbuzz", "an name").is_ok());
     }
 
     #[test]

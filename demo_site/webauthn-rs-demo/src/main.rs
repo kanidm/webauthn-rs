@@ -11,8 +11,8 @@ use structopt::StructOpt;
 
 use rand::prelude::*;
 
+use webauthn_rs::prelude::Uuid;
 use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKeyCredential};
-
 use webauthn_rs_demo_shared::*;
 
 mod actors;
@@ -100,7 +100,7 @@ async fn demo_start_register(mut request: tide::Request<AppState>) -> tide::Resu
 
     let actor_res = request
         .state()
-        .demo_start_register(username, reg_settings)
+        .demo_start_register(Uuid::new_v4(), username, reg_settings)
         .await;
 
     let res = match actor_res {
