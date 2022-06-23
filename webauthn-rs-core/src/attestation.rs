@@ -382,7 +382,7 @@ pub(crate) fn verify_packed_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-) -> Result<ParsedAttestationData, WebauthnError> {
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
 
@@ -469,7 +469,10 @@ pub(crate) fn verify_packed_attestation(
             // If successful, return implementation-specific values representing attestation type
             // Basic, AttCA or uncertainty, and attestation trust path x5c.
 
-            Ok(ParsedAttestationData::Basic(arr_x509))
+            Ok((
+                ParsedAttestationData::Basic(arr_x509),
+                AttestationMetadata::Packed { aaguid: acd.aaguid },
+            ))
         }
         (None, Some(_ecdaa_key_id)) => {
             // 3. If ecdaaKeyId is present, then the attestation type is ECDAA.
@@ -502,7 +505,7 @@ pub(crate) fn verify_packed_attestation(
             }
 
             // 4.c. If successful, return implementation-specific values representing attestation type Self and an empty attestation trust path.
-            Ok(ParsedAttestationData::Self_)
+            Ok((ParsedAttestationData::Self_, AttestationMetadata::None))
         }
     }
 }
@@ -609,7 +612,7 @@ pub(crate) fn verify_tpm_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-) -> Result<ParsedAttestationData, WebauthnError> {
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
     debug!("begin verify_tpm_attest");
 
     let att_stmt = &att_obj.att_stmt;
@@ -837,14 +840,17 @@ pub(crate) fn verify_tpm_attestation(
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
-    Ok(ParsedAttestationData::AttCa(arr_x509))
+    Ok((
+        ParsedAttestationData::AttCa(arr_x509),
+        AttestationMetadata::None,
+    ))
 }
 
 pub(crate) fn verify_apple_anonymous_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
     client_data_hash: &[u8],
-) -> Result<ParsedAttestationData, WebauthnError> {
+) -> Result<(ParsedAttestationData, AttestationMetadata), WebauthnError> {
     let att_stmt = &att_obj.att_stmt;
     let auth_data_bytes = &att_obj.auth_data_bytes;
 
@@ -902,7 +908,10 @@ pub(crate) fn verify_apple_anonymous_attestation(
     }
 
     // 6. If successful, return implementation-specific values representing attestation type Anonymous CA and attestation trust path x5c.
-    Ok(ParsedAttestationData::AnonCa(arr_x509))
+    Ok((
+        ParsedAttestationData::AnonCa(arr_x509),
+        AttestationMetadata::None,
+    ))
 }
 
 /// https://www.w3.org/TR/webauthn-3/#sctn-android-key-attestation

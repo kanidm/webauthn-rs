@@ -1,9 +1,10 @@
-#![deny(warnings)]
+// #![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![recursion_limit = "512"]
 use wasm_bindgen::prelude::*;
 
 mod compat;
+mod condui;
 mod demo;
 mod error;
 mod manager;

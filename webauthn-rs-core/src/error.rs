@@ -249,8 +249,11 @@ pub enum WebauthnError {
     #[error("Inconsistent Credential Verification and User Verification Policy")]
     InconsistentUserVerificationPolicy,
 
-    #[error("Invalid UserID supplied for registration")]
+    #[error("Invalid User Name supplied for registration")]
     InvalidUsername,
+
+    #[error("Invalid UserID supplied during authentication")]
+    InvalidUserUniqueId,
 
     #[error("Supplied Nid does not correspond to a supported ECDSA curve")]
     ECDSACurveInvalidNid,
@@ -262,6 +265,9 @@ pub enum WebauthnError {
         "The credential was created in a cross-origin context (while cross-origin was disallowed)"
     )]
     CredentialCrossOrigin,
+
+    #[error("The attestation ca list can not be empty")]
+    MissingAttestationCaList,
 }
 
 impl PartialEq for WebauthnError {

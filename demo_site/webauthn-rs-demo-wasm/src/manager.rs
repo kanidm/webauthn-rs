@@ -3,6 +3,7 @@ use yew::functional::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
+use crate::condui::ConduiTest;
 use crate::compat::CompatTest;
 use crate::demo::Demo;
 // use crate::uv::UvInconsistent;
@@ -16,8 +17,9 @@ pub enum Route {
     #[at("/compat_test")]
     CompatTest,
 
-    // #[at("/uv_inconsistent")]
-    // UvInconsistent,
+    #[at("/condui_test")]
+    ConditionalUiTest,
+
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -62,6 +64,15 @@ fn nav() -> Html {
                 </li>
                 <li class="nav-item">
                   <Link<Route> classes={
+                    if matches!(cur_route, Some(Route::ConditionalUiTest)) {
+                        classes!("nav-link", "active")
+                    } else {
+                        classes!("nav-link")
+                    }
+                  } to={ Route::ConditionalUiTest }>{ "Conditional Ui Test" }</Link<Route>>
+                </li>
+                <li class="nav-item">
+                  <Link<Route> classes={
                     if matches!(cur_route, Some(Route::CompatTest)) {
                         classes!("nav-link", "active")
                     } else {
@@ -81,6 +92,7 @@ fn switch(routes: &Route) -> Html {
     match routes {
         Route::Demo => html! { <Demo /> },
         Route::CompatTest => html! { <CompatTest /> },
+        Route::ConditionalUiTest => html! { <ConduiTest /> },
         // Route::UvInconsistent => html! { <UvInconsistent /> },
         Route::NotFound => {
             html! {

@@ -338,6 +338,15 @@ impl WebauthnCore {
         req_extn: &RequestRegistrationExtensions,
         experimental_allow_passkeys: bool,
     ) -> Result<Credential, WebauthnError> {
+        // Internal management - if the attestation ca list is some, but is empty, we need to fail!
+        if attestation_cas
+            .as_ref()
+            .map(|l| l.is_empty())
+            .unwrap_or(false)
+        {
+            return Err(WebauthnError::MissingAttestationCaList);
+        }
+
         // ======================================================================
         // References:
         // Level 2: https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential
@@ -484,6 +493,7 @@ impl WebauthnCore {
 
         // Now, match based on the attest_format
         debug!("attestation is: {:?}", &attest_format);
+        debug!("attested credential data is: {:?}", &acd);
 
         let opt_req_extn: Option<&RequestRegistrationExtensions> = match attest_format {
             AttestationFormat::Packed
@@ -497,22 +507,20 @@ impl WebauthnCore {
                 verify_fidou2f_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
                 AttestationMetadata::None,
             ),
-            AttestationFormat::Packed => (
-                verify_packed_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
-                AttestationMetadata::None,
-            ),
-            AttestationFormat::Tpm => (
-                verify_tpm_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
-                AttestationMetadata::None,
-            ),
-            AttestationFormat::AppleAnonymous => (
-                verify_apple_anonymous_attestation(
-                    acd,
-                    &data.attestation_object,
-                    &client_data_json_hash,
-                )?,
-                AttestationMetadata::None,
-            ),
+            AttestationFormat::Packed => {
+                verify_packed_attestation(acd, &data.attestation_object, &client_data_json_hash)?
+            }
+            // AttestationMetadata::None,
+            AttestationFormat::Tpm => {
+                verify_tpm_attestation(acd, &data.attestation_object, &client_data_json_hash)?
+            }
+            // AttestationMetadata::None,
+            AttestationFormat::AppleAnonymous => verify_apple_anonymous_attestation(
+                acd,
+                &data.attestation_object,
+                &client_data_json_hash,
+            )?,
+            // AttestationMetadata::None,
             AttestationFormat::AndroidKey => verify_android_key_attestation(
                 acd,
                 &data.attestation_object,
@@ -561,11 +569,19 @@ impl WebauthnCore {
         // the Relying Party SHOULD fail the registration ceremony.
 
         let attested_ca_crt = if let Some(ca_list) = attestation_cas {
-            verify_attestation_ca_chain(
+            // If given a set of ca's assert that our attestation actually matched one.
+            let ca_crt = verify_attestation_ca_chain(
                 &credential.attestation.data,
                 &ca_list,
                 danger_disable_certificate_time_checks,
-            )?
+            )?;
+
+            // It may seem odd to unwrap the option and make this not verified at this point,
+            // but in this case because we have the ca_list and none was the result (which happens)
+            // in some cases, we need to map that through. But we need verify_attesation_ca_chain
+            // to still return these option types due to re-attestation in the future.
+            let ca_crt = ca_crt.ok_or(WebauthnError::AttestationNotVerifiable)?;
+            Some(ca_crt)
         } else {
             None
         };
@@ -1802,6 +1818,51 @@ mod tests {
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
         };
+
+        // Assert this fails when the attestaion is missing.
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            Some(&AttestationCaList {
+                // This is what introduces the failure!
+                cas: Vec::with_capacity(0),
+            }),
+            false,
+            &RequestRegistrationExtensions::default(),
+            false,
+        );
+        trace!("{:?}", result);
+        assert!(matches!(
+            result,
+            Err(WebauthnError::MissingAttestationCaList)
+        ));
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            Some(&AttestationCaList {
+                cas: vec![
+                    AttestationCa::apple_webauthn_root_ca(),
+                    // Exclude the matching CA!
+                    // AttestationCa::yubico_u2f_root_ca_serial_457200631(),
+                    AttestationCa::microsoft_tpm_root_certificate_authority_2014(),
+                ],
+            }),
+            false,
+            &RequestRegistrationExtensions::default(),
+            false,
+        );
+        trace!("{:?}", result);
+        assert!(matches!(
+            result,
+            Err(WebauthnError::AttestationChainNotTrusted(_))
+        ));
 
         let result = wan.register_credential_internal(
             &rsp_d,
