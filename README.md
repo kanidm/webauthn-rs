@@ -19,7 +19,13 @@ example javascript and wasm bindings to demonstrate the browser interactions req
 Documentation
 -------------
 
-Our docs are available on [docs rs](https://docs.rs/webauthn-rs/latest/webauthn_rs/)
+This library consists of two major parts.
+
+A safe, use-case driven api, which is defined in [Webauthn-RS](https://docs.rs/webauthn-rs/)
+
+The low level, protocol level interactions which is defined in [Webauthn-Core-RS](https://docs.rs/webauthn-core-rs/)
+
+We strongly recommend you use the safe api, as webauthn has many sharp edges and ways to hold it wrong!
 
 Demonstration
 -------------
@@ -42,6 +48,7 @@ We have extensively tested a variety of keys and devices, not limited to:
 
 * Yubico 5c / 5ci / FIPS / Bio
 * TouchID / FaceID (iPhone, iPad, MacBook Pro)
+* Android
 * Windows Hello (TPM)
 * Softtokens
 
@@ -52,14 +59,16 @@ an issue so that we can resolve the issue!
 Known BROKEN Keys/Harwdare
 --------------------------
 
+### Broken
+
 * Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates,
   and ignores requested algorithms. Not resolved.
+* Windows Hello with Older TPMs - Often use RSA-SHA1 signatures over attestation which may allow credential compromise/falsification.
+
+### Fixed
+
 * Windows 10 / Windows 11 + Firefox 98 - When aaguid is meant
   to be 16 bytes of 0, it emits a single 0 byte. This should be resolved as of 2022-04-17
-* CTAP2.0/CTAP2.1 compliant devices - Incorrectly request UV on registration, but do not prompt for
-  it during authentication, leading to possible social engineering and UV bypass attacks
-* Windows Hello with TPM - Often use RSA-SHA1 signatures over attestation which may allow credential compromise/falsification
-
 * BUG in Safari, NOT Apple Passkeys (was: passkeys do not identify themself as a transferable credential, and should be considered to be floating.)
 
 Standards Compliance
@@ -74,13 +83,13 @@ to be standards complaint because:
 * We do not support all cryptographic primitive types (only limited to secure ones).
 * A large number of advertised features in webauthn do not function in the real world.
 
-This library has passed a security review performed by SUSE product security. Other security reviews
+This library has passed a security audit performed by SUSE product security. Other security reviews
 are welcome!
 
 Feedback
 --------
 
-The current design of the traits and configuration is open to feedback on how it
+The current design of the library is open to feedback on how it
 can be improved - please use this library and contact the project on what can be
 improved!
 

@@ -17,7 +17,7 @@ use webauthn_rs::prelude::{
 };
 
 use webauthn_rs::prelude::{
-    AttestationCaList, ResidentKey, ResidentKeyAuthentication, ResidentKeyRegistration,
+    AttestationCaList, DeviceKey, DeviceKeyAuthentication, DeviceKeyRegistration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -359,12 +359,12 @@ impl WebauthnActor {
         &self,
         user_unique_id: Uuid,
         username: String,
-    ) -> WebauthnResult<(CreationChallengeResponse, ResidentKeyRegistration)> {
+    ) -> WebauthnResult<(CreationChallengeResponse, DeviceKeyRegistration)> {
         // ) -> WebauthnResult<(CreationChallengeResponse, PassKeyRegistration)> {
         debug!("handle ChallengeRegister -> {:?}", username);
 
         let att_ca = AttestationCaList::strict();
-        let (ccr, rs) = self.swan.start_residentkey_registration(
+        let (ccr, rs) = self.swan.start_devicekey_registration(
             user_unique_id,
             &username,
             &username,
@@ -390,9 +390,9 @@ impl WebauthnActor {
     pub async fn condui_finish_register(
         &self,
         reg: &RegisterPublicKeyCredential,
-        rs: ResidentKeyRegistration,
+        rs: DeviceKeyRegistration,
         // rs: PassKeyRegistration,
-    ) -> WebauthnResult<ResidentKey> {
+    ) -> WebauthnResult<DeviceKey> {
         // ) -> WebauthnResult<PassKey> {
         debug!("handle Register -> (reg: {:?})", reg);
 
@@ -400,7 +400,7 @@ impl WebauthnActor {
         let r = self.swan
             .finish_passkey_registration(reg, &rs);
         */
-        let r = self.swan.finish_residentkey_registration(reg, &rs);
+        let r = self.swan.finish_devicekey_registration(reg, &rs);
 
         debug!("complete Register -> {:?}", r);
         r
@@ -408,11 +408,11 @@ impl WebauthnActor {
 
     pub async fn condui_start_login(
         &self,
-    ) -> WebauthnResult<(RequestChallengeResponse, ResidentKeyAuthentication)> {
+    ) -> WebauthnResult<(RequestChallengeResponse, DeviceKeyAuthentication)> {
         // ) -> WebauthnResult<(RequestChallengeResponse, PassKeyAuthentication)> {
         debug!("handle ChallengeAuthenticate");
 
-        let (acr, st) = self.swan.start_residentkey_authentication()?;
+        let (acr, st) = self.swan.start_devicekey_authentication()?;
         /*
         let (acr, st) = self.swan
             .start_discoverable_passkey_authentication()?;
@@ -424,16 +424,16 @@ impl WebauthnActor {
 
     pub async fn condui_finish_login(
         &self,
-        cred_map: &BTreeMap<Uuid, Vec<ResidentKey>>,
+        cred_map: &BTreeMap<Uuid, Vec<DeviceKey>>,
         // cred_map: &BTreeMap<Uuid, Vec<PassKey>>,
         lgn: &PublicKeyCredential,
-        st: ResidentKeyAuthentication,
+        st: DeviceKeyAuthentication,
         // st: PassKeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         debug!("handle Authenticate -> (lgn: {:?})", lgn);
 
         // Find the credentials
-        let unique_id = self.swan.identify_residentkey_authentication(lgn, &st)?;
+        let unique_id = self.swan.identify_devicekey_authentication(lgn, &st)?;
         // let unique_id = self.swan.identify_discoverable_passkey_authentication(lgn, &st)?;
 
         let creds = cred_map
@@ -442,7 +442,7 @@ impl WebauthnActor {
 
         let r =
             // self.swan.finish_discoverable_passkey_authentication(lgn, st, &creds);
-            self.swan.finish_residentkey_authentication(lgn, st, &creds);
+            self.swan.finish_devicekey_authentication(lgn, st, &creds);
 
         debug!("complete Authenticate -> {:?}", r);
         r

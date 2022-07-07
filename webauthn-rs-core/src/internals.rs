@@ -121,36 +121,34 @@ impl Credential {
         ck: COSEKey,
         registration_policy: UserVerificationPolicy,
         attestation: ParsedAttestation,
-        req_extn: Option<&RequestRegistrationExtensions>,
+        req_extn: &RequestRegistrationExtensions,
+        client_extn: &RegistrationExtensionsClientOutputs,
         attestation_format: AttestationFormat,
     ) -> Self {
-        let extensions = if let Some(req_extn) = req_extn {
-            let cred_protect = match (
-                auth_data.extensions.cred_protect.as_ref(),
-                req_extn.cred_protect.is_some(),
-            ) {
-                (Some(credprotect), false) => ExtnState::Unsolicited(credprotect.0),
-                (Some(credprotect), true) => ExtnState::Set(credprotect.0),
-                (None, true) => ExtnState::Ignored,
-                (None, false) => ExtnState::NotRequested,
-            };
 
-            let hmac_create_secret = match (
-                auth_data.extensions.hmac_secret.as_ref(),
-                req_extn.hmac_create_secret.is_some(),
-            ) {
-                (Some(hmac_create_secret), false) => ExtnState::Unsolicited(*hmac_create_secret),
-                (Some(hmac_create_secret), true) => ExtnState::Set(*hmac_create_secret),
-                (None, true) => ExtnState::Ignored,
-                (None, false) => ExtnState::NotRequested,
-            };
+        let cred_protect = match (
+            auth_data.extensions.cred_protect.as_ref(),
+            req_extn.cred_protect.is_some(),
+        ) {
+            (Some(credprotect), false) => ExtnState::Unsolicited(credprotect.0),
+            (Some(credprotect), true) => ExtnState::Set(credprotect.0),
+            (None, true) => ExtnState::Ignored,
+            (None, false) => ExtnState::NotRequested,
+        };
 
-            RegisteredExtensions {
-                cred_protect,
-                hmac_create_secret,
-            }
-        } else {
-            RegisteredExtensions::none()
+        let hmac_create_secret = match (
+            auth_data.extensions.hmac_secret.as_ref(),
+            req_extn.hmac_create_secret.is_some(),
+        ) {
+            (Some(hmac_create_secret), false) => ExtnState::Unsolicited(*hmac_create_secret),
+            (Some(hmac_create_secret), true) => ExtnState::Set(*hmac_create_secret),
+            (None, true) => ExtnState::Ignored,
+            (None, false) => ExtnState::NotRequested,
+        };
+
+        let extensions = RegisteredExtensions {
+            cred_protect,
+            hmac_create_secret,
         };
 
         trace!(?extensions);
