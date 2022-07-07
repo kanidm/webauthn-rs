@@ -1058,11 +1058,14 @@ pub(crate) fn verify_android_safetynet_attestation(
         .collect();
     let data_to_verify = sha256(&data_to_verify);
 
-    // 2. Verify that response is a valid SafetyNet response of version ver by following the steps indicated by the SafetyNet online documentation. As of this writing, there is only one format of the SafetyNet response and ver is reserved for future use.
-    #[derive(Debug, serde::Deserialize, serde::Serialize)]
+    // 2. Verify that response is a valid SafetyNet response of version ver by following the steps
+    // indicated by the SafetyNet online documentation. As of this writing, there is only one format
+    // of the SafetyNet response and ver is reserved for future use.
+    #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct SafteyNetAttestResponse {
         timestamp_ms: u64,
+        nonce: Base64UrlSafeData,
         apk_package_name: String,
         apk_certificate_digest_sha256: Vec<Base64UrlSafeData>,
         cts_profile_match: bool,
@@ -1076,8 +1079,8 @@ pub(crate) fn verify_android_safetynet_attestation(
     #[derive(Debug, thiserror::Error)]
     #[allow(missing_docs)]
     enum SafetyNetError {
-        #[error("JWT error: {0}")]
-        Jwt(#[from] jwt_simple::Error),
+        #[error("JWT error")]
+        Jwt(#[from] compact_jwt::JwtError),
 
         #[error("No cert in chain")]
         MissingCertChain,
@@ -1090,15 +1093,6 @@ pub(crate) fn verify_android_safetynet_attestation(
 
         #[error("openssl")]
         OpenSSL(#[from] openssl::error::ErrorStack),
-
-        #[error("unsupported jwt alg")]
-        BadAlg,
-
-        #[error("missing nonce")]
-        MissingNonce,
-
-        #[error("nonce invalid")]
-        BadNonce,
 
         #[error("nonce mismatch")]
         NonceMismatch,
@@ -1116,113 +1110,68 @@ pub(crate) fn verify_android_safetynet_attestation(
         Time(#[from] std::time::SystemTimeError),
     }
 
-    use jwt_simple::prelude::*;
+    let (x5c, safetynet_response) =
+        |token: &str| -> Result<(Vec<x509::X509>, SafteyNetAttestResponse), SafetyNetError> {
+            trace!(?token);
+            use std::str::FromStr;
+            let jwsu = compact_jwt::JwsUnverified::from_str(token)?;
 
-    let (x5c, safetynet_response) = |token: &str| -> Result<
-        (Vec<x509::X509>, SafteyNetAttestResponse),
-        SafetyNetError,
-    > {
-        trace!(?response_str);
-        // dbg!(&token);
-        let meta = jwt_simple::token::Token::decode_metadata(response_str)?;
+            let certs = jwsu
+                .get_x5c_chain()?
+                .ok_or(SafetyNetError::MissingCertChain)?;
 
-        let certs = meta
-            .certificate_chain()
-            .ok_or(SafetyNetError::MissingCertChain)?
-            .iter()
-            .map(|cert| {
-                let cert = base64::decode(cert)?;
-                x509::X509::from_der(&cert).map_err(|_| SafetyNetError::BadCert)
-            })
-            .collect::<Result<Vec<x509::X509>, SafetyNetError>>()?;
+            let leaf_cert = certs.iter().next().ok_or(SafetyNetError::BadCert)?;
 
-        let cert = certs.iter().next().ok_or(SafetyNetError::BadCert)?;
-        let public_key = cert.public_key()?;
+            // Verify with the internal certificate.
+            let jws: compact_jwt::Jws<SafteyNetAttestResponse> = jwsu.validate_embeded()?;
 
-        let opts = Some(VerificationOptions::default());
+            let verified_claims = jws.into_inner();
 
-        let verified_claims: jwt_simple::prelude::JWTClaims<SafteyNetAttestResponse> =
-            match public_key.id() {
-                openssl::pkey::Id::RSA => {
-                    let der = public_key.public_key_to_der()?;
-                    use openssl::nid::Nid;
+            // 3. Verify that the nonce attribute in the payload of response is identical to the Base64 encoding of the SHA-256 hash of the concatenation of authenticatorData and clientDataHash.
+            if verified_claims.nonce.0 != data_to_verify.to_vec() {
+                return Err(SafetyNetError::NonceMismatch);
+            }
 
-                    match (cert.signature_algorithm().object().nid(), meta.algorithm()) {
-                        (Nid::SHA256WITHRSAENCRYPTION, "RS256") => {
-                            RS256PublicKey::from_der(&der)?.verify_token(token, opts)?
-                        }
-                        (Nid::SHA384WITHRSAENCRYPTION, "RS384") => {
-                            RS384PublicKey::from_der(&der)?.verify_token(token, opts)?
-                        }
-                        (Nid::SHA512WITHRSAENCRYPTION, "RS512") => {
-                            RS512PublicKey::from_der(&der)?.verify_token(token, opts)?
-                        }
-                        _ => return Err(SafetyNetError::BadAlg),
-                    }
-                }
-                openssl::pkey::Id::EC => {
-                    let ec_key = public_key.ec_key()?;
-                    let mut ctxt = openssl::bn::BigNumContext::new()?;
-                    let raw = ec_key.public_key().to_bytes(
-                        ec_key.group(),
-                        openssl::ec::PointConversionForm::UNCOMPRESSED,
-                        &mut ctxt,
-                    )?;
-
-                    match meta.algorithm() {
-                        "ES256" => ES256PublicKey::from_bytes(&raw)?.verify_token(token, opts)?,
-                        _ => return Err(SafetyNetError::BadAlg),
-                    }
-                }
-                _ => return Err(SafetyNetError::BadAlg),
+            // 4. Verify that the SafetyNet response actually came from the SafetyNet service by following the steps in the SafetyNet online documentation.
+            let common_name = {
+                let name = leaf_cert
+                    .subject_name()
+                    .entries_by_nid(openssl::nid::Nid::COMMONNAME)
+                    .next()
+                    .ok_or(SafetyNetError::InvalidHostname)?;
+                name.data().as_utf8()?.to_string()
             };
 
-        // 3. Verify that the nonce attribute in the payload of response is identical to the Base64 encoding of the SHA-256 hash of the concatenation of authenticatorData and clientDataHash.
-        let nonce = verified_claims.nonce.ok_or(SafetyNetError::MissingNonce)?;
-        let nonce = base64::decode(&nonce).map_err(|_| SafetyNetError::BadNonce)?;
-        if nonce != data_to_verify.to_vec() {
-            return Err(SafetyNetError::NonceMismatch);
-        }
-
-        // 4. Verify that the SafetyNet response actually came from the SafetyNet service by following the steps in the SafetyNet online documentation.
-        let common_name = {
-            let name = cert
-                .subject_name()
-                .entries_by_nid(openssl::nid::Nid::COMMONNAME)
-                .next()
-                .ok_or(SafetyNetError::InvalidHostname)?;
-            name.data().as_utf8()?.to_string()
-        };
-
-        // §8.5.5 Verify that attestationCert is issued to the hostname "attest.android.com"
-        if common_name.as_str() != "attest.android.com" {
-            return Err(SafetyNetError::InvalidHostname);
-        }
-
-        // §8.5.6 Verify that the ctsProfileMatch attribute in the payload of response is true.
-        if !verified_claims.custom.cts_profile_match {
-            return Err(SafetyNetError::CtsProfileMatchFailed);
-        }
-
-        // Verify sanity of timestamp in the payload
-        if !danger_ignore_timestamp {
-            let expires: std::time::Duration = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)?
-                + std::time::Duration::from_secs(60);
-            if verified_claims.custom.timestamp_ms as u128 > expires.as_millis() {
-                return Err(SafetyNetError::Expired);
+            // §8.5.5 Verify that attestationCert is issued to the hostname "attest.android.com"
+            if common_name.as_str() != "attest.android.com" {
+                return Err(SafetyNetError::InvalidHostname);
             }
-        }
 
-        Ok((certs, verified_claims.custom))
-    }(response_str)
-    .map_err(|e| {
-        error!("jwt saftey-net error: {:?}", e);
-        WebauthnError::AttestationStatementResponseInvalid
-    })?;
+            // §8.5.6 Verify that the ctsProfileMatch attribute in the payload of response is true.
+            if !verified_claims.cts_profile_match {
+                return Err(SafetyNetError::CtsProfileMatchFailed);
+            }
+
+            // Verify sanity of timestamp in the payload
+            if !danger_ignore_timestamp {
+                let expires: std::time::Duration = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    + std::time::Duration::from_secs(60);
+                if verified_claims.timestamp_ms as u128 > expires.as_millis() {
+                    return Err(SafetyNetError::Expired);
+                }
+            }
+
+            Ok((certs, verified_claims))
+        }(response_str)
+        .map_err(|e| {
+            error!("jwt saftey-net error: {:?}", e);
+            WebauthnError::AttestationStatementResponseInvalid
+        })?;
 
     let SafteyNetAttestResponse {
         timestamp_ms: _,
+        nonce: _,
         apk_package_name,
         apk_certificate_digest_sha256,
         cts_profile_match,
