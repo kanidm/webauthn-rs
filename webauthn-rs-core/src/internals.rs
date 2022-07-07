@@ -125,7 +125,6 @@ impl Credential {
         client_extn: &RegistrationExtensionsClientOutputs,
         attestation_format: AttestationFormat,
     ) -> Self {
-
         let cred_protect = match (
             auth_data.extensions.cred_protect.as_ref(),
             req_extn.cred_protect.is_some(),
@@ -146,9 +145,32 @@ impl Credential {
             (None, false) => ExtnState::NotRequested,
         };
 
+        let appid = ExtnState::NotRequested;
+        /*
+        let appid = match (
+            client_extn.appid,
+            req_extn.appid.is_some()
+        ) {
+            (Some(b), _) => ExtnState::Unsigned(b),
+            (None, true) => ExtnState::Ignored,
+            (None, false) => ExtnState::NotRequested,
+        };
+        */
+
+        let cred_props = match (
+            client_extn.cred_props.as_ref(),
+            req_extn.cred_props.is_some(),
+        ) {
+            (Some(b), _) => ExtnState::Unsigned(b.clone()),
+            (None, true) => ExtnState::Ignored,
+            (None, false) => ExtnState::NotRequested,
+        };
+
         let extensions = RegisteredExtensions {
             cred_protect,
             hmac_create_secret,
+            appid,
+            cred_props,
         };
 
         trace!(?extensions);

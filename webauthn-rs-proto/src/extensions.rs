@@ -98,8 +98,8 @@ impl Default for RequestRegistrationExtensions {
         RequestRegistrationExtensions {
             cred_protect: None,
             cred_blob: None,
-            uvm: None,
-            cred_props: None,
+            uvm: Some(true),
+            cred_props: Some(true),
             min_pin_length: None,
             hmac_create_secret: None,
         }
@@ -185,10 +185,12 @@ pub struct RegistrationExtensionsClientOutputs {
     pub appid: Option<bool>,
 
     /// Indicates if the client used the provided cred_blob extensions.
+    #[serde(default)]
     pub cred_blob: Option<bool>,
 
     /// Indicates if the client believes it created a resident key. This
     /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
+    #[serde(default)]
     pub cred_props: Option<CredProps>,
 }
 
@@ -247,17 +249,37 @@ where
     Set(T),
     /// The extension was not requested, and the authenticator sent an unsolicited extension value.
     Unsolicited(T),
-    /// ⚠️  WARNING: The data in this extension is not signed cryptographically, and can not be trusted.
+    /// ⚠️  WARNING: The data in this extension is not signed cryptographically, and can not be
+    /// trusted for security assertions. It MAY be used for UI/UX hints.
     Unsigned(T),
+}
+
+impl<T> Default for ExtnState<T>
+where
+    T: Clone + std::fmt::Debug,
+{
+    fn default() -> Self {
+        ExtnState::NotRequested
+    }
 }
 
 /// The set of extensions that were registered by this credential.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RegisteredExtensions {
+    // ⚠️  It's critical we place serde default here so that we
+    // can deserialise in the future as we add new types!
     /// The state of the cred_protect extension
+    #[serde(default)]
     pub cred_protect: ExtnState<CredentialProtectionPolicy>,
     /// The state of the hmac-secret extension, if it was created
+    #[serde(default)]
     pub hmac_create_secret: ExtnState<bool>,
+    /// The state of the client appid extensions
+    #[serde(default)]
+    pub appid: ExtnState<bool>,
+    /// The state of the client credential properties extension
+    #[serde(default)]
+    pub cred_props: ExtnState<CredProps>,
 }
 
 impl RegisteredExtensions {
@@ -266,6 +288,8 @@ impl RegisteredExtensions {
         RegisteredExtensions {
             cred_protect: ExtnState::NotRequested,
             hmac_create_secret: ExtnState::NotRequested,
+            appid: ExtnState::NotRequested,
+            cred_props: ExtnState::NotRequested,
         }
     }
 }

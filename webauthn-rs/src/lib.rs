@@ -318,10 +318,10 @@ impl Webauthn {
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: None,
             cred_blob: None,
-            uvm: None,
+            uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: None,
-            hmac_create_secret: None
+            hmac_create_secret: None,
         });
 
         self.core
