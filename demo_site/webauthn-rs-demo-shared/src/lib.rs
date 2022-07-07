@@ -10,9 +10,9 @@ use webauthn_rs_core::proto::AttestationCaList;
 pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticationExtensions, AuthenticatorAttachment,
     COSEAlgorithm, CreationChallengeResponse, CredProtect, CredentialID,
-    CredentialProtectionPolicy, ExtnState, PublicKeyCredential, RegisterPublicKeyCredential,
-    RegisteredExtensions, RequestAuthenticationExtensions, RequestChallengeResponse,
-    RequestRegistrationExtensions, UserVerificationPolicy,
+    CredentialProtectionPolicy, ExtnState, Mediation, PublicKeyCredential,
+    RegisterPublicKeyCredential, RegisteredExtensions, RequestAuthenticationExtensions,
+    RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

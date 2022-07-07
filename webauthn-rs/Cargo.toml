@@ -3,10 +3,9 @@ name = "webauthn-rs"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [features]
 resident_key_support = []
+discoverable_passkey = []
 
 [dependencies]
 base64urlsafedata = { path = "../base64urlsafedata" }

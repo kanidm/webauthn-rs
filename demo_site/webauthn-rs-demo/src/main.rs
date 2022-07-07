@@ -12,6 +12,12 @@ use structopt::StructOpt;
 use rand::prelude::*;
 
 use webauthn_rs::prelude::Uuid;
+use webauthn_rs::prelude::{
+    ResidentKey,
+    ResidentKeyRegistration,
+    // PassKey,
+    // PassKeyRegistration,
+};
 use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKeyCredential};
 use webauthn_rs_demo_shared::*;
 
@@ -518,6 +524,167 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
     Ok(res)
 }
 
+async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Result {
+    let username: String = request.param("username")?.parse()?;
+
+    let session = request.session_mut();
+    session.remove("cu_rs");
+
+    // Setup the uuid to name map.
+    let mut uuid_map: BTreeMap<String, Uuid> =
+        session.get("cu_id_map").unwrap_or_else(|| BTreeMap::new());
+
+    let u = if let Some(u) = uuid_map.get(&username) {
+        *u
+    } else {
+        let u = Uuid::new_v4();
+        uuid_map.insert(username.clone(), u);
+        u
+    };
+
+    let actor_res = request.state().condui_start_register(u, username).await;
+
+    let res = match actor_res {
+        Ok((chal, rs)) => {
+            request
+                .session_mut()
+                .insert("cu_rs", (u, rs))
+                .expect("Failed to insert");
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&chal)?)
+                .build()
+        }
+        Err(e) => {
+            debug!("challenge_register -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+    Ok(res)
+}
+
+async fn condui_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
+    debug!("session - {:?}", request.session().get_raw("cu_cred_map"));
+    let session = request.session_mut();
+    let (u, rs): (Uuid, ResidentKeyRegistration) = match session.get("cu_rs") {
+        Some(v) => v,
+        None => {
+            error!("no reg session state");
+            return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::SessionStateInvalid)?)
+                .build());
+        }
+    };
+    session.remove("cu_rs");
+
+    let mut cred_map: BTreeMap<Uuid, Vec<ResidentKey>> = session
+        .get("cu_cred_map")
+        .unwrap_or_else(|| BTreeMap::new());
+
+    // Safe to remove, since we aren't mutating the session.
+    let mut creds = cred_map.remove(&u).unwrap_or_else(|| Vec::new());
+
+    let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
+
+    let actor_res = request.state().condui_finish_register(&reg, rs).await;
+    let res = match actor_res {
+        Ok(cred) => {
+            creds.push(cred.clone());
+            cred_map.insert(u, creds);
+            // Set the credmap back
+            request
+                .session_mut()
+                .insert("cu_cred_map", cred_map)
+                .expect("Failed to insert");
+            debug!(
+                "write session to cookie - {:?}",
+                request.session().get_raw("cu_cred_map")
+            );
+            tide::Response::builder(tide::StatusCode::Ok).build()
+        }
+        Err(e) => {
+            debug!("register -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+
+    debug!("session - {:?}", request.session().get_raw("cu_cred_map"));
+    Ok(res)
+}
+
+async fn condui_start_login(mut request: tide::Request<AppState>) -> tide::Result {
+    debug!("session - {:?}", request.session().get_raw("d_cred_map"));
+
+    let actor_res = request.state().condui_start_login().await;
+
+    let session = request.session_mut();
+    session.remove("cu_st");
+
+    let res = match actor_res {
+        Ok((chal, st)) => {
+            request
+                .session_mut()
+                .insert("cu_st", st)
+                .expect("Failed to insert");
+            debug!(
+                "Session - inserted auth state - {:?}",
+                request.session().get_raw("c_st")
+            );
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&chal)?)
+                .build()
+        }
+        Err(e) => {
+            debug!("challenge_login -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+    Ok(res)
+}
+
+async fn condui_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
+    let session = request.session_mut();
+
+    let st = match session.get("cu_st") {
+        Some(v) => v,
+        None => {
+            error!("no auth session state");
+            return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::SessionStateInvalid)?)
+                .build());
+        }
+    };
+    session.remove("cu_st");
+
+    let mut cred_map: BTreeMap<Uuid, Vec<ResidentKey>> = session
+        .get("cu_cred_map")
+        .unwrap_or_else(|| BTreeMap::new());
+
+    let lgn = request.body_json::<PublicKeyCredential>().await?;
+
+    let res = match request
+        .state()
+        .condui_finish_login(&mut cred_map, &lgn, st)
+        .await
+    {
+        // Normally we should update the counters here.
+        Ok(_auth_result) => tide::Response::builder(tide::StatusCode::Ok).build(),
+        Err(e) => {
+            debug!("login -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+
+    Ok(res)
+}
+
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     let opt: CmdOptions = CmdOptions::from_args();
@@ -576,6 +743,13 @@ async fn main() -> tide::Result<()> {
     app.at("/demo/login_start/:username").post(demo_start_login);
     app.at("/demo/login_finish/:username")
         .post(demo_finish_login);
+
+    app.at("/condui/register_start/:username")
+        .post(condui_start_register);
+    app.at("/condui/register_finish")
+        .post(condui_finish_register);
+    app.at("/condui/login_start").post(condui_start_login);
+    app.at("/condui/login_finish").post(condui_finish_login);
 
     app.at("/").get(index_view);
     app.at("/*").get(index_view);

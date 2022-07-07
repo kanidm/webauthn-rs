@@ -140,3 +140,50 @@ impl From<Credential> for SecurityKey {
         SecurityKey { cred }
     }
 }
+
+// PasswordlessKey
+
+/// An in progress registration session for a [ResidentKey].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResidentKeyRegistration {
+    pub(crate) rs: RegistrationState,
+    pub(crate) ca_list: AttestationCaList,
+}
+
+/// An in progress registration session for a [ResidentKey].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResidentKeyAuthentication {
+    pub(crate) ast: AuthenticationState,
+}
+
+/// A passwordless key for a user
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResidentKey {
+    pub(crate) cred: Credential,
+}
+
+impl ResidentKey {
+    /// Retrieve a reference to this Resident Key's credential ID.
+    pub fn cred_id(&self) -> &CredentialID {
+        &self.cred.cred_id
+    }
+
+    /// Retrieve the type of cryptographic algorithm used by this key
+    pub fn cred_algorithm(&self) -> &COSEAlgorithm {
+        &self.cred.cred.type_
+    }
+
+    /// Retrieve a reference to the attestation used during this [`Credential`]'s
+    /// registration. This can tell you information about the manufacterer and
+    /// what type of credential it is.
+    pub fn attestation(&self) -> &ParsedAttestationData {
+        &self.cred.attestation.data
+    }
+
+    /// Post authentication, update this credentials counter.
+    pub fn update_credential_counter(&mut self, counter: u32) {
+        if counter > self.cred.counter {
+            self.cred.counter = counter
+        }
+    }
+}

@@ -46,7 +46,10 @@ pub struct AuthenticationState {
 }
 
 impl AuthenticationState {
-    /// set which credentials the user is allowed to authenticate with
+    /// set which credentials the user is allowed to authenticate with. This
+    /// is used as part of resident key authentication flows where we need
+    /// to inject the set of viable credentials after the client has sent us
+    /// their public key credential and we identify the user.
     pub fn set_allowed_credentials(&mut self, credentials: Vec<Credential>) {
         self.credentials = credentials;
     }
@@ -225,13 +228,15 @@ pub struct Credential {
     pub backup_state: bool,
     /// During registration, the policy that was requested from this
     /// credential. This is used to understand if the how the verified
-    /// component interacts with the device, IE an always verified authenticator
+    /// component interacts with the device, i.e. an always verified authenticator
     /// vs one that can dynamically request it.
     pub registration_policy: UserVerificationPolicy,
     /// The set of registrations that were verified at registration, that can
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
-    /// The attestation certificate of this credential.
+
+    /// The attestation certificate of this credential, including parsed metadata from the
+    /// credential.
     pub attestation: ParsedAttestation,
     /// the format of the attestation
     pub attestation_format: AttestationFormat,
@@ -380,11 +385,18 @@ impl Default for ParsedAttestation {
     }
 }
 
-/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
+/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData. This
+/// metadata may allow identification of the device and it's specific properties.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttestationMetadata {
-    /// no metadata available
+    /// no metadata available for this device.
     None,
+    /// This is commonly found on Fido Authenticators.
+    Packed {
+        /// This is the unique id of the class/type of device. Often this id can imply the
+        /// properties of the device.
+        aaguid: Aaguid,
+    },
     /// various attestation flags set by the device (attested by OS)
     AndroidKey {
         /// is the key master running in a Trusted Execution Environment
@@ -587,6 +599,25 @@ pub struct AuthenticationResult {
     pub extensions: AuthenticationExtensions,
 }
 
+/*
+/// This are the properties of the device as derived through the attestation process. These properties
+/// are conservatively determined, based on available information and our ability to absolutely
+/// guarantee that these determinations are true and correct. We prefer to assume the lowest common
+/// denominator if we are unable to absolutely guarantee the property.
+pub struct DeviceProperties {
+    ///
+    // identity: DeviceIdentity,
+    ///
+    key_storage: KeyStorageClass,
+
+    transports: Option<Vec<AuthenticatorTransport>>,
+
+    user_verification_methods: Option<Vec<UserVerificationMethod>>,
+
+    ca: CaIdentity,
+}
+*/
+
 /// A serialised Attestation CA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialisableAttestationCa {
@@ -600,6 +631,9 @@ pub struct SerialisableAttestationCa {
 /// testing by the Webauthn-RS project.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum KeyStorageClass {
+    ///
+    Indeterminate,
+
     /// This credential may exist between multiple devices. This is commonly called a passkey
     /// and represents that the credential is not bound to any specific hardware and could be
     /// recovered through some third party mechanism.
@@ -610,19 +644,23 @@ pub enum KeyStorageClass {
     /// This credential is bound to a single hardware cryptographic device and may not be used
     /// without that specific hardware.
     ///
+    /// This credential is stored in an encrypted form inside the CredentialID. When the credentialID
+    /// is presented to the singular hardware device that owns the encryption key, it is able to then
+    /// use the contained private key.
+    ///
     /// This keystorage class is secure in the majority of use cases. In some extremely rare
     /// environments it may not be considered secure as an attacker who possesses the
     /// CredentialID could perform and offline bruteforce attack, but this is highly infeasible
-    /// as these credentials generally use aes128 which would take potentialy thousands of years
+    /// as these credentials generally use aes128 or better which would take potentialy thousands of years
     /// to bruteforce.
-    SingleDeviceWrappedKey,
+    SingleDeviceWrapped,
     /// This credential is bound to a single hardware cryptographic device, and never leaves
     /// that device. The CredentialID is just for lookup and association and has no relation to the
     /// private key (unlike a wrapped key).
     ///
     /// This keystorage class is the highest level of security, asserting that a credential resides
     /// only in a secure cryptographic processor.
-    ResidentKey,
+    Resident,
 }
 
 /// A structure representing an Attestation CA and other options associated to this CA.
@@ -684,7 +722,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).unwrap(),
             platform_only: true,
-            key_storage: KeyStorageClass::ResidentKey,
+            key_storage: KeyStorageClass::Resident,
             strict: true,
         }
     }
@@ -694,7 +732,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: true,
         }
     }
@@ -710,7 +748,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM).unwrap(),
             platform_only: true,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -723,7 +761,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -736,7 +774,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -746,7 +784,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -756,7 +794,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -766,7 +804,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -776,7 +814,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -786,7 +824,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -797,7 +835,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
             platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrappedKey,
+            key_storage: KeyStorageClass::SingleDeviceWrapped,
             strict: false,
         }
     }
@@ -810,6 +848,11 @@ pub struct AttestationCaList {
 }
 
 impl AttestationCaList {
+    /// Determine if this attestation list contains any members.
+    pub fn is_empty(&self) -> bool {
+        self.cas.is_empty()
+    }
+
     /// This is a list of CA's who's manufactured authenticators are of the highest
     /// quality and guarantees for users and RP's. These are devices that not only
     /// are secure, but user friendly, consistent, and correct.

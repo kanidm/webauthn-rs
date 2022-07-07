@@ -49,6 +49,7 @@
 extern crate tracing;
 
 mod interface;
+// mod trust;
 
 use url::Url;
 use uuid::Uuid;
@@ -513,26 +514,14 @@ impl Webauthn {
         let policy = Some(UserVerificationPolicy::Required);
         let reject_passkeys = true;
 
-        // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
-        // UVM
-        // If rk - credProps
-
-        // credProtect
-        let extensions = None;
-        /*
         let extensions = Some(RequestRegistrationExtensions {
-            cred_protect: Some(CredProtect {
-                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
-                // If set to true, causes many authenticators to shit the bed.
-                enforce_credential_protection_policy: Some(false),
-            }),
+            cred_protect: None,
             cred_blob: None,
             uvm: Some(true),
             cred_props: Some(true),
+            min_pin_length: Some(true),
+            hmac_create_secret: Some(true),
         });
-        */
-
-        // min pin
 
         self.core
             .generate_challenge_register_options(
@@ -591,7 +580,7 @@ impl Webauthn {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
         let extensions = Some(RequestAuthenticationExtensions {
-            get_cred_blob: Some(CredBlobGet(true)),
+            get_cred_blob: None,
             appid: None,
             uvm: Some(true),
         });
@@ -817,6 +806,44 @@ impl Webauthn {
     }
 }
 
+#[cfg(feature = "discoverable_passkey")]
+impl Webauthn {
+    /// WIP DO NOT USE
+    pub fn start_discoverable_passkey_authentication(
+        &self,
+    ) -> WebauthnResult<(RequestChallengeResponse, PassKeyAuthentication)> {
+        let extensions = None;
+        let creds = Vec::with_capacity(0);
+
+        self.core
+            .generate_challenge_authenticate_options(creds, extensions)
+            .map(|(rcr, ast)| (rcr, PassKeyAuthentication { ast }))
+    }
+
+    /// WIP DO NOT USE
+    pub fn identify_discoverable_passkey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        _state: &PassKeyAuthentication,
+    ) -> WebauthnResult<Uuid> {
+        reg.get_user_unique_id()
+            .and_then(|b| Uuid::from_slice(b).ok())
+            .ok_or(WebauthnError::InvalidUserUniqueId)
+    }
+
+    /// WIP DO NOT USE
+    pub fn finish_discoverable_passkey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        mut state: PassKeyAuthentication,
+        creds: &[PassKey],
+    ) -> WebauthnResult<AuthenticationResult> {
+        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+        state.ast.set_allowed_credentials(creds);
+        self.core.authenticate_credential(reg, &state.ast)
+    }
+}
+
 #[cfg(feature = "resident_key_support")]
 impl Webauthn {
     /// TODO
@@ -829,7 +856,63 @@ impl Webauthn {
         attestation_ca_list: AttestationCaList,
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
     ) -> WebauthnResult<(CreationChallengeResponse, ResidentKeyRegistration)> {
-        todo!();
+        if attestation_ca_list.is_empty() {
+            return Err(WebauthnError::MissingAttestationCaList);
+        }
+
+        let attestation = AttestationConveyancePreference::Direct;
+        let credential_algorithms = self.algorithms.clone();
+        let require_resident_key = true;
+        let policy = Some(UserVerificationPolicy::Required);
+        let reject_passkeys = true;
+
+        // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
+        // UVM
+        // If rk - credProps
+
+        // credProtect
+        let extensions = Some(RequestRegistrationExtensions {
+            cred_protect: Some(CredProtect {
+                // Since this will contain PII, we need to enforce this.
+                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                // If set to true, causes many authenticators to shit the bed. As a result,
+                // during the registration, we check if the aaguid is credProtect viable and
+                // then enforce it there.
+                enforce_credential_protection_policy: Some(false),
+            }),
+            cred_blob: None,
+            uvm: Some(true),
+            cred_props: Some(true),
+            min_pin_length: Some(true),
+            hmac_create_secret: None,
+        });
+
+        // https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-minpinlength-extension
+        // min pin
+
+        self.core
+            .generate_challenge_register_options(
+                user_unique_id.as_bytes(),
+                user_name,
+                user_display_name,
+                attestation,
+                policy,
+                exclude_credentials,
+                extensions,
+                credential_algorithms,
+                require_resident_key,
+                ui_hint_authenticator_attachment,
+                reject_passkeys,
+            )
+            .map(|(ccr, rs)| {
+                (
+                    ccr,
+                    ResidentKeyRegistration {
+                        rs,
+                        ca_list: attestation_ca_list,
+                    },
+                )
+            })
     }
 
     /// TODO
@@ -838,14 +921,35 @@ impl Webauthn {
         reg: &RegisterPublicKeyCredential,
         state: &ResidentKeyRegistration,
     ) -> WebauthnResult<ResidentKey> {
-        todo!();
+        let cred = self
+            .core
+            .register_credential(reg, &state.rs, Some(&state.ca_list))?;
+
+        trace!("finish residentkey -> {:?}", cred);
+
+        // cred protect ignored :(
+        // Is the pin long enough?
+        // We'll never know because lol.
+
+        // Is it an approvide cred / aaguid?
+
+        Ok(ResidentKey { cred })
     }
 
     /// TODO
     pub fn start_residentkey_authentication(
         &self,
     ) -> WebauthnResult<(RequestChallengeResponse, ResidentKeyAuthentication)> {
-        todo!();
+        let creds = Vec::with_capacity(0);
+        let extensions = Some(RequestAuthenticationExtensions {
+            get_cred_blob: None,
+            appid: None,
+            uvm: Some(true),
+        });
+
+        self.core
+            .generate_challenge_authenticate_options(creds, extensions)
+            .map(|(rcr, ast)| (rcr, ResidentKeyAuthentication { ast }))
     }
 
     /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
@@ -855,18 +959,21 @@ impl Webauthn {
         &self,
         reg: &PublicKeyCredential,
         _state: &ResidentKeyAuthentication,
-    ) -> Option<Uuid> {
+    ) -> WebauthnResult<Uuid> {
         reg.get_user_unique_id()
-            .and_then(|b| Uuid::from_bytes().ok())
+            .and_then(|b| Uuid::from_slice(b).ok())
+            .ok_or(WebauthnError::InvalidUserUniqueId)
     }
 
     /// TODO
-    pub fn finish_passwordlesskey_authentication(
+    pub fn finish_residentkey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        state: &ResidentKeyAuthentication,
+        mut state: ResidentKeyAuthentication,
         creds: &[ResidentKey],
     ) -> WebauthnResult<AuthenticationResult> {
-        todo!();
+        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+        state.ast.set_allowed_credentials(creds);
+        self.core.authenticate_credential(reg, &state.ast)
     }
 }
