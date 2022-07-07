@@ -1122,6 +1122,7 @@ pub(crate) fn verify_android_safetynet_attestation(
         (Vec<x509::X509>, SafteyNetAttestResponse),
         SafetyNetError,
     > {
+        trace!(?response_str);
         // dbg!(&token);
         let meta = jwt_simple::token::Token::decode_metadata(response_str)?;
 
