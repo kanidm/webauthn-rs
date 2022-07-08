@@ -40,6 +40,8 @@
 //! After this point you then need to use `finish_passkey_registration`, followed by
 //! `start_passkey_authentication` and `finish_passkey_authentication`
 //!
+//! No other authentication factors are needed!
+//!
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
@@ -208,22 +210,28 @@ impl<'a> WebauthnBuilder<'a> {
 /// authenticating credentials for users. Depending on your needs, you'll want to allow users
 /// to register and authenticate with different kinds of authenticators.
 ///
-/// *I just want something to replace passwords, and I don't have other requirements*
+/// *I just want to replace passwords with strong cryptographic authentication, and I don't have other requirements*
 ///
-/// --> You should use `start_securitykey_registration`
+/// --> You should use `start_passkey_registration`
 ///
 /// *I want to replace passwords with strong, multi-factor cryptographic authentication, limited to
-/// a known set of trusted authenticator types*
+/// a known set of controlled and trusted authenticator types*
 ///
 /// --> You should use `start_passwordlesskey_registration`
 ///
+/// *I want users to have their identites stored on their devices, and for them to authenticate with
+///  strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types*
+///
+/// NOTE: This authenticator type consumes resources of the users devices, and may result in failures,
+/// so you should only use it in tightly controlled environments where you supply devices to your
+/// users.
+///
+/// --> You should use `start_devicekey_registration`
+///
 /// *I want a security token along with a password to create multi-factor authentication*
 ///
-/// If possible, consider `start_passwordlesskey_registration` instead - it's probably what you
+/// If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration` instead - it's probably what you
 /// want! But if not, and you really want a security key, you should use `start_securitykey_registration`
-///
-/// In the future we will also add "devicekey"'s which both identify and authenticate the user without
-/// need to enter a username or other identity information.
 #[derive(Debug)]
 pub struct Webauthn {
     core: WebauthnCore,
@@ -301,12 +309,20 @@ impl Webauthn {
         exclude_credentials: Option<Vec<CredentialID>>,
     ) -> WebauthnResult<(CreationChallengeResponse, PassKeyRegistration)> {
         let attestation = AttestationConveyancePreference::None;
-        let extensions = None;
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
         let authenticator_attachment = None;
         let policy = Some(UserVerificationPolicy::Preferred);
         let reject_passkeys = false;
+
+        let extensions = Some(RequestRegistrationExtensions {
+            cred_protect: None,
+            cred_blob: None,
+            uvm: Some(true),
+            cred_props: Some(true),
+            min_pin_length: None,
+            hmac_create_secret: None,
+        });
 
         self.core
             .generate_challenge_register_options(
@@ -520,7 +536,7 @@ impl Webauthn {
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: Some(true),
-            hmac_create_secret: Some(true),
+            hmac_create_secret: None,
         });
 
         self.core
@@ -649,7 +665,7 @@ impl Webauthn {
     /// registered devices are manufactured by Yubico.
     ///
     /// Extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they can
-    /// NOT be trusted.
+    /// ARE NOT trusted.
     ///
     /// # Returns
     ///
@@ -847,7 +863,7 @@ impl Webauthn {
 #[cfg(feature = "resident_key_support")]
 impl Webauthn {
     /// TODO
-    pub fn start_residentkey_registration(
+    pub fn start_devicekey_registration(
         &self,
         user_unique_id: Uuid,
         user_name: &str,
@@ -855,7 +871,7 @@ impl Webauthn {
         exclude_credentials: Option<Vec<CredentialID>>,
         attestation_ca_list: AttestationCaList,
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
-    ) -> WebauthnResult<(CreationChallengeResponse, ResidentKeyRegistration)> {
+    ) -> WebauthnResult<(CreationChallengeResponse, DeviceKeyRegistration)> {
         if attestation_ca_list.is_empty() {
             return Err(WebauthnError::MissingAttestationCaList);
         }
@@ -907,7 +923,7 @@ impl Webauthn {
             .map(|(ccr, rs)| {
                 (
                     ccr,
-                    ResidentKeyRegistration {
+                    DeviceKeyRegistration {
                         rs,
                         ca_list: attestation_ca_list,
                     },
@@ -916,16 +932,16 @@ impl Webauthn {
     }
 
     /// TODO
-    pub fn finish_residentkey_registration(
+    pub fn finish_devicekey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: &ResidentKeyRegistration,
-    ) -> WebauthnResult<ResidentKey> {
+        state: &DeviceKeyRegistration,
+    ) -> WebauthnResult<DeviceKey> {
         let cred = self
             .core
             .register_credential(reg, &state.rs, Some(&state.ca_list))?;
 
-        trace!("finish residentkey -> {:?}", cred);
+        trace!("finish devicekey -> {:?}", cred);
 
         // cred protect ignored :(
         // Is the pin long enough?
@@ -933,13 +949,13 @@ impl Webauthn {
 
         // Is it an approvide cred / aaguid?
 
-        Ok(ResidentKey { cred })
+        Ok(DeviceKey { cred })
     }
 
     /// TODO
-    pub fn start_residentkey_authentication(
+    pub fn start_devicekey_authentication(
         &self,
-    ) -> WebauthnResult<(RequestChallengeResponse, ResidentKeyAuthentication)> {
+    ) -> WebauthnResult<(RequestChallengeResponse, DeviceKeyAuthentication)> {
         let creds = Vec::with_capacity(0);
         let extensions = Some(RequestAuthenticationExtensions {
             get_cred_blob: None,
@@ -949,16 +965,16 @@ impl Webauthn {
 
         self.core
             .generate_challenge_authenticate_options(creds, extensions)
-            .map(|(rcr, ast)| (rcr, ResidentKeyAuthentication { ast }))
+            .map(|(rcr, ast)| (rcr, DeviceKeyAuthentication { ast }))
     }
 
     /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
     /// attempt to identify user's unique id. This does NOT authenticate the user, it only retrieve the
     /// unique_user_id if present so that you can then lookup the user's account in a usernameless-flow.
-    pub fn identify_residentkey_authentication(
+    pub fn identify_devicekey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        _state: &ResidentKeyAuthentication,
+        _state: &DeviceKeyAuthentication,
     ) -> WebauthnResult<Uuid> {
         reg.get_user_unique_id()
             .and_then(|b| Uuid::from_slice(b).ok())
@@ -966,11 +982,11 @@ impl Webauthn {
     }
 
     /// TODO
-    pub fn finish_residentkey_authentication(
+    pub fn finish_devicekey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        mut state: ResidentKeyAuthentication,
-        creds: &[ResidentKey],
+        mut state: DeviceKeyAuthentication,
+        creds: &[DeviceKey],
     ) -> WebauthnResult<AuthenticationResult> {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         state.ast.set_allowed_credentials(creds);

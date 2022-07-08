@@ -495,13 +495,6 @@ impl WebauthnCore {
         debug!("attestation is: {:?}", &attest_format);
         debug!("attested credential data is: {:?}", &acd);
 
-        let opt_req_extn: Option<&RequestRegistrationExtensions> = match attest_format {
-            AttestationFormat::Packed
-            | AttestationFormat::Tpm
-            | AttestationFormat::AppleAnonymous => Some(req_extn),
-            _ => None,
-        };
-
         let (attestation_data, attestation_metadata) = match attest_format {
             AttestationFormat::FIDOU2F => (
                 verify_fidou2f_attestation(acd, &data.attestation_object, &client_data_json_hash)?,
@@ -544,7 +537,8 @@ impl WebauthnCore {
                 data: attestation_data,
                 metadata: attestation_metadata,
             },
-            opt_req_extn,
+            req_extn,
+            &reg.extensions,
             attest_format,
         );
 

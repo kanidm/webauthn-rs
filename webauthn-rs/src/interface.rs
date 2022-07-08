@@ -143,26 +143,26 @@ impl From<Credential> for SecurityKey {
 
 // PasswordlessKey
 
-/// An in progress registration session for a [ResidentKey].
+/// An in progress registration session for a [DeviceKey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResidentKeyRegistration {
+pub struct DeviceKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
 }
 
-/// An in progress registration session for a [ResidentKey].
+/// An in progress registration session for a [DeviceKey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResidentKeyAuthentication {
+pub struct DeviceKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
 /// A passwordless key for a user
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResidentKey {
+pub struct DeviceKey {
     pub(crate) cred: Credential,
 }
 
-impl ResidentKey {
+impl DeviceKey {
     /// Retrieve a reference to this Resident Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
         &self.cred.cred_id

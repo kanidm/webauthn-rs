@@ -13,8 +13,8 @@ use rand::prelude::*;
 
 use webauthn_rs::prelude::Uuid;
 use webauthn_rs::prelude::{
-    ResidentKey,
-    ResidentKeyRegistration,
+    DeviceKey,
+    DeviceKeyRegistration,
     // PassKey,
     // PassKeyRegistration,
 };
@@ -567,7 +567,7 @@ async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Re
 async fn condui_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
     debug!("session - {:?}", request.session().get_raw("cu_cred_map"));
     let session = request.session_mut();
-    let (u, rs): (Uuid, ResidentKeyRegistration) = match session.get("cu_rs") {
+    let (u, rs): (Uuid, DeviceKeyRegistration) = match session.get("cu_rs") {
         Some(v) => v,
         None => {
             error!("no reg session state");
@@ -578,7 +578,7 @@ async fn condui_finish_register(mut request: tide::Request<AppState>) -> tide::R
     };
     session.remove("cu_rs");
 
-    let mut cred_map: BTreeMap<Uuid, Vec<ResidentKey>> = session
+    let mut cred_map: BTreeMap<Uuid, Vec<DeviceKey>> = session
         .get("cu_cred_map")
         .unwrap_or_else(|| BTreeMap::new());
 
@@ -661,7 +661,7 @@ async fn condui_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
     };
     session.remove("cu_st");
 
-    let mut cred_map: BTreeMap<Uuid, Vec<ResidentKey>> = session
+    let mut cred_map: BTreeMap<Uuid, Vec<DeviceKey>> = session
         .get("cu_cred_map")
         .unwrap_or_else(|| BTreeMap::new());
 

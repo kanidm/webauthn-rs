@@ -234,7 +234,6 @@ pub struct Credential {
     /// The set of registrations that were verified at registration, that can
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
-
     /// The attestation certificate of this credential, including parsed metadata from the
     /// credential.
     pub attestation: ParsedAttestation,
