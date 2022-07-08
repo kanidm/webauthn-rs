@@ -1,11 +1,9 @@
 [package]
 name = "webauthn-rs-core"
-version = "0.4.0-dev"
+version = "0.4.1"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
-description = "Webauthn Framework for Rust Web Servers"
-# documentation = "..."
-# homepage = "..."
+description = "Webauthn Cryptographic Operation Handling"
 repository = "https://github.com/kanidm/webauthn-rs"
 readme = "../README.md"
 keywords = ["webauthn", "authentication"]
@@ -18,8 +16,8 @@ insecure_rs1 = []
 default = []
 
 [dependencies]
-base64urlsafedata = { path = "../base64urlsafedata" }
-webauthn-rs-proto = { path = "../webauthn-rs-proto" }
+base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
+webauthn-rs-proto = { version = "0.4.1-beta.1", path = "../webauthn-rs-proto" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
 serde_json = "1.0"

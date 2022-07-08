@@ -2,18 +2,23 @@
 
 [workspace]
 members = [
+    # Support Libraries
     "base64urlsafedata",
     "webauthn-rs-proto",
     "webauthn-rs-core",
+    # The actually library.
     "webauthn-rs",
-    "demo_site/webauthn-rs-demo",
-    "demo_site/webauthn-rs-demo-shared",
+    # Authenticator interactions
     "webauthn-authenticator-rs",
+    # Tutorial / Example sites.
     "tutorial/site",
-    "tutorial/wasm"
+    "tutorial/wasm",
+    # The compat tester
+    "compat_tester/webauthn-rs-demo",
+    "compat_tester/webauthn-rs-demo-shared",
 ]
 
 # Due to --cfg=web_sys_unstable_apis
 exclude = [
-    "demo_site/webauthn-rs-demo-wasm",
+    "compat_tester/webauthn-rs-demo-wasm",
 ]
