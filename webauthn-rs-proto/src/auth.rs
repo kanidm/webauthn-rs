@@ -163,6 +163,11 @@ impl PublicKeyCredential {
     pub fn get_user_unique_id(&self) -> Option<&[u8]> {
         self.response.user_handle.as_ref().map(|b| b.as_ref())
     }
+
+    /// Retrieve the credential id that was provided in this authentication
+    pub fn get_credential_id(&self) -> &[u8] {
+        self.raw_id.0.as_slice()
+    }
 }
 
 #[cfg(feature = "wasm")]

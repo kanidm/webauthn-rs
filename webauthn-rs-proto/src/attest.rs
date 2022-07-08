@@ -89,6 +89,10 @@ pub struct AuthenticatorAttestationResponseRaw {
     /// <https://w3c.github.io/webauthn/#dom-authenticatorresponse-clientdatajson>
     #[serde(rename = "clientDataJSON")]
     pub client_data_json: Base64UrlSafeData,
+
+    /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-gettransports
+    #[serde(default)]
+    pub transports: Option<Vec<AuthenticatorTransport>>,
 }
 
 /// A client response to a registration challenge. This contains all required
@@ -123,6 +127,7 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
         // is_user_verifying_platform_authenticator_available
 
         // AuthenticatorAttestationResponse has getTransports but web_sys isn't exposing it?
+        let transports = None;
 
         // First, we have to b64 some data here.
         // data.raw_id
@@ -149,12 +154,14 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
             Base64UrlSafeData(data_response_attestation_object);
 
         let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
+
         RegisterPublicKeyCredential {
             id: format!("{}", data_raw_id_b64),
             raw_id: data_raw_id_b64,
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: data_response_attestation_object_b64,
                 client_data_json: data_response_client_data_json_b64,
+                transports,
             },
             type_: "public-key".to_string(),
             extensions: data_extensions.into(),

@@ -119,6 +119,8 @@ pub enum AuthenticatorTransport {
     Ble,
     /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-internal>
     Internal,
+    // ///
+    // Hybrid
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
