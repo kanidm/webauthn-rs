@@ -17,7 +17,7 @@ use webauthn_rs::prelude::{
 };
 
 use webauthn_rs::prelude::{
-    AttestationCaList, DeviceKey, DeviceKeyAuthentication, DeviceKeyRegistration,
+    AttestationCaList, DeviceKey, DeviceKeyRegistration, DiscoverableAuthentication,
 };
 
 use serde::{Deserialize, Serialize};
@@ -98,9 +98,7 @@ impl WebauthnActor {
                         &username,
                         &username,
                         None,
-                        false,
                         att_ca.unwrap(),
-                        // Some(AuthenticatorAttachment::None),
                         None,
                     )
                     .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passwordless(rs)))?
@@ -113,6 +111,7 @@ impl WebauthnActor {
                     &username,
                     None,
                     strict.into(),
+                    None,
                 )
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::SecurityKey(rs)))?,
         };
@@ -408,11 +407,11 @@ impl WebauthnActor {
 
     pub async fn condui_start_login(
         &self,
-    ) -> WebauthnResult<(RequestChallengeResponse, DeviceKeyAuthentication)> {
+    ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
         // ) -> WebauthnResult<(RequestChallengeResponse, PassKeyAuthentication)> {
         debug!("handle ChallengeAuthenticate");
 
-        let (acr, st) = self.swan.start_devicekey_authentication()?;
+        let (acr, st) = self.swan.start_discoverable_authentication()?;
         /*
         let (acr, st) = self.swan
             .start_discoverable_passkey_authentication()?;
@@ -425,24 +424,24 @@ impl WebauthnActor {
     pub async fn condui_finish_login(
         &self,
         cred_map: &BTreeMap<Uuid, Vec<DeviceKey>>,
-        // cred_map: &BTreeMap<Uuid, Vec<PassKey>>,
         lgn: &PublicKeyCredential,
-        st: DeviceKeyAuthentication,
+        st: DiscoverableAuthentication,
         // st: PassKeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         debug!("handle Authenticate -> (lgn: {:?})", lgn);
 
         // Find the credentials
-        let unique_id = self.swan.identify_devicekey_authentication(lgn, &st)?;
-        // let unique_id = self.swan.identify_discoverable_passkey_authentication(lgn, &st)?;
+        let (unique_id, _) = self.swan.identify_discoverable_authentication(lgn)?;
 
         let creds = cred_map
             .get(&unique_id)
             .ok_or(WebauthnError::InvalidUserUniqueId)?;
 
-        let r =
-            // self.swan.finish_discoverable_passkey_authentication(lgn, st, &creds);
-            self.swan.finish_devicekey_authentication(lgn, st, &creds);
+        let creds: Vec<_> = creds.iter().map(|x| x.into()).collect();
+
+        let r = self
+            .swan
+            .finish_discoverable_authentication(lgn, st, &creds);
 
         debug!("complete Authenticate -> {:?}", r);
         r

@@ -20,6 +20,7 @@ use openssl::stack;
 use openssl::x509;
 use openssl::x509::store;
 use openssl::x509::verify;
+use uuid::Uuid;
 use x509_parser::oid_registry::Oid;
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
@@ -471,7 +472,9 @@ pub(crate) fn verify_packed_attestation(
 
             Ok((
                 ParsedAttestationData::Basic(arr_x509),
-                AttestationMetadata::Packed { aaguid: acd.aaguid },
+                AttestationMetadata::Packed {
+                    aaguid: Uuid::from_bytes(acd.aaguid),
+                },
             ))
         }
         (None, Some(_ecdaa_key_id)) => {

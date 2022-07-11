@@ -442,6 +442,7 @@ where
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(ao_bytes),
                 client_data_json: Base64UrlSafeData(client_data_json.as_bytes().to_vec()),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),

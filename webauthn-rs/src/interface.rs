@@ -187,3 +187,31 @@ impl DeviceKey {
         }
     }
 }
+
+/// An in progress registration session for a [DeviceKey].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverableAuthentication {
+    pub(crate) ast: AuthenticationState,
+}
+
+/// A key that can be used in discoverable workflows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverableKey {
+    pub(crate) cred: Credential,
+}
+
+impl From<&DeviceKey> for DiscoverableKey {
+    fn from(k: &DeviceKey) -> Self {
+        DiscoverableKey {
+            cred: k.cred.clone(),
+        }
+    }
+}
+
+impl From<&PassKey> for DiscoverableKey {
+    fn from(k: &PassKey) -> Self {
+        DiscoverableKey {
+            cred: k.cred.clone(),
+        }
+    }
+}
