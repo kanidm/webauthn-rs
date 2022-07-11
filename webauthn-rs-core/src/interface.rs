@@ -21,6 +21,9 @@ use uuid::Uuid;
 /// <https://www.w3.org/TR/webauthn/#aaguid>
 pub type Aaguid = [u8; 16];
 
+/// Representation of a credentials activation counter.
+pub type Counter = u32;
+
 /// The in progress state of a credential registration attempt. You must persist this in a server
 /// side location associated to the active session requesting the registration. This contains the
 /// user unique id which you can use to reference the user requesting the registration.
@@ -206,7 +209,7 @@ pub struct Credential {
     /// The public key of this credential
     pub cred: COSEKey,
     /// The counter for this credential
-    pub counter: u32,
+    pub counter: Counter,
     /// The set of transports this credential indicated it could use. This is NOT
     /// a security property, but a hint for the browser and the user experience to
     /// how to communicate to this specific device.
