@@ -25,7 +25,7 @@ extern crate tracing;
 
 struct Data {
     name_to_id: HashMap<String, Uuid>,
-    keys: HashMap<Uuid, Vec<PassKey>>,
+    keys: HashMap<Uuid, Vec<Passkey>>,
 }
 
 #[derive(Clone)]
@@ -166,7 +166,7 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let session = request.session_mut();
 
-    let (username, user_unique_id, reg_state): (String, Uuid, PassKeyRegistration) = session
+    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
         .get("reg_state")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 
@@ -288,7 +288,7 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
 
     let session = request.session_mut();
 
-    let (user_unique_id, auth_state): (Uuid, PassKeyAuthentication) = session
+    let (user_unique_id, auth_state): (Uuid, PasskeyAuthentication) = session
         .get("auth_state")
         .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
 

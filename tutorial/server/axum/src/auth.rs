@@ -118,7 +118,7 @@ pub async fn finish_register(
     Extension(mut session): Extension<Session>,
     Json(reg): Json<RegisterPublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
-    let (username, user_unique_id, reg_state): (String, Uuid, PassKeyRegistration) = session
+    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
         .get("reg_state")
         .ok_or(WebauthnError::CorruptSession)?; //Corrupt Session
 
@@ -238,7 +238,7 @@ pub async fn finish_authentication(
     Extension(mut session): Extension<Session>,
     Json(auth): Json<PublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
-    let (user_unique_id, auth_state): (Uuid, PassKeyAuthentication) = session
+    let (user_unique_id, auth_state): (Uuid, PasskeyAuthentication) = session
         .get("auth_state")
         .ok_or(WebauthnError::CorruptSession)?;
 

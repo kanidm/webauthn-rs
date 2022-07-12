@@ -15,7 +15,7 @@ use webauthn_rs::prelude::*;
 
 pub struct Data {
     pub name_to_id: HashMap<String, Uuid>,
-    pub keys: HashMap<Uuid, Vec<PassKey>>,
+    pub keys: HashMap<Uuid, Vec<Passkey>>,
 }
 
 #[derive(Clone)]

@@ -35,7 +35,7 @@ impl Into<Option<AttestationCaList>> for AttestationLevel {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum RegisterWithType {
-    PassKey,
+    Passkey,
     Passwordless(AttestationLevel),
     SecurityKey(AttestationLevel),
     // Device(bool),
@@ -43,7 +43,7 @@ pub enum RegisterWithType {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum AuthenticateWithType {
-    PassKey,
+    Passkey,
     Passwordless,
     SecurityKey,
     // Device
@@ -52,7 +52,7 @@ pub enum AuthenticateWithType {
 impl From<&RegisterWithType> for AuthenticateWithType {
     fn from(regsettings: &RegisterWithType) -> AuthenticateWithType {
         match regsettings {
-            RegisterWithType::PassKey => AuthenticateWithType::PassKey,
+            RegisterWithType::Passkey => AuthenticateWithType::Passkey,
             RegisterWithType::Passwordless(_) => AuthenticateWithType::Passwordless,
             RegisterWithType::SecurityKey(_) => AuthenticateWithType::SecurityKey,
         }

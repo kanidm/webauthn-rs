@@ -11,7 +11,7 @@ use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
 
 use webauthn_rs::prelude::{
-    PassKey, PassKeyAuthentication, PassKeyRegistration, PasswordlessKey,
+    Passkey, PasskeyAuthentication, PasskeyRegistration, PasswordlessKey,
     PasswordlessKeyAuthentication, PasswordlessKeyRegistration, SecurityKey,
     SecurityKeyAuthentication, SecurityKeyRegistration,
 };
@@ -25,21 +25,21 @@ use std::collections::BTreeMap;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum RegistrationTypedState {
-    PassKey(PassKeyRegistration),
+    Passkey(PasskeyRegistration),
     SecurityKey(SecurityKeyRegistration),
     Passwordless(PasswordlessKeyRegistration),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum AuthenticationTypedState {
-    PassKey(PassKeyAuthentication),
+    Passkey(PasskeyAuthentication),
     SecurityKey(SecurityKeyAuthentication),
     Passwordless(PasswordlessKeyAuthentication),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TypedCredential {
-    PassKey(PassKey),
+    Passkey(Passkey),
     SecurityKey(SecurityKey),
     Passwordless(PasswordlessKey),
 }
@@ -86,10 +86,10 @@ impl WebauthnActor {
         debug!("handle ChallengeRegister -> {:?}", username);
 
         let (ccr, rs) = match reg_settings {
-            RegisterWithType::PassKey => self
+            RegisterWithType::Passkey => self
                 .swan
                 .start_passkey_registration(user_unique_id, &username, &username, None)
-                .map(|(ccr, rs)| (ccr, RegistrationTypedState::PassKey(rs)))?,
+                .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passkey(rs)))?,
             RegisterWithType::Passwordless(strict) => {
                 let att_ca: Option<_> = strict.into();
                 self.swan
@@ -132,10 +132,10 @@ impl WebauthnActor {
         );
 
         let r = match rs {
-            RegistrationTypedState::PassKey(rs) => self
+            RegistrationTypedState::Passkey(rs) => self
                 .swan
                 .finish_passkey_registration(reg, &rs)
-                .map(|sk| TypedCredential::PassKey(sk)),
+                .map(|sk| TypedCredential::Passkey(sk)),
             RegistrationTypedState::Passwordless(rs) => self
                 .swan
                 .finish_passwordlesskey_registration(reg, &rs)
@@ -159,17 +159,17 @@ impl WebauthnActor {
         debug!("handle ChallengeAuthenticate -> {:?}", username);
 
         let (acr, st) = match auth_settings {
-            AuthenticateWithType::PassKey => {
+            AuthenticateWithType::Passkey => {
                 let creds: Vec<_> = creds
                     .iter()
                     .filter_map(|c| match c {
-                        TypedCredential::PassKey(sk) => Some(sk.clone()),
+                        TypedCredential::Passkey(sk) => Some(sk.clone()),
                         _ => None,
                     })
                     .collect();
                 self.swan
                     .start_passkey_authentication(&creds)
-                    .map(|(acr, ast)| (acr, AuthenticationTypedState::PassKey(ast)))?
+                    .map(|(acr, ast)| (acr, AuthenticationTypedState::Passkey(ast)))?
             }
             AuthenticateWithType::Passwordless => {
                 let creds: Vec<_> = creds
@@ -213,7 +213,7 @@ impl WebauthnActor {
         );
 
         let r = match st {
-            AuthenticationTypedState::PassKey(ast) => {
+            AuthenticationTypedState::Passkey(ast) => {
                 self.swan.finish_passkey_authentication(lgn, &ast)
             }
             AuthenticationTypedState::Passwordless(ast) => {
@@ -359,7 +359,7 @@ impl WebauthnActor {
         user_unique_id: Uuid,
         username: String,
     ) -> WebauthnResult<(CreationChallengeResponse, DeviceKeyRegistration)> {
-        // ) -> WebauthnResult<(CreationChallengeResponse, PassKeyRegistration)> {
+        // ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
         debug!("handle ChallengeRegister -> {:?}", username);
 
         let att_ca = AttestationCaList::strict();
@@ -390,9 +390,9 @@ impl WebauthnActor {
         &self,
         reg: &RegisterPublicKeyCredential,
         rs: DeviceKeyRegistration,
-        // rs: PassKeyRegistration,
+        // rs: PasskeyRegistration,
     ) -> WebauthnResult<DeviceKey> {
-        // ) -> WebauthnResult<PassKey> {
+        // ) -> WebauthnResult<Passkey> {
         debug!("handle Register -> (reg: {:?})", reg);
 
         /*
@@ -408,7 +408,7 @@ impl WebauthnActor {
     pub async fn condui_start_login(
         &self,
     ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
-        // ) -> WebauthnResult<(RequestChallengeResponse, PassKeyAuthentication)> {
+        // ) -> WebauthnResult<(RequestChallengeResponse, PasskeyAuthentication)> {
         debug!("handle ChallengeAuthenticate");
 
         let (acr, st) = self.swan.start_discoverable_authentication()?;
@@ -426,7 +426,7 @@ impl WebauthnActor {
         cred_map: &BTreeMap<Uuid, Vec<DeviceKey>>,
         lgn: &PublicKeyCredential,
         st: DiscoverableAuthentication,
-        // st: PassKeyAuthentication,
+        // st: PasskeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         debug!("handle Authenticate -> (lgn: {:?})", lgn);
 
