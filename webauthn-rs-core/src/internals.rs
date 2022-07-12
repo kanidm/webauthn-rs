@@ -28,9 +28,9 @@ impl Challenge {
     }
 }
 
-impl Into<Base64UrlSafeData> for Challenge {
-    fn into(self) -> Base64UrlSafeData {
-        Base64UrlSafeData(self.0)
+impl From<Challenge> for Base64UrlSafeData {
+    fn from(chal: Challenge) -> Self {
+        Base64UrlSafeData(chal.0)
     }
 }
 
@@ -188,7 +188,7 @@ impl Credential {
             backup_state,
             registration_policy,
             extensions,
-            attestation: attestation.into(),
+            attestation,
             attestation_format,
         }
     }
@@ -334,7 +334,7 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
     let (i, acd) = cond(data_flags.1, acd_parser)(i)?;
     let (i, extensions) = cond(data_flags.0, extensions_parser::<T>)(i)?;
     trace!(?extensions);
-    let extensions = extensions.unwrap_or_else(|| T::SignedExtensions::default());
+    let extensions = extensions.unwrap_or_default();
 
     Ok((
         i,
@@ -436,7 +436,7 @@ impl TryFrom<u8> for CredProtectResponse {
 
 impl From<CredProtectResponse> for u8 {
     fn from(policy: CredProtectResponse) -> Self {
-        u8::from(policy.0 as u8)
+        policy.0 as u8
     }
 }
 
@@ -1046,16 +1046,16 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 /// [1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-VendorIDRegistry-v1p06-r0p91-pub.pdf,
 #[derive(Debug)]
 pub enum TpmVendor {
-    AMD,
+    Amd,
     Atmel,
     Broadcom,
     Cisco,
     FlySliceTechnologies,
     FuzhouRockchip,
     Google,
-    HPE,
+    Hpe,
     Huawei,
-    IBM,
+    Ibm,
     Infineon,
     Intel,
     Lenovo,
@@ -1066,7 +1066,7 @@ pub enum TpmVendor {
     Qualcomm,
     Samsung,
     Sinosun,
-    SMSC,
+    Smsc,
     StMicroelectronics,
     TexasInstruments,
     Winbond,
@@ -1081,16 +1081,16 @@ impl TryFrom<&[u8; 8]> for TpmVendor {
 
     fn try_from(v: &[u8; 8]) -> Result<Self, Self::Error> {
         match v {
-            b"414d4400" => Ok(Self::AMD),
+            b"414d4400" => Ok(Self::Amd),
             b"41544D4C" => Ok(Self::Atmel),
             b"4252434D" => Ok(Self::Broadcom),
             b"4353434F" => Ok(Self::Cisco),
             b"464C5953" => Ok(Self::FlySliceTechnologies),
             b"524F4343" => Ok(Self::FuzhouRockchip),
             b"474F4F47" => Ok(Self::Google),
-            b"48504500" => Ok(Self::HPE),
+            b"48504500" => Ok(Self::Hpe),
             b"48495349" => Ok(Self::Huawei),
-            b"49424D00" => Ok(Self::IBM),
+            b"49424D00" => Ok(Self::Ibm),
             b"49465800" => Ok(Self::Infineon),
             b"494E5443" => Ok(Self::Intel),
             b"4C454E00" => Ok(Self::Lenovo),
@@ -1101,7 +1101,7 @@ impl TryFrom<&[u8; 8]> for TpmVendor {
             b"51434F4D" => Ok(Self::Qualcomm),
             b"534D534E" => Ok(Self::Samsung),
             b"534E5300" => Ok(Self::Sinosun),
-            b"534D5343" => Ok(Self::SMSC),
+            b"534D5343" => Ok(Self::Smsc),
             b"53544D20" => Ok(Self::StMicroelectronics),
             b"54584E00" => Ok(Self::TexasInstruments),
             b"57454300" => Ok(Self::Winbond),
@@ -1139,7 +1139,6 @@ mod tests {
         TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use crate::interface::*;
-    use serde_json;
     use std::convert::TryFrom;
 
     #[test]
@@ -1299,7 +1298,7 @@ mod tests {
     fn migrate_credentialv3() {
         let legacy_cred = r#"{"cred_id":[185,151,21,12,21,82,235,193,63,50,208,32,121,10,68,148,156,101,116,95,250,113,143,108,74,246,214,171,31,234,70,31,48,138,238,54,151,36,65,70,104,121,200,87,131,254,191,100,215,125,29,49,177,71,4,114,61,69,49,96,116,148,8,205],"cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"verified":false,"registration_policy":"preferred"}"#;
 
-        let cred: CredentialV3 = serde_json::from_str(&legacy_cred).unwrap();
+        let cred: CredentialV3 = serde_json::from_str(legacy_cred).unwrap();
 
         println!("{:?}", cred);
 

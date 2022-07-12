@@ -127,7 +127,7 @@ where
 {
     match extension {
         Ok(Some(extension)) => {
-            if f(&extension) {
+            if f(extension) {
                 Ok(())
             } else {
                 Err(WebauthnError::AttestationCertificateRequirementsNotMet)

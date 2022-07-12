@@ -52,15 +52,15 @@ pub struct CreationChallengeResponse {
 }
 
 #[cfg(feature = "wasm")]
-impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
-    fn into(self) -> web_sys::CredentialCreationOptions {
+impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
+    fn from(ccr: CreationChallengeResponse) -> Self {
         use js_sys::Uint8Array;
         use wasm_bindgen::JsValue;
 
-        let chal = Uint8Array::from(self.public_key.challenge.0.as_slice());
-        let userid = Uint8Array::from(self.public_key.user.id.0.as_slice());
+        let chal = Uint8Array::from(ccr.public_key.challenge.0.as_slice());
+        let userid = Uint8Array::from(ccr.public_key.user.id.0.as_slice());
 
-        let jsv = JsValue::from_serde(&self).unwrap();
+        let jsv = JsValue::from_serde(&ccr).unwrap();
 
         let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
         js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
@@ -68,7 +68,7 @@ impl Into<web_sys::CredentialCreationOptions> for CreationChallengeResponse {
         let user = js_sys::Reflect::get(&pkcco, &"user".into()).unwrap();
         js_sys::Reflect::set(&user, &"id".into(), &userid).unwrap();
 
-        if let Some(extensions) = self.public_key.extensions {
+        if let Some(extensions) = ccr.public_key.extensions {
             if let Some(cred_blob) = extensions.cred_blob {
                 let exts = js_sys::Reflect::get(&pkcco, &"extensions".into()).unwrap();
                 let cred_blob = Uint8Array::from(cred_blob.0.as_ref());

@@ -73,13 +73,13 @@ pub struct RequestChallengeResponse {
 }
 
 #[cfg(feature = "wasm")]
-impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
-    fn into(self) -> web_sys::CredentialRequestOptions {
+impl From<RequestChallengeResponse> for web_sys::CredentialRequestOptions {
+    fn from(rcr: RequestChallengeResponse) -> Self {
         use js_sys::{Array, Object, Uint8Array};
         use wasm_bindgen::JsValue;
 
-        let chal = Uint8Array::from(self.public_key.challenge.0.as_slice());
-        let allow_creds: Array = self
+        let chal = Uint8Array::from(rcr.public_key.challenge.0.as_slice());
+        let allow_creds: Array = rcr
             .public_key
             .allow_credentials
             .iter()
@@ -104,7 +104,7 @@ impl Into<web_sys::CredentialRequestOptions> for RequestChallengeResponse {
             })
             .collect();
 
-        let jsv = JsValue::from_serde(&self).unwrap();
+        let jsv = JsValue::from_serde(&rcr).unwrap();
 
         let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
         js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
@@ -207,7 +207,7 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
             Base64UrlSafeData(data_response_authenticator_data);
         let data_response_signature_b64 = Base64UrlSafeData(data_response_signature);
 
-        let data_response_user_handle_b64 = data_response_user_handle.map(|d| Base64UrlSafeData(d));
+        let data_response_user_handle_b64 = data_response_user_handle.map(Base64UrlSafeData);
 
         PublicKeyCredential {
             id: format!("{}", data_raw_id_b64),

@@ -263,7 +263,7 @@ impl Credential {
         let danger_disable_certificate_time_checks = true;
         verify_attestation_ca_chain(
             &self.attestation.data,
-            &ca_list,
+            ca_list,
             danger_disable_certificate_time_checks,
         )
     }
