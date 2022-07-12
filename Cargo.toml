@@ -11,7 +11,8 @@ members = [
     # Authenticator interactions
     "webauthn-authenticator-rs",
     # Tutorial / Example sites.
-    "tutorial/site",
+    "tutorial/server/tide",
+    "tutorial/server/axum",
     "tutorial/wasm",
     # The compat tester
     "compat_tester/webauthn-rs-demo",
