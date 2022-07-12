@@ -5,25 +5,25 @@ use serde::{Deserialize, Serialize};
 use webauthn_rs_core::interface::{AttestationCaList, AuthenticationState, RegistrationState};
 use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestationData};
 
-/// An in progress registration session for a [PassKey].
+/// An in progress registration session for a [Passkey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PassKeyRegistration {
+pub struct PasskeyRegistration {
     pub(crate) rs: RegistrationState,
 }
 
-/// An in progress authentication session for a [PassKey].
+/// An in progress authentication session for a [Passkey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PassKeyAuthentication {
+pub struct PasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
 /// A Pass Key for a user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PassKey {
+pub struct Passkey {
     pub(crate) cred: Credential,
 }
 
-impl PassKey {
+impl Passkey {
     /// Retrieve a reference to this Pass Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
         &self.cred.cred_id
@@ -39,6 +39,19 @@ impl PassKey {
         if counter > self.cred.counter {
             self.cred.counter = counter
         }
+    }
+}
+
+impl From<Credential> for Passkey {
+    /// Convert a generic webauthn credential into a Passkey
+    fn from(cred: Credential) -> Self {
+        Passkey { cred }
+    }
+}
+
+impl PartialEq for Passkey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cred.cred_id == other.cred.cred_id
     }
 }
 
@@ -134,6 +147,12 @@ impl SecurityKey {
     }
 }
 
+impl PartialEq for SecurityKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cred.cred_id == other.cred.cred_id
+    }
+}
+
 impl From<Credential> for SecurityKey {
     /// Convert a generic webauthn credential into a security key
     fn from(cred: Credential) -> Self {
@@ -208,8 +227,8 @@ impl From<&DeviceKey> for DiscoverableKey {
     }
 }
 
-impl From<&PassKey> for DiscoverableKey {
-    fn from(k: &PassKey) -> Self {
+impl From<&Passkey> for DiscoverableKey {
+    fn from(k: &Passkey) -> Self {
         DiscoverableKey {
             cred: k.cred.clone(),
         }

@@ -288,7 +288,7 @@ impl Demo {
                               <td>{ "Credential Type" }</td>
                               <td>
                                 <select class="form-select" id="credential_type">
-                                  <option selected=true value="pk">{ "PassKey" }</option>
+                                  <option selected=true value="pk">{ "Passkey" }</option>
                                   <option value="pl">{ "Passwordless" }</option>
                                   <option value="sk">{ "Security Key" }</option>
                                 </select>
@@ -432,7 +432,7 @@ impl Component for Demo {
         console::log!(format!("create").as_str());
         Demo {
             state: DemoState::Register,
-            reg_settings: RegisterWithType::PassKey,
+            reg_settings: RegisterWithType::Passkey,
             last_username: String::default(),
         }
     }
@@ -482,12 +482,12 @@ impl Component for Demo {
 
                 let settings = utils::get_select_value_from_element_id("credential_type")
                     .and_then(|v| match v.as_str() {
-                        "pk" => Some(RegisterWithType::PassKey),
+                        "pk" => Some(RegisterWithType::Passkey),
                         "sk" => Some(RegisterWithType::SecurityKey(attest_req)),
                         "pl" => Some(RegisterWithType::Passwordless(attest_req)),
                         _ => None,
                     })
-                    .unwrap_or(RegisterWithType::PassKey);
+                    .unwrap_or(RegisterWithType::Passkey);
 
                 console::log!(format!("cred_type  -> {:?}", settings).as_str());
                 console::log!(format!("username   -> {:?}", username).as_str());

@@ -8,12 +8,11 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tide = "0.16"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 serde = { version = "1", features = ["derive"] }
 rand = {version="0.8", features=["min_const_gen"]}
-webauthn-rs = "0.4.1-beta.2"
+webauthn-rs = { path = "../../../webauthn-rs" }
 axum = {version = "0.5.11", features = ["http2"]}
 tokio = {version="1.19.2", features = ["full"]}
 uuid = {version="1.1.2", features=["v4"]}
