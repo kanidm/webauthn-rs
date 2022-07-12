@@ -3,12 +3,19 @@ use crate::startup::AppState;
 use axum::{
     extract::{Extension, Json, Path},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
 };
 use axum_sessions::async_session::Session;
+
+/*
+ * Webauthn RS auth handlers.
+ * These files use webauthn to process the data received from each route, and are closely tied to axum
+ */
+
+// 1. Import the prelude - this contains everything needed for the server to function.
 use webauthn_rs::prelude::*;
 
-// 3. The first step a client (user) will carry out is requesting a credential to be
+// 2. The first step a client (user) will carry out is requesting a credential to be
 // registered. We need to provide a challenge for this. The work flow will be:
 //
 //          ┌───────────────┐     ┌───────────────┐      ┌───────────────┐
@@ -59,7 +66,6 @@ pub async fn start_register(
     // important in authentication, where presented credentials may *only* provide
     // the unique id, and not the username!
 
-    //TODO: Generate a Unique ID for a username and store it in the DB
     let user_unique_id = {
         let users_guard = app_state.users.lock().await;
         users_guard
@@ -74,7 +80,6 @@ pub async fn start_register(
 
     // If the user has any other credentials, we exclude these here so they can't be duplicate registered.
     // It also hints to the browser that only new credentials should be "blinked" for interaction.
-    //TODO: Store registered User IDs and keys in the DB
     let exclude_credentials = {
         let users_guard = app_state.users.lock().await;
         users_guard
@@ -104,7 +109,7 @@ pub async fn start_register(
     Ok(res)
 }
 
-// 4. The browser has completed it's steps and the user has created a public key
+// 3. The browser has completed it's steps and the user has created a public key
 // on their device. Now we have the registration options sent to us, and we need
 // to verify these and persist them.
 
@@ -146,7 +151,7 @@ pub async fn finish_register(
     Ok(res)
 }
 
-// 5. Now that our public key has been registered, we can authenticate a user and verify
+// 4. Now that our public key has been registered, we can authenticate a user and verify
 // that they are the holder of that security token. The work flow is similar to registration.
 //
 //          ┌───────────────┐     ┌───────────────┐      ┌───────────────┐
@@ -191,7 +196,6 @@ pub async fn start_authentication(
     let users_guard = app_state.users.lock().await;
 
     // Look up their unique id from the username
-    // TODO: This is where we would get the user's UUID from their username in the DB
     let user_unique_id = users_guard
         .name_to_id
         .get(&username)
@@ -224,7 +228,7 @@ pub async fn start_authentication(
     Ok(res)
 }
 
-// 6. The browser and user have completed their part of the processing. Only in the
+// 5. The browser and user have completed their part of the processing. Only in the
 // case that the webauthn authenticate call returns Ok, is authentication considered
 // a success. If the browser does not complete this call, or *any* error occurs,
 // this is an authentication failure.
@@ -248,7 +252,6 @@ pub async fn finish_authentication(
             let mut users_guard = app_state.users.lock().await;
 
             // Update the credential counter, if possible.
-            // TODO: Update the DB with the new keys for the user
             users_guard
                 .keys
                 .get_mut(&user_unique_id)
@@ -260,15 +263,11 @@ pub async fn finish_authentication(
                     })
                 })
                 .ok_or(WebauthnError::UserHasNoCredentials)?;
-            Response::builder().status(StatusCode::OK).body(()).unwrap();
+            StatusCode::OK
         }
         Err(e) => {
             debug!("challenge_register -> {:?}", e);
-            // WebauthnError::BadRequest
-            Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body(())
-                .unwrap();
+            StatusCode::BAD_REQUEST
         }
     };
     info!("Authentication Successful!");

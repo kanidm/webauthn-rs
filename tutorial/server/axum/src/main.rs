@@ -12,11 +12,8 @@ mod file;
  * Webauthn RS server side tutorial.
  */
 
-// 1. Import the prelude - this contains everything needed for the server to function.
-// use webauthn_rs::prelude::*;
-
-// These are other imports needed to make the site generally work.
-
+// The handlers that process the data can be found in the auth.rs file
+// This file contains the wasm client loading code and the axum routing
 use crate::auth::{finish_authentication, finish_register, start_authentication, start_register};
 use crate::file::file_handler;
 use crate::startup::AppState;
@@ -62,51 +59,6 @@ async fn index_view() -> impl IntoResponse {
     )
 }
 
-// #[tokio::main]
-// async fn main() -> tide::Result<()> {
-//     tracing_subscriber::fmt::init();
-
-//     // Create the app
-//     let app_state = AppState::new();
-//     let mut app = tide::with_state(app_state);
-
-//     // Allow cookies so that we can bind some data to sessions.
-//     // In production, you should NOT use the memory store, since
-//     // it does not have cleanup.
-//     let cookie_sig = StdRng::from_entropy().gen::<[u8; 32]>();
-//     let memory_store = tide::sessions::MemoryStore::new();
-
-//     let sessions = tide::sessions::SessionMiddleware::new(memory_store.clone(), &cookie_sig)
-//         .with_cookie_domain("localhost")
-//         .with_same_site_policy(tide::http::cookies::SameSite::Strict)
-//         .with_session_ttl(Some(Duration::from_secs(3600)))
-//         .with_cookie_name("webauthnrs");
-
-//     // Bind the sessions to our app
-//     app.with(sessions);
-//     // Enable logging
-//     app.with(tide::log::LogMiddleware::new());
-
-//     // Serve our wasm content
-//     app.at("/pkg").serve_dir("../wasm/pkg")?;
-
-//     // Bind our apis to our functions.
-//     app.at("/register_start/:username").post(start_register);
-//     app.at("/register_finish").post(finish_register);
-//     app.at("/login_start/:username").post(start_authentication);
-//     app.at("/login_finish").post(finish_authentication);
-
-//     // Serve our base html that bootstraps the wasm context.
-//     app.at("/").get(index_view);
-//     app.at("/*").get(index_view);
-
-//     info!("Spawning on http://localhost:8080");
-
-//     // Spawn the socket listener, and run the actual site.
-//     app.listen("127.0.0.1:8080").await?;
-
-//     Ok(())
-// }
 #[tokio::main]
 async fn main() {
     // initialize tracing
@@ -122,9 +74,6 @@ async fn main() {
         .with_cookie_name("webauthnrs")
         .with_same_site_policy(SameSite::Lax)
         .with_secure(true);
-
-    // // Serve our wasm content
-    // app.at("/pkg").serve_dir("../wasm/pkg")?;
 
     // build our application with a route
     let app = Router::new()

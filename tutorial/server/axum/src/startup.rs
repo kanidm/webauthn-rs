@@ -3,7 +3,11 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use webauthn_rs::prelude::*;
 
-// 2. Configure the Webauthn instance by using the WebauthnBuilder. This defines
+/*
+ * Webauthn RS server side app state and setup  code.
+ */
+
+// Configure the Webauthn instance by using the WebauthnBuilder. This defines
 // the options needed for your site, and has some implications. One of these is that
 // you can NOT change your rp_id (relying party id), without invalidating all
 // webauthn credentials. Remember, rp_id is derived from your URL origin, meaning
@@ -36,7 +40,7 @@ impl AppState {
         // Now, with the builder you can define other options.
         // Set a "nice" relying party name. Has no security properties and
         // may be changed in the future.
-        let builder = builder.rp_name("Panda5");
+        let builder = builder.rp_name("Axum Webauthn-rs");
 
         // Consume the builder and create our webauthn instance.
         let webauthn = Arc::new(builder.build().expect("Invalid configuration"));
