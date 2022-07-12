@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs-core"
-version = "0.4.1"
+version = "0.4.1-beta.1"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Cryptographic Operation Handling"
@@ -32,6 +32,7 @@ url = { version = "2", features = ["serde"] }
 x509-parser = "0.13.0"
 der-parser = "7.0.0"
 compact_jwt = "0.2.3"
+uuid = { version = "1", features = ["serde"] }
 
 [dev-dependencies]
 hex-literal = "0.3"

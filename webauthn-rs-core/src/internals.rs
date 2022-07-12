@@ -124,6 +124,7 @@ impl Credential {
         req_extn: &RequestRegistrationExtensions,
         client_extn: &RegistrationExtensionsClientOutputs,
         attestation_format: AttestationFormat,
+        transports: Option<Vec<AuthenticatorTransport>>,
     ) -> Self {
         let cred_protect = match (
             auth_data.extensions.cred_protect.as_ref(),
@@ -183,6 +184,7 @@ impl Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
             counter,
+            transports,
             user_verified,
             backup_eligible: backup_elligible,
             backup_state,
@@ -444,6 +446,7 @@ pub(crate) struct AuthenticatorAttestationResponse<T: Ceremony> {
     pub(crate) attestation_object: AttestationObject<T>,
     pub(crate) client_data_json: CollectedClientData,
     pub(crate) client_data_json_bytes: Vec<u8>,
+    pub(crate) transports: Option<Vec<AuthenticatorTransport>>,
 }
 
 impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
@@ -460,6 +463,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
             attestation_object: ao,
             client_data_json: ccdj,
             client_data_json_bytes: aarr.client_data_json.clone().into(),
+            transports: aarr.transports.clone(),
         })
     }
 }

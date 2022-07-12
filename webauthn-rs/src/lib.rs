@@ -51,7 +51,6 @@
 extern crate tracing;
 
 mod interface;
-// mod trust;
 
 use url::Url;
 use uuid::Uuid;
@@ -441,11 +440,6 @@ impl Webauthn {
     /// You *should* provide the list of credentials that are already registered to this user's account
     /// to prevent duplicate credential registrations.
     ///
-    /// `attestation_anonymise` determines if we should try to anonymise some details of the device
-    /// that is being attested. If set to "true", then attestation is carried out in a privacy
-    /// preserving manner. If set to "false" then the device may be directly identifiable. If in
-    /// doubt, set to "true".
-    ///
     /// `attestation_ca_list` contains an optional list of Root CA certificates of authenticator
     /// manufacturers that you wish to trust. For example, if you want to only allow Yubikeys on
     /// your site, then you can provide the Yubico Root CA in this list, to validate that all
@@ -487,7 +481,6 @@ impl Webauthn {
     ///         "claire",
     ///         "Claire",
     ///         None,
-    ///         true,
     ///         AttestationCaList::strict(),
     ///         Some(AuthenticatorAttachment::CrossPlatform),
     ///     )
@@ -503,7 +496,6 @@ impl Webauthn {
     ///         "claire",
     ///         "Claire",
     ///         None,
-    ///         true,
     ///         AttestationCaList::strict(),
     ///         Some(AuthenticatorAttachment::Platform),
     ///     )
@@ -515,16 +507,15 @@ impl Webauthn {
         user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
-        attestation_anonymise: bool,
         attestation_ca_list: AttestationCaList,
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
         // extensions
     ) -> WebauthnResult<(CreationChallengeResponse, PasswordlessKeyRegistration)> {
-        let attestation = if attestation_anonymise {
-            AttestationConveyancePreference::Indirect
-        } else {
-            AttestationConveyancePreference::Direct
-        };
+        let attestation = AttestationConveyancePreference::Direct;
+        if attestation_ca_list.is_empty() {
+            return Err(WebauthnError::MissingAttestationCaList);
+        }
+
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
         let policy = Some(UserVerificationPolicy::Required);
@@ -693,6 +684,20 @@ impl Webauthn {
     ///         "Claire",
     ///         None,
     ///         None,
+    ///         None,
+    ///     )
+    ///     .expect("Failed to start registration.");
+    ///
+    /// // Initiate a basic registration flow, hinting that the device is probably roaming (i.e. a usb),
+    /// // but it could have any attachement in reality
+    /// let (ccr, skr) = webauthn
+    ///     .start_securitykey_registration(
+    ///         Uuid::new_v4(),
+    ///         "claire",
+    ///         "Claire",
+    ///         None,
+    ///         None,
+    ///         Some(AuthenticatorAttachment::CrossPlatform),
     ///     )
     ///     .expect("Failed to start registration.");
     ///
@@ -705,6 +710,7 @@ impl Webauthn {
     ///         "Claire",
     ///         None,
     ///         Some(AttestationCaList::strict()),
+    ///         None,
     ///     )
     ///     .expect("Failed to start registration.");
     /// ```
@@ -715,16 +721,20 @@ impl Webauthn {
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
         attestation_ca_list: Option<AttestationCaList>,
+        ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
     ) -> WebauthnResult<(CreationChallengeResponse, SecurityKeyRegistration)> {
-        let attestation = if attestation_ca_list.is_some() {
-            AttestationConveyancePreference::Direct
+        let attestation = if let Some(ca_list) = attestation_ca_list.as_ref() {
+            if ca_list.is_empty() {
+                return Err(WebauthnError::MissingAttestationCaList);
+            } else {
+                AttestationConveyancePreference::Direct
+            }
         } else {
             AttestationConveyancePreference::None
         };
         let extensions = None;
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
-        let authenticator_attachment = None;
         let policy = Some(UserVerificationPolicy::Preferred);
         let reject_passkeys = true;
 
@@ -739,7 +749,7 @@ impl Webauthn {
                 extensions,
                 credential_algorithms,
                 require_resident_key,
-                authenticator_attachment,
+                ui_hint_authenticator_attachment,
                 reject_passkeys,
             )
             .map(|(ccr, rs)| {
@@ -822,39 +832,44 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "discoverable_passkey")]
+#[cfg(feature = "resident_key_support")]
 impl Webauthn {
     /// WIP DO NOT USE
-    pub fn start_discoverable_passkey_authentication(
+    pub fn start_discoverable_authentication(
         &self,
-    ) -> WebauthnResult<(RequestChallengeResponse, PassKeyAuthentication)> {
-        let extensions = None;
-        let creds = Vec::with_capacity(0);
+    ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
+        let policy = UserVerificationPolicy::Required;
+        let extensions = Some(RequestAuthenticationExtensions {
+            get_cred_blob: None,
+            appid: None,
+            uvm: Some(true),
+        });
 
         self.core
-            .generate_challenge_authenticate_options(creds, extensions)
-            .map(|(rcr, ast)| (rcr, PassKeyAuthentication { ast }))
+            .generate_challenge_authenticate_discoverable(policy, extensions)
+            .map(|(rcr, ast)| (rcr, DiscoverableAuthentication { ast }))
     }
 
     /// WIP DO NOT USE
-    pub fn identify_discoverable_passkey_authentication(
-        &self,
-        reg: &PublicKeyCredential,
-        _state: &PassKeyAuthentication,
-    ) -> WebauthnResult<Uuid> {
+    pub fn identify_discoverable_authentication<'a>(
+        &'_ self,
+        reg: &'a PublicKeyCredential,
+    ) -> WebauthnResult<(Uuid, &'a [u8])> {
+        let cred_id = reg.get_credential_id();
         reg.get_user_unique_id()
             .and_then(|b| Uuid::from_slice(b).ok())
+            .map(|u| (u, cred_id))
             .ok_or(WebauthnError::InvalidUserUniqueId)
     }
 
     /// WIP DO NOT USE
-    pub fn finish_discoverable_passkey_authentication(
+    pub fn finish_discoverable_authentication(
         &self,
         reg: &PublicKeyCredential,
-        mut state: PassKeyAuthentication,
-        creds: &[PassKey],
+        mut state: DiscoverableAuthentication,
+        creds: &[DiscoverableKey],
     ) -> WebauthnResult<AuthenticationResult> {
-        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+        let creds = creds.iter().map(|dk| dk.cred.clone()).collect();
         state.ast.set_allowed_credentials(creds);
         self.core.authenticate_credential(reg, &state.ast)
     }
@@ -882,10 +897,6 @@ impl Webauthn {
         let policy = Some(UserVerificationPolicy::Required);
         let reject_passkeys = true;
 
-        // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
-        // UVM
-        // If rk - credProps
-
         // credProtect
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
@@ -897,14 +908,13 @@ impl Webauthn {
                 enforce_credential_protection_policy: Some(false),
             }),
             cred_blob: None,
+            // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
             uvm: Some(true),
             cred_props: Some(true),
+            // https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-minpinlength-extension
             min_pin_length: Some(true),
             hmac_create_secret: None,
         });
-
-        // https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-minpinlength-extension
-        // min pin
 
         self.core
             .generate_challenge_register_options(
@@ -945,9 +955,10 @@ impl Webauthn {
 
         // cred protect ignored :(
         // Is the pin long enough?
-        // We'll never know because lol.
+        // Is it rk?
+        // I guess we'll never know ...
 
-        // Is it an approvide cred / aaguid?
+        // Is it an approved cred / aaguid?
 
         Ok(DeviceKey { cred })
     }
@@ -955,8 +966,9 @@ impl Webauthn {
     /// TODO
     pub fn start_devicekey_authentication(
         &self,
+        creds: &[DeviceKey],
     ) -> WebauthnResult<(RequestChallengeResponse, DeviceKeyAuthentication)> {
-        let creds = Vec::with_capacity(0);
+        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let extensions = Some(RequestAuthenticationExtensions {
             get_cred_blob: None,
             appid: None,
@@ -968,28 +980,12 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, DeviceKeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
-    /// attempt to identify user's unique id. This does NOT authenticate the user, it only retrieve the
-    /// unique_user_id if present so that you can then lookup the user's account in a usernameless-flow.
-    pub fn identify_devicekey_authentication(
-        &self,
-        reg: &PublicKeyCredential,
-        _state: &DeviceKeyAuthentication,
-    ) -> WebauthnResult<Uuid> {
-        reg.get_user_unique_id()
-            .and_then(|b| Uuid::from_slice(b).ok())
-            .ok_or(WebauthnError::InvalidUserUniqueId)
-    }
-
     /// TODO
     pub fn finish_devicekey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        mut state: DeviceKeyAuthentication,
-        creds: &[DeviceKey],
+        state: DeviceKeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
-        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-        state.ast.set_allowed_credentials(creds);
         self.core.authenticate_credential(reg, &state.ast)
     }
 }

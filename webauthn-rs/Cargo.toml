@@ -12,7 +12,6 @@ license = "MPL-2.0"
 
 [features]
 resident_key_support = []
-discoverable_passkey = []
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }

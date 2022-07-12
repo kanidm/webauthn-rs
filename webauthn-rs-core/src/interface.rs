@@ -15,10 +15,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use openssl::x509;
+use uuid::Uuid;
 
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
 pub type Aaguid = [u8; 16];
+
+/// Representation of a credentials activation counter.
+pub type Counter = u32;
 
 /// The in progress state of a credential registration attempt. You must persist this in a server
 /// side location associated to the active session requesting the registration. This contains the
@@ -205,7 +209,11 @@ pub struct Credential {
     /// The public key of this credential
     pub cred: COSEKey,
     /// The counter for this credential
-    pub counter: u32,
+    pub counter: Counter,
+    /// The set of transports this credential indicated it could use. This is NOT
+    /// a security property, but a hint for the browser and the user experience to
+    /// how to communicate to this specific device.
+    pub transports: Option<Vec<AuthenticatorTransport>>,
     /// During registration, if this credential was verified
     /// then this is true. If not it is false. This is based on
     /// the policy at the time of registration of the credential.
@@ -284,6 +292,7 @@ impl From<CredentialV3> for Credential {
             cred_id: Base64UrlSafeData(cred_id),
             cred,
             counter,
+            transports: None,
             user_verified: verified,
             backup_eligible: false,
             backup_state: false,
@@ -394,7 +403,7 @@ pub enum AttestationMetadata {
     Packed {
         /// This is the unique id of the class/type of device. Often this id can imply the
         /// properties of the device.
-        aaguid: Aaguid,
+        aaguid: Uuid,
     },
     /// various attestation flags set by the device (attested by OS)
     AndroidKey {
@@ -598,68 +607,10 @@ pub struct AuthenticationResult {
     pub extensions: AuthenticationExtensions,
 }
 
-/*
-/// This are the properties of the device as derived through the attestation process. These properties
-/// are conservatively determined, based on available information and our ability to absolutely
-/// guarantee that these determinations are true and correct. We prefer to assume the lowest common
-/// denominator if we are unable to absolutely guarantee the property.
-pub struct DeviceProperties {
-    ///
-    // identity: DeviceIdentity,
-    ///
-    key_storage: KeyStorageClass,
-
-    transports: Option<Vec<AuthenticatorTransport>>,
-
-    user_verification_methods: Option<Vec<UserVerificationMethod>>,
-
-    ca: CaIdentity,
-}
-*/
-
 /// A serialised Attestation CA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialisableAttestationCa {
     pub(crate) ca: Base64UrlSafeData,
-    pub(crate) platform_only: bool,
-    pub(crate) key_storage: KeyStorageClass,
-    pub(crate) strict: bool,
-}
-
-/// Type type of storage that this credential is *likely* backed by. This is derived from
-/// testing by the Webauthn-RS project.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum KeyStorageClass {
-    ///
-    Indeterminate,
-
-    /// This credential may exist between multiple devices. This is commonly called a passkey
-    /// and represents that the credential is not bound to any specific hardware and could be
-    /// recovered through some third party mechanism.
-    ///
-    /// This keystorage class has the most external risks of credential disclosure if the
-    /// related third party account is compromised.
-    MultiDevice,
-    /// This credential is bound to a single hardware cryptographic device and may not be used
-    /// without that specific hardware.
-    ///
-    /// This credential is stored in an encrypted form inside the CredentialID. When the credentialID
-    /// is presented to the singular hardware device that owns the encryption key, it is able to then
-    /// use the contained private key.
-    ///
-    /// This keystorage class is secure in the majority of use cases. In some extremely rare
-    /// environments it may not be considered secure as an attacker who possesses the
-    /// CredentialID could perform and offline bruteforce attack, but this is highly infeasible
-    /// as these credentials generally use aes128 or better which would take potentialy thousands of years
-    /// to bruteforce.
-    SingleDeviceWrapped,
-    /// This credential is bound to a single hardware cryptographic device, and never leaves
-    /// that device. The CredentialID is just for lookup and association and has no relation to the
-    /// private key (unlike a wrapped key).
-    ///
-    /// This keystorage class is the highest level of security, asserting that a credential resides
-    /// only in a secure cryptographic processor.
-    Resident,
 }
 
 /// A structure representing an Attestation CA and other options associated to this CA.
@@ -674,29 +625,12 @@ pub enum KeyStorageClass {
 pub struct AttestationCa {
     /// The x509 root CA of the attestation chain that a security key will be attested to.
     pub ca: x509::X509,
-    /// If a credential signed by this attestation CA is provided, then this boolean determines
-    /// if it is platform only (i.e. part of the device and can never leave it) or is roaming and
-    /// can be used between multiple devices through transports like USB, Bluetooth or NFC.
-    pub platform_only: bool,
-    /// If a credential signed by this attestation CA is provided, this shows the minimum level
-    /// of keystorage provided. Some devices can support multiple key storage classes (ie yubikey)
-    /// but due to limitations of the Webauthn standard there is no way to assert this during
-    /// registration leaving us to make the safe and conservative choice to pick the lowest
-    /// common method for that manufacturer.
-    pub key_storage: KeyStorageClass,
-    /// A flag determining if this credential meets the Webauthn-RS project's high level of
-    /// quality. Considerations are not just the supply chain and cryptographic soundness, but
-    /// also the user experience, hardware quality, manufacturer response to issues, and more.
-    pub strict: bool,
 }
 
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {
             ca: Base64UrlSafeData(self.ca.to_der().expect("Invalid DER")),
-            platform_only: self.platform_only,
-            key_storage: self.key_storage,
-            strict: self.strict,
         }
     }
 }
@@ -707,22 +641,22 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
     fn try_from(data: SerialisableAttestationCa) -> Result<Self, Self::Error> {
         Ok(AttestationCa {
             ca: x509::X509::from_der(&data.ca.0).map_err(WebauthnError::OpenSSLError)?,
-            platform_only: data.platform_only,
-            key_storage: data.key_storage,
-            strict: data.strict,
         })
     }
 }
 
 impl AttestationCa {
+    /// Create a customised attestation CA from a DER public key.
+    pub fn new_from_der(data: &[u8]) -> Result<Self, WebauthnError> {
+        Ok(AttestationCa {
+            ca: x509::X509::from_der(data).map_err(WebauthnError::OpenSSLError)?,
+        })
+    }
+
     /// The Apple TouchID and FaceID root CA.
     pub fn apple_webauthn_root_ca() -> Self {
-        // COSEAlgorithm::ES384,
         AttestationCa {
             ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).unwrap(),
-            platform_only: true,
-            key_storage: KeyStorageClass::Resident,
-            strict: true,
         }
     }
 
@@ -730,9 +664,6 @@ impl AttestationCa {
     pub fn yubico_u2f_root_ca_serial_457200631() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: true,
         }
     }
 
@@ -746,9 +677,6 @@ impl AttestationCa {
     pub fn microsoft_tpm_root_certificate_authority_2014() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM).unwrap(),
-            platform_only: true,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -759,9 +687,6 @@ impl AttestationCa {
     pub fn nitrokey_fido2_root_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -772,9 +697,6 @@ impl AttestationCa {
     pub fn nitrokey_u2f_root_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -782,9 +704,6 @@ impl AttestationCa {
     pub fn android_root_ca_1() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -792,9 +711,6 @@ impl AttestationCa {
     pub fn android_root_ca_2() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -802,9 +718,6 @@ impl AttestationCa {
     pub fn android_root_ca_3() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -812,9 +725,6 @@ impl AttestationCa {
     pub fn android_software_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -822,9 +732,6 @@ impl AttestationCa {
     pub fn google_safetynet_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 
@@ -833,9 +740,6 @@ impl AttestationCa {
     pub(crate) fn google_safetynet_ca_old() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
-            platform_only: false,
-            key_storage: KeyStorageClass::SingleDeviceWrapped,
-            strict: false,
         }
     }
 }
@@ -857,10 +761,7 @@ impl AttestationCaList {
     /// are secure, but user friendly, consistent, and correct.
     pub fn strict() -> Self {
         AttestationCaList {
-            cas: vec![
-                AttestationCa::apple_webauthn_root_ca(),
-                AttestationCa::yubico_u2f_root_ca_serial_457200631(),
-            ],
+            cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
         }
     }
 

@@ -540,6 +540,7 @@ impl WebauthnCore {
             req_extn,
             &reg.extensions,
             attest_format,
+            data.transports,
         );
 
         // Now based on result ...
@@ -874,6 +875,15 @@ impl WebauthnCore {
         }
     }
 
+    /// Begin a discoverable authentication session.
+    pub fn generate_challenge_authenticate_discoverable(
+        &self,
+        policy: UserVerificationPolicy,
+        extensions: Option<RequestAuthenticationExtensions>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
+        self.generate_challenge_authenticate_inner(vec![], policy, extensions)
+    }
+
     fn generate_challenge_authenticate_inner(
         &self,
         creds: Vec<Credential>,
@@ -888,7 +898,7 @@ impl WebauthnCore {
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
                 id: cred.cred_id.clone(),
-                transports: None,
+                transports: cred.transports.clone(),
             })
             .collect();
 
@@ -1589,6 +1599,7 @@ mod tests {
                 }),
             },
             counter: 1,
+            transports: None,
             user_verified: false,
             backup_eligible: false,
             backup_state: false,
@@ -1684,6 +1695,7 @@ mod tests {
         // Create the fake credential that we know is associated
         let cred = Credential {
             counter: 1,
+            transports: None,
             cred_id: Base64UrlSafeData(vec![
                 179, 64, 237, 0, 28, 248, 197, 30, 213, 228, 250, 139, 28, 11, 156, 130, 69, 242,
                 21, 48, 84, 77, 103, 163, 66, 204, 167, 147, 82, 214, 212,
@@ -1808,6 +1820,7 @@ mod tests {
                 client_data_json: Base64UrlSafeData(
                     base64::decode("eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwib3JpZ2luIjoiaHR0cHM6XC9cLzE3Mi4yMC4wLjE0MTo4NDQzIiwiY2hhbGxlbmdlIjoidHZSMW0tZF9vaFhyd1Z4UWpNZ0g4S25vdkhaN0JSV2habURONFRWTXBOVSJ9").unwrap()
                 ),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
@@ -1949,6 +1962,7 @@ mod tests {
                     111, 109, 58, 56, 48, 56, 48, 34, 44, 34, 99, 114, 111, 115, 115, 79, 114, 105,
                     103, 105, 110, 34, 58, 102, 97, 108, 115, 101, 125,
                 ]),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
@@ -2316,6 +2330,7 @@ mod tests {
                     46, 99, 111, 109, 58, 56, 48, 56, 48, 34, 44, 34, 99, 114, 111, 115, 115, 79,
                     114, 105, 103, 105, 110, 34, 58, 102, 97, 108, 115, 101, 125,
                 ]),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
@@ -2489,6 +2504,7 @@ mod tests {
                     103, 105, 110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 115, 112, 101,
                     99, 116, 114, 97, 108, 46, 108, 111, 99, 97, 108, 58, 56, 52, 52, 51, 34, 125,
                 ]),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
@@ -2660,6 +2676,7 @@ mod tests {
                     103, 105, 110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 115, 112, 101,
                     99, 116, 114, 97, 108, 46, 108, 111, 99, 97, 108, 58, 56, 52, 52, 51, 34, 125,
                 ]),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
@@ -2739,6 +2756,7 @@ mod tests {
                     }),
                 },
                 counter: 0,
+                transports: None,
                 user_verified: false,
                 backup_eligible: false,
                 backup_state: false,
@@ -2777,6 +2795,7 @@ mod tests {
                     }),
                 },
                 counter: 1,
+                transports: None,
                 user_verified: true,
                 backup_eligible: false,
                 backup_state: false,
@@ -2945,6 +2964,7 @@ mod tests {
                     44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105, 110, 34, 58, 102, 97,
                     108, 115, 101, 125,
                 ]),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
@@ -3385,6 +3405,7 @@ mod tests {
                     108, 104, 111, 115, 116, 58, 56, 48, 56, 48, 34, 44, 34, 99, 114, 111, 115,
                     115, 79, 114, 105, 103, 105, 110, 34, 58, 102, 97, 108, 115, 101, 125,
                 ]),
+                transports: None,
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),
