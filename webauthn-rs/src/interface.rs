@@ -147,12 +147,6 @@ impl SecurityKey {
     }
 }
 
-impl PartialEq for SecurityKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.cred.cred_id == other.cred.cred_id
-    }
-}
-
 impl From<Credential> for SecurityKey {
     /// Convert a generic webauthn credential into a security key
     fn from(cred: Credential) -> Self {

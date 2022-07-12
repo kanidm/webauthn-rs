@@ -13,7 +13,6 @@ use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
-use debug;
 use openssl::hash::MessageDigest;
 use openssl::sha::sha256;
 use openssl::stack;
@@ -106,12 +105,13 @@ pub(crate) mod android_key_attestation {
 
     impl PartialEq for EnforcementType {
         fn eq(&self, other: &Self) -> bool {
-            match (self, other) {
-                (Self::Either, _) | (_, Self::Either) => true,
-                (Self::Software, Self::Software) => true,
-                (Self::Tee, Self::Tee) => true,
-                _ => false,
-            }
+            matches!(
+                (self, other),
+                (Self::Either, _)
+                    | (_, Self::Either)
+                    | (Self::Software, Self::Software)
+                    | (Self::Tee, Self::Tee)
+            )
         }
     }
 
@@ -120,7 +120,7 @@ pub(crate) mod android_key_attestation {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
-                    return Err(nom::Err::Error(BerError::BerTypeError.into()));
+                    return Err(nom::Err::Error(BerError::BerTypeError));
                 }
 
                 let mut all_applications = false;
@@ -141,14 +141,14 @@ pub(crate) mod android_key_attestation {
                         }
                         Tag(702) => {
                             if let BerObjectContent::Unknown(o) = obj.content {
-                                let (_, val) = parse_der_integer(&o.data)?;
+                                let (_, val) = parse_der_integer(o.data)?;
                                 origin = Some(val.as_u32()?);
                             }
                         }
                         Tag(1) => {
                             if let BerObjectContent::Unknown(o) = obj.content {
                                 let (_, val) =
-                                    parse_der_container(|i, _| parse_der_integer(i))(&o.data)?;
+                                    parse_der_container(|i, _| parse_der_integer(i))(o.data)?;
                                 purpose = Some(val.as_u32()?);
                             }
                         }
@@ -172,7 +172,7 @@ pub(crate) mod android_key_attestation {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
-                    return Err(nom::Err::Error(BerError::BerTypeError.into()));
+                    return Err(nom::Err::Error(BerError::BerTypeError));
                 }
                 let (i, attestation_version) = parse_der_integer(i)?;
                 let _attestation_version = attestation_version.as_i64()?;
@@ -207,7 +207,7 @@ pub(crate) mod android_key_attestation {
                 if software_enforced.all_applications || tee_enforced.all_applications {
                     return Err(der_parser::error::BerError::InvalidValue {
                         tag: Tag(600),
-                        msg: format!("all_applications must not be set"),
+                        msg: "all_applications must not be set".to_string(),
                     })?;
                 }
 
@@ -222,7 +222,7 @@ pub(crate) mod android_key_attestation {
                     _ => {
                         return Err(der_parser::error::BerError::InvalidValue {
                             tag: Tag(701),
-                            msg: format!("invalid key master values (software)"),
+                            msg: "invalid key master values (software)".to_string(),
                         })?;
                     }
                 };
@@ -237,7 +237,7 @@ pub(crate) mod android_key_attestation {
                     _ => {
                         return Err(der_parser::error::BerError::InvalidValue {
                             tag: Tag(701),
-                            msg: format!("invalid key master values (tee)"),
+                            msg: "invalid key master values (tee)".to_string(),
                         })?;
                     }
                 };
@@ -245,7 +245,7 @@ pub(crate) mod android_key_attestation {
                 if !tee_set && !software_set {
                     return Err(der_parser::error::BerError::InvalidValue {
                         tag: Tag(701),
-                        msg: format!("both software and tee not set (keymaster values)"),
+                        msg: "both software and tee not set (keymaster values)".to_string(),
                     })?;
                 }
 
@@ -286,12 +286,12 @@ impl AttestationX509Extension for AppleAnonymousNonce {
         use der_parser::{der::*, error::BerError};
         parse_der_container(|i: &[u8], hdr: Header| {
             if hdr.tag() != Tag::Sequence {
-                return Err(nom::Err::Error(BerError::BerTypeError.into()));
+                return Err(nom::Err::Error(BerError::BerTypeError));
             }
             let (i, tagged_nonce) = parse_der_tagged_explicit(1, parse_der_octetstring)(i)?;
             let (class, _tag, nonce) = tagged_nonce.as_tagged()?;
             if class != Class::ContextSpecific {
-                return Err(nom::Err::Error(BerError::BerTypeError.into()));
+                return Err(nom::Err::Error(BerError::BerTypeError));
             }
             let nonce = nonce
                 .as_slice()?
@@ -332,7 +332,7 @@ where
                     })
             })
         })
-        .unwrap_or_else(|| {
+        .unwrap_or({
             if T::IS_REQUIRED {
                 Err(WebauthnError::AttestationStatementMissingExtension)
             } else {
@@ -447,7 +447,7 @@ pub(crate) fn verify_packed_attestation(
                 .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
-                .and_then(|sig| verify_signature(alg, &attestn_cert, sig, &verification_data))?;
+                .and_then(|sig| verify_signature(alg, attestn_cert, sig, &verification_data))?;
             if !is_valid_signature {
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
@@ -462,7 +462,7 @@ pub(crate) fn verify_packed_attestation(
             // (id-fido-gen-ce-aaguid) verify that the value of this extension matches the aaguid
             // in authenticatorData.
 
-            validate_extension::<FidoGenCeAaguid>(&attestn_cert, &acd.aaguid)?;
+            validate_extension::<FidoGenCeAaguid>(attestn_cert, &acd.aaguid)?;
 
             // Optionally, inspect x5c and consult externally provided knowledge to determine
             // whether attStmt conveys a Basic or AttCA attestation.
@@ -555,7 +555,7 @@ pub(crate) fn verify_fidou2f_attestation(
     }
 
     let arr_x509 = att_cert_array
-        .into_iter()
+        .iter()
         .map(|att_cert_bytes| {
             cbor_try_bytes!(att_cert_bytes).and_then(|att_cert| {
                 x509::X509::from_der(att_cert.as_slice()).map_err(WebauthnError::OpenSSLError)
@@ -595,7 +595,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .collect();
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    let verified = verify_signature(alg, &cerificate_public_key, sig, &verification_data)?;
+    let verified = verify_signature(alg, cerificate_public_key, sig, &verification_data)?;
 
     if !verified {
         error!("signature verification failed!");
@@ -839,7 +839,7 @@ pub(crate) fn verify_tpm_attestation(
     // If aik_cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
     // verify that the value of this extension matches the aaguid in authenticatorData.
 
-    validate_extension::<FidoGenCeAaguid>(&aik_cert, &acd.aaguid)?;
+    validate_extension::<FidoGenCeAaguid>(aik_cert, &acd.aaguid)?;
 
     // If successful, return implementation-specific values representing attestation type AttCA
     // and attestation trust path x5c.
@@ -901,7 +901,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
 
-    validate_extension::<AppleAnonymousNonce>(&attestn_cert, &nonce)?;
+    validate_extension::<AppleAnonymousNonce>(attestn_cert, &nonce)?;
 
     // 5. Verify credential public key matches the Subject Public Key of credCert.
     let subject_public_key = COSEKey::try_from((alg, attestn_cert))?;
@@ -986,7 +986,7 @@ pub(crate) fn verify_android_key_attestation(
 
     // 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the public key in the first certificate in x5c with the algorithm specified in alg.
 
-    let verified = verify_signature(alg, &attestn_cert, sig, &data_to_verify)?;
+    let verified = verify_signature(alg, attestn_cert, sig, &data_to_verify)?;
 
     if !verified {
         error!("signature verification failed!");
@@ -1009,7 +1009,7 @@ pub(crate) fn verify_android_key_attestation(
     // dbg!(std::str::from_utf8(&pem).unwrap());
 
     let meta = validate_extension::<AndroidKeyAttestationExtensionData>(
-        &attestn_cert,
+        attestn_cert,
         &client_data_hash.to_vec(),
     )?;
 
@@ -1123,7 +1123,7 @@ pub(crate) fn verify_android_safetynet_attestation(
                 .get_x5c_chain()?
                 .ok_or(SafetyNetError::MissingCertChain)?;
 
-            let leaf_cert = certs.iter().next().ok_or(SafetyNetError::BadCert)?;
+            let leaf_cert = certs.get(0).ok_or(SafetyNetError::BadCert)?;
 
             // Verify with the internal certificate.
             let jws: compact_jwt::Jws<SafteyNetAttestResponse> = jwsu.validate_embeded()?;
@@ -1261,7 +1261,7 @@ pub fn verify_attestation_ca_chain<'a>(
     // Note this is a result<result ... because the inner .init must return an errorstack
     // for openssl.
     let res: Result<_, _> = ca_ctx
-        .init(&ca_store, &leaf, &chain_stack, |ca_ctx_ref| {
+        .init(&ca_store, leaf, &chain_stack, |ca_ctx_ref| {
             ca_ctx_ref.verify_cert().map(|_| {
                 // The value as passed in is a boolean that we ignore in favour of the richer error type.
                 let res = ca_ctx_ref.error();
@@ -1318,7 +1318,7 @@ pub fn verify_attestation_ca_chain<'a>(
             })
             .take(1)
             .next()
-            .map(|ca_crt| Some(ca_crt))
+            .map(Some)
             .ok_or_else(|| {
                 WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string())
             })

@@ -15,8 +15,8 @@ use webauthn_rs::prelude::Uuid;
 use webauthn_rs::prelude::{
     DeviceKey,
     DeviceKeyRegistration,
-    // PassKey,
-    // PassKeyRegistration,
+    // Passkey,
+    // PasskeyRegistration,
 };
 use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKeyCredential};
 use webauthn_rs_demo_shared::*;
