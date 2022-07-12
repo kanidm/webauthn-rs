@@ -265,7 +265,7 @@ impl Webauthn {
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
-    /// on the server the `PassKeyRegistration` which contains the state of this registration
+    /// on the server the `PasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
     /// ```
@@ -306,7 +306,7 @@ impl Webauthn {
         user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
-    ) -> WebauthnResult<(CreationChallengeResponse, PassKeyRegistration)> {
+    ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
         let attestation = AttestationConveyancePreference::None;
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
@@ -337,11 +337,11 @@ impl Webauthn {
                 authenticator_attachment,
                 reject_passkeys,
             )
-            .map(|(ccr, rs)| (ccr, PassKeyRegistration { rs }))
+            .map(|(ccr, rs)| (ccr, PasskeyRegistration { rs }))
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired `PassKeyRegistration`. The details of the Authenticator
+    /// and the server provides it's paired `PasskeyRegistration`. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
@@ -349,7 +349,7 @@ impl Webauthn {
     ///
     /// # Returns
     ///
-    /// The returned `PassKey` must be associated to the users account, and is used for future
+    /// The returned `Passkey` must be associated to the users account, and is used for future
     /// authentications via `start_passkey_authentication`.
     ///
     /// You MUST assert that the registered credential id has not previously been registered.
@@ -357,30 +357,30 @@ impl Webauthn {
     pub fn finish_passkey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: &PassKeyRegistration,
-    ) -> WebauthnResult<PassKey> {
+        state: &PasskeyRegistration,
+    ) -> WebauthnResult<Passkey> {
         self.core
             .register_credential(reg, &state.rs, None)
-            .map(|cred| PassKey { cred })
+            .map(|cred| Passkey { cred })
     }
 
-    /// Given a set of `PassKey`'s, begin an authentication of the user. This returns
+    /// Given a set of `Passkey`'s, begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the `PassKeyAuthentication` state as it is paired to the
+    /// The server must persist the `PasskeyAuthentication` state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     pub fn start_passkey_authentication(
         &self,
-        creds: &[PassKey],
-    ) -> WebauthnResult<(RequestChallengeResponse, PassKeyAuthentication)> {
+        creds: &[Passkey],
+    ) -> WebauthnResult<(RequestChallengeResponse, PasskeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
         self.core
             .generate_challenge_authenticate_options(creds, extensions)
-            .map(|(rcr, ast)| (rcr, PassKeyAuthentication { ast }))
+            .map(|(rcr, ast)| (rcr, PasskeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PassKeyAuthentication`
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasskeyAuthentication`
     /// complete the authentication of the user.
     ///
     /// # Errors
@@ -403,7 +403,7 @@ impl Webauthn {
     pub fn finish_passkey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        state: &PassKeyAuthentication,
+        state: &PasskeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
     }
