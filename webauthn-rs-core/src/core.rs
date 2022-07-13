@@ -155,6 +155,7 @@ impl WebauthnCore {
     /// It also returns a RegistrationState, that you *must*
     /// persist. It is strongly advised you associate this RegistrationState with the
     /// UserId of the requester.
+     #[allow(clippy::too_many_arguments)]
     pub fn generate_challenge_register_options(
         &self,
         user_unique_id: &[u8],
@@ -326,6 +327,7 @@ impl WebauthnCore {
         Ok(credential)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn register_credential_internal(
         &self,
         reg: &RegisterPublicKeyCredential,

@@ -113,7 +113,7 @@ impl PartialEq<Credential> for Credential {
         self.cred_id == c.cred_id
     }
 }
-
+#[allow(clippy::too_many_arguments)]
 impl Credential {
     pub(crate) fn new(
         acd: &AttestedCredentialData,
@@ -306,7 +306,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
         },
     ))
 }
-
+#[allow(clippy::type_complexity)]
 fn authenticator_data_flags(i: &[u8]) -> nom::IResult<&[u8], (bool, bool, bool, bool, bool, bool)> {
     // Using nom for bit fields is shit, do it by hand.
     let (i, ctrl) = nom::number::complete::u8(i)?;
@@ -1049,17 +1049,18 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 /// From the [TPM Vendor ID Registry][1]
 /// [1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-VendorIDRegistry-v1p06-r0p91-pub.pdf,
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum TpmVendor {
-    Amd,
+    AMD,
     Atmel,
     Broadcom,
     Cisco,
     FlySliceTechnologies,
     FuzhouRockchip,
     Google,
-    Hpe,
+    HPE,
     Huawei,
-    Ibm,
+    IBM,
     Infineon,
     Intel,
     Lenovo,
@@ -1070,7 +1071,7 @@ pub enum TpmVendor {
     Qualcomm,
     Samsung,
     Sinosun,
-    Smsc,
+    SMSC,
     StMicroelectronics,
     TexasInstruments,
     Winbond,
@@ -1085,16 +1086,16 @@ impl TryFrom<&[u8; 8]> for TpmVendor {
 
     fn try_from(v: &[u8; 8]) -> Result<Self, Self::Error> {
         match v {
-            b"414d4400" => Ok(Self::Amd),
+            b"414d4400" => Ok(Self::AMD),
             b"41544D4C" => Ok(Self::Atmel),
             b"4252434D" => Ok(Self::Broadcom),
             b"4353434F" => Ok(Self::Cisco),
             b"464C5953" => Ok(Self::FlySliceTechnologies),
             b"524F4343" => Ok(Self::FuzhouRockchip),
             b"474F4F47" => Ok(Self::Google),
-            b"48504500" => Ok(Self::Hpe),
+            b"48504500" => Ok(Self::HPE),
             b"48495349" => Ok(Self::Huawei),
-            b"49424D00" => Ok(Self::Ibm),
+            b"49424D00" => Ok(Self::IBM),
             b"49465800" => Ok(Self::Infineon),
             b"494E5443" => Ok(Self::Intel),
             b"4C454E00" => Ok(Self::Lenovo),
@@ -1105,7 +1106,7 @@ impl TryFrom<&[u8; 8]> for TpmVendor {
             b"51434F4D" => Ok(Self::Qualcomm),
             b"534D534E" => Ok(Self::Samsung),
             b"534E5300" => Ok(Self::Sinosun),
-            b"534D5343" => Ok(Self::Smsc),
+            b"534D5343" => Ok(Self::SMSC),
             b"53544D20" => Ok(Self::StMicroelectronics),
             b"54584E00" => Ok(Self::TexasInstruments),
             b"57454300" => Ok(Self::Winbond),
