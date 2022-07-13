@@ -271,7 +271,7 @@ impl Credential {
         let danger_disable_certificate_time_checks = true;
         verify_attestation_ca_chain(
             &self.attestation.data,
-            &ca_list,
+            ca_list,
             danger_disable_certificate_time_checks,
         )
     }
@@ -456,7 +456,7 @@ pub enum ParsedAttestationData {
     /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain,
 }
-
+#[allow(clippy::from_over_into)]
 impl Into<SerialisableAttestationData> for ParsedAttestationData {
     fn into(self) -> SerialisableAttestationData {
         match self {
@@ -626,7 +626,7 @@ pub struct AttestationCa {
     /// The x509 root CA of the attestation chain that a security key will be attested to.
     pub ca: x509::X509,
 }
-
+#[allow(clippy::from_over_into)]
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {

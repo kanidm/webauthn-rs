@@ -155,6 +155,7 @@ impl WebauthnCore {
     /// It also returns a RegistrationState, that you *must*
     /// persist. It is strongly advised you associate this RegistrationState with the
     /// UserId of the requester.
+     #[allow(clippy::too_many_arguments)]
     pub fn generate_challenge_register_options(
         &self,
         user_unique_id: &[u8],
@@ -212,7 +213,7 @@ impl WebauthnCore {
                     id: self.rp_id.clone(),
                 },
                 user: User {
-                    id: Base64UrlSafeData(user_id.clone()),
+                    id: Base64UrlSafeData(user_id),
                     name: user_name.to_string(),
                     display_name: user_display_name.to_string(),
                 },
@@ -254,7 +255,7 @@ impl WebauthnCore {
             // We can potentially enforce these!
             require_resident_key,
             authenticator_attachment,
-            extensions: extensions.unwrap_or_else(|| RequestRegistrationExtensions::default()),
+            extensions: extensions.unwrap_or_default(),
             experimental_allow_passkeys: !experimental_reject_passkeys,
         };
 
@@ -302,10 +303,10 @@ impl WebauthnCore {
             *policy,
             chal,
             exclude_credentials,
-            &credential_algorithms,
+            credential_algorithms,
             attestation_cas,
             false,
-            &extensions,
+            extensions,
             *experimental_allow_passkeys,
         )?;
 
@@ -326,6 +327,7 @@ impl WebauthnCore {
         Ok(credential)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn register_credential_internal(
         &self,
         reg: &RegisterPublicKeyCredential,
@@ -567,7 +569,7 @@ impl WebauthnCore {
             // If given a set of ca's assert that our attestation actually matched one.
             let ca_crt = verify_attestation_ca_chain(
                 &credential.attestation.data,
-                &ca_list,
+                ca_list,
                 danger_disable_certificate_time_checks,
             )?;
 
@@ -2825,7 +2827,6 @@ mod tests {
                 .map(|cred| {
                     cred.user_verified = true;
                     cred.registration_policy = UserVerificationPolicy::Required;
-                    ()
                 })
                 .unwrap();
             creds
@@ -2833,7 +2834,6 @@ mod tests {
                 .map(|cred| {
                     cred.user_verified = true;
                     cred.registration_policy = UserVerificationPolicy::Required;
-                    ()
                 })
                 .unwrap();
         }
@@ -2851,7 +2851,6 @@ mod tests {
                 .map(|cred| {
                     cred.user_verified = true;
                     cred.registration_policy = UserVerificationPolicy::Discouraged_DO_NOT_USE;
-                    ()
                 })
                 .unwrap();
             creds
@@ -2859,7 +2858,6 @@ mod tests {
                 .map(|cred| {
                     cred.user_verified = false;
                     cred.registration_policy = UserVerificationPolicy::Discouraged_DO_NOT_USE;
-                    ()
                 })
                 .unwrap();
         }
@@ -2997,8 +2995,8 @@ mod tests {
         ]);
 
         let rsp_d = PublicKeyCredential {
-            id: id.clone(),
-            raw_id: raw_id.clone(),
+            id,
+            raw_id,
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: Base64UrlSafeData(vec![
                     239, 115, 241, 111, 91, 226, 27, 23, 185, 145, 15, 75, 208, 190, 109, 73, 186,

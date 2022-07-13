@@ -133,7 +133,8 @@ pub struct RequestAuthenticationExtensions {
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
-#[derive(Debug, Deserialize, Serialize, Clone)]
+/// The default option here for Options are None, so it can be derived
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
@@ -141,15 +142,6 @@ pub struct AuthenticationExtensionsClientOutputs {
 
     /// Indicates if the client used the provided cred_blob extensions.
     pub cred_blob: Option<bool>,
-}
-
-impl Default for AuthenticationExtensionsClientOutputs {
-    fn default() -> Self {
-        AuthenticationExtensionsClientOutputs {
-            appid: None,
-            cred_blob: None,
-        }
-    }
 }
 
 #[cfg(feature = "wasm")]
@@ -178,7 +170,8 @@ pub struct CredProps {
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
-#[derive(Debug, Deserialize, Serialize, Clone)]
+/// The default option here for Options are None, so it can be derived
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct RegistrationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
@@ -192,16 +185,6 @@ pub struct RegistrationExtensionsClientOutputs {
     /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
     #[serde(default)]
     pub cred_props: Option<CredProps>,
-}
-
-impl Default for RegistrationExtensionsClientOutputs {
-    fn default() -> Self {
-        RegistrationExtensionsClientOutputs {
-            appid: None,
-            cred_blob: None,
-            cred_props: None,
-        }
-    }
 }
 
 #[cfg(feature = "wasm")]
