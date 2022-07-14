@@ -413,7 +413,7 @@ pub enum AttestationMetadata {
         is_attest_tee: bool,
     },
     /// various attestation flags set by the device (attested via safety-net)
-    /// https://developer.android.com/training/safetynet/attestation#use-response-server
+    /// <https://developer.android.com/training/safetynet/attestation#use-response-server>
     AndroidSafetyNet {
         /// the name of apk that originated this key operation
         apk_package_name: String,
@@ -595,16 +595,44 @@ pub(crate) struct AttestedCredentialData {
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticationResult {
     /// The credential ID that was used to authenticate.
-    pub cred_id: CredentialID,
+    pub(crate) cred_id: CredentialID,
     /// If the authentication provided user_verification.
-    pub user_verified: bool,
+    pub(crate) user_verified: bool,
     /// The current backup state of the authenticator. It may have
     /// changed since registration.
-    pub backup_state: bool,
+    pub(crate) backup_state: bool,
     /// The state of the counter
-    pub counter: u32,
+    pub(crate) counter: Counter,
     /// The response from associated extensions.
-    pub extensions: AuthenticationExtensions,
+    pub(crate) extensions: AuthenticationExtensions,
+}
+
+impl AuthenticationResult {
+    /// The credential ID that was used to authenticate.
+    pub fn cred_id(&self) -> &CredentialID {
+        &self.cred_id
+    }
+
+    /// If the authentication provided user_verification.
+    pub fn user_verified(&self) -> bool {
+        self.user_verified
+    }
+
+    /// The current backup state of the authenticator. It may have
+    /// changed since registration.
+    pub fn backup_state(&self) -> bool {
+        self.backup_state
+    }
+
+    /// The state of the counter
+    pub fn counter(&self) -> Counter {
+        self.counter
+    }
+
+    /// The response from associated extensions.
+    pub fn extensions(&self) -> &AuthenticationExtensions {
+        &self.extensions
+    }
 }
 
 /// A serialised Attestation CA.

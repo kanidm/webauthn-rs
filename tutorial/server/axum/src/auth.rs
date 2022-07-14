@@ -257,9 +257,10 @@ pub async fn finish_authentication(
                 .get_mut(&user_unique_id)
                 .map(|keys| {
                     keys.iter_mut().for_each(|sk| {
-                        if sk.cred_id() == &auth_result.cred_id {
-                            sk.update_credential_counter(auth_result.counter)
-                        }
+                        // This will update the credential if it's the matching
+                        // one. Otherwise it's ignored. That is why it is safe to
+                        // iterate this over the full list.
+                        sk.update_credential(&auth_result);
                     })
                 })
                 .ok_or(WebauthnError::UserHasNoCredentials)?;

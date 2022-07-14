@@ -70,8 +70,9 @@ pub mod prelude {
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
     pub use webauthn_rs_core::proto::{
-        AuthenticationState, Credential, CredentialID, ParsedAttestationData, PublicKeyCredential,
-        RegisterPublicKeyCredential,
+        AuthenticationResult, AuthenticationState, CreationChallengeResponse, Credential,
+        CredentialID, ParsedAttestationData, PublicKeyCredential, RegisterPublicKeyCredential,
+        RequestChallengeResponse,
     };
     pub use webauthn_rs_core::AttestationFormat;
 }

@@ -90,7 +90,7 @@ pub struct AuthenticatorAttestationResponseRaw {
     #[serde(rename = "clientDataJSON")]
     pub client_data_json: Base64UrlSafeData,
 
-    /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-gettransports
+    /// <https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-gettransports>
     #[serde(default)]
     pub transports: Option<Vec<AuthenticatorTransport>>,
 }

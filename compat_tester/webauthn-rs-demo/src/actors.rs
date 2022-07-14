@@ -346,8 +346,8 @@ impl WebauthnActor {
             .map(|auth_result| {
                 creds
                     .iter_mut()
-                    .filter(|cred| &auth_result.cred_id == &cred.cred_id)
-                    .for_each(|cred| cred.counter = auth_result.counter);
+                    .filter(|cred| auth_result.cred_id() == &cred.cred_id)
+                    .for_each(|cred| cred.counter = auth_result.counter());
                 (creds, auth_result)
             });
         debug!("complete Authenticate -> {:?}", r);

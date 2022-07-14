@@ -501,10 +501,10 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
                 .expect("Failed to insert");
 
             let auth_response = AuthenticationSuccess {
-                cred_id: auth_result.cred_id,
-                uv: auth_result.user_verified,
+                cred_id: auth_result.cred_id().clone(),
+                uv: auth_result.user_verified(),
                 // counter: auth_data.counter,
-                extensions: auth_result.extensions.clone(),
+                extensions: auth_result.extensions().clone(),
             };
 
             tide::Response::builder(tide::StatusCode::Ok)
