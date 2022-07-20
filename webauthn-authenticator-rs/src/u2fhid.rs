@@ -1,366 +1,327 @@
 use crate::error::WebauthnCError;
-use crate::U2FToken;
-use crate::{U2FRegistrationData, U2FSignData};
-use webauthn_rs_proto::AllowCredentials;
+use crate::AuthenticatorBackend;
+use crate::Url;
 
-use std::convert::TryFrom;
+use base64urlsafedata::Base64UrlSafeData;
+use webauthn_rs_proto::PublicKeyCredentialCreationOptions;
+use webauthn_rs_proto::{
+    AuthenticatorAttestationResponseRaw, RegisterPublicKeyCredential,
+    RegistrationExtensionsClientOutputs,
+};
+
+use webauthn_rs_proto::PublicKeyCredentialRequestOptions;
+use webauthn_rs_proto::{
+    AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw, PublicKeyCredential,
+};
 
 use authenticator::{
-    authenticatorservice::AuthenticatorService, statecallback::StateCallback,
-    AuthenticatorTransports, KeyHandle, RegisterFlags, SignFlags, StatusUpdate,
+    authenticatorservice::{
+        AuthenticatorService, CtapVersion, GetAssertionExtensions, GetAssertionOptions,
+        MakeCredentialsExtensions, MakeCredentialsOptions, RegisterArgsCtap2, SignArgsCtap2,
+    },
+    ctap2::server::{
+        PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, Transport, User,
+    },
+    ctap2::AssertionObject,
+    errors::PinError,
+    statecallback::StateCallback,
+    COSEAlgorithm, Pin, RegisterResult, SignResult, StatusUpdate,
 };
-use std::sync::mpsc::channel;
+
+use std::sync::mpsc::{channel, RecvError, Sender};
 use std::thread;
 
-pub struct U2FHid {}
-
-impl Default for U2FHid {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// The format of the return registration data is as follows:
-//
-// Bytes  Value
-// 1      0x05
-// 65     public key
-// 1      key handle length
-// *      key handle
-// ASN.1  attestation certificate
-// *      attestation signature
-
-// https://hg.mozilla.org/mozilla-central/file/6d98cc745df58e544a8d71c131f060fc2c460d83/dom/webauthn/WebAuthnUtil.cpp#l285
-
-fn asn1_seq_extractor(i: &[u8]) -> nom::IResult<&[u8], &[u8]> {
-    // Assert we have enough bytes for the ASN.1 header.
-    if i.len() < 2 {
-        return Err(nom::Err::Failure(nom::error::Error::new(
-            i,
-            nom::error::ErrorKind::LengthValue,
-        )));
-    }
-    if i[0] != 0x30 {
-        // It's not an ASN.1 sequence.
-        return Err(nom::Err::Failure(nom::error::Error::new(
-            i,
-            nom::error::ErrorKind::IsNot,
-        )));
-    }
-
-    let length: usize = if i[1] & 0x40 == 0x40 {
-        // This is a long form length
-        return Err(nom::Err::Failure(nom::error::Error::new(
-            i,
-            nom::error::ErrorKind::Tag,
-        )));
-    } else {
-        i[1] as usize
-    };
-
-    if i.len() < (2 + length) {
-        // Not enough bytes to satisfy.
-        return Err(nom::Err::Failure(nom::error::Error::new(
-            i,
-            nom::error::ErrorKind::TakeUntil,
-        )));
-    }
-
-    let (cert, rem) = i.split_at(2 + length);
-    Ok((rem, cert))
-}
-
-fn u2rd_parser_inner(i: &[u8]) -> nom::IResult<&[u8], U2FRegistrationData> {
-    let (i, public_key_x) = nom::sequence::preceded(
-        nom::combinator::verify(nom::bytes::complete::take(1usize), |val: &[u8]| {
-            val == [0x04]
-        }),
-        nom::bytes::complete::take(32usize),
-    )(i)?;
-
-    let (i, public_key_y) = nom::bytes::complete::take(32usize)(i)?;
-    let (i, key_handle) = nom::multi::length_data(nom::number::complete::be_u8)(i)?;
-    let (i, att_cert) = asn1_seq_extractor(i)?;
-    let (i, signature) = nom::combinator::rest(i)?;
-
-    Ok((
-        i,
-        U2FRegistrationData {
-            public_key_x: public_key_x.to_vec(),
-            public_key_y: public_key_y.to_vec(),
-            key_handle: key_handle.to_vec(),
-            att_cert: att_cert.to_vec(),
-            signature: signature.to_vec(),
-        },
-    ))
-}
-
-fn u2rd_parser(i: &[u8]) -> nom::IResult<&[u8], U2FRegistrationData> {
-    nom::sequence::preceded(
-        nom::combinator::verify(nom::bytes::complete::take(1usize), |val: &[u8]| {
-            val == [0x05]
-        }),
-        u2rd_parser_inner,
-    )(i)
-}
-
-impl TryFrom<&[u8]> for U2FRegistrationData {
-    type Error = WebauthnCError;
-    fn try_from(data: &[u8]) -> Result<U2FRegistrationData, WebauthnCError> {
-        u2rd_parser(data)
-            .map_err(|_| WebauthnCError::ParseNOMFailure)
-            .map(|(_, ad)| ad)
-    }
-}
-
-// https://hg.mozilla.org/mozilla-central/file/6d98cc745df58e544a8d71c131f060fc2c460d83/dom/webauthn/U2FHIDTokenManager.cpp#l296
-// https://hg.mozilla.org/mozilla-central/file/6d98cc745df58e544a8d71c131f060fc2c460d83/dom/webauthn/WebAuthnUtil.cpp#l187
-
-// A U2F Sign operation creates a signature over the "param" arguments (plus
-// some other stuff) using the private key indicated in the key handle argument.
-//
-// The format of the signed data is as follows:
-//
-//  32    Application parameter
-//  1     User presence (0x01)
-//  4     Counter
-//  32    Challenge parameter
-//
-// The format of the signature data is as follows:
-//
-//  1     User presence
-//  4     Counter
-//  *     Signature
-
-fn u2sd_sign_data_parser(i: &[u8]) -> nom::IResult<&[u8], (u8, u32, Vec<u8>)> {
-    let (i, up) = nom::number::complete::be_u8(i)?;
-    let (i, cnt) = nom::number::complete::be_u32(i)?;
-    let (i, sig) = nom::combinator::rest(i)?;
-    Ok((i, (up, cnt, sig.to_vec())))
+pub struct U2FHid {
+    status_tx: Sender<StatusUpdate>,
+    _thread_handle: thread::JoinHandle<()>,
+    manager: AuthenticatorService,
 }
 
 impl U2FHid {
     pub fn new() -> Self {
-        U2FHid {}
-    }
-}
-
-impl U2FToken for U2FHid {
-    // fn authenticator_make_credential(&self) -> {
-    //          Invoke the authenticatorMakeCredential operation on authenticator with clientDataHash, options.rp, options.user, options.authenticatorSelection.requireResidentKey, userPresence, userVerification, credTypesAndPubKeyAlgs, excludeCredentialDescriptorList, and authenticatorExtensions as parameters.
-    // }
-
-    fn perform_u2f_register(
-        &mut self,
-        // This is rp.id_hash
-        app_bytes: Vec<u8>,
-        // This is client_data_json_hash
-        chal_bytes: Vec<u8>,
-        // timeout from options
-        timeout_ms: u64,
-        //
-        platform_attached: bool,
-        resident_key: bool,
-        user_verification: bool,
-    ) -> Result<U2FRegistrationData, WebauthnCError> {
-        if user_verification {
-            error!("User Verification not supported by attestation-rs");
-            return Err(WebauthnCError::NotSupported);
-        }
-
-        let mut manager = AuthenticatorService::new().map_err(|e| {
-            error!("Authentication Service -> {:?}", e);
-            WebauthnCError::PlatformAuthenticator
-        })?;
+        let mut manager = AuthenticatorService::new(CtapVersion::CTAP2)
+            .expect("The auth service should initialize safely");
 
         manager.add_u2f_usb_hid_platform_transports();
 
-        let mut flags = RegisterFlags::empty();
-
-        if platform_attached {
-            flags.insert(RegisterFlags::REQUIRE_PLATFORM_ATTACHMENT)
-        }
-
-        if resident_key {
-            flags.insert(RegisterFlags::REQUIRE_RESIDENT_KEY)
-        }
-
-        debug!("flags -> {:?}", flags);
-
         let (status_tx, status_rx) = channel::<StatusUpdate>();
-        let (register_tx, register_rx) = channel();
 
-        thread::spawn(move || loop {
+        let _thread_handle = thread::spawn(move || loop {
             match status_rx.recv() {
                 Ok(StatusUpdate::DeviceAvailable { dev_info }) => {
-                    debug!("STATUS: device available: {}", dev_info);
-                    info!(
-                        "Available Device: {}",
-                        std::str::from_utf8(&dev_info.device_name).unwrap_or("invalid device name")
-                    );
+                    println!("STATUS: device available: {}", dev_info)
                 }
                 Ok(StatusUpdate::DeviceUnavailable { dev_info }) => {
-                    debug!("STATUS: device unavailable: {}", dev_info)
+                    println!("STATUS: device unavailable: {}", dev_info)
                 }
                 Ok(StatusUpdate::Success { dev_info }) => {
-                    info!("STATUS: success using device: {}", dev_info);
+                    println!("STATUS: success using device: {}", dev_info);
                 }
-                Err(_recverror) => {
-                    debug!("STATUS: end");
+                Ok(StatusUpdate::SelectDeviceNotice) => {
+                    println!("STATUS: Please select a device by touching one of them.");
+                }
+                Ok(StatusUpdate::DeviceSelected(dev_info)) => {
+                    println!("STATUS: Continuing with device: {}", dev_info);
+                }
+                Ok(StatusUpdate::PinError(error, sender)) => match error {
+                    PinError::PinRequired => {
+                        let raw_pin = rpassword::prompt_password_stderr("Enter PIN: ")
+                            .expect("Failed to read PIN");
+                        sender.send(Pin::new(&raw_pin)).expect("Failed to send PIN");
+                        continue;
+                    }
+                    PinError::InvalidPin(attempts) => {
+                        println!(
+                            "Wrong PIN! {}",
+                            attempts.map_or(format!("Try again."), |a| format!(
+                                "You have {} attempts left.",
+                                a
+                            ))
+                        );
+                        let raw_pin = rpassword::prompt_password_stderr("Enter PIN: ")
+                            .expect("Failed to read PIN");
+                        sender.send(Pin::new(&raw_pin)).expect("Failed to send PIN");
+                        continue;
+                    }
+                    PinError::PinAuthBlocked => {
+                        panic!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
+                    }
+                    PinError::PinBlocked => {
+                        panic!("Too many failed attempts. Your device has been blocked. Reset it.")
+                    }
+                    e => {
+                        panic!("Unexpected error: {:?}", e)
+                    }
+                },
+                Err(RecvError) => {
+                    println!("STATUS: end");
                     return;
                 }
             }
         });
 
+        U2FHid {
+            status_tx,
+            _thread_handle,
+            manager,
+        }
+    }
+}
+
+impl AuthenticatorBackend for U2FHid {
+    fn perform_register(
+        &mut self,
+        origin: Url,
+        options: PublicKeyCredentialCreationOptions,
+        timeout_ms: u32,
+    ) -> Result<RegisterPublicKeyCredential, WebauthnCError> {
+        let pub_cred_params = options
+            .pub_key_cred_params
+            .into_iter()
+            .map(|param| {
+                COSEAlgorithm::try_from(param.alg)
+                    .map_err(|e| {
+                        error!(?e, "error converting to COSEAlgorithm");
+                        WebauthnCError::InvalidAlgorithm
+                    })
+                    .map(|alg| PublicKeyCredentialParameters { alg })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let ctap_args = RegisterArgsCtap2 {
+            challenge: options.challenge.0,
+            relying_party: RelyingParty {
+                id: options.rp.id,
+                name: Some(options.rp.name),
+                icon: None,
+            },
+            origin: origin.to_string(),
+            user: User {
+                id: options.user.id.0,
+                icon: None,
+                name: Some(options.user.name),
+                display_name: Some(options.user.display_name),
+            },
+            pub_cred_params,
+            exclude_list: vec![],
+            options: MakeCredentialsOptions {
+                resident_key: None,
+                user_verification: None,
+            },
+            extensions: MakeCredentialsExtensions {
+                ..Default::default()
+            },
+            pin: None,
+        };
+
+        /* Actually call the library. */
+        let (register_tx, register_rx) = channel();
+
         let callback = StateCallback::new(Box::new(move |rv| {
             register_tx.send(rv).unwrap();
         }));
 
-        manager
-            .register(
-                flags,
-                timeout_ms,
-                chal_bytes,
-                app_bytes,
-                vec![],
-                status_tx,
-                callback,
-            )
-            .map_err(|e| {
-                error!("Failed to setup manager register -> {:?}", e);
-                WebauthnCError::Internal
-            })?;
+        if let Err(e) = self.manager.register(
+            timeout_ms.into(),
+            ctap_args.clone().into(),
+            self.status_tx.clone(),
+            callback,
+        ) {
+            panic!("Couldn't register: {:?}", e);
+        };
 
-        let register_result = register_rx.recv().map_err(|e| {
-            error!("Registration Channel Error -> {:?}", e);
-            WebauthnCError::Internal
-        })?;
+        let register_result = register_rx
+            .recv()
+            .expect("Problem receiving, unable to continue");
 
-        let (register_data, device_info) = register_result.map_err(|e| {
-            error!("Device Registration Error -> {:?}", e);
-            WebauthnCError::Internal
-        })?;
+        let (attestation_object, client_data) = match register_result {
+            Ok(RegisterResult::CTAP1(_, _)) => panic!("Requested CTAP2, but got CTAP1 results!"),
+            Ok(RegisterResult::CTAP2(a, c)) => {
+                println!("Ok!");
+                (a, c)
+            }
+            Err(e) => panic!("Registration failed: {:?}", e),
+        };
 
-        debug!("di ->  {:?}", device_info);
+        trace!("{:?}", attestation_object);
+        trace!("{:?}", client_data);
 
-        // Now we have to transform the u2f response to something that
-        // webauthn can understand.
+        // Warning! In the future this may change!
+        // This currently relies on serde_json and serde_cbor being deterministic, and has
+        // been brought up with MS.
 
-        let u2rd = U2FRegistrationData::try_from(register_data.as_slice()).map_err(|e| {
-            error!("U2F Registration Data Corrupt -> {:?}", e);
-            e
-        })?;
+        let raw_id = if let Some(cred_data) = &attestation_object.auth_data.credential_data {
+            Base64UrlSafeData(cred_data.credential_id.clone())
+        } else {
+            panic!("Fuck");
+        };
 
-        debug!("u2rd -> {:?}", u2rd);
-        Ok(u2rd)
+        // Based on the request attestation format, provide it
+        let attestation_object = serde_cbor::to_vec(&attestation_object)
+            .map(|bytes| Base64UrlSafeData(bytes))
+            .unwrap();
+
+        let client_data_json = serde_json::to_vec(&client_data)
+            .map(|bytes| Base64UrlSafeData(bytes))
+            .unwrap();
+
+        Ok(RegisterPublicKeyCredential {
+            id: raw_id.to_string(),
+            raw_id,
+            response: AuthenticatorAttestationResponseRaw {
+                // Turn into cbor,
+                attestation_object,
+                // Turn into json
+                client_data_json,
+                transports: None,
+            },
+            type_: "public-key".to_string(),
+            extensions: RegistrationExtensionsClientOutputs {
+                ..Default::default()
+            },
+        })
     }
 
-    // Then, using transport, invoke the authenticatorGetAssertion operation on authenticator, with rpId, clientDataHash, allowCredentialDescriptorList, userPresence, userVerification, and authenticatorExtensions as parameters.
-    fn perform_u2f_sign(
+    fn perform_auth(
         &mut self,
-        // This is rp.id_hash
-        app_bytes: Vec<u8>,
-        // This is client_data_json_hash
-        chal_bytes: Vec<u8>,
-        // timeout from options
-        timeout_ms: u64,
-        // list of creds
-        allowed_credentials: &[AllowCredentials],
-        user_verification: bool,
-    ) -> Result<U2FSignData, WebauthnCError> {
-        if user_verification {
-            error!("User Verification not supported by attestation-rs");
-            return Err(WebauthnCError::NotSupported);
-        }
-
-        let allowed_credentials: Vec<KeyHandle> = allowed_credentials
+        origin: Url,
+        options: PublicKeyCredentialRequestOptions,
+        timeout_ms: u32,
+    ) -> Result<PublicKeyCredential, WebauthnCError> {
+        let allow_list = options
+            .allow_credentials
             .iter()
-            .map(|ac| {
-                KeyHandle {
-                    // Dup the inner id.
-                    credential: ac.id.0.clone(),
-                    transports: AuthenticatorTransports::empty(),
+            .map(|cred| {
+                PublicKeyCredentialDescriptor {
+                    id: cred.id.0.clone(),
+                    // It appears we have to always specify the lower transport in this
+                    // library due to discovered bugs
+                    transports: vec![Transport::USB],
                 }
             })
             .collect();
 
-        let mut manager = AuthenticatorService::new().map_err(|e| {
-            error!("Authentication Service -> {:?}", e);
-            WebauthnCError::PlatformAuthenticator
-        })?;
+        let ctap_args = SignArgsCtap2 {
+            challenge: options.challenge.0.clone(),
+            origin: origin.to_string(),
+            relying_party_id: options.rp_id.clone(),
+            allow_list,
+            options: GetAssertionOptions::default(),
+            extensions: GetAssertionExtensions {
+                ..Default::default()
+            },
+            pin: None,
+        };
 
-        manager.add_u2f_usb_hid_platform_transports();
-
-        let flags = SignFlags::empty();
-
-        debug!("flags -> {:?}", flags);
-
-        let (status_tx, status_rx) = channel::<StatusUpdate>();
-        let (register_tx, register_rx) = channel();
-
-        thread::spawn(move || loop {
-            match status_rx.recv() {
-                Ok(StatusUpdate::DeviceAvailable { dev_info }) => {
-                    debug!("STATUS: device available: {}", dev_info);
-                    info!(
-                        "Available Device: {}",
-                        std::str::from_utf8(&dev_info.device_name).unwrap_or("invalid device name")
-                    );
-                }
-                Ok(StatusUpdate::DeviceUnavailable { dev_info }) => {
-                    debug!("STATUS: device unavailable: {}", dev_info)
-                }
-                Ok(StatusUpdate::Success { dev_info }) => {
-                    info!("STATUS: success using device: {}", dev_info);
-                }
-                Err(_recverror) => {
-                    debug!("STATUS: end");
-                    return;
-                }
-            }
-        });
+        let (sign_tx, sign_rx) = channel();
 
         let callback = StateCallback::new(Box::new(move |rv| {
-            register_tx.send(rv).unwrap();
+            sign_tx.send(rv).unwrap();
         }));
 
-        manager
-            .sign(
-                flags,
-                timeout_ms,
-                chal_bytes,
-                vec![app_bytes],
-                allowed_credentials,
-                status_tx,
-                callback,
-            )
-            .map_err(|e| {
-                error!("Failed to setup manager sign -> {:?}", e);
-                WebauthnCError::Internal
-            })?;
+        if let Err(e) = self.manager.sign(
+            timeout_ms.into(),
+            ctap_args.into(),
+            self.status_tx.clone(),
+            callback,
+        ) {
+            panic!("Couldn't sign: {:?}", e);
+        }
 
-        let register_result = register_rx.recv().map_err(|e| {
-            error!("Registration Channel Error -> {:?}", e);
-            WebauthnCError::Internal
-        })?;
+        let sign_result = sign_rx
+            .recv()
+            .expect("Problem receiving, unable to continue");
 
-        let (appid, key_handle, sign_data, device_info) = register_result.map_err(|e| {
-            error!("Device Registration Error -> {:?}", e);
-            WebauthnCError::Internal
-        })?;
+        let (assertion_object, client_data) = match sign_result {
+            Ok(SignResult::CTAP1(..)) => panic!("Requested CTAP2, but got CTAP1 sign results!"),
+            Ok(SignResult::CTAP2(assertion_object, client_data)) => (assertion_object, client_data),
+            Err(e) => panic!("Signing failed: {:?}", e),
+        };
 
-        debug!("di ->  {:?}", device_info);
+        trace!("{:?}", assertion_object);
+        trace!("{:?}", client_data);
 
-        let (_, (user_present, counter, signature)) =
-            u2sd_sign_data_parser(sign_data.as_slice())
-                .map_err(|_| WebauthnCError::ParseNOMFailure)?;
+        let AssertionObject(mut assertions) = assertion_object;
+        let assertion = if assertions.len() != 1 {
+            panic!("Fuck");
+        } else {
+            assertions.pop().unwrap()
+        };
 
-        Ok(U2FSignData {
-            appid,
-            key_handle,
-            counter,
-            signature,
-            user_present,
+        let raw_id = assertion
+            .credentials
+            .map(|pkdesc| Base64UrlSafeData(pkdesc.id))
+            .ok_or(WebauthnCError::Internal)?;
+
+        let id = raw_id.to_string();
+
+        let user_handle = assertion.user.map(|u| Base64UrlSafeData(u.id));
+        let signature = Base64UrlSafeData(assertion.signature);
+
+        // let authenticator_data = serde_cbor::to_vec(&assertion.auth_data)
+        let authenticator_data = assertion
+            .auth_data
+            .to_vec()
+            .map(|bytes| Base64UrlSafeData(bytes))
+            .unwrap();
+
+        let client_data_json = serde_json::to_vec(&client_data)
+            .map(|bytes| Base64UrlSafeData(bytes))
+            .unwrap();
+
+        Ok(PublicKeyCredential {
+            id,
+            raw_id,
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data,
+                client_data_json,
+                signature,
+                user_handle,
+            },
+            type_: "public-key".to_string(),
+            extensions: AuthenticationExtensionsClientOutputs {
+                ..Default::default()
+            },
         })
     }
 }
@@ -368,43 +329,55 @@ impl U2FToken for U2FHid {
 #[cfg(test)]
 mod tests {
     use crate::u2fhid::U2FHid;
-    use crate::WebauthnAuthenticator;
+    use crate::AuthenticatorBackend;
+    use crate::Url;
     use webauthn_rs_core::WebauthnCore as Webauthn;
 
     #[test]
     fn webauthn_authenticator_wan_u2fhid_interact() {
         let _ = tracing_subscriber::fmt::try_init();
-        let wan = unsafe {
-            Webauthn::new(
-                "https://localhost:8080/auth",
-                "localhost",
-                &url::Url::parse("https://localhost:8080").unwrap(),
-                None,
-                None,
+        let wan = Webauthn::new_unsafe_experts_only(
+            "https://localhost:8080/auth",
+            "localhost",
+            &url::Url::parse("https://localhost:8080").unwrap(),
+            None,
+            None,
+            None,
+        );
+
+        let unique_id = [
+            158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
+        ];
+        let name = "william";
+
+        let (chal, reg_state) = wan
+            .generate_challenge_register(&unique_id, name, name, false)
+            .unwrap();
+
+        info!("🍿 challenge -> {:x?}", chal);
+
+        let mut u = U2FHid::new();
+
+        let r = u
+            .perform_register(
+                Url::parse("https://localhost:8080").unwrap(),
+                chal.public_key,
+                60_000,
             )
-        };
-
-        let username = "william".to_string();
-
-        let (chal, reg_state) = wan.generate_challenge_register(&username, false).unwrap();
-
-        println!("🍿 challenge -> {:x?}", chal);
-
-        let mut wa = WebauthnAuthenticator::new(U2FHid::new());
-        let r = wa
-            .do_registration("https://localhost:8080", chal)
-            .map_err(|e| {
-                error!("Error -> {:x?}", e);
-                e
-            })
-            .expect("Failed to register");
+            .unwrap();
 
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
+        trace!(?cred);
+
         let (chal, auth_state) = wan.generate_challenge_authenticate(vec![cred]).unwrap();
 
-        let r = wa
-            .do_authentication("https://localhost:8080", chal)
+        let r = u
+            .perform_auth(
+                Url::parse("https://localhost:8080").unwrap(),
+                chal.public_key,
+                60_000,
+            )
             .map_err(|e| {
                 error!("Error -> {:x?}", e);
                 e
@@ -414,6 +387,7 @@ mod tests {
         let auth_res = wan
             .authenticate_credential(&r, &auth_state)
             .expect("webauth authentication denied");
+
         info!("auth_res -> {:x?}", auth_res);
     }
 }

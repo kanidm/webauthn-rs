@@ -27,8 +27,12 @@ serde_json = "1.0"
 nom = "7.1"
 serde_cbor = "0.11"
 openssl = "0.10"
+rpassword = "5.0"
 
-authenticator = { version = "0.3", optional = true }
+# authenticator = { version = "0.3", optional = true }
+# authenticator = { path = "../../../authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"] }
+authenticator = { git = "https://github.com/Firstyear/authenticator-rs.git", branch = "webauthn-authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"] }
+
 pcsc = { version = "2", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 
@@ -36,3 +40,4 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 webauthn-rs-core = { path = "../webauthn-rs-core" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
 base64 = "0.13"
+

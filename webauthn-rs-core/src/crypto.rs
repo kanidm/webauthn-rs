@@ -121,7 +121,11 @@ pub(crate) fn verify_signature(
 
 use x509_parser::prelude::{GeneralName, X509Error, X509Name};
 
-fn check_extension<T, F>(extension: &Result<Option<T>, X509Error>, f: F) -> WebauthnResult<()>
+fn check_extension<T, F>(
+    extension: &Result<Option<T>, X509Error>,
+    must_be_present: bool,
+    f: F,
+) -> WebauthnResult<()>
 where
     F: Fn(&T) -> bool,
 {
@@ -130,10 +134,18 @@ where
             if f(extension) {
                 Ok(())
             } else {
+                trace!("Custome extension check failed");
                 Err(WebauthnError::AttestationCertificateRequirementsNotMet)
             }
         }
-        Ok(None) => Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+        Ok(None) => {
+            if must_be_present {
+                trace!("Extension not present");
+                Err(WebauthnError::AttestationCertificateRequirementsNotMet)
+            } else {
+                Ok(())
+            }
+        }
         Err(_) => {
             debug!("extension present multiple times or invalid");
             Err(WebauthnError::AttestationCertificateRequirementsNotMet)
@@ -239,6 +251,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
     // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
     check_extension(
         &x509_cert.subject_alternative_name(),
+        true,
         |subject_alternative_name| {
             // From [TPMv2-EK-Profile]:
             // In accordance with RFC 5280[11], this extension MUST be critical if
@@ -276,15 +289,19 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
     )?;
 
     // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
-    check_extension(&x509_cert.extended_key_usage(), |extended_key_usage| {
-        extended_key_usage
-            .value
-            .other
-            .contains(&der_parser::oid!(2.23.133 .8 .3))
-    })?;
+    check_extension(
+        &x509_cert.extended_key_usage(),
+        true,
+        |extended_key_usage| {
+            extended_key_usage
+                .value
+                .other
+                .contains(&der_parser::oid!(2.23.133 .8 .3))
+        },
+    )?;
 
     // The Basic Constraints extension MUST have the CA component set to false.
-    check_extension(&x509_cert.basic_constraints(), |basic_constraints| {
+    check_extension(&x509_cert.basic_constraints(), true, |basic_constraints| {
         !basic_constraints.value.ca
     })?;
 
@@ -307,6 +324,7 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     // The attestation certificate MUST have the following fields/extensions:
     // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
     if x509_cert.version != X509Version::V3 {
+        trace!("X509 Version != v3");
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
@@ -328,6 +346,7 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     let subject_cn = subject.iter_common_name().take(1).next();
 
     if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
+        trace!("Invalid subject details");
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
@@ -335,12 +354,19 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
         Some(ou) => match ou.attr_value().as_str() {
             Ok(ou_d) => {
                 if ou_d != "Authenticator Attestation" {
+                    trace!("ou != Authenticator Attestation");
                     return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
                 }
             }
-            Err(_) => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+            Err(_) => {
+                trace!("ou invalid");
+                return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+            }
         },
-        None => return Err(WebauthnError::AttestationCertificateRequirementsNotMet),
+        None => {
+            trace!("ou not found");
+            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+        }
     }
 
     // If the related attestation root certificate is used for multiple authenticator models,
@@ -349,13 +375,17 @@ pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), Webauthn
     //
     // We already check that the value matches the AAGUID in attestation
     // verification, so we only have to check the critical requirement here.
+    //
+    // The problem with this check, is that it's not actually required that this
+    // oid be present at all ...
     check_extension(
         &x509_cert.get_extension_unique(&FidoGenCeAaguid::OID),
+        false,
         |fido_gen_ce_aaguid| !fido_gen_ce_aaguid.critical,
     )?;
 
     // The Basic Constraints extension MUST have the CA component set to false.
-    check_extension(&x509_cert.basic_constraints(), |basic_constraints| {
+    check_extension(&x509_cert.basic_constraints(), true, |basic_constraints| {
         !basic_constraints.value.ca
     })?;
 

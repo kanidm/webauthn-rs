@@ -158,9 +158,25 @@ impl SecurityKey {
     }
 
     /// Post authentication, update this credentials counter.
-    pub fn update_credential_counter(&mut self, counter: u32) {
-        if counter > self.cred.counter {
-            self.cred.counter = counter
+    /// If the credential_id does not match, None is returned. If the cred id matches
+    /// and the credential is updated, Some(true) is returned. If the cred id
+    /// matches, but the credential is not changed, Some(false) is returned.
+    pub fn update_credential(&mut self, res: &AuthenticationResult) -> Option<bool> {
+        if res.cred_id() == self.cred_id() {
+            let mut changed = false;
+            if res.counter() > self.cred.counter {
+                self.cred.counter = res.counter();
+                changed = true;
+            }
+
+            if res.backup_state() != self.cred.backup_state {
+                self.cred.backup_state = res.backup_state();
+                changed = true;
+            }
+
+            Some(changed)
+        } else {
+            None
         }
     }
 }

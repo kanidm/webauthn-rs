@@ -596,6 +596,8 @@ pub(crate) struct AttestedCredentialData {
 pub struct AuthenticationResult {
     /// The credential ID that was used to authenticate.
     pub(crate) cred_id: CredentialID,
+    /// If the credential associated needs updating
+    pub(crate) needs_update: bool,
     /// If the authentication provided user_verification.
     pub(crate) user_verified: bool,
     /// The current backup state of the authenticator. It may have
@@ -611,6 +613,12 @@ impl AuthenticationResult {
     /// The credential ID that was used to authenticate.
     pub fn cred_id(&self) -> &CredentialID {
         &self.cred_id
+    }
+
+    /// If this authentication result should be applied to the associated
+    /// credential to update it's properties.
+    pub fn needs_update(&self) -> bool {
+        self.needs_update
     }
 
     /// If the authentication provided user_verification.
@@ -775,7 +783,8 @@ impl AttestationCa {
 /// A list of AttestationCas and associated options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttestationCaList {
-    pub(crate) cas: Vec<AttestationCa>,
+    /// The list
+    pub cas: Vec<AttestationCa>,
 }
 
 impl AttestationCaList {

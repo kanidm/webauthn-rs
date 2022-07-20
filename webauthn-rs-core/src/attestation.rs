@@ -498,12 +498,15 @@ pub(crate) fn verify_packed_attestation(
                 .chain(client_data_hash.iter())
                 .copied()
                 .collect();
+
             let is_valid_signature = att_stmt_map
                 .get(&serde_cbor::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
                 .and_then(|sig| credential_public_key.verify_signature(sig, &verification_data))?;
+
             if !is_valid_signature {
+                trace!("Invalid Self Attestation Signature");
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
 
