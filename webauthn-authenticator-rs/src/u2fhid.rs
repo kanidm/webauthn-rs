@@ -73,7 +73,7 @@ impl U2FHid {
                     PinError::InvalidPin(attempts) => {
                         println!(
                             "Wrong PIN! {}",
-                            attempts.map_or(format!("Try again."), |a| format!(
+                            attempts.map_or("Try again.".to_string(), |a| format!(
                                 "You have {} attempts left.",
                                 a
                             ))
@@ -84,13 +84,15 @@ impl U2FHid {
                         continue;
                     }
                     PinError::PinAuthBlocked => {
-                        panic!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
+                        eprintln!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
                     }
                     PinError::PinBlocked => {
-                        panic!("Too many failed attempts. Your device has been blocked. Reset it.")
+                        eprintln!(
+                            "Too many failed attempts. Your device has been blocked. Reset it."
+                        )
                     }
                     e => {
-                        panic!("Unexpected error: {:?}", e)
+                        eprintln!("Unexpected error: {:?}", e)
                     }
                 },
                 Err(RecvError) => {
@@ -105,6 +107,12 @@ impl U2FHid {
             _thread_handle,
             manager,
         }
+    }
+}
+
+impl Default for U2FHid {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -158,29 +166,31 @@ impl AuthenticatorBackend for U2FHid {
         let (register_tx, register_rx) = channel();
 
         let callback = StateCallback::new(Box::new(move |rv| {
-            register_tx.send(rv).unwrap();
+            register_tx
+                .send(rv)
+                .expect("Unable to proceed - state callback channel closed!");
         }));
 
-        if let Err(e) = self.manager.register(
+        if let Err(_e) = self.manager.register(
             timeout_ms.into(),
-            ctap_args.clone().into(),
+            ctap_args.into(),
             self.status_tx.clone(),
             callback,
         ) {
-            panic!("Couldn't register: {:?}", e);
+            return Err(WebauthnCError::PlatformAuthenticator);
         };
 
         let register_result = register_rx
             .recv()
-            .expect("Problem receiving, unable to continue");
+            .map_err(|_| WebauthnCError::PlatformAuthenticator)?;
 
         let (attestation_object, client_data) = match register_result {
-            Ok(RegisterResult::CTAP1(_, _)) => panic!("Requested CTAP2, but got CTAP1 results!"),
+            Ok(RegisterResult::CTAP1(_, _)) => return Err(WebauthnCError::PlatformAuthenticator),
             Ok(RegisterResult::CTAP2(a, c)) => {
                 println!("Ok!");
                 (a, c)
             }
-            Err(e) => panic!("Registration failed: {:?}", e),
+            Err(_e) => return Err(WebauthnCError::PlatformAuthenticator),
         };
 
         trace!("{:?}", attestation_object);
@@ -193,17 +203,17 @@ impl AuthenticatorBackend for U2FHid {
         let raw_id = if let Some(cred_data) = &attestation_object.auth_data.credential_data {
             Base64UrlSafeData(cred_data.credential_id.clone())
         } else {
-            panic!("Fuck");
+            return Err(WebauthnCError::PlatformAuthenticator);
         };
 
         // Based on the request attestation format, provide it
         let attestation_object = serde_cbor::to_vec(&attestation_object)
-            .map(|bytes| Base64UrlSafeData(bytes))
-            .unwrap();
+            .map(Base64UrlSafeData)
+            .map_err(|_| WebauthnCError::Cbor)?;
 
         let client_data_json = serde_json::to_vec(&client_data)
-            .map(|bytes| Base64UrlSafeData(bytes))
-            .unwrap();
+            .map(Base64UrlSafeData)
+            .map_err(|_| WebauthnCError::Json)?;
 
         Ok(RegisterPublicKeyCredential {
             id: raw_id.to_string(),
@@ -244,7 +254,7 @@ impl AuthenticatorBackend for U2FHid {
         let ctap_args = SignArgsCtap2 {
             challenge: options.challenge.0.clone(),
             origin: origin.to_string(),
-            relying_party_id: options.rp_id.clone(),
+            relying_party_id: options.rp_id,
             allow_list,
             options: GetAssertionOptions::default(),
             extensions: GetAssertionExtensions {
@@ -256,36 +266,42 @@ impl AuthenticatorBackend for U2FHid {
         let (sign_tx, sign_rx) = channel();
 
         let callback = StateCallback::new(Box::new(move |rv| {
-            sign_tx.send(rv).unwrap();
+            sign_tx
+                .send(rv)
+                .expect("Unable to proceed - state callback channel closed!");
         }));
 
-        if let Err(e) = self.manager.sign(
+        if let Err(_e) = self.manager.sign(
             timeout_ms.into(),
             ctap_args.into(),
             self.status_tx.clone(),
             callback,
         ) {
-            panic!("Couldn't sign: {:?}", e);
+            return Err(WebauthnCError::PlatformAuthenticator);
         }
 
         let sign_result = sign_rx
             .recv()
-            .expect("Problem receiving, unable to continue");
+            .map_err(|_| WebauthnCError::PlatformAuthenticator)?;
 
         let (assertion_object, client_data) = match sign_result {
-            Ok(SignResult::CTAP1(..)) => panic!("Requested CTAP2, but got CTAP1 sign results!"),
+            Ok(SignResult::CTAP1(..)) => return Err(WebauthnCError::PlatformAuthenticator),
             Ok(SignResult::CTAP2(assertion_object, client_data)) => (assertion_object, client_data),
-            Err(e) => panic!("Signing failed: {:?}", e),
+            Err(_e) => return Err(WebauthnCError::PlatformAuthenticator),
         };
 
         trace!("{:?}", assertion_object);
         trace!("{:?}", client_data);
 
         let AssertionObject(mut assertions) = assertion_object;
-        let assertion = if assertions.len() != 1 {
-            panic!("Fuck");
+        let assertion = if let Some(a) = assertions.pop() {
+            if assertions.is_empty() {
+                a
+            } else {
+                return Err(WebauthnCError::InvalidAssertion);
+            }
         } else {
-            assertions.pop().unwrap()
+            return Err(WebauthnCError::InvalidAssertion);
         };
 
         let raw_id = assertion
@@ -302,12 +318,12 @@ impl AuthenticatorBackend for U2FHid {
         let authenticator_data = assertion
             .auth_data
             .to_vec()
-            .map(|bytes| Base64UrlSafeData(bytes))
-            .unwrap();
+            .map(Base64UrlSafeData)
+            .map_err(|_| WebauthnCError::Cbor)?;
 
         let client_data_json = serde_json::to_vec(&client_data)
-            .map(|bytes| Base64UrlSafeData(bytes))
-            .unwrap();
+            .map(Base64UrlSafeData)
+            .map_err(|_| WebauthnCError::Json)?;
 
         Ok(PublicKeyCredential {
             id,

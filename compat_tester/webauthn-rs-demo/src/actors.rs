@@ -135,15 +135,15 @@ impl WebauthnActor {
             RegistrationTypedState::Passkey(rs) => self
                 .swan
                 .finish_passkey_registration(reg, &rs)
-                .map(|sk| TypedCredential::Passkey(sk)),
+                .map(TypedCredential::Passkey),
             RegistrationTypedState::Passwordless(rs) => self
                 .swan
                 .finish_passwordlesskey_registration(reg, &rs)
-                .map(|sk| TypedCredential::Passwordless(sk)),
+                .map(TypedCredential::Passwordless),
             RegistrationTypedState::SecurityKey(rs) => self
                 .swan
                 .finish_securitykey_registration(reg, &rs)
-                .map(|sk| TypedCredential::SecurityKey(sk)),
+                .map(TypedCredential::SecurityKey),
         };
 
         debug!("complete Register -> {:?}", r);
@@ -296,8 +296,7 @@ impl WebauthnActor {
             Some(use_cred_id) => {
                 let cred = creds
                     .into_iter()
-                    .filter(|c| c.cred_id == use_cred_id)
-                    .next()
+                    .find(|c| c.cred_id == use_cred_id)
                     .ok_or(WebauthnError::CredentialNotFound)?;
 
                 self.wan

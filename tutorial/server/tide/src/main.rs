@@ -117,7 +117,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
             .name_to_id
             .get(&username)
             .copied()
-            .unwrap_or_else(|| Uuid::new_v4())
+            .unwrap_or_else(Uuid::new_v4)
     };
 
     // Remove any previous registrations that may have occured from the session.
@@ -184,7 +184,7 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
                 .keys
                 .entry(user_unique_id)
                 .and_modify(|keys| keys.push(sk.clone()))
-                .or_insert(vec![sk.clone()]);
+                .or_insert_with(|| vec![sk.clone()]);
 
             users_guard.name_to_id.insert(username, user_unique_id);
 

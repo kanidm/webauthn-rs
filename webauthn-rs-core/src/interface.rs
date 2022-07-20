@@ -692,14 +692,14 @@ impl AttestationCa {
     /// The Apple TouchID and FaceID root CA.
     pub fn apple_webauthn_root_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).unwrap(),
+            ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).expect("Invalid DER"),
         }
     }
 
     /// The yubico u2f root ca. Applies to all devices up to and including series 5.
     pub fn yubico_u2f_root_ca_serial_457200631() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).unwrap(),
+            ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).expect("Invalid DER"),
         }
     }
 
@@ -712,7 +712,8 @@ impl AttestationCa {
     /// strict category.
     pub fn microsoft_tpm_root_certificate_authority_2014() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM).unwrap(),
+            ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM)
+                .expect("Invalid DER"),
         }
     }
 
@@ -722,7 +723,7 @@ impl AttestationCa {
     /// and easy to break or destroy.
     pub fn nitrokey_fido2_root_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).unwrap(),
+            ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).expect("Invalid DER"),
         }
     }
 
@@ -732,42 +733,42 @@ impl AttestationCa {
     /// and easy to break or destroy.
     pub fn nitrokey_u2f_root_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).unwrap(),
+            ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).expect("Invalid DER"),
         }
     }
 
     /// Android ROOT CA 1
     pub fn android_root_ca_1() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).expect("Invalid DER"),
         }
     }
 
     /// Android ROOT CA 2
     pub fn android_root_ca_2() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).expect("Invalid DER"),
         }
     }
 
     /// Android ROOT CA 3
     pub fn android_root_ca_3() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).expect("Invalid DER"),
         }
     }
 
     /// Android SOFTWARE ONLY root CA
     pub fn android_software_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).expect("Invalid DER"),
         }
     }
 
     /// Google SafetyNet CA (for android)
     pub fn google_safetynet_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).expect("Invalid DER"),
         }
     }
 
@@ -775,7 +776,7 @@ impl AttestationCa {
     #[allow(unused)]
     pub(crate) fn google_safetynet_ca_old() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).expect("Invalid DER"),
         }
     }
 }

@@ -124,7 +124,7 @@ impl Credential {
         req_extn: &RequestRegistrationExtensions,
         client_extn: &RegistrationExtensionsClientOutputs,
         attestation_format: AttestationFormat,
-        _transports: Option<Vec<AuthenticatorTransport>>,
+        _transports: &Option<Vec<AuthenticatorTransport>>,
     ) -> Self {
         let cred_protect = match (
             auth_data.extensions.cred_protect.as_ref(),
@@ -200,7 +200,7 @@ impl Credential {
 }
 
 pub(crate) fn process_authentication_extensions(
-    auth_extn: AuthenticationSignedExtensions,
+    auth_extn: &AuthenticationSignedExtensions,
 ) -> AuthenticationExtensions {
     trace!(?auth_extn);
     AuthenticationExtensions {}
@@ -1136,7 +1136,7 @@ pub(crate) fn tpm_device_attribute_parser(i: &[u8]) -> nom::IResult<&[u8], &[u8;
     let (i, _) = tag("id:")(i)?;
     let (i, vendor_code) = take(8usize)(i)?;
 
-    Ok((i, vendor_code.try_into().expect("took exactly 4 bytes")))
+    Ok((i, vendor_code.try_into().expect("took exactly 8 bytes")))
 }
 
 impl TryFrom<&[u8]> for TpmVendor {

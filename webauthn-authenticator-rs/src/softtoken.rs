@@ -176,14 +176,10 @@ impl SoftToken {
         let ca = ca_cert.clone();
         trace!(
             "{}",
-            String::from_utf8_lossy(
-                &ca.to_text()
-                    .map_err(|e| {
-                        error!("OpenSSL Error -> {:?}", e);
-                        e
-                    })
-                    .unwrap()
-            )
+            String::from_utf8_lossy(&ca.to_text().map_err(|e| {
+                error!("OpenSSL Error -> {:?}", e);
+                WebauthnCError::OpenSSL
+            })?)
         );
 
         let (intermediate_key, intermediate_cert) =
@@ -194,15 +190,10 @@ impl SoftToken {
 
         trace!(
             "{}",
-            String::from_utf8_lossy(
-                &intermediate_cert
-                    .to_text()
-                    .map_err(|e| {
-                        error!("OpenSSL Error -> {:?}", e);
-                        e
-                    })
-                    .unwrap()
-            )
+            String::from_utf8_lossy(&intermediate_cert.to_text().map_err(|e| {
+                error!("OpenSSL Error -> {:?}", e);
+                WebauthnCError::OpenSSL
+            })?)
         );
 
         Ok((

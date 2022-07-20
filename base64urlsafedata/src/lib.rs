@@ -2,6 +2,18 @@
 //! base64 implementations to account for various clients and libraries. Compatible
 //! with serde.
 
+#![deny(warnings)]
+#![warn(unused_extern_crates)]
+#![deny(clippy::todo)]
+#![deny(clippy::unimplemented)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::unreachable)]
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::needless_pass_by_value)]
+#![deny(clippy::trivially_copy_pass_by_ref)]
+
 use serde::de::{Error, SeqAccess, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
@@ -35,6 +47,8 @@ impl From<Vec<u8>> for Base64UrlSafeData {
     }
 }
 
+// We have to allow this because we can't implement a trait on an external type
+#[allow(clippy::from_over_into)]
 impl Into<Vec<u8>> for Base64UrlSafeData {
     fn into(self) -> Vec<u8> {
         self.0

@@ -431,7 +431,7 @@ impl EDDSACurve {
 */
 
 pub(crate) fn only_hash_from_type(
-    alg: &COSEAlgorithm,
+    alg: COSEAlgorithm,
     input: &[u8],
 ) -> Result<Vec<u8>, WebauthnError> {
     match alg {

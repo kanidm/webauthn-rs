@@ -23,6 +23,7 @@ pub enum AttestationLevel {
 }
 
 #[cfg(feature = "core")]
+#[allow(clippy::from_over_into)]
 impl Into<Option<AttestationCaList>> for AttestationLevel {
     fn into(self) -> Option<AttestationCaList> {
         match self {
@@ -90,7 +91,7 @@ pub struct AuthenticateWithSettings {
 impl From<&RegisterWithSettings> for AuthenticateWithSettings {
     fn from(regsettings: &RegisterWithSettings) -> AuthenticateWithSettings {
         let use_cred_id = None;
-        let uv = regsettings.uv.clone();
+        let uv = regsettings.uv;
         let extensions = None;
         let username = regsettings.username.clone();
 
@@ -232,7 +233,7 @@ impl CTestAttestState {
 
     pub fn get_reg_result(&self) -> Option<&RegistrationSuccess> {
         match self {
-            CTestAttestState::Passed { rs, .. } => Some(&rs),
+            CTestAttestState::Passed { rs, .. } => Some(rs),
             _ => None,
         }
     }
@@ -345,7 +346,7 @@ impl CTestAuthState {
 
     pub fn get_auth_result(&self) -> Option<&AuthenticationSuccess> {
         match self {
-            CTestAuthState::Passed { aus, .. } => Some(&aus),
+            CTestAuthState::Passed { aus, .. } => Some(aus),
             _ => None,
         }
     }

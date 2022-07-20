@@ -771,7 +771,7 @@ pub(crate) fn verify_tpm_attestation(
 
     // Verify that extraData is set to the hash of attToBeSigned using the hash algorithm
     // employed in "alg".
-    let hash_verification_data = only_hash_from_type(&alg, verification_data.as_slice())?;
+    let hash_verification_data = only_hash_from_type(alg, verification_data.as_slice())?;
 
     if hash_verification_data != extra_data_hash {
         return Err(WebauthnError::AttestationTpmExtraDataMismatch);

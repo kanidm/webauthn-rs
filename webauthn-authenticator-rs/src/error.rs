@@ -11,4 +11,5 @@ pub enum WebauthnCError {
     OpenSSL,
     ApduTransmission,
     InvalidAlgorithm,
+    InvalidAssertion,
 }

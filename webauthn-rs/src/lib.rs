@@ -46,6 +46,15 @@
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![warn(missing_docs)]
+#![deny(clippy::todo)]
+#![deny(clippy::unimplemented)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
+#![deny(clippy::unreachable)]
+#![deny(clippy::await_holding_lock)]
+#![deny(clippy::needless_pass_by_value)]
+#![deny(clippy::trivially_copy_pass_by_ref)]
 
 #[macro_use]
 extern crate tracing;
@@ -239,6 +248,11 @@ pub struct Webauthn {
 }
 
 impl Webauthn {
+    /// Get the currently configured origin
+    pub fn get_origin(&self) -> &Url {
+        self.core.get_origin()
+    }
+
     /// Initiate the registration of a new pass key for a user. A pass key is any cryptographic
     /// authenticator acting as a single factor of authentication, far stronger than a password
     /// or email-reset link.
@@ -985,7 +999,7 @@ impl Webauthn {
     pub fn finish_devicekey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        state: DeviceKeyAuthentication,
+        state: &DeviceKeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
     }

@@ -102,6 +102,11 @@ impl WebauthnCore {
         }
     }
 
+    /// Get the currently configured origin
+    pub fn get_origin(&self) -> &Url {
+        &self.rp_origin
+    }
+
     fn generate_challenge(&self) -> Challenge {
         let mut rng = rand::thread_rng();
         Challenge::new(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
@@ -542,7 +547,7 @@ impl WebauthnCore {
             req_extn,
             &reg.extensions,
             attest_format,
-            data.transports,
+            &data.transports,
         );
 
         // Now based on result ...
@@ -1025,7 +1030,7 @@ impl WebauthnCore {
         let user_verified = auth_data.user_verified;
         let backup_state = auth_data.backup_state;
 
-        let extensions = process_authentication_extensions(auth_data.extensions);
+        let extensions = process_authentication_extensions(&auth_data.extensions);
 
         if backup_state != cred.backup_state {
             needs_update = true;
