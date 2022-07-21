@@ -79,9 +79,9 @@ pub mod prelude {
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
     pub use webauthn_rs_core::proto::{
-        AuthenticationResult, AuthenticationState, CreationChallengeResponse, Credential,
-        CredentialID, ParsedAttestationData, PublicKeyCredential, RegisterPublicKeyCredential,
-        RequestChallengeResponse,
+        AttestationMetadata, AuthenticationResult, AuthenticationState, CreationChallengeResponse,
+        Credential, CredentialID, ParsedAttestation, ParsedAttestationData, PublicKeyCredential,
+        RegisterPublicKeyCredential, RequestChallengeResponse,
     };
     pub use webauthn_rs_core::AttestationFormat;
 }
@@ -235,12 +235,13 @@ impl<'a> WebauthnBuilder<'a> {
 /// so you should only use it in tightly controlled environments where you supply devices to your
 /// users.
 ///
-/// --> You should use `start_devicekey_registration`
+/// --> You should use `start_devicekey_registration` (still in development)
 ///
 /// *I want a security token along with a password to create multi-factor authentication*
 ///
 /// If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration` instead - it's probably what you
 /// want! But if not, and you really want a security key, you should use `start_securitykey_registration`
+///
 #[derive(Debug)]
 pub struct Webauthn {
     core: WebauthnCore,
@@ -259,8 +260,13 @@ impl Webauthn {
     ///
     /// Some examples of pass keys include Yubikeys, TouchID, FaceID, Windows Hello and others.
     ///
-    /// You *should* NOT pair this authentication with another factor. A pass key may opportunistically
-    /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
+    /// The keys *may* exist and 'roam' between multiple devices. For example, Apple allows Passkeys
+    /// to sync between devices owned by the same Apple account. This can affect your risk model
+    /// related to these credentials, but generally in all cases passkeys are better than passwords!
+    ///
+    /// You *should* NOT pair this authentication with another factor. A passkey may opportunistically
+    /// allow and enforce user-verification (MFA), but this is NOT guaranteed with all authenticator
+    /// types.
     ///
     /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
     ///  identify the user during certain client side work flows.
@@ -431,7 +437,14 @@ impl Webauthn {
     ///
     /// As a result, the server *only* requires this passwordless key to authenticator the user
     /// and assert their identity. Because of this reliance on the authenticator, attestation of
-    /// the authenticator and it's properties required.
+    /// the authenticator and it's properties is strongly recommended.
+    ///
+    /// The primary difference to a passkey, is that these credentials *can not* 'roam' between multiple
+    /// devices, and must be bound to a single authenticator. This precludes the use of certain types
+    /// of authenticators (such as Apple's Passkeys as these are always synced).
+    ///
+    /// Additionally, these credentials can have an attestation or certificate of authenticity
+    /// validated to give you stronger assertions in the types of devices in use.
     ///
     /// You *should* recommend to the user to register multiple passwordkeys to their account on
     /// seperate devices so that they have fall back authentication.
@@ -580,12 +593,17 @@ impl Webauthn {
     /// # Returns
     /// The returned `PasswordlessKey` must be associated to the users account, and is used for future
     /// authentications via `start_passwordlesskey_authentication`.
+    ///
+    /// # Verifying specific device models
+    /// If you wish to assert a specifc type of device model is in use, you can inspect the
+    /// PasswordlessKey `attestation()` and it's associated metadata. You can use this to check for
+    /// specific device aaguids for example.
+    ///
     pub fn finish_passwordlesskey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
         state: &PasswordlessKeyRegistration,
     ) -> WebauthnResult<PasswordlessKey> {
-        // TODO: Check the AttestationCa List!!
         self.core
             .register_credential(reg, &state.rs, Some(&state.ca_list))
             .map(|cred| PasswordlessKey { cred })
@@ -647,9 +665,16 @@ impl Webauthn {
     /// authenticator acting as a single factor of authentication to supplement a password or some
     /// other authentication factor.
     ///
-    /// Some examples of security keys include Yubikeys, TouchID, FaceID, Windows Hello and others.
+    /// Some examples of security keys include Yubikeys, Solokeys, and others.
     ///
-    /// You *should* pair this authentication with another factor. A security key may opportunistically
+    /// We don't recommend this over Passkeys or PasswordlessKeys, as today in Webauthn most devices
+    /// due to their construction require userVerification to be maintained for user trust. What this
+    /// means is that most users will require a password, their security key, and a pin or biometric
+    /// on the security key for a total of three factors. This adds friction to the user experience
+    /// but is required due to a consistency flaw in CTAP2.0 and newer devices. Since the user already
+    /// needs a pin or biometrics, why not just use the device as a self contained MFA?
+    ///
+    /// You MUST pair this authentication with another factor. A security key may opportunistically
     /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
     ///
     /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
@@ -792,6 +817,12 @@ impl Webauthn {
     ///
     /// You MUST assert that the registered credential id has not previously been registered.
     /// to any other account.
+    ///
+    /// # Verifying specific device models
+    /// If you wish to assert a specifc type of device model is in use, you can inspect the
+    /// PasswordlessKey `attestation()` and it's associated metadata. You can use this to check for
+    /// specific device aaguids for example.
+    ///
     pub fn finish_securitykey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
