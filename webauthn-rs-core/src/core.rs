@@ -102,6 +102,11 @@ impl WebauthnCore {
         }
     }
 
+    /// Get the currently configured origin
+    pub fn get_origin(&self) -> &Url {
+        &self.rp_origin
+    }
+
     fn generate_challenge(&self) -> Challenge {
         let mut rng = rand::thread_rng();
         Challenge::new(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
@@ -155,7 +160,7 @@ impl WebauthnCore {
     /// It also returns a RegistrationState, that you *must*
     /// persist. It is strongly advised you associate this RegistrationState with the
     /// UserId of the requester.
-     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn generate_challenge_register_options(
         &self,
         user_unique_id: &[u8],
@@ -542,7 +547,7 @@ impl WebauthnCore {
             req_extn,
             &reg.extensions,
             attest_format,
-            data.transports,
+            &data.transports,
         );
 
         // Now based on result ...
@@ -1020,11 +1025,16 @@ impl WebauthnCore {
         // these conditions.
 
         let auth_data = self.verify_credential_internal(rsp, *policy, chal, cred, appid)?;
+        let mut needs_update = false;
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
         let backup_state = auth_data.backup_state;
 
-        let extensions = process_authentication_extensions(auth_data.extensions);
+        let extensions = process_authentication_extensions(&auth_data.extensions);
+
+        if backup_state != cred.backup_state {
+            needs_update = true;
+        }
 
         // If the signature counter value authData.signCount is nonzero or the value stored in
         // conjunction with credential’s id attribute is nonzero, then run the following sub-step:
@@ -1040,6 +1050,10 @@ impl WebauthnCore {
             //      or fails the authentication ceremony or not, is Relying Party-specific.
             let counter_shows_compromise = auth_data.counter <= cred.counter;
 
+            if counter > cred.counter {
+                needs_update = true;
+            }
+
             if self.require_valid_counter_value && counter_shows_compromise {
                 return Err(WebauthnError::CredentialPossibleCompromise);
             }
@@ -1047,6 +1061,7 @@ impl WebauthnCore {
 
         Ok(AuthenticationResult {
             cred_id: cred.cred_id.clone(),
+            needs_update,
             user_verified,
             backup_state,
             counter,

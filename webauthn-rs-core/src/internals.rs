@@ -124,7 +124,7 @@ impl Credential {
         req_extn: &RequestRegistrationExtensions,
         client_extn: &RegistrationExtensionsClientOutputs,
         attestation_format: AttestationFormat,
-        transports: Option<Vec<AuthenticatorTransport>>,
+        _transports: &Option<Vec<AuthenticatorTransport>>,
     ) -> Self {
         let cred_protect = match (
             auth_data.extensions.cred_protect.as_ref(),
@@ -180,6 +180,9 @@ impl Credential {
         let backup_elligible = auth_data.backup_elligible;
         let backup_state = auth_data.backup_state;
 
+        // due to bugs in chrome, we have to disable transports because lol.
+        let transports = None;
+
         Credential {
             cred_id: acd.credential_id.clone(),
             cred: ck,
@@ -197,7 +200,7 @@ impl Credential {
 }
 
 pub(crate) fn process_authentication_extensions(
-    auth_extn: AuthenticationSignedExtensions,
+    auth_extn: &AuthenticationSignedExtensions,
 ) -> AuthenticationExtensions {
     trace!(?auth_extn);
     AuthenticationExtensions {}
@@ -391,28 +394,38 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
-    pub(crate) auth_data: &'a [u8],
     pub(crate) fmt: &'a str,
     pub(crate) att_stmt: serde_cbor::Value,
+    pub(crate) auth_data: &'a [u8],
+    pub(crate) ep_att: Option<bool>,
+    pub(crate) large_blob_key: Option<&'a [u8]>,
 }
 
 /// Attestation Object
 #[derive(Debug)]
 pub struct AttestationObject<T: Ceremony> {
-    /// auth_data.
-    pub(crate) auth_data: AuthenticatorData<T>,
-    /// auth_data_bytes.
-    pub(crate) auth_data_bytes: Vec<u8>,
     /// format.
     pub(crate) fmt: String,
     /// <https://w3c.github.io/webauthn/#generating-an-attestation-object>
     pub(crate) att_stmt: serde_cbor::Value,
+    /// auth_data.
+    pub(crate) auth_data: AuthenticatorData<T>,
+    /// auth_data_bytes.
+    pub(crate) auth_data_bytes: Vec<u8>,
+    /// ep_att
+    pub(crate) _ep_att: Option<bool>,
+    /// large_blob_key
+    pub(crate) _large_blob_key: Option<Vec<u8>>,
 }
 
 impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
     type Error = WebauthnError;
 
     fn try_from(data: &[u8]) -> Result<AttestationObject<T>, WebauthnError> {
+        let v: serde_cbor::Value =
+            serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
+        trace!(?v, "AttestationObjectInner");
+
         let aoi: AttestationObjectInner =
             serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
         let auth_data_bytes: &[u8] = aoi.auth_data;
@@ -421,9 +434,11 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
         // Yay! Now we can assemble a reasonably sane structure.
         Ok(AttestationObject {
             fmt: aoi.fmt.to_owned(),
+            att_stmt: aoi.att_stmt,
             auth_data,
             auth_data_bytes: auth_data_bytes.to_owned(),
-            att_stmt: aoi.att_stmt,
+            _ep_att: aoi.ep_att,
+            _large_blob_key: aoi.large_blob_key.map(|v| v.to_owned()),
         })
     }
 }
@@ -1121,7 +1136,7 @@ pub(crate) fn tpm_device_attribute_parser(i: &[u8]) -> nom::IResult<&[u8], &[u8;
     let (i, _) = tag("id:")(i)?;
     let (i, vendor_code) = take(8usize)(i)?;
 
-    Ok((i, vendor_code.try_into().expect("took exactly 4 bytes")))
+    Ok((i, vendor_code.try_into().expect("took exactly 8 bytes")))
 }
 
 impl TryFrom<&[u8]> for TpmVendor {

@@ -37,8 +37,8 @@ pub enum Mediation {
     // /// If we can get creds without the user having to do anything, gread, other wise ask the user. Probably a bad idea.
     // Optional,
     /// Discovered credentials are presented to the user in a dialog.
-    /// Conditional UI is used. See https://github.com/w3c/webauthn/wiki/Explainer:-WebAuthn-Conditional-UI
-    /// https://w3c.github.io/webappsec-credential-management/#enumdef-credentialmediationrequirement
+    /// Conditional UI is used. See <https://github.com/w3c/webauthn/wiki/Explainer:-WebAuthn-Conditional-UI>
+    /// <https://w3c.github.io/webappsec-credential-management/#enumdef-credentialmediationrequirement>
     Conditional,
     // /// The user needs to do something.
     // Required

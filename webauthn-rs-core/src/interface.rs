@@ -413,7 +413,7 @@ pub enum AttestationMetadata {
         is_attest_tee: bool,
     },
     /// various attestation flags set by the device (attested via safety-net)
-    /// https://developer.android.com/training/safetynet/attestation#use-response-server
+    /// <https://developer.android.com/training/safetynet/attestation#use-response-server>
     AndroidSafetyNet {
         /// the name of apk that originated this key operation
         apk_package_name: String,
@@ -595,16 +595,52 @@ pub(crate) struct AttestedCredentialData {
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticationResult {
     /// The credential ID that was used to authenticate.
-    pub cred_id: CredentialID,
+    pub(crate) cred_id: CredentialID,
+    /// If the credential associated needs updating
+    pub(crate) needs_update: bool,
     /// If the authentication provided user_verification.
-    pub user_verified: bool,
+    pub(crate) user_verified: bool,
     /// The current backup state of the authenticator. It may have
     /// changed since registration.
-    pub backup_state: bool,
+    pub(crate) backup_state: bool,
     /// The state of the counter
-    pub counter: u32,
+    pub(crate) counter: Counter,
     /// The response from associated extensions.
-    pub extensions: AuthenticationExtensions,
+    pub(crate) extensions: AuthenticationExtensions,
+}
+
+impl AuthenticationResult {
+    /// The credential ID that was used to authenticate.
+    pub fn cred_id(&self) -> &CredentialID {
+        &self.cred_id
+    }
+
+    /// If this authentication result should be applied to the associated
+    /// credential to update it's properties.
+    pub fn needs_update(&self) -> bool {
+        self.needs_update
+    }
+
+    /// If the authentication provided user_verification.
+    pub fn user_verified(&self) -> bool {
+        self.user_verified
+    }
+
+    /// The current backup state of the authenticator. It may have
+    /// changed since registration.
+    pub fn backup_state(&self) -> bool {
+        self.backup_state
+    }
+
+    /// The state of the counter
+    pub fn counter(&self) -> Counter {
+        self.counter
+    }
+
+    /// The response from associated extensions.
+    pub fn extensions(&self) -> &AuthenticationExtensions {
+        &self.extensions
+    }
 }
 
 /// A serialised Attestation CA.
@@ -656,14 +692,14 @@ impl AttestationCa {
     /// The Apple TouchID and FaceID root CA.
     pub fn apple_webauthn_root_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).unwrap(),
+            ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).expect("Invalid DER"),
         }
     }
 
     /// The yubico u2f root ca. Applies to all devices up to and including series 5.
     pub fn yubico_u2f_root_ca_serial_457200631() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).unwrap(),
+            ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).expect("Invalid DER"),
         }
     }
 
@@ -676,7 +712,8 @@ impl AttestationCa {
     /// strict category.
     pub fn microsoft_tpm_root_certificate_authority_2014() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM).unwrap(),
+            ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM)
+                .expect("Invalid DER"),
         }
     }
 
@@ -686,7 +723,7 @@ impl AttestationCa {
     /// and easy to break or destroy.
     pub fn nitrokey_fido2_root_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).unwrap(),
+            ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).expect("Invalid DER"),
         }
     }
 
@@ -696,42 +733,42 @@ impl AttestationCa {
     /// and easy to break or destroy.
     pub fn nitrokey_u2f_root_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).unwrap(),
+            ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).expect("Invalid DER"),
         }
     }
 
     /// Android ROOT CA 1
     pub fn android_root_ca_1() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).expect("Invalid DER"),
         }
     }
 
     /// Android ROOT CA 2
     pub fn android_root_ca_2() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).expect("Invalid DER"),
         }
     }
 
     /// Android ROOT CA 3
     pub fn android_root_ca_3() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).expect("Invalid DER"),
         }
     }
 
     /// Android SOFTWARE ONLY root CA
     pub fn android_software_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).unwrap(),
+            ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).expect("Invalid DER"),
         }
     }
 
     /// Google SafetyNet CA (for android)
     pub fn google_safetynet_ca() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).unwrap(),
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).expect("Invalid DER"),
         }
     }
 
@@ -739,7 +776,7 @@ impl AttestationCa {
     #[allow(unused)]
     pub(crate) fn google_safetynet_ca_old() -> Self {
         AttestationCa {
-            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).unwrap(),
+            ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).expect("Invalid DER"),
         }
     }
 }
@@ -747,7 +784,8 @@ impl AttestationCa {
 /// A list of AttestationCas and associated options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttestationCaList {
-    pub(crate) cas: Vec<AttestationCa>,
+    /// The list
+    pub cas: Vec<AttestationCa>,
 }
 
 impl AttestationCaList {

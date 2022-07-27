@@ -53,9 +53,9 @@ impl App {
     // 3. The user entered their username, and hit start. We issue a fetch request
     // to the server, requesting it to generate our challenge for us.
     fn update_start_register(&mut self, ctx: &Context<Self>) -> AppState {
-        let username = get_value_from_element_id("username").unwrap_or_else(String::default);
+        let username = get_value_from_element_id("username").unwrap_or_default();
 
-        if username == "" {
+        if username.is_empty() {
             return AppState::Error("A username must be provided".to_string());
         }
 
@@ -187,7 +187,7 @@ impl App {
             Ok(AppMsg::RegisterSuccess)
         } else {
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(String::default);
+            let emsg = text.as_string().unwrap_or_default();
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -219,9 +219,9 @@ impl App {
     // 7. Issue the fetch request to the server, getting the authentication
     // challenge.
     fn update_start_authenticate(&mut self, ctx: &Context<Self>) -> AppState {
-        let username = get_value_from_element_id("username").unwrap_or_else(String::default);
+        let username = get_value_from_element_id("username").unwrap_or_default();
 
-        if username == "" {
+        if username.is_empty() {
             return AppState::Error("A username must be provided".to_string());
         }
 
@@ -335,7 +335,7 @@ impl App {
             Ok(AppMsg::AuthenticateSuccess)
         } else {
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(String::default);
+            let emsg = text.as_string().unwrap_or_default();
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -456,7 +456,7 @@ impl Component for App {
             AppState::Waiting => self.view_waiting(ctx),
             AppState::Login => self.view_authenticate(ctx),
             AppState::Success => self.view_success(ctx),
-            AppState::Error(msg) => self.view_error(ctx, &msg),
+            AppState::Error(msg) => self.view_error(ctx, msg),
         }
     }
 

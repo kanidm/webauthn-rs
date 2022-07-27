@@ -90,7 +90,7 @@ pub struct AuthenticatorAttestationResponseRaw {
     #[serde(rename = "clientDataJSON")]
     pub client_data_json: Base64UrlSafeData,
 
-    /// https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-gettransports
+    /// <https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-gettransports>
     #[serde(default)]
     pub transports: Option<Vec<AuthenticatorTransport>>,
 }
@@ -104,9 +104,17 @@ pub struct AuthenticatorAttestationResponseRaw {
 /// <https://w3c.github.io/webauthn/#iface-pkcredential>
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RegisterPublicKeyCredential {
-    /// The id of the PublicKey credential, likely in base64
+    /// The id of the PublicKey credential, likely in base64.
+    ///
+    /// This is NEVER actually
+    /// used in a real registration, because the true credential ID is taken from the
+    /// attestation data.
     pub id: String,
     /// The id of the credential, as binary.
+    ///
+    /// This is NEVER actually
+    /// used in a real registration, because the true credential ID is taken from the
+    /// attestation data.
     #[serde(rename = "rawId")]
     pub raw_id: Base64UrlSafeData,
     /// <https://w3c.github.io/webauthn/#dom-publickeycredential-response>

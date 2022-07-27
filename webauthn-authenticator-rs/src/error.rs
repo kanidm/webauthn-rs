@@ -10,4 +10,6 @@ pub enum WebauthnCError {
     ParseNOMFailure,
     OpenSSL,
     ApduTransmission,
+    InvalidAlgorithm,
+    InvalidAssertion,
 }

@@ -2,8 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use webauthn_rs_core::interface::{AttestationCaList, AuthenticationState, RegistrationState};
-use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestationData};
+use webauthn_rs_core::interface::{
+    AttestationCaList, AuthenticationResult, AuthenticationState, RegistrationState,
+};
+use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestation};
 
 /// An in progress registration session for a [Passkey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,10 +36,33 @@ impl Passkey {
         &self.cred.cred.type_
     }
 
-    /// Post authentication, update this credentials counter.
-    pub fn update_credential_counter(&mut self, counter: u32) {
-        if counter > self.cred.counter {
-            self.cred.counter = counter
+    /// Post authentication, update this credentials properties.
+    ///
+    /// To determine if this is required, you can inspect the result of
+    /// `authentication_result.needs_update()`. Counter intuitively, most passkeys
+    /// will never need their properties updated! This is because passkeys lack an
+    /// internal device activation counter (due to their synchronisation), and the
+    /// backup-state flags are rarely if ever changed.
+    ///
+    /// If the credential_id does not match, None is returned. If the cred id matches
+    /// and the credential is updated, Some(true) is returned. If the cred id
+    /// matches, but the credential is not changed, Some(false) is returned.
+    pub fn update_credential(&mut self, res: &AuthenticationResult) -> Option<bool> {
+        if res.cred_id() == self.cred_id() {
+            let mut changed = false;
+            if res.counter() > self.cred.counter {
+                self.cred.counter = res.counter();
+                changed = true;
+            }
+
+            if res.backup_state() != self.cred.backup_state {
+                self.cred.backup_state = res.backup_state();
+                changed = true;
+            }
+
+            Some(changed)
+        } else {
+            None
         }
     }
 }
@@ -90,14 +115,36 @@ impl PasswordlessKey {
     /// Retrieve a reference to the attestation used during this [`Credential`]'s
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
-    pub fn attestation(&self) -> &ParsedAttestationData {
-        &self.cred.attestation.data
+    pub fn attestation(&self) -> &ParsedAttestation {
+        &self.cred.attestation
     }
 
-    /// Post authentication, update this credentials counter.
-    pub fn update_credential_counter(&mut self, counter: u32) {
-        if counter > self.cred.counter {
-            self.cred.counter = counter
+    /// Post authentication, update this credentials properties.
+    ///
+    /// To determine if this is required, you can inspect the result of
+    /// `authentication_result.needs_update()`. Generally this will always
+    /// be true as this class of key will maintain an activation counter which
+    /// allows (limited) protection against device cloning.
+    ///
+    /// If the credential_id does not match, None is returned. If the cred id matches
+    /// and the credential is updated, Some(true) is returned. If the cred id
+    /// matches, but the credential is not changed, Some(false) is returned.
+    pub fn update_credential(&mut self, res: &AuthenticationResult) -> Option<bool> {
+        if res.cred_id() == self.cred_id() {
+            let mut changed = false;
+            if res.counter() > self.cred.counter {
+                self.cred.counter = res.counter();
+                changed = true;
+            }
+
+            if res.backup_state() != self.cred.backup_state {
+                self.cred.backup_state = res.backup_state();
+                changed = true;
+            }
+
+            Some(changed)
+        } else {
+            None
         }
     }
 }
@@ -135,14 +182,36 @@ impl SecurityKey {
     /// Retrieve a reference to the attestation used during this [`Credential`]'s
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
-    pub fn attestation(&self) -> &ParsedAttestationData {
-        &self.cred.attestation.data
+    pub fn attestation(&self) -> &ParsedAttestation {
+        &self.cred.attestation
     }
 
-    /// Post authentication, update this credentials counter.
-    pub fn update_credential_counter(&mut self, counter: u32) {
-        if counter > self.cred.counter {
-            self.cred.counter = counter
+    /// Post authentication, update this credentials properties.
+    ///
+    /// To determine if this is required, you can inspect the result of
+    /// `authentication_result.needs_update()`. Generally this will always
+    /// be true as this class of key will maintain an activation counter which
+    /// allows (limited) protection against device cloning.
+    ///
+    /// If the credential_id does not match, None is returned. If the cred id matches
+    /// and the credential is updated, Some(true) is returned. If the cred id
+    /// matches, but the credential is not changed, Some(false) is returned.
+    pub fn update_credential(&mut self, res: &AuthenticationResult) -> Option<bool> {
+        if res.cred_id() == self.cred_id() {
+            let mut changed = false;
+            if res.counter() > self.cred.counter {
+                self.cred.counter = res.counter();
+                changed = true;
+            }
+
+            if res.backup_state() != self.cred.backup_state {
+                self.cred.backup_state = res.backup_state();
+                changed = true;
+            }
+
+            Some(changed)
+        } else {
+            None
         }
     }
 }
@@ -159,8 +228,6 @@ impl From<Credential> for SecurityKey {
         SecurityKey { cred }
     }
 }
-
-// PasswordlessKey
 
 /// An in progress registration session for a [DeviceKey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -195,19 +262,48 @@ impl DeviceKey {
     /// Retrieve a reference to the attestation used during this [`Credential`]'s
     /// registration. This can tell you information about the manufacterer and
     /// what type of credential it is.
-    pub fn attestation(&self) -> &ParsedAttestationData {
-        &self.cred.attestation.data
+    pub fn attestation(&self) -> &ParsedAttestation {
+        &self.cred.attestation
     }
 
-    /// Post authentication, update this credentials counter.
-    pub fn update_credential_counter(&mut self, counter: u32) {
-        if counter > self.cred.counter {
-            self.cred.counter = counter
+    /// Post authentication, update this credentials properties.
+    ///
+    /// To determine if this is required, you can inspect the result of
+    /// `authentication_result.needs_update()`. Generally this will always
+    /// be true as this class of key will maintain an activation counter which
+    /// allows (limited) protection against device cloning.
+    ///
+    /// If the credential_id does not match, None is returned. If the cred id matches
+    /// and the credential is updated, Some(true) is returned. If the cred id
+    /// matches, but the credential is not changed, Some(false) is returned.
+    pub fn update_credential(&mut self, res: &AuthenticationResult) -> Option<bool> {
+        if res.cred_id() == self.cred_id() {
+            let mut changed = false;
+            if res.counter() > self.cred.counter {
+                self.cred.counter = res.counter();
+                changed = true;
+            }
+
+            if res.backup_state() != self.cred.backup_state {
+                self.cred.backup_state = res.backup_state();
+                changed = true;
+            }
+
+            Some(changed)
+        } else {
+            None
         }
     }
 }
 
-/// An in progress registration session for a [DeviceKey].
+impl PartialEq for DeviceKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cred.cred_id == other.cred.cred_id
+    }
+}
+
+/// An in progress registration session for a [DiscoverableKey]. [Passkey] and [DeviceKey]
+/// can be used with these workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoverableAuthentication {
     pub(crate) ast: AuthenticationState,

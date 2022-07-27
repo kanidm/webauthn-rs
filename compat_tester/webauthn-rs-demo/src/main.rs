@@ -146,9 +146,9 @@ async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Res
     session.remove("d_rs");
 
     let mut cred_map: BTreeMap<String, Vec<TypedCredential>> =
-        session.get("d_cred_map").unwrap_or_else(|| BTreeMap::new());
+        session.get("d_cred_map").unwrap_or_default();
 
-    let mut creds = cred_map.remove(&username).unwrap_or_else(|| Vec::new());
+    let mut creds: Vec<_> = cred_map.remove(&username).unwrap_or_default();
 
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
 
@@ -159,7 +159,7 @@ async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Res
     let res = match actor_res {
         Ok(cred) => {
             // TODO make this a fn call back for cred exist
-            creds.push(cred.clone());
+            creds.push(cred);
             cred_map.insert(username, creds);
             // Set the credmap back
             request
@@ -215,7 +215,7 @@ async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result 
     session.remove("d_st");
 
     let mut cred_map: BTreeMap<String, Vec<TypedCredential>> =
-        session.get("d_cred_map").unwrap_or_else(|| BTreeMap::new());
+        session.get("d_cred_map").unwrap_or_default();
 
     let creds = match cred_map.remove(&username) {
         Some(v) => v,
@@ -338,7 +338,7 @@ async fn compat_start_login(mut request: tide::Request<AppState>) -> tide::Resul
     session.remove("st");
 
     let mut cred_map: BTreeMap<String, Vec<Credential>> =
-        session.get("cred_map").unwrap_or_else(|| BTreeMap::new());
+        session.get("cred_map").unwrap_or_default();
 
     let creds = match cred_map.remove(&auth_settings.username) {
         Some(v) => v,
@@ -401,11 +401,11 @@ async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::R
     session.remove("rs");
 
     let mut cred_map: BTreeMap<String, Vec<Credential>> =
-        session.get("cred_map").unwrap_or_else(|| BTreeMap::new());
+        session.get("cred_map").unwrap_or_default();
 
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
 
-    let mut creds = cred_map.remove(&username).unwrap_or_else(|| Vec::new());
+    let mut creds = cred_map.remove(&username).unwrap_or_default();
 
     let actor_res = request
         .state()
@@ -432,7 +432,7 @@ async fn compat_finish_register(mut request: tide::Request<AppState>) -> tide::R
                 uv: cred.user_verified,
                 alg: cred.cred.type_,
                 // counter: auth_data.counter,
-                extensions: cred.extensions.clone(),
+                extensions: cred.extensions,
             };
 
             trace!(?reg_response);
@@ -472,7 +472,7 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
     let username_copy: String = username.clone();
 
     let mut cred_map: BTreeMap<String, Vec<Credential>> =
-        session.get("cred_map").unwrap_or_else(|| BTreeMap::new());
+        session.get("cred_map").unwrap_or_default();
     let creds = match cred_map.remove(&username) {
         Some(v) => v,
         None => {
@@ -501,10 +501,10 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
                 .expect("Failed to insert");
 
             let auth_response = AuthenticationSuccess {
-                cred_id: auth_result.cred_id,
-                uv: auth_result.user_verified,
+                cred_id: auth_result.cred_id().clone(),
+                uv: auth_result.user_verified(),
                 // counter: auth_data.counter,
-                extensions: auth_result.extensions.clone(),
+                extensions: auth_result.extensions().clone(),
             };
 
             tide::Response::builder(tide::StatusCode::Ok)
@@ -531,8 +531,7 @@ async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Re
     session.remove("cu_rs");
 
     // Setup the uuid to name map.
-    let mut uuid_map: BTreeMap<String, Uuid> =
-        session.get("cu_id_map").unwrap_or_else(|| BTreeMap::new());
+    let mut uuid_map: BTreeMap<String, Uuid> = session.get("cu_id_map").unwrap_or_default();
 
     let u = if let Some(u) = uuid_map.get(&username) {
         *u
@@ -578,19 +577,18 @@ async fn condui_finish_register(mut request: tide::Request<AppState>) -> tide::R
     };
     session.remove("cu_rs");
 
-    let mut cred_map: BTreeMap<Uuid, Vec<DeviceKey>> = session
-        .get("cu_cred_map")
-        .unwrap_or_else(|| BTreeMap::new());
+    let mut cred_map: BTreeMap<Uuid, Vec<DeviceKey>> =
+        session.get("cu_cred_map").unwrap_or_default();
 
     // Safe to remove, since we aren't mutating the session.
-    let mut creds = cred_map.remove(&u).unwrap_or_else(|| Vec::new());
+    let mut creds = cred_map.remove(&u).unwrap_or_default();
 
     let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
 
     let actor_res = request.state().condui_finish_register(&reg, rs).await;
     let res = match actor_res {
         Ok(cred) => {
-            creds.push(cred.clone());
+            creds.push(cred);
             cred_map.insert(u, creds);
             // Set the credmap back
             request
@@ -661,15 +659,13 @@ async fn condui_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
     };
     session.remove("cu_st");
 
-    let mut cred_map: BTreeMap<Uuid, Vec<DeviceKey>> = session
-        .get("cu_cred_map")
-        .unwrap_or_else(|| BTreeMap::new());
+    let cred_map: BTreeMap<Uuid, Vec<DeviceKey>> = session.get("cu_cred_map").unwrap_or_default();
 
     let lgn = request.body_json::<PublicKeyCredential>().await?;
 
     let res = match request
         .state()
-        .condui_finish_login(&mut cred_map, &lgn, st)
+        .condui_finish_login(&cred_map, &lgn, st)
         .await
     {
         // Normally we should update the counters here.
