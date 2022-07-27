@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs"
-version = "0.4.1-beta.2"
+version = "0.4.1-beta.3"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Framework for Rust Web Servers"
@@ -15,7 +15,7 @@ resident_key_support = []
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
-webauthn-rs-core = { version = "0.4.1-beta.1", path = "../webauthn-rs-core" }
+webauthn-rs-core = { version = "0.4.1-beta.3", path = "../webauthn-rs-core" }
 url = { version = "2", features = ["serde"] }
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
