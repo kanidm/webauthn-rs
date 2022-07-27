@@ -118,7 +118,7 @@ where
             // .or_else(|| caller_origin.host_str())
             .ok_or(WebauthnCError::Security)
             .map_err(|e| {
-                error!("origin has no domain or host_str");
+                error!("origin has no domain or host_str (ip address only?)");
                 e
             })?;
 
@@ -132,7 +132,7 @@ where
         //          Set options.rp.id to effectiveDomain.
 
         if !effective_domain.ends_with(&options.rp.id) {
-            error!("relying party id domain is not suffix of effective domain.");
+            error!("relying party id domain is not a suffix of the effective domain.");
             return Err(WebauthnCError::Security);
         }
 

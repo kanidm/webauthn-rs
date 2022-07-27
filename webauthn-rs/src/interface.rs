@@ -296,6 +296,12 @@ impl DeviceKey {
     }
 }
 
+impl PartialEq for DeviceKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cred.cred_id == other.cred.cred_id
+    }
+}
+
 /// An in progress registration session for a [DiscoverableKey]. [Passkey] and [DeviceKey]
 /// can be used with these workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
