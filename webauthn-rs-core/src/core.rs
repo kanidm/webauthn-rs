@@ -178,9 +178,6 @@ impl WebauthnCore {
         experimental_reject_passkeys: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
-        if policy == UserVerificationPolicy::Discouraged_DO_NOT_USE {
-            warn!("UserVerificationPolicy::Discouraged_DO_NOT_USE is misleading! You should select Preferred or Required!");
-        }
 
         if user_unique_id.is_empty() || user_display_name.is_empty() || user_name.is_empty() {
             return Err(WebauthnError::InvalidUsername);
