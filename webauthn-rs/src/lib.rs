@@ -448,9 +448,10 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, PasskeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+        let policy = UserVerificationPolicy::Preferred;
 
         self.core
-            .generate_challenge_authenticate_options(creds, extensions)
+            .generate_challenge_authenticate_policy(creds, policy, extensions)
             .map(|(rcr, ast)| (rcr, PasskeyAuthentication { ast }))
     }
 
@@ -682,8 +683,10 @@ impl Webauthn {
             uvm: Some(true),
         });
 
+        let policy = UserVerificationPolicy::Required;
+
         self.core
-            .generate_challenge_authenticate_options(creds, extensions)
+            .generate_challenge_authenticate_policy(creds, policy, extensions)
             .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
     }
 
@@ -909,8 +912,14 @@ impl Webauthn {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
+        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+            UserVerificationPolicy::Discouraged_DO_NOT_USE
+        } else {
+            UserVerificationPolicy::Preferred
+        };
+
         self.core
-            .generate_challenge_authenticate_options(creds, extensions)
+            .generate_challenge_authenticate_policy(creds, policy, extensions)
             .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
     }
 
@@ -1078,8 +1087,10 @@ impl Webauthn {
             uvm: Some(true),
         });
 
+        let policy = UserVerificationPolicy::Required;
+
         self.core
-            .generate_challenge_authenticate_options(creds, extensions)
+            .generate_challenge_authenticate_policy(creds, policy, extensions)
             .map(|(rcr, ast)| (rcr, DeviceKeyAuthentication { ast }))
     }
 

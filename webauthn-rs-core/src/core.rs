@@ -794,63 +794,9 @@ impl WebauthnCore {
         Ok(data.authenticator_data)
     }
 
-    /// Convenience function for `generate_challenge_authenticate_extensions` without extensions
+    /// Authenticate a set of credentials, deriving the correct user verification policy
+    /// for them in a secure manner.
     pub fn generate_challenge_authenticate(
-        &self,
-        creds: Vec<Credential>,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        self.generate_challenge_authenticate_options(creds, None)
-    }
-
-    /// Authenticate a single credential, with the ability to override the userVerification
-    /// policy requested, or extensions in use. If userVerification is `None`, the policy from
-    /// registration is used.
-    ///
-    /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
-    /// understand how this interacts with the single credential in use, and how that may impact
-    /// your system security.
-    ///
-    /// If in doubt, do NOT use this function!
-    pub fn generate_challenge_authenticate_credential(
-        &self,
-        cred: Credential,
-        policy: Option<UserVerificationPolicy>,
-        extensions: Option<RequestAuthenticationExtensions>,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        let policy = policy.unwrap_or(cred.registration_policy);
-        self.generate_challenge_authenticate_inner(vec![cred], policy, extensions)
-    }
-
-    /// Generate a challenge for an authenticate request for a user. You must supply the set of
-    /// credentials that exist for the user that *may* be used in this authentication request. If
-    /// an empty credential set is supplied, the authentication *will* fail.
-    ///
-    /// This challenge is supplied to
-    /// to the client javascript function `navigator.credentials.get()`.
-    ///
-    /// You must persist the AuthenticationState that is returned. You should associate this by
-    /// UserId. The AuthenticationState is required for the authenticate_credential function to
-    /// operate correctly.
-    ///
-    /// NOTE: `WebauthnError::InconsistentUserVerificationPolicy`
-    ///
-    /// This error is returning when the set of credentials has a mix of registration
-    /// user verification policies.
-    /// This is due to an issue with the webauthn standard
-    /// as noted at <https://github.com/w3c/webauthn/issues/1510>. What can occur is that
-    /// when you *register* a credential, you set an expectation as to the verification
-    /// policy of that credential, and if that credential can soley be a MFA on it's own
-    /// or requires extra material to function as an MFA. However, when you mix credentials
-    /// you can have unverified credentials require verification (register discouraged, or
-    /// u2f on ctap1, then authenticate preferred and ctap2) or verified credentials NOT
-    /// need verification.
-    ///
-    /// As a result, this means the set of credentials that is provided must be internally
-    /// consistent so that the policy can be set to discouraged or required based on
-    /// the credentials given. This means you *must* consider a UX to allow the user to
-    /// choose if they wish to use a verified token or not as webauthn as a standard can
-    /// not make this distinction.
-    pub fn generate_challenge_authenticate_options(
         &self,
         creds: Vec<Credential>,
         extensions: Option<RequestAuthenticationExtensions>,
@@ -877,6 +823,41 @@ impl WebauthnCore {
             ),
             (_, _) => Err(WebauthnError::InconsistentUserVerificationPolicy),
         }
+    }
+
+    /// Authenticate a single credential, with the ability to override the userVerification
+    /// policy requested, or extensions in use. If userVerification is `None`, the policy from
+    /// registration is used.
+    ///
+    /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
+    /// understand how this interacts with the single credential in use, and how that may impact
+    /// your system security.
+    ///
+    /// If in doubt, do NOT use this function!
+    pub fn generate_challenge_authenticate_credential(
+        &self,
+        cred: Credential,
+        policy: Option<UserVerificationPolicy>,
+        extensions: Option<RequestAuthenticationExtensions>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
+        let policy = policy.unwrap_or(cred.registration_policy);
+        self.generate_challenge_authenticate_inner(vec![cred], policy, extensions)
+    }
+
+    /// Authenticate a set of credentials allowing the user verification policy to be set.
+    ///
+    /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
+    /// understand how this interacts with the single credential in use, and how that may impact
+    /// your system security.
+    ///
+    /// If in doubt, do NOT use this function!
+    pub fn generate_challenge_authenticate_policy(
+        &self,
+        creds: Vec<Credential>,
+        policy: UserVerificationPolicy,
+        extensions: Option<RequestAuthenticationExtensions>,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
+        self.generate_challenge_authenticate_inner(creds, policy, extensions)
     }
 
     /// Begin a discoverable authentication session.
@@ -2825,7 +2806,7 @@ mod tests {
         // Ensure we get a bad result.
 
         assert!(
-            wan.generate_challenge_authenticate(creds.clone())
+            wan.generate_challenge_authenticate(creds.clone(), None)
                 .unwrap_err()
                 == WebauthnError::InconsistentUserVerificationPolicy
         );
@@ -2850,7 +2831,7 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone());
+        let r = wan.generate_challenge_authenticate(creds.clone(), None);
         debug!("{:?}", r);
         assert!(r.is_ok());
 
@@ -2874,7 +2855,7 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone());
+        let r = wan.generate_challenge_authenticate(creds.clone(), None);
         debug!("{:?}", r);
         assert!(r.is_ok());
     }
