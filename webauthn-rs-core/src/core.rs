@@ -2367,7 +2367,7 @@ mod tests {
             true,
         );
         trace!("{:?}", result);
-        if cfg!(feature = "insecure_rs1") {
+        if cfg!(feature = "insecure-rs1") {
             assert!(result.is_ok());
         } else {
             assert!(matches!(

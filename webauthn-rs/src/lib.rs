@@ -42,6 +42,51 @@
 //!
 //! No other authentication factors are needed!
 //!
+//! # Tutorial
+//!
+//! A tutorial on how to use this library is on the project github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
+//!
+//! # Features
+//!
+//! This library supports some optional features that you may wish to use. These are all
+//! disabled by default as they have risks associated.
+//!
+//! ## Allow Insecure RSA_SHA1
+//!
+//! Many Windows Hello credentials are signed with RSA and SHA1. SHA1 is considered broken
+//! and should not be trusted in cryptographic contexts. These signatures are used only
+//! during attestation, but the credentials themself are generally RSA-SHA256. In some
+//! cases this may allow forgery of a credentials attestation, meaning you are unable to
+//! trust the integrity of the authenticator.
+//!
+//! For the broadest compatibility, and if you do not use attestation (such as passkey only users)
+//! you may choose to use RSA SHA1 signed credentials with `danger-insecure-rs1` as this has no impact
+//! on your system security. For users who use attestation, you should NOT enable this feature as it
+//! undermines attestation.
+//!
+//! ## Credential Internals and Type Changes
+//!
+//! By default the type wrappers around the keys are opaque. However in some cases you
+//! may wish to migrate a key between types (security key to passkey, passwordlesskey to passkey)
+//! for example. Alternately, you may wish to access the internals of a credential to implement
+//! an alternate serialisation or storage mechanism. In these cases you can access the underlying
+//! `Credential` type via Into and From by enabling the feature `danger-credential-internals`. The
+//! `Credential` type is exposed via the `prelude` when this feature is enabled.
+//!
+//! ## User-Presence only SecurityKeys
+//!
+//! By default, SecurityKeys will opportunistically enforce User Verification (Such as a PIN or
+//! Biometric). This can cause issues with Firefox which only supports CTAP1. An example of this
+//! is if you register a SecurityKey on chromium it will be bound to always perform UserVerification
+//! for the life of the SecurityKey precluding it's use on Firefox.
+//!
+//! Enabling the feature `danger-user-presence-only-security-keys` changes these keys to prevent
+//! User Verification if possible. However, newer keys will confusingly force a User Verification
+//! on registration, but will then not prompt for this during usage. Some user surveys have shown
+//! this to confuse users to why the UV is not requested, and it can lower trust in these tokens
+//! when they are elevated to be self-contained MFA as the user believes these UV prompts to be
+//! unreliable and not verified correctly. In these cases you MUST communicate to the user that
+//! the UV *may* occur on registration and then will not occur again, and that is *by design*.
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
@@ -77,10 +122,12 @@ pub mod prelude {
     pub use url::Url;
     pub use uuid::Uuid;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
+    #[cfg(feature = "danger-credential-internals")]
+    pub use webauthn_rs_core::proto::Credential;
     pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AuthenticatorAttachment};
     pub use webauthn_rs_core::proto::{
         AttestationMetadata, AuthenticationResult, AuthenticationState, CreationChallengeResponse,
-        Credential, CredentialID, ParsedAttestation, ParsedAttestationData, PublicKeyCredential,
+        CredentialID, ParsedAttestation, ParsedAttestationData, PublicKeyCredential,
         RegisterPublicKeyCredential, RequestChallengeResponse,
     };
     pub use webauthn_rs_core::AttestationFormat;
@@ -223,7 +270,7 @@ impl<'a> WebauthnBuilder<'a> {
 ///
 /// --> You should use `start_passkey_registration`
 ///
-/// *I want to replace passwords with strong, multi-factor cryptographic authentication, limited to
+/// *I want to replace passwords with strong multi-factor cryptographic authentication, limited to
 /// a known set of controlled and trusted authenticator types*
 ///
 /// --> You should use `start_passwordlesskey_registration`
@@ -237,10 +284,12 @@ impl<'a> WebauthnBuilder<'a> {
 ///
 /// --> You should use `start_devicekey_registration` (still in development)
 ///
-/// *I want a security token along with a password to create multi-factor authentication*
+/// *I want a security token along with an external password to create multi-factor authentication*
 ///
-/// If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration` instead - it's probably what you
-/// want! But if not, and you really want a security key, you should use `start_securitykey_registration`
+/// NOTE: If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration`
+/// instead - it's likely to provide a better user experience than security keys as MFA!
+///
+/// --> If you really want a security key, you should use `start_securitykey_registration`
 ///
 #[derive(Debug)]
 pub struct Webauthn {
@@ -300,10 +349,14 @@ impl Webauthn {
     /// # let webauthn = builder.build()
     /// #     .expect("Invalid configuration");
     ///
+    /// // you must store this user's unique id with the account. Alternatelly you can
+    /// // use an existed UUID source.
+    /// let user_unique_id = Uuid::new_v4();
+    ///
     /// // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
     /// let (ccr, skr) = webauthn
     ///     .start_passkey_registration(
-    ///         Uuid::new_v4(),
+    ///         user_unique_id,
     ///         "claire",
     ///         "Claire",
     ///         None, // No other credentials are registered yet.
@@ -500,12 +553,16 @@ impl Webauthn {
     /// # let webauthn = builder.build()
     /// #     .expect("Invalid configuration");
     ///
+    /// // you must store this user's unique id with the account. Alternatelly you can
+    /// // use an existed UUID source.
+    /// let user_unique_id = Uuid::new_v4();
+    ///
     /// // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
     /// // Hint (but do not enforce) that we prefer this to be a token/key like a yubikey.
     /// // To enforce this you can validate the properties of the returned device aaguid.
     /// let (ccr, skr) = webauthn
     ///     .start_passwordlesskey_registration(
-    ///         Uuid::new_v4(),
+    ///         user_unique_id,
     ///         "claire",
     ///         "Claire",
     ///         None,
@@ -716,10 +773,14 @@ impl Webauthn {
     /// # let webauthn = builder.build()
     /// #     .expect("Invalid configuration");
     ///
+    /// // you must store this user's unique id with the account. Alternatelly you can
+    /// // use an existed UUID source.
+    /// let user_unique_id = Uuid::new_v4();
+    ///
     /// // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
     /// let (ccr, skr) = webauthn
     ///     .start_securitykey_registration(
-    ///         Uuid::new_v4(),
+    ///         user_unique_id,
     ///         "claire",
     ///         "Claire",
     ///         None,
@@ -775,7 +836,11 @@ impl Webauthn {
         let extensions = None;
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
-        let policy = Some(UserVerificationPolicy::Preferred);
+        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
+        } else {
+            Some(UserVerificationPolicy::Preferred)
+        };
         let reject_passkeys = true;
 
         self.core
@@ -870,7 +935,7 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "resident_key_support")]
+#[cfg(feature = "resident-key-support")]
 impl Webauthn {
     /// WIP DO NOT USE
     pub fn start_discoverable_authentication(
@@ -913,7 +978,7 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "resident_key_support")]
+#[cfg(feature = "resident-key-support")]
 impl Webauthn {
     /// TODO
     pub fn start_devicekey_registration(

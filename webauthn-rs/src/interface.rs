@@ -19,7 +19,9 @@ pub struct PasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A Pass Key for a user.
+/// A Passkey for a user.
+///
+/// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Passkey {
     pub(crate) cred: Credential,
@@ -44,9 +46,9 @@ impl Passkey {
     /// internal device activation counter (due to their synchronisation), and the
     /// backup-state flags are rarely if ever changed.
     ///
-    /// If the credential_id does not match, None is returned. If the cred id matches
-    /// and the credential is updated, Some(true) is returned. If the cred id
-    /// matches, but the credential is not changed, Some(false) is returned.
+    /// If the credential_id does not match, None is returned.
+    /// If the cred id matches and the credential is updated, Some(true) is returned.
+    /// If the cred id matches, but the credential is not changed, Some(false) is returned.
     pub fn update_credential(&mut self, res: &AuthenticationResult) -> Option<bool> {
         if res.cred_id() == self.cred_id() {
             let mut changed = false;
@@ -67,6 +69,14 @@ impl Passkey {
     }
 }
 
+#[cfg(feature = "danger-credential-internals")]
+impl From<Passkey> for Credential {
+    fn from(pk: Passkey) -> Self {
+        pk.cred
+    }
+}
+
+#[cfg(feature = "danger-credential-internals")]
 impl From<Credential> for Passkey {
     /// Convert a generic webauthn credential into a Passkey
     fn from(cred: Credential) -> Self {
@@ -96,6 +106,8 @@ pub struct PasswordlessKeyAuthentication {
 }
 
 /// A passwordless key for a user
+///
+/// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PasswordlessKey {
     pub(crate) cred: Credential,
@@ -149,6 +161,21 @@ impl PasswordlessKey {
     }
 }
 
+#[cfg(feature = "danger-credential-internals")]
+impl From<PasswordlessKey> for Credential {
+    fn from(pk: PasswordlessKey) -> Self {
+        pk.cred
+    }
+}
+
+#[cfg(feature = "danger-credential-internals")]
+impl From<Credential> for PasswordlessKey {
+    /// Convert a generic webauthn credential into a Passkey
+    fn from(cred: Credential) -> Self {
+        PasswordlessKey { cred }
+    }
+}
+
 /// An in progress registration session for a [SecurityKey].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityKeyRegistration {
@@ -163,6 +190,8 @@ pub struct SecurityKeyAuthentication {
 }
 
 /// A Security Key for a user.
+///
+/// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityKey {
     pub(crate) cred: Credential,
@@ -222,6 +251,14 @@ impl PartialEq for SecurityKey {
     }
 }
 
+#[cfg(feature = "danger-credential-internals")]
+impl From<SecurityKey> for Credential {
+    fn from(sk: SecurityKey) -> Self {
+        sk.cred
+    }
+}
+
+#[cfg(feature = "danger-credential-internals")]
 impl From<Credential> for SecurityKey {
     /// Convert a generic webauthn credential into a security key
     fn from(cred: Credential) -> Self {
@@ -242,7 +279,9 @@ pub struct DeviceKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A passwordless key for a user
+/// A device key belonging to a user
+///
+/// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceKey {
     pub(crate) cred: Credential,
@@ -302,7 +341,22 @@ impl PartialEq for DeviceKey {
     }
 }
 
-/// An in progress registration session for a [DiscoverableKey]. [Passkey] and [DeviceKey]
+#[cfg(feature = "danger-credential-internals")]
+impl From<DeviceKey> for Credential {
+    fn from(dk: DeviceKey) -> Self {
+        dk.cred
+    }
+}
+
+#[cfg(feature = "danger-credential-internals")]
+impl From<Credential> for DeviceKey {
+    /// Convert a generic webauthn credential into a security key
+    fn from(cred: Credential) -> Self {
+        DeviceKey { cred }
+    }
+}
+
+/// An in progress authentication session for a [DiscoverableKey]. [Passkey] and [DeviceKey]
 /// can be used with these workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoverableAuthentication {
