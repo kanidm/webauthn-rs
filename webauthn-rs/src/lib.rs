@@ -859,16 +859,8 @@ impl Webauthn {
     /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
     /// process.
     ///
-    /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
-    ///
-    /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
-    /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
-    /// and you SHOULD invalidate and reject that credential as a result.
-    ///
-    /// From this `AuthenticationResult` you *should* update the Credential's Counter value if it is
-    /// valid per the above check. If you wish
-    /// you *may* use the content of the `AuthenticationResult` for extended validations (such as the
-    /// user verification flag).
+    /// You should use `SecurityKey::update_credential` on the returned `AuthenticationResult` and
+    /// ensure it is persisted.
     pub fn finish_securitykey_authentication(
         &self,
         reg: &PublicKeyCredential,
