@@ -45,7 +45,7 @@ fn pkey_verify_signature(
             Ok(verifier)
         }
         COSEAlgorithm::INSECURE_RS1 => {
-            if cfg!(feature = "insecure_rs1") {
+            if cfg!(feature = "insecure-rs1") {
                 warn!("INSECURE SHA1 USAGE DETECTED");
                 let mut verifier = sign::Verifier::new(hash::MessageDigest::sha1(), pkey)
                     .map_err(WebauthnError::OpenSSLError)?;

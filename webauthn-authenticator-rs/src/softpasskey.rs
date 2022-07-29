@@ -667,7 +667,9 @@ mod tests {
 
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
-        let (chal, auth_state) = wan.generate_challenge_authenticate(vec![cred]).unwrap();
+        let (chal, auth_state) = wan
+            .generate_challenge_authenticate(vec![cred], None)
+            .unwrap();
 
         let r = wa
             .do_authentication(Url::parse("https://localhost:8080").unwrap(), chal)

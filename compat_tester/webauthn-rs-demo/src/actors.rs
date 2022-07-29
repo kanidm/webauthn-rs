@@ -302,9 +302,7 @@ impl WebauthnActor {
                 self.wan
                     .generate_challenge_authenticate_credential(cred, uv, extensions)
             }
-            None => self
-                .wan
-                .generate_challenge_authenticate_options(creds, extensions),
+            None => self.wan.generate_challenge_authenticate(creds, extensions),
         }?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);

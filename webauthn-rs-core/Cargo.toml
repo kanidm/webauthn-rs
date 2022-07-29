@@ -11,7 +11,7 @@ categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
 
 [features]
-insecure_rs1 = []
+insecure-rs1 = []
 
 default = []
 

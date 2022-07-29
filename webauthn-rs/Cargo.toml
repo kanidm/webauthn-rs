@@ -11,7 +11,10 @@ categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
 
 [features]
-resident_key_support = []
+resident-key-support = []
+danger-insecure-rs1 = ["webauthn-rs-core/insecure-rs1"]
+danger-credential-internals = []
+danger-user-presence-only-security-keys = []
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
