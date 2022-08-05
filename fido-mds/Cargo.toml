@@ -1,0 +1,27 @@
+[package]
+name = "fido-mds"
+version = "0.4.2-beta.4"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2021"
+description = "Fido Metadata Service parser"
+repository = "https://github.com/kanidm/webauthn-rs"
+readme = "../README.md"
+keywords = ["webauthn", "authentication"]
+categories = ["authentication", "web-programming"]
+license = "MPL-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+tracing = "^0.1.35"
+
+serde = { version = "^1.0.141", features = ["derive"] }
+serde_json = "^1.0.79"
+# time = { version = "0.3", features = ["serde"] }
+
+# compact_jwt = "^0.2.3"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+compact_jwt = { path = "/Users/william/development/kanidm/compact_jwt", features = ["unsafe_release_without_verify"] }
+

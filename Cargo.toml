@@ -14,6 +14,9 @@ members = [
     "tutorial/server/tide",
     "tutorial/server/axum",
     "tutorial/wasm",
+    # Fido MDS tools
+    "fido-mds",
+    "fido-mds-tool",
     # The compat tester
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
