@@ -1,10 +1,8 @@
 use crate::error::WebauthnCError;
-use crate::U2FToken;
-use crate::{U2FRegistrationData, U2FSignData};
 use base64urlsafedata::Base64UrlSafeData;
 
 use webauthn_rs_proto::{
-    AllowCredentials, PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User,
+    PubKeyCredParams, RelyingParty, User,
 };
 
 use pcsc::*;
@@ -236,6 +234,7 @@ impl<'a> NFCCard<'a> {
         if rapdu == &APPLET_U2F_V2 {
             trace!("Selected U2F_V2 applet successfully");
         } else {
+            error!("Applet not supported");
             return Err(WebauthnCError::NotSupported);
         };
 
