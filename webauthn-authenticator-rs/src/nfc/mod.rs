@@ -1,12 +1,10 @@
 use crate::error::WebauthnCError;
 use base64urlsafedata::Base64UrlSafeData;
 
-use webauthn_rs_proto::{
-    PubKeyCredParams, RelyingParty, User,
-};
+use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
 use pcsc::*;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::fmt;
 
 pub mod apdu;
@@ -121,7 +119,7 @@ impl<'a> NFCCard<'a> {
         tx_buf: &[u8],
         rx_buf: &mut Vec<u8>,
     ) -> Result<[u8; 2], WebauthnCError> {
-        trace!("Sending raw APDU: {:x?}", tx_buf);
+        trace!(">>> {:02x?}", tx_buf);
         let mut rapdu_buf = vec![0; MAX_SHORT_BUFFER_SIZE];
         // The returned slice gives us the correct lengths of what
         // was filled to buf.
@@ -132,6 +130,8 @@ impl<'a> NFCCard<'a> {
                 error!("Failed to transmit APDU command to card: {}", e);
                 WebauthnCError::ApduTransmission
             })?;
+
+        trace!("<<< {:02x?}", rapdu);
         let (data, status) = rapdu.split_at(rapdu.len() - 2);
         rx_buf.extend_from_slice(data);
         Ok(status.try_into().expect("Status not 2 bytes??!?!?!"))
@@ -181,18 +181,15 @@ impl<'a> NFCCard<'a> {
             }
             let status = self.transmit_raw(&tx_buf, &mut ans)?;
 
-            trace!("{:x?}", status);
             match pdu {
                 Pdu::Fragment(data) => {
-                    trace!("{:x?}", ans);
                     debug_assert!(ans.len() == 0);
-                    if status != [0x90, 0x00] {
+                    if status != ISO7816_STATUS_OK {
                         return Err(WebauthnCError::ApduTransmission);
                     }
                 }
                 Pdu::Complete(data) => {
-                    trace!("{:x?}", ans);
-                    if status == [0x90, 0x00] {
+                    if status == ISO7816_STATUS_OK {
                         // All good :)
                         continue;
                     } else if status == [0x61, 0x00] {
@@ -226,17 +223,21 @@ impl<'a> NFCCard<'a> {
 
     // Need a way to select the type of card now.
     pub fn select_u2f_v2_applet(mut self) -> Result<Selected<'a>, WebauthnCError> {
-        let mut rapdu_buf = [0; MAX_SHORT_BUFFER_SIZE];
-        let rapdu = self
-            .card_ref
-            .transmit(&APPLET_SELECT_CMD, &mut rapdu_buf)
+        let mut ans = Vec::with_capacity(MAX_SHORT_BUFFER_SIZE);
+
+        let status = self
+            .transmit_raw(&APPLET_SELECT_CMD, &mut ans)
             .expect("Failed to select CTAP2.1 applet");
-        if rapdu == &APPLET_U2F_V2 {
-            trace!("Selected U2F_V2 applet successfully");
-        } else {
-            error!("Applet not supported");
+
+        if status != ISO7816_STATUS_OK {
+            error!("Error selecting applet: {:02x?}", status);
             return Err(WebauthnCError::NotSupported);
-        };
+        }
+
+        if ans != &APPLET_U2F_V2 {
+            error!("Unsupported applet: {:02x?}", ans);
+            return Err(WebauthnCError::NotSupported);
+        }
 
         // Read the card info.
         let tokinfo = self.authenticator_get_info()?;
