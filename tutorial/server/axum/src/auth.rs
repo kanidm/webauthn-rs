@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use axum_sessions::async_session::Session;
+use axum_sessions::extractors::WritableSession;
 
 /*
  * Webauthn RS auth handlers.
@@ -51,7 +51,7 @@ use webauthn_rs::prelude::*;
 
 pub async fn start_register(
     Extension(app_state): Extension<AppState>,
-    Extension(mut session): Extension<Session>,
+    mut session: WritableSession,
     Path(username): Path<String>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     info!("Start register");
@@ -115,7 +115,7 @@ pub async fn start_register(
 
 pub async fn finish_register(
     Extension(app_state): Extension<AppState>,
-    Extension(mut session): Extension<Session>,
+    mut session: WritableSession,
     Json(reg): Json<RegisterPublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
@@ -182,7 +182,7 @@ pub async fn finish_register(
 
 pub async fn start_authentication(
     Extension(app_state): Extension<AppState>,
-    Extension(mut session): Extension<Session>,
+    mut session: WritableSession,
     Path(username): Path<String>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     info!("Start Authentication");
@@ -235,7 +235,7 @@ pub async fn start_authentication(
 
 pub async fn finish_authentication(
     Extension(app_state): Extension<AppState>,
-    Extension(mut session): Extension<Session>,
+    mut session: WritableSession,
     Json(auth): Json<PublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     let (user_unique_id, auth_state): (Uuid, PasskeyAuthentication) = session
