@@ -78,13 +78,16 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
 
         if let Some(exclude_credentials) = ccr.public_key.exclude_credentials {
             // There must be an array of these in the jsv ...
-            let exclude_creds: Array =
-                exclude_credentials
+            let exclude_creds: Array = exclude_credentials
                 .iter()
                 .map(|ac| {
                     let obj = Object::new();
-                    js_sys::Reflect::set(&obj, &"type".into(), &JsValue::from_str(ac.type_.as_str()))
-                        .unwrap();
+                    js_sys::Reflect::set(
+                        &obj,
+                        &"type".into(),
+                        &JsValue::from_str(ac.type_.as_str()),
+                    )
+                    .unwrap();
 
                     js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.0.as_slice()))
                         .unwrap();
