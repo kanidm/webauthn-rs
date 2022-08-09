@@ -356,7 +356,7 @@ impl FromStr for FidoMds {
         let s_pretty = serde_json::to_string_pretty(&metadata.entries[0]).unwrap();
         trace!(%s_pretty);
 
-        todo!();
+        Ok(metadata);
     }
 }
 
