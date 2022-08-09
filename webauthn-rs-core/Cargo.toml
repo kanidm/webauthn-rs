@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs-core"
-version = "0.4.2-beta.4"
+version = "0.4.2-beta.6"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Cryptographic Operation Handling"
@@ -17,7 +17,7 @@ default = []
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
-webauthn-rs-proto = { version = "0.4.2-beta.4", path = "../webauthn-rs-proto" }
+webauthn-rs-proto = { version = "0.4.2-beta.6", path = "../webauthn-rs-proto" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
 serde_json = "1.0"
