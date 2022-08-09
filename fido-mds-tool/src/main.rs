@@ -1,4 +1,3 @@
-
 // #![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![deny(clippy::todo)]
@@ -13,10 +12,10 @@
 
 use clap::Parser;
 use clap::{Args, Subcommand};
-use std::path::PathBuf;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
-use std::str::FromStr;
 use std::fs;
+use std::path::PathBuf;
+use std::str::FromStr;
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use fido_mds::FidoMds;
 
@@ -29,7 +28,6 @@ pub struct CommonOpt {
     pub path: PathBuf,
 }
 
-
 #[derive(Debug, Subcommand)]
 #[clap(about = "Fido Metadata Service parsing tool")]
 pub enum Opt {
@@ -40,11 +38,10 @@ pub enum Opt {
 impl Opt {
     fn debug(&self) -> bool {
         match self {
-            Opt::Parse(CommonOpt { debug, .. } ) => *debug,
+            Opt::Parse(CommonOpt { debug, .. }) => *debug,
         }
     }
 }
-
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "Fido Metadata Service parsing tool")]
@@ -59,8 +56,7 @@ fn main() {
     let fmt_layer = fmt::layer().with_writer(std::io::stderr);
 
     let filter_layer = if opt.commands.debug() {
-        match EnvFilter::try_new("fido-mds=debug,fido-mds-tool=debug")
-        {
+        match EnvFilter::try_new("fido-mds=debug,fido-mds-tool=debug") {
             Ok(f) => f,
             Err(e) => {
                 eprintln!("ERROR! Unable to start tracing {:?}", e);
@@ -80,10 +76,7 @@ fn main() {
         .init();
 
     match opt.commands {
-        Opt::Parse(CommonOpt {
-            debug: _,
-            path
-        }) => {
+        Opt::Parse(CommonOpt { debug: _, path }) => {
             tracing::trace!("{:?}", path);
 
             let s = match fs::read_to_string(path) {
