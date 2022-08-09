@@ -2,7 +2,7 @@ use url::Url;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::{
     AuthenticationResult, CreationChallengeResponse, Credential, PublicKeyCredential,
-    RegisterPublicKeyCredential, RequestChallengeResponse,
+    RegisterPublicKeyCredential, RequestChallengeResponse, Base64UrlSafeData
 };
 use webauthn_rs_core::proto::{AuthenticationState, RegistrationState};
 
@@ -88,7 +88,13 @@ impl WebauthnActor {
         let (ccr, rs) = match reg_settings {
             RegisterWithType::Passkey => self
                 .swan
-                .start_passkey_registration(user_unique_id, &username, &username, None)
+                .start_passkey_registration(user_unique_id, &username, &username,
+                    Some(vec![
+                        Base64UrlSafeData(vec![
+                            0x00, 0x01, 0x02, 0x03
+                        ])
+                    ])
+                )
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passkey(rs)))?,
             RegisterWithType::Passwordless(strict) => {
                 let att_ca: Option<_> = strict.into();

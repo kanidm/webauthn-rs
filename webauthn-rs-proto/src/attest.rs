@@ -54,7 +54,7 @@ pub struct CreationChallengeResponse {
 #[cfg(feature = "wasm")]
 impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
     fn from(ccr: CreationChallengeResponse) -> Self {
-        use js_sys::Uint8Array;
+        use js_sys::{Array, Object, Uint8Array};
         use wasm_bindgen::JsValue;
 
         let chal = Uint8Array::from(ccr.public_key.challenge.0.as_slice());
@@ -75,6 +75,36 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
                 js_sys::Reflect::set(&exts, &"credBlob".into(), &cred_blob).unwrap();
             }
         }
+
+        if let Some(exclude_credentials) = ccr.public_key.exclude_credentials {
+            // There must be an array of these in the jsv ...
+            let exclude_creds: Array =
+                exclude_credentials
+                .iter()
+                .map(|ac| {
+                    let obj = Object::new();
+                    js_sys::Reflect::set(&obj, &"type".into(), &JsValue::from_str(ac.type_.as_str()))
+                        .unwrap();
+
+                    js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.0.as_slice()))
+                        .unwrap();
+
+                    if let Some(transports) = &ac.transports {
+                        let tarray: Array = transports
+                            .iter()
+                            .map(|trs| JsValue::from_serde(trs).unwrap())
+                            .collect();
+
+                        js_sys::Reflect::set(&obj, &"transports".into(), &tarray).unwrap();
+                    }
+
+                    obj
+                })
+                .collect();
+
+            js_sys::Reflect::set(&pkcco, &"excludeCredentials".into(), &exclude_creds).unwrap();
+        }
+
         web_sys::CredentialCreationOptions::from(jsv)
     }
 }
