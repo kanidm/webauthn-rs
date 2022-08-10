@@ -89,7 +89,10 @@ fn main() {
 
             match FidoMds::from_str(&s) {
                 Ok(mds) => {
-                    tracing::info!(%mds, "hooray");
+                    for fd in mds.entries.iter() {
+                        // eprintln!("{:?}", fd);
+                    }
+                    eprintln!("{}", mds.entries.len());
                 }
                 Err(e) => {
                     tracing::error!(?e);
