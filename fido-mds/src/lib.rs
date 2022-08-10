@@ -370,9 +370,11 @@ pub enum AttachmentHint {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 /// A statement describing a device and it's associated properties.
 pub struct MetadataStatement {
+    /// Version of this structure
+    pub schema: u16,
     /// Legal Header
     pub legal_header: Option<String>,
     /// The Authenticator Attestation ID. See [UAFProtocol] for the definition of the AAID structure.
