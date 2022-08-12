@@ -10,6 +10,8 @@ members = [
     "webauthn-rs",
     # Authenticator interactions
     "webauthn-authenticator-rs",
+    # Authenticator CLI,
+    "authenticator-cli",
     # Tutorial / Example sites.
     "tutorial/server/tide",
     "tutorial/server/axum",
