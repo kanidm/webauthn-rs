@@ -1,4 +1,4 @@
-// #![deny(warnings)]
+#![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
@@ -15,9 +15,11 @@ use clap::{Args, Subcommand};
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use tracing::{debug, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use fido_mds::FidoMds;
+use uuid::Uuid;
 
 #[derive(Debug, Args)]
 pub struct CommonOpt {
@@ -28,17 +30,30 @@ pub struct CommonOpt {
     pub path: PathBuf,
 }
 
+#[derive(Debug, Args)]
+pub struct QueryOpt {
+    pub aaguid: Uuid,
+    #[clap(flatten)]
+    pub common: CommonOpt,
+}
+
 #[derive(Debug, Subcommand)]
 #[clap(about = "Fido Metadata Service parsing tool")]
 pub enum Opt {
-    /// Parse and display the content of the MDS file
-    Parse(CommonOpt),
+    /// Parse and display the list of Fido2 devices from an MDS file.
+    ListFido2(CommonOpt),
+    /// Query and display metadata for a specific FIDO2 device by its AAGUID
+    QueryAaguid(QueryOpt),
 }
 
 impl Opt {
     fn debug(&self) -> bool {
         match self {
-            Opt::Parse(CommonOpt { debug, .. }) => *debug,
+            Opt::ListFido2(CommonOpt { debug, .. }) => *debug,
+            Opt::QueryAaguid(QueryOpt {
+                common: CommonOpt { debug, .. },
+                ..
+            }) => *debug,
         }
     }
 }
@@ -76,8 +91,8 @@ fn main() {
         .init();
 
     match opt.commands {
-        Opt::Parse(CommonOpt { debug: _, path }) => {
-            tracing::trace!("{:?}", path);
+        Opt::ListFido2(CommonOpt { debug: _, path }) => {
+            trace!("{:?}", path);
 
             let s = match fs::read_to_string(path) {
                 Ok(s) => s,
@@ -89,10 +104,91 @@ fn main() {
 
             match FidoMds::from_str(&s) {
                 Ok(mds) => {
-                    for fd in mds.entries.iter() {
-                        // eprintln!("{:?}", fd);
+                    debug!("{} fido metadata avaliable", mds.fido2.len());
+                    for fd in mds.fido2.values() {
+                        eprintln!("{}", fd);
                     }
-                    eprintln!("{}", mds.entries.len());
+                }
+                Err(e) => {
+                    tracing::error!(?e);
+                }
+            }
+        }
+        Opt::QueryAaguid(QueryOpt {
+            aaguid,
+            common: CommonOpt { debug: _, path },
+        }) => {
+            trace!("{:?}", path);
+
+            let s = match fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!(?e);
+                    return;
+                }
+            };
+
+            match FidoMds::from_str(&s) {
+                Ok(mds) => {
+                    debug!("{} fido metadata avaliable", mds.fido2.len());
+                    match mds.fido2.get(&aaguid) {
+                        Some(fd) => {
+                            println!("aaguid: {}", fd.aaguid);
+                            println!("last update: {}", fd.time_of_last_status_change);
+                            println!("description: {}", fd.description);
+                            println!("authenticator_version: {}", fd.authenticator_version);
+                            println!("authentication_algorithms:");
+                            for alg in fd.authentication_algorithms.iter() {
+                                println!("  {:?}", alg);
+                            }
+                            println!("public_key_alg_and_encodings: ");
+                            for alg in fd.public_key_alg_and_encodings.iter() {
+                                println!("  {:?}", alg);
+                            }
+
+                            println!("user_verification_details:");
+                            for uvm_or in fd.user_verification_details.iter() {
+                                println!("-- OR");
+                                for uvm_and in uvm_or.iter() {
+                                    println!("  AND");
+                                    println!("  {}", uvm_and);
+                                }
+                            }
+                            println!("key_protection:");
+                            for kp in fd.key_protection.iter() {
+                                println!("  {:?}", kp);
+                            }
+                            println!("is_key_restricted: {}", fd.is_key_restricted);
+                            println!(
+                                "is_fresh_user_verification_required: {}",
+                                fd.is_fresh_user_verification_required
+                            );
+
+                            // attestation root certificates
+
+                            println!("supported_extensions:");
+                            for se in fd.supported_extensions.iter() {
+                                println!(
+                                    "  {} - {} - {}",
+                                    se.id,
+                                    se.fail_if_unknown,
+                                    se.data.as_deref().unwrap_or("")
+                                );
+                            }
+
+                            if let Some(authenticator_info) = &fd.authenticator_get_info {
+                                println!("  {:?}", authenticator_info);
+                            } else {
+                                println!("authenticator_get_info: not present")
+                            }
+
+                            println!("status_reports:");
+                            for sr in fd.status_reports.iter() {
+                                println!("  {:?}", sr);
+                            }
+                        }
+                        None => warn!("No metadata associated with {}", aaguid),
+                    }
                 }
                 Err(e) => {
                     tracing::error!(?e);
