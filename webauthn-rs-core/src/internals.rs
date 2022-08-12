@@ -254,7 +254,7 @@ impl TryFrom<i128> for EDDSACurve {
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     let mut deserializer = serde_cbor::Deserializer::from_slice(i);
     let v = serde::de::Deserialize::deserialize(&mut deserializer).map_err(|e| {
-        error!(?e);
+        error!(?e, "cbor_parser");
         nom::Err::Failure(nom::error::Error::from_error_kind(
             i,
             nom::error::ErrorKind::Fail,
@@ -271,7 +271,7 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
     trace!(?v, "OK!");
 
     let v: T::SignedExtensions = serde_cbor::value::from_value(v).map_err(|e| {
-        error!(?e);
+        error!(?e, "extensions_parser");
         nom::Err::Failure(nom::error::Error::from_error_kind(
             i,
             nom::error::ErrorKind::Fail,
@@ -384,7 +384,7 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
         authenticator_data_parser(auth_data_bytes)
             .map_err(|e| {
-                error!("nom -> {:?}", e);
+                error!(?e, "try_from authenticator_data_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, ad)| ad)
@@ -725,7 +725,7 @@ impl TryFrom<&[u8]> for TpmsAttest {
     fn try_from(data: &[u8]) -> Result<TpmsAttest, WebauthnError> {
         tpmsattest_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpmsattest_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -789,6 +789,7 @@ pub enum TpmAlgId {
 
 impl TpmAlgId {
     fn new(v: u16) -> Option<Self> {
+        trace!("TpmAlgId::new ( {:x?} )", v);
         match v {
             0x0000 => Some(TpmAlgId::Error),
             0x0001 => Some(TpmAlgId::Rsa),
@@ -913,7 +914,7 @@ pub enum TpmuPublicParms {
 }
 
 fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPublicParms> {
-    // eprintln!("tpmupublicparms input -> {:?}", input);
+    trace!(?input, ?alg, "tpmupublicparms input");
     match alg {
         TpmAlgId::Rsa => {
             tpmsrsaparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Rsa(inner)))
@@ -987,7 +988,7 @@ impl TryFrom<&[u8]> for TpmtPublic {
     fn try_from(data: &[u8]) -> Result<TpmtPublic, WebauthnError> {
         tpmtpublic_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpmtpublic_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -1043,7 +1044,7 @@ impl TryFrom<&[u8]> for TpmtSignature {
     fn try_from(data: &[u8]) -> Result<TpmtSignature, WebauthnError> {
         tpmtsignature_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpmtsignature_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -1144,7 +1145,7 @@ impl TryFrom<&[u8]> for TpmVendor {
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         tpm_device_attribute_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpm_device_attribute_parser");
                 WebauthnError::ParseNOMFailure
             })
             .and_then(|(_, v)| TpmVendor::try_from(v))
@@ -1236,6 +1237,20 @@ mod tests {
             217, 244, 35, 137, 43, 138, 137, 140, 82, 231, 195, 145, 213, 230, 185, 245, 104, 105,
             62, 142, 124, 34, 9, 157, 167, 188, 243, 112, 104, 248, 63, 50, 19, 53, 173, 69, 12,
             39, 252, 9, 69, 223,
+        ];
+        let tpmt_public = TpmtPublic::try_from(data.as_slice()).unwrap();
+        println!("{:?}", tpmt_public);
+    }
+
+    #[test]
+    fn deserialise_tpmt_public_ecc() {
+        let _ = tracing_subscriber::fmt::try_init();
+        // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
+        let data: Vec<u8> = vec![
+            0, 16, 0, 16, 0, 3, 0, 16, 0, 32, 176, 120, 225, 36, 231, 106, 252, 154, 114, 122, 203,
+            214, 236, 25, 195, 55, 87, 135, 75, 212, 181, 173, 240, 142, 187, 38, 60, 121, 153,
+            202, 197, 184, 0, 32, 143, 7, 127, 141, 160, 132, 16, 224, 9, 45, 95, 123, 145, 125,
+            213, 129, 188, 115, 162, 147, 216, 48, 46, 13, 168, 65, 99, 15, 73, 185, 228, 250,
         ];
         let tpmt_public = TpmtPublic::try_from(data.as_slice()).unwrap();
         println!("{:?}", tpmt_public);
