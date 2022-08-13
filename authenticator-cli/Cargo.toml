@@ -4,14 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-authenticator = { git = "https://github.com/Firstyear/authenticator-rs.git", branch = "webauthn-authenticator-rs", default-features = false, features = ["crypto_openssl"] }
 
+authenticator = { git = "https://github.com/Firstyear/authenticator-rs.git", branch = "webauthn-authenticator-rs", default-features = false, features = ["crypto_openssl"] }
 clap = { version = "^3.0", features = ["derive"] }
 
-# tracing = "0.1"
-# tracing-subscriber = { version = "0.3.11", features = ["env-filter", "fmt"] }
-# tracing-log = { version = "0.1.3", features = ["env_logger"] }
-
-log = "0.4"
-env_logger = "^0.6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.11", features = ["env-filter", "fmt"] }
+tracing-log = { version = "0.1.3" }
 

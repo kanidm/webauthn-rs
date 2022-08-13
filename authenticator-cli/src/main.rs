@@ -15,7 +15,8 @@ enum Opt {
 }
 
 fn main() {
-    env_logger::init();
+    tracing_subscriber::fmt::init();
+    tracing_log::LogTracer::init();
 
     let timeout_ms = 25000;
 
