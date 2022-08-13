@@ -11,6 +11,9 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - run: |
+          apt-get update && \
+          apt-get -y install libudev-dev
       - run: cargo build --release
       - run: cargo test --all
 
@@ -22,6 +25,9 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: 1.45.0
+      - run: |
+          apt-get update && \
+          apt-get -y install libudev-dev
       - run: cargo build --release
       - run: cargo test --all
 
