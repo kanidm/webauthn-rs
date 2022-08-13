@@ -12,8 +12,8 @@ jobs:
         with:
           toolchain: stable
       - run: |
-          apt-get update && \
-          apt-get -y install libudev-dev
+          sudo apt-get update && \
+          sudo apt-get -y install libudev-dev
       - run: cargo build --release
       - run: cargo test --all
 
@@ -26,8 +26,8 @@ jobs:
         with:
           toolchain: 1.45.0
       - run: |
-          apt-get update && \
-          apt-get -y install libudev-dev
+          sudo apt-get update && \
+          sudo apt-get -y install libudev-dev
       - run: cargo build --release
       - run: cargo test --all
 
