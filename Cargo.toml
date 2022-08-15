@@ -10,10 +10,15 @@ members = [
     "webauthn-rs",
     # Authenticator interactions
     "webauthn-authenticator-rs",
+    # Authenticator CLI,
+    "authenticator-cli",
     # Tutorial / Example sites.
     "tutorial/server/tide",
     "tutorial/server/axum",
     "tutorial/wasm",
+    # Fido MDS tools
+    "fido-mds",
+    "fido-mds-tool",
     # The compat tester
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
