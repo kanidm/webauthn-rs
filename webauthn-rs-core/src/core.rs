@@ -3689,17 +3689,22 @@ mod tests {
             true,
         );
         dbg!(&result);
-        assert!(result.is_ok());
-
-        match result.unwrap().attestation.metadata {
-            AttestationMetadata::AndroidKey {
-                is_km_tee,
-                is_attest_tee,
-            } => {
-                assert!(is_km_tee);
-                assert!(!is_attest_tee);
+        if cfg!(feature = "insecure-rs1") {
+            assert!(result.is_ok());
+            match result.unwrap().attestation.metadata {
+                AttestationMetadata::Tpm { aaguid } => {
+                    assert!(
+                        aaguid
+                            == uuid::Uuid::parse_str("08987058cadc4b81b6e130de50dcbe96").unwrap()
+                    );
+                }
+                _ => panic!("invalid metadata"),
             }
-            _ => panic!("invalid metadata"),
+        } else {
+            assert!(matches!(
+                result,
+                Err(WebauthnError::CredentialInsecureCryptography)
+            ))
         }
     }
 }

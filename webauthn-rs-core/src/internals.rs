@@ -833,6 +833,74 @@ fn parse_tpmtsymdefobject(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtSymDef
 }
 
 #[derive(Debug)]
+/// Symmetric crypto definition. Unused in webauthn
+pub struct TpmtEccScheme {
+    _algorithm: TpmAlgId,
+}
+
+fn parse_tpmteccscheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtEccScheme>> {
+    let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
+    match algorithm {
+        TpmAlgId::Null => Ok((data, None)),
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+            input,
+            nom::error::ErrorKind::Fail,
+        ))),
+    }
+}
+
+// 11.2.5.5 TPMI_ECC_CURVE
+// 6.4 TPM_ECC_CURVE
+#[derive(Debug, Clone, Copy)]
+#[repr(u16)]
+pub enum TpmiEccCurve {
+    None = 0x0000,
+    NistP192 = 0x0001,
+    NistP224 = 0x0002,
+    NistP256 = 0x0003,
+    NistP384 = 0x0004,
+    NistP521 = 0x0005,
+    BnP256 = 0x0010,
+    BnP638 = 0x0011,
+    Sm2P256 = 0x0020,
+}
+
+impl TpmiEccCurve {
+    fn new(v: u16) -> Option<Self> {
+        trace!("TpmiEccCurve::new ( {:x?} )", v);
+        match v {
+            0x0000 => Some(TpmiEccCurve::None),
+            0x0001 => Some(TpmiEccCurve::NistP192),
+            0x0002 => Some(TpmiEccCurve::NistP224),
+            0x0003 => Some(TpmiEccCurve::NistP256),
+            0x0004 => Some(TpmiEccCurve::NistP384),
+            0x0005 => Some(TpmiEccCurve::NistP521),
+            0x0010 => Some(TpmiEccCurve::BnP256),
+            0x0011 => Some(TpmiEccCurve::BnP638),
+            0x0020 => Some(TpmiEccCurve::Sm2P256),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+/// Symmetric crypto definition. Unused in webauthn
+pub struct TpmtKdfScheme {
+    _algorithm: TpmAlgId,
+}
+
+fn parse_tpmtkdfscheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtKdfScheme>> {
+    let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
+    match algorithm {
+        TpmAlgId::Null => Ok((data, None)),
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+            input,
+            nom::error::ErrorKind::Fail,
+        ))),
+    }
+}
+
+#[derive(Debug)]
 /// The Rsa Scheme. Unused in webauthn.
 pub struct TpmtRsaScheme {
     _algorithm: TpmAlgId,
@@ -896,11 +964,33 @@ fn tpmsrsaparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsRsaParms> {
     */
 }
 
-/*
+// 12.2.3.6 TPMS_ECC_PARMS in
+fn tpmseccparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsEccParms> {
+    trace!(?i);
+    let (i, symmetric) = parse_tpmtsymdefobject(i)?;
+    let (i, scheme) = parse_tpmteccscheme(i)?;
+    let (i, curve_id) = map_opt(be_u16, TpmiEccCurve::new)(i)?;
+    let (i, kdf) = parse_tpmtkdfscheme(i)?;
+
+    Ok((
+        i,
+        TpmsEccParms {
+            _symmetric: symmetric,
+            _scheme: scheme,
+            curve_id,
+            _kdf: kdf,
+        },
+    ))
+}
+
 #[derive(Debug)]
 pub struct TpmsEccParms {
+    _symmetric: Option<TpmtSymDefObject>,
+    _scheme: Option<TpmtEccScheme>,
+    /// The ID of the ECC curve in use
+    pub curve_id: TpmiEccCurve,
+    _kdf: Option<TpmtKdfScheme>,
 }
-*/
 
 #[derive(Debug)]
 /// Asymmetric Public Parameters
@@ -909,7 +999,7 @@ pub enum TpmuPublicParms {
     // Symcipher
     /// Rsa
     Rsa(TpmsRsaParms),
-    // Ecc(TpmsEccParms),
+    Ecc(TpmsEccParms),
     // Asym
 }
 
@@ -919,11 +1009,44 @@ fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], Tpm
         TpmAlgId::Rsa => {
             tpmsrsaparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Rsa(inner)))
         }
-        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
-            input,
-            nom::error::ErrorKind::Fail,
-        ))),
+        TpmAlgId::Ecc => {
+            tpmseccparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Ecc(inner)))
+        }
+        a => {
+            debug!(?a, "unsuported alg in parse_tpmupublicparms");
+            Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+                input,
+                nom::error::ErrorKind::Fail,
+            )))
+        }
     }
+}
+
+/// 11.2.5.2 TPMS_ECC_POINT
+#[derive(Debug)]
+pub struct TpmsEccPoint {
+    pub x: Vec<u8>,
+    pub y: Vec<u8>,
+}
+
+fn tpmseccpoint_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsEccPoint> {
+    let (i, size) = be_u16(i)?;
+    let (i, x) = match size {
+        0 => (i, Vec::new()),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            (i, d.to_vec())
+        }
+    };
+    let (i, size) = be_u16(i)?;
+    let (i, y) = match size {
+        0 => (i, Vec::new()),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            (i, d.to_vec())
+        }
+    };
+    Ok((i, TpmsEccPoint { x, y }))
 }
 
 #[derive(Debug)]
@@ -933,7 +1056,8 @@ pub enum TpmuPublicId {
     // Symcipher
     /// Rsa
     Rsa(Vec<u8>),
-    // Ecc(TpmsEccParms),
+    /// Ecc
+    Ecc(TpmsEccPoint),
     // Asym
 }
 
@@ -954,10 +1078,16 @@ fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPu
         TpmAlgId::Rsa => {
             tpmsrsapublickey_parser(input).map(|(data, inner)| (data, TpmuPublicId::Rsa(inner)))
         }
-        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
-            input,
-            nom::error::ErrorKind::Fail,
-        ))),
+        TpmAlgId::Ecc => {
+            tpmseccpoint_parser(input).map(|(data, inner)| (data, TpmuPublicId::Ecc(inner)))
+        }
+        a => {
+            debug!(?a, "unsuported alg in parse_tpmupublicid");
+            Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+                input,
+                nom::error::ErrorKind::Fail,
+            )))
+        }
     }
 }
 
@@ -986,6 +1116,7 @@ impl TryFrom<&[u8]> for TpmtPublic {
     type Error = WebauthnError;
 
     fn try_from(data: &[u8]) -> Result<TpmtPublic, WebauthnError> {
+        trace!(?data);
         tpmtpublic_parser(data)
             .map_err(|e| {
                 error!(?e, "try_from tpmtpublic_parser");
@@ -1237,20 +1368,6 @@ mod tests {
             217, 244, 35, 137, 43, 138, 137, 140, 82, 231, 195, 145, 213, 230, 185, 245, 104, 105,
             62, 142, 124, 34, 9, 157, 167, 188, 243, 112, 104, 248, 63, 50, 19, 53, 173, 69, 12,
             39, 252, 9, 69, 223,
-        ];
-        let tpmt_public = TpmtPublic::try_from(data.as_slice()).unwrap();
-        println!("{:?}", tpmt_public);
-    }
-
-    #[test]
-    fn deserialise_tpmt_public_ecc() {
-        let _ = tracing_subscriber::fmt::try_init();
-        // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
-        let data: Vec<u8> = vec![
-            0, 16, 0, 16, 0, 3, 0, 16, 0, 32, 176, 120, 225, 36, 231, 106, 252, 154, 114, 122, 203,
-            214, 236, 25, 195, 55, 87, 135, 75, 212, 181, 173, 240, 142, 187, 38, 60, 121, 153,
-            202, 197, 184, 0, 32, 143, 7, 127, 141, 160, 132, 16, 224, 9, 45, 95, 123, 145, 125,
-            213, 129, 188, 115, 162, 147, 216, 48, 46, 13, 168, 65, 99, 15, 73, 185, 228, 250,
         ];
         let tpmt_public = TpmtPublic::try_from(data.as_slice()).unwrap();
         println!("{:?}", tpmt_public);

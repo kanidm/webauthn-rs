@@ -405,6 +405,12 @@ pub enum AttestationMetadata {
         /// properties of the device.
         aaguid: Uuid,
     },
+    /// This is found on TPM authenticators.
+    Tpm {
+        /// This is the unique id of the class/type of device. Often this id can imply the
+        /// properties of the device.
+        aaguid: Uuid,
+    },
     /// various attestation flags set by the device (attested by OS)
     AndroidKey {
         /// is the key master running in a Trusted Execution Environment
