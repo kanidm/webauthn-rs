@@ -10,7 +10,7 @@ repository = "https://github.com/kanidm/webauthn-rs"
 
 [features]
 u2fhid = ["authenticator"]
-nfc = ["pcsc", "serde"]
+nfc = ["pcsc"]
 
 default = []
 
@@ -34,7 +34,7 @@ rpassword = "5.0"
 authenticator = { git = "https://github.com/Firstyear/authenticator-rs.git", branch = "webauthn-authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"] }
 
 pcsc = { version = "2", optional = true }
-serde = { version = "1.0", features = ["derive"], optional = true }
+serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 webauthn-rs-core = { path = "../webauthn-rs-core" }

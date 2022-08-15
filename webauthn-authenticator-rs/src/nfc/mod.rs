@@ -7,9 +7,15 @@ use pcsc::*;
 use std::ffi::CString;
 use std::fmt;
 
-pub mod apdu;
+mod apdu;
+mod atr;
+mod iso7816;
+mod tlv;
 
-use self::apdu::*;
+pub use self::apdu::*;
+pub use self::atr::*;
+pub use self::iso7816::*;
+use super::cbor::*;
 
 pub struct NFCReader {
     ctx: Context,
@@ -17,21 +23,24 @@ pub struct NFCReader {
     rdr_state: Vec<ReaderState>,
 }
 
-pub struct NFCCard<'a> {
-    rdr: &'a NFCReader,
+pub struct NFCCard {
+    // rdr: &'a NFCReader,
     card_ref: Card,
+    pub atr: Atr,
 }
 
-pub enum Selected<'a> {
+#[allow(non_camel_case_types)]
+pub enum Selected {
     // FIDO_2_1(),
-    FIDO_2_1_PRE(Ctap2_1_pre<'a>),
+    FIDO_2_1_PRE(Ctap2_1_pre),
     // FIDO_2_0(),
     // U2F(),
 }
 
-pub struct Ctap2_1_pre<'a> {
-    tokinfo: AuthenticatorGetInfoResponse,
-    card: NFCCard<'a>,
+#[allow(non_camel_case_types)]
+pub struct Ctap2_1_pre {
+    tokinfo: GetInfoResponse,
+    card: NFCCard,
 }
 
 impl fmt::Debug for NFCReader {
@@ -72,7 +81,7 @@ impl Default for NFCReader {
 }
 
 impl NFCReader {
-    pub fn wait_for_card(&mut self) -> Result<NFCCard<'_>, ()> {
+    pub fn wait_for_card(&mut self) -> Result<NFCCard, ()> {
         loop {
             for read_state in &mut self.rdr_state {
                 read_state.sync_current_state();
@@ -92,10 +101,7 @@ impl NFCReader {
                             .ctx
                             .connect(&self.rdr_id, ShareMode::Shared, Protocols::ANY)
                             .expect("Failed to access NFC card");
-                        return Ok(NFCCard {
-                            card_ref,
-                            rdr: self,
-                        });
+                        return Ok(NFCCard::new(card_ref));
                     } else if state.contains(State::EMPTY) {
                         info!("Card removed");
                     } else {
@@ -107,135 +113,132 @@ impl NFCReader {
     }
 }
 
-#[derive(Debug)]
-enum Pdu<'b> {
-    Fragment(&'b [u8]),
-    Complete(&'b [u8]),
+fn transmit(
+    card: &Card,
+    request: &ISO7816RequestAPDU,
+    form: ISO7816LengthForm,
+) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
+    let req = request.to_bytes(form).map_err(|e| {
+        error!("Failed to build APDU command: {:?}", e);
+        WebauthnCError::ApduConstruction
+    })?;
+    let mut resp = vec![0; MAX_BUFFER_SIZE_EXTENDED];
+
+    trace!(">>> {:02x?}", req);
+
+    let rapdu = card.transmit(&req, &mut resp).map_err(|e| {
+        error!("Failed to transmit APDU command to card: {}", e);
+        WebauthnCError::ApduTransmission
+    })?;
+
+    trace!("<<< {:02x?}", rapdu);
+
+    ISO7816ResponseAPDU::try_from(rapdu).map_err(|e| {
+        error!("Failed to parse card response: {:?}", e);
+        WebauthnCError::ApduTransmission
+    })
 }
 
-impl<'a> NFCCard<'a> {
-    fn transmit_raw(
-        &mut self,
-        tx_buf: &[u8],
-        rx_buf: &mut Vec<u8>,
-    ) -> Result<[u8; 2], WebauthnCError> {
-        trace!(">>> {:02x?}", tx_buf);
-        let mut rapdu_buf = vec![0; MAX_SHORT_BUFFER_SIZE];
-        // The returned slice gives us the correct lengths of what
-        // was filled to buf.
-        let rapdu = self
-            .card_ref
-            .transmit(&tx_buf, &mut rapdu_buf)
-            .map_err(|e| {
-                error!("Failed to transmit APDU command to card: {}", e);
-                WebauthnCError::ApduTransmission
-            })?;
+const DESELECT_APPLET: ISO7816RequestAPDU = ISO7816RequestAPDU {
+    cla: 0x80,
+    ins: 0x12,
+    p1: 0x01,
+    p2: 0x00,
+    data: vec![],
+    ne: 256,
+};
 
-        trace!("<<< {:02x?}", rapdu);
-        let (data, status) = rapdu.split_at(rapdu.len() - 2);
-        rx_buf.extend_from_slice(data);
-        Ok(status.try_into().expect("Status not 2 bytes??!?!?!"))
+impl NFCCard {
+    pub fn new(card_ref: Card) -> NFCCard {
+        let mut names_buf = vec![0; MAX_BUFFER_SIZE];
+        let mut atr_buf = vec![0; MAX_ATR_SIZE];
+
+        let card_status = card_ref
+            .status2(&mut names_buf, &mut atr_buf)
+            .expect("error getting status");
+
+        trace!("ATR: {:02x?}", card_status.atr());
+        let atr = Atr::try_from(card_status.atr()).expect("oops atr");
+        trace!("Parsed: {:?}", &atr);
+
+        let card = NFCCard { card_ref, atr: atr };
+        return card;
     }
 
-    // This handles frag/defrag
-    fn transmit_pdu(&mut self, apdu: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-        let mut ans = Vec::with_capacity(MAX_SHORT_BUFFER_SIZE);
-        let mut tx_buf = Vec::with_capacity(MAX_SHORT_BUFFER_SIZE);
-
-        // Fragmentation works by sending chunks with a frag_cmd, until you complete the chunks
-        // with a cmd that has the correct apply header.
-        //
-        // We reverse the list, so that if there is only a single chunk we apply the correct header
-        // in a generic way.
-        let mut pdu_chunk_iter = apdu.chunks(FRAG_MAX as usize).rev();
-
-        // For the "last" chunk, we need to signal that we are done, so we send this with the
-        // applet header.
-        let mut chunks = Vec::new();
-        match pdu_chunk_iter.next() {
-            Some(chunk_last) => chunks.push(Pdu::Complete(chunk_last)),
-            None => return Err(WebauthnCError::ApduTransmission),
-        };
-        // Now push the fragments
-        for chunk_next in pdu_chunk_iter {
-            chunks.push(Pdu::Fragment(chunk_next));
-        }
-
-        trace!("{:x?}", chunks);
-
-        let mut need_more = false;
-        for pdu in chunks.into_iter().rev() {
-            tx_buf.clear();
-            match pdu {
-                Pdu::Fragment(data) => {
-                    tx_buf.extend_from_slice(&FRAG_HDR);
-                    tx_buf.push(data.len() as u8);
-                    tx_buf.extend_from_slice(data);
-                }
-                Pdu::Complete(data) => {
-                    tx_buf.extend_from_slice(&HDR);
-                    tx_buf.push(data.len() as u8);
-                    tx_buf.extend_from_slice(data);
-                    tx_buf.push(0x00);
-                }
-            }
-            let status = self.transmit_raw(&tx_buf, &mut ans)?;
-
-            match pdu {
-                Pdu::Fragment(data) => {
-                    debug_assert!(ans.len() == 0);
-                    if status != ISO7816_STATUS_OK {
-                        return Err(WebauthnCError::ApduTransmission);
-                    }
-                }
-                Pdu::Complete(data) => {
-                    if status == ISO7816_STATUS_OK {
-                        // All good :)
-                        continue;
-                    } else if status == [0x61, 0x00] {
-                        need_more = true;
-                    } else {
-                        return Err(WebauthnCError::ApduTransmission);
-                    }
-                }
-            }
-            trace!(?need_more);
-        }
-
-        if need_more {
-            // We need to req more ...
-        }
-
-        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#error-responses
-        let ctap_status = ans.remove(0);
-        debug!("{:x?}", ctap_status);
-
-        Ok(ans)
+    /// Transmits a single ISO 7816-4 APDU to the card.
+    pub fn transmit(
+        &self,
+        request: &ISO7816RequestAPDU,
+        form: ISO7816LengthForm,
+    ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
+        transmit(&self.card_ref, request, form)
     }
 
-    fn authenticator_get_info(&mut self) -> Result<AuthenticatorGetInfoResponse, WebauthnCError> {
-        let rapdu = self.transmit_pdu(&AUTHENTICATOR_GET_INFO_APDU)?;
-        AuthenticatorGetInfoResponse::try_from(rapdu.as_slice()).map_err(|e| {
-            error!(?e);
+    /// Transmit multiple chunks of data to the card, and handle a chunked
+    /// response. All requests must be transmittable in short form.
+    pub fn transmit_chunks(
+        &self,
+        requests: &[ISO7816RequestAPDU],
+    ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
+        let mut r = EMPTY_RESPONSE;
+
+        for chunk in requests {
+            r = self.transmit(chunk, ISO7816LengthForm::ShortOnly)?;
+            if !r.is_success() {
+                return Err(WebauthnCError::ApduTransmission);
+            }
+        }
+
+        if r.ctap_needs_get_response() {
+            unimplemented!("NFCCTAP_GETRESPONSE");
+        }
+
+        if r.bytes_available() == 0 {
+            return Ok(r);
+        }
+
+        let mut response_data = Vec::new();
+        response_data.extend_from_slice(&r.data);
+
+        while r.bytes_available() > 0 {
+            r = self.transmit(
+                &get_response(0x80, r.bytes_available()),
+                ISO7816LengthForm::ShortOnly,
+            )?;
+            if !r.is_success() {
+                return Err(WebauthnCError::ApduTransmission);
+            }
+            response_data.extend_from_slice(&r.data);
+        }
+
+        r.data = response_data;
+        Ok(r)
+    }
+
+    pub fn authenticator_get_info(&mut self) -> Result<GetInfoResponse, WebauthnCError> {
+        let apdus = (GetInfoRequest {}).to_short_apdus().unwrap();
+        let resp = self.transmit_chunks(&apdus)?;
+
+        // CTAP has its own extra status code over NFC in the first byte.
+        GetInfoResponse::try_from(&resp.data[1..]).map_err(|e| {
+            error!("error: {:?}", e);
             WebauthnCError::Cbor
         })
     }
 
-    // Need a way to select the type of card now.
-    pub fn select_u2f_v2_applet(mut self) -> Result<Selected<'a>, WebauthnCError> {
-        let mut ans = Vec::with_capacity(MAX_SHORT_BUFFER_SIZE);
-
-        let status = self
-            .transmit_raw(&APPLET_SELECT_CMD, &mut ans)
+    /// Selects the U2Fv2 applet.
+    pub fn select_u2f_v2_applet(mut self) -> Result<Selected, WebauthnCError> {
+        let resp = self
+            .transmit(&select_by_df_name(&APPLET_DF), ISO7816LengthForm::ShortOnly)
             .expect("Failed to select CTAP2.1 applet");
 
-        if status != ISO7816_STATUS_OK {
-            error!("Error selecting applet: {:02x?}", status);
+        if !resp.is_ok() {
+            error!("Error selecting applet: {:02x} {:02x}", resp.sw1, resp.sw2);
             return Err(WebauthnCError::NotSupported);
         }
 
-        if ans != &APPLET_U2F_V2 {
-            error!("Unsupported applet: {:02x?}", ans);
+        if resp.data != &APPLET_U2F_V2 {
+            error!("Unsupported applet: {:02x?}", &resp.data);
             return Err(WebauthnCError::NotSupported);
         }
 
@@ -256,17 +259,17 @@ impl<'a> NFCCard<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Ctap2_1_pre<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Ctap2_1_pre<'_>")
+impl fmt::Debug for Ctap2_1_pre {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Ctap2_1_pre")
             .field("token_info", &self.tokinfo)
             .finish()
     }
 }
 
-impl<'a> Ctap2_1_pre<'a> {
+impl Ctap2_1_pre {
     pub fn hack_make_cred(&mut self) -> Result<(), WebauthnCError> {
-        let mc = AuthenticatorMakeCredential {
+        let mc = MakeCredentialRequest {
             client_data_hash: vec![
                 104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106, 226,
                 47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65,
@@ -289,11 +292,25 @@ impl<'a> Ctap2_1_pre<'a> {
             pin_uv_auth_proto: None,
             enterprise_attest: None,
         };
-        let pdu = mc.to_apdu();
-        let rapdu = self.card.transmit_pdu(&pdu)?;
+        // TODO: handle extended APDUs
+        let pdus = mc.to_short_apdus().unwrap();
+        let rapdu = self.card.transmit_chunks(&pdus)?;
         trace!("got encoded APDU: {:x?}", rapdu);
 
         Ok(())
+    }
+
+    pub fn deselect_applet(&self) -> Result<(), WebauthnCError> {
+        let resp = self
+            .card
+            .transmit(&DESELECT_APPLET, ISO7816LengthForm::ShortOnly)
+            .expect("Failed to deselect CTAP2.1 applet");
+
+        if !resp.is_ok() {
+            Err(WebauthnCError::ApduTransmission)
+        } else {
+            Ok(())
+        }
     }
 }
 
