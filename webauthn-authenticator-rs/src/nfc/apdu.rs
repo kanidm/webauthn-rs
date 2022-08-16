@@ -20,7 +20,7 @@ mod tests {
     fn get_authenticator_info() {
         let req = GetInfoRequest {};
         let short = vec![0x80, 0x10, 0, 0, 1, 0x4, 0];
-        let ext = vec![0x80, 0x10, 0, 0, 0, 0, 1, 0x4, 0, 0xff, 0xff];
+        let ext = vec![0x80, 0x10, 0, 0, 0, 0, 1, 0x4, 0xff, 0xff];
 
         let a = req.to_short_apdus().unwrap();
         assert_eq!(1, a.len());
