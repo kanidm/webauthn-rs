@@ -743,7 +743,32 @@ pub(crate) fn verify_tpm_attestation(
                 return Err(WebauthnError::AttestationTpmPubAreaMismatch);
             }
         }
-        _ => return Err(WebauthnError::AttestationTpmPubAreaMismatch),
+        (
+            COSEKeyType::EC_EC2(COSEEC2Key { curve, x, y }),
+            TpmuPublicParms::Ecc(ecc_parms),
+            TpmuPublicId::Ecc(ecc_points),
+        ) => {
+            match (curve, ecc_parms.curve_id) {
+                (ECDSACurve::SECP256R1, TpmiEccCurve::NistP256)
+                | (ECDSACurve::SECP384R1, TpmiEccCurve::NistP384)
+                | (ECDSACurve::SECP521R1, TpmiEccCurve::NistP521) => {
+                    // Ok!
+                }
+                c_mismatch => {
+                    debug!(?c_mismatch, "TpmiEccCurve ID mismatch");
+                    return Err(WebauthnError::AttestationTpmPubAreaMismatch);
+                }
+            }
+
+            if x.0 != ecc_points.x || y.0 != ecc_points.y {
+                debug!("Invalid X or Y coords in TpmuPublicId");
+                return Err(WebauthnError::AttestationTpmPubAreaMismatch);
+            }
+        }
+        ex => {
+            debug!(?ex, "Unrecognised combination");
+            return Err(WebauthnError::AttestationTpmPubAreaMismatch);
+        }
     }
 
     // Concatenate authenticatorData and clientDataHash to form attToBeSigned.
@@ -848,7 +873,9 @@ pub(crate) fn verify_tpm_attestation(
     // and attestation trust path x5c.
     Ok((
         ParsedAttestationData::AttCa(arr_x509),
-        AttestationMetadata::None,
+        AttestationMetadata::Tpm {
+            aaguid: Uuid::from_bytes(acd.aaguid),
+        },
     ))
 }
 

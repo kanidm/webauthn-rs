@@ -254,7 +254,7 @@ impl TryFrom<i128> for EDDSACurve {
 fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
     let mut deserializer = serde_cbor::Deserializer::from_slice(i);
     let v = serde::de::Deserialize::deserialize(&mut deserializer).map_err(|e| {
-        error!(?e);
+        error!(?e, "cbor_parser");
         nom::Err::Failure(nom::error::Error::from_error_kind(
             i,
             nom::error::ErrorKind::Fail,
@@ -271,7 +271,7 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
     trace!(?v, "OK!");
 
     let v: T::SignedExtensions = serde_cbor::value::from_value(v).map_err(|e| {
-        error!(?e);
+        error!(?e, "extensions_parser");
         nom::Err::Failure(nom::error::Error::from_error_kind(
             i,
             nom::error::ErrorKind::Fail,
@@ -384,7 +384,7 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
     fn try_from(auth_data_bytes: &[u8]) -> Result<Self, Self::Error> {
         authenticator_data_parser(auth_data_bytes)
             .map_err(|e| {
-                error!("nom -> {:?}", e);
+                error!(?e, "try_from authenticator_data_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, ad)| ad)
@@ -725,7 +725,7 @@ impl TryFrom<&[u8]> for TpmsAttest {
     fn try_from(data: &[u8]) -> Result<TpmsAttest, WebauthnError> {
         tpmsattest_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpmsattest_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -789,6 +789,7 @@ pub enum TpmAlgId {
 
 impl TpmAlgId {
     fn new(v: u16) -> Option<Self> {
+        trace!("TpmAlgId::new ( {:x?} )", v);
         match v {
             0x0000 => Some(TpmAlgId::Error),
             0x0001 => Some(TpmAlgId::Rsa),
@@ -821,6 +822,74 @@ pub struct TpmtSymDefObject {
 }
 
 fn parse_tpmtsymdefobject(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtSymDefObject>> {
+    let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
+    match algorithm {
+        TpmAlgId::Null => Ok((data, None)),
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+            input,
+            nom::error::ErrorKind::Fail,
+        ))),
+    }
+}
+
+#[derive(Debug)]
+/// Symmetric crypto definition. Unused in webauthn
+pub struct TpmtEccScheme {
+    _algorithm: TpmAlgId,
+}
+
+fn parse_tpmteccscheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtEccScheme>> {
+    let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
+    match algorithm {
+        TpmAlgId::Null => Ok((data, None)),
+        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+            input,
+            nom::error::ErrorKind::Fail,
+        ))),
+    }
+}
+
+// 11.2.5.5 TPMI_ECC_CURVE
+// 6.4 TPM_ECC_CURVE
+#[derive(Debug, Clone, Copy)]
+#[repr(u16)]
+pub enum TpmiEccCurve {
+    None = 0x0000,
+    NistP192 = 0x0001,
+    NistP224 = 0x0002,
+    NistP256 = 0x0003,
+    NistP384 = 0x0004,
+    NistP521 = 0x0005,
+    BnP256 = 0x0010,
+    BnP638 = 0x0011,
+    Sm2P256 = 0x0020,
+}
+
+impl TpmiEccCurve {
+    fn new(v: u16) -> Option<Self> {
+        trace!("TpmiEccCurve::new ( {:x?} )", v);
+        match v {
+            0x0000 => Some(TpmiEccCurve::None),
+            0x0001 => Some(TpmiEccCurve::NistP192),
+            0x0002 => Some(TpmiEccCurve::NistP224),
+            0x0003 => Some(TpmiEccCurve::NistP256),
+            0x0004 => Some(TpmiEccCurve::NistP384),
+            0x0005 => Some(TpmiEccCurve::NistP521),
+            0x0010 => Some(TpmiEccCurve::BnP256),
+            0x0011 => Some(TpmiEccCurve::BnP638),
+            0x0020 => Some(TpmiEccCurve::Sm2P256),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+/// Symmetric crypto definition. Unused in webauthn
+pub struct TpmtKdfScheme {
+    _algorithm: TpmAlgId,
+}
+
+fn parse_tpmtkdfscheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtKdfScheme>> {
     let (data, algorithm) = map_opt(be_u16, TpmAlgId::new)(input)?;
     match algorithm {
         TpmAlgId::Null => Ok((data, None)),
@@ -895,11 +964,33 @@ fn tpmsrsaparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsRsaParms> {
     */
 }
 
-/*
+// 12.2.3.6 TPMS_ECC_PARMS in
+fn tpmseccparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsEccParms> {
+    trace!(?i);
+    let (i, symmetric) = parse_tpmtsymdefobject(i)?;
+    let (i, scheme) = parse_tpmteccscheme(i)?;
+    let (i, curve_id) = map_opt(be_u16, TpmiEccCurve::new)(i)?;
+    let (i, kdf) = parse_tpmtkdfscheme(i)?;
+
+    Ok((
+        i,
+        TpmsEccParms {
+            _symmetric: symmetric,
+            _scheme: scheme,
+            curve_id,
+            _kdf: kdf,
+        },
+    ))
+}
+
 #[derive(Debug)]
 pub struct TpmsEccParms {
+    _symmetric: Option<TpmtSymDefObject>,
+    _scheme: Option<TpmtEccScheme>,
+    /// The ID of the ECC curve in use
+    pub curve_id: TpmiEccCurve,
+    _kdf: Option<TpmtKdfScheme>,
 }
-*/
 
 #[derive(Debug)]
 /// Asymmetric Public Parameters
@@ -908,21 +999,54 @@ pub enum TpmuPublicParms {
     // Symcipher
     /// Rsa
     Rsa(TpmsRsaParms),
-    // Ecc(TpmsEccParms),
+    Ecc(TpmsEccParms),
     // Asym
 }
 
 fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPublicParms> {
-    // eprintln!("tpmupublicparms input -> {:?}", input);
+    trace!(?input, ?alg, "tpmupublicparms input");
     match alg {
         TpmAlgId::Rsa => {
             tpmsrsaparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Rsa(inner)))
         }
-        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
-            input,
-            nom::error::ErrorKind::Fail,
-        ))),
+        TpmAlgId::Ecc => {
+            tpmseccparms_parser(input).map(|(data, inner)| (data, TpmuPublicParms::Ecc(inner)))
+        }
+        a => {
+            debug!(?a, "unsuported alg in parse_tpmupublicparms");
+            Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+                input,
+                nom::error::ErrorKind::Fail,
+            )))
+        }
     }
+}
+
+/// 11.2.5.2 TPMS_ECC_POINT
+#[derive(Debug)]
+pub struct TpmsEccPoint {
+    pub x: Vec<u8>,
+    pub y: Vec<u8>,
+}
+
+fn tpmseccpoint_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsEccPoint> {
+    let (i, size) = be_u16(i)?;
+    let (i, x) = match size {
+        0 => (i, Vec::new()),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            (i, d.to_vec())
+        }
+    };
+    let (i, size) = be_u16(i)?;
+    let (i, y) = match size {
+        0 => (i, Vec::new()),
+        size => {
+            let (i, d) = take(size as usize)(i)?;
+            (i, d.to_vec())
+        }
+    };
+    Ok((i, TpmsEccPoint { x, y }))
 }
 
 #[derive(Debug)]
@@ -932,7 +1056,8 @@ pub enum TpmuPublicId {
     // Symcipher
     /// Rsa
     Rsa(Vec<u8>),
-    // Ecc(TpmsEccParms),
+    /// Ecc
+    Ecc(TpmsEccPoint),
     // Asym
 }
 
@@ -953,10 +1078,16 @@ fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPu
         TpmAlgId::Rsa => {
             tpmsrsapublickey_parser(input).map(|(data, inner)| (data, TpmuPublicId::Rsa(inner)))
         }
-        _ => Err(nom::Err::Failure(nom::error::Error::from_error_kind(
-            input,
-            nom::error::ErrorKind::Fail,
-        ))),
+        TpmAlgId::Ecc => {
+            tpmseccpoint_parser(input).map(|(data, inner)| (data, TpmuPublicId::Ecc(inner)))
+        }
+        a => {
+            debug!(?a, "unsuported alg in parse_tpmupublicid");
+            Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+                input,
+                nom::error::ErrorKind::Fail,
+            )))
+        }
     }
 }
 
@@ -985,9 +1116,10 @@ impl TryFrom<&[u8]> for TpmtPublic {
     type Error = WebauthnError;
 
     fn try_from(data: &[u8]) -> Result<TpmtPublic, WebauthnError> {
+        trace!(?data);
         tpmtpublic_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpmtpublic_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -1043,7 +1175,7 @@ impl TryFrom<&[u8]> for TpmtSignature {
     fn try_from(data: &[u8]) -> Result<TpmtSignature, WebauthnError> {
         tpmtsignature_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpmtsignature_parser");
                 WebauthnError::ParseNOMFailure
             })
             .map(|(_, v)| v)
@@ -1144,7 +1276,7 @@ impl TryFrom<&[u8]> for TpmVendor {
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         tpm_device_attribute_parser(data)
             .map_err(|e| {
-                error!("{:?}", e);
+                error!(?e, "try_from tpm_device_attribute_parser");
                 WebauthnError::ParseNOMFailure
             })
             .and_then(|(_, v)| TpmVendor::try_from(v))
