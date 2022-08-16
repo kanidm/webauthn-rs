@@ -28,6 +28,7 @@ fn compute_sha256(data: &[u8]) -> [u8; 32] {
     hasher.finish()
 }
 
+// This is 0fb9bcbc-a0d4-4042-bbb0-559bc1631e28
 pub const AAGUID: [u8; 16] = [
     15, 185, 188, 188, 160, 212, 64, 66, 187, 176, 85, 155, 193, 99, 30, 40,
 ];
@@ -174,6 +175,8 @@ impl SoftToken {
         })?;
 
         let ca = ca_cert.clone();
+        /*
+        // Disabled as older openssl versions can't provide this.
         trace!(
             "{}",
             String::from_utf8_lossy(&ca.to_text().map_err(|e| {
@@ -181,6 +184,7 @@ impl SoftToken {
                 WebauthnCError::OpenSSL
             })?)
         );
+        */
 
         let (intermediate_key, intermediate_cert) =
             build_intermediate(&ca_key, &ca_cert).map_err(|e| {
@@ -188,6 +192,8 @@ impl SoftToken {
                 WebauthnCError::OpenSSL
             })?;
 
+        /*
+        // Disabled as older openssl versions can't provide this.
         trace!(
             "{}",
             String::from_utf8_lossy(&intermediate_cert.to_text().map_err(|e| {
@@ -195,6 +201,7 @@ impl SoftToken {
                 WebauthnCError::OpenSSL
             })?)
         );
+        */
 
         Ok((
             SoftToken {
@@ -252,7 +259,6 @@ impl AuthenticatorBackend for SoftToken {
             return Err(WebauthnCError::NotSupported);
         }
 
-        // Webauthn-rs doesn't support this yet.
         /*
             // Let clientExtensions be a new map and let authenticatorExtensions be a new map.
 
@@ -837,6 +843,8 @@ mod tests {
                 }),
             )
             .unwrap();
+
+        info!("Credential -> {:?}", cred);
 
         let (chal, auth_state) = wan
             .generate_challenge_authenticate(vec![cred], None)
