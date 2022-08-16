@@ -3692,7 +3692,10 @@ mod tests {
         if cfg!(feature = "insecure-rs1") {
             assert!(result.is_ok());
             match result.unwrap().attestation.metadata {
-                AttestationMetadata::Tpm { aaguid, firmware_version } => {
+                AttestationMetadata::Tpm {
+                    aaguid,
+                    firmware_version,
+                } => {
                     assert!(firmware_version == 1390997124431944132);
                     assert!(
                         aaguid

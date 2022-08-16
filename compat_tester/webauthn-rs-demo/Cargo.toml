@@ -13,7 +13,7 @@ license = "MPL-2.0"
 [dependencies]
 webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", features = ["core"] }
 webauthn-rs-core = { path = "../../webauthn-rs-core" }
-webauthn-rs = { path = "../../webauthn-rs", features = ["resident-key-support"] }
+webauthn-rs = { path = "../../webauthn-rs", features = ["resident-key-support", "preview-features"] }
 tide = "0.16"
 tide-rustls = "0.3"
 async-std = { version = "1.6", features = ["attributes"] }
