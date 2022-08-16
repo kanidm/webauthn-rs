@@ -66,11 +66,12 @@ pub struct Atr {
     /// capabilities" value (§8.1.1.2.7), and therefore does not support
     /// extended fields (§5.1).
     ///
-    /// **Note:** Some devices falsely report that they support extended
-    /// L<sub>c</sub>/L<sub>e</sub>, eg:
-    /// [Yubikey](https://smartcard-atr.apdu.fr/parse?ATR=3b+8d+80+01+80+73+c0+21+c0+57+59+75+62+69+4b+65+79+f9)
+    /// FIDO v2.0 [requires][nfc-ext] all devices support short _and_ extended
+    /// length encoding.
     ///
     /// See: [`ISO7816LengthForm`]
+    ///
+    /// [nfc-ext]: https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#nfc-framing
     pub extended_lc: Option<bool>,
 }
 
