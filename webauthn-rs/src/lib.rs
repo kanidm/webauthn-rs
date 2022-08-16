@@ -270,23 +270,29 @@ impl<'a> WebauthnBuilder<'a> {
 ///
 /// --> You should use `start_passkey_registration`
 ///
+///
 /// *I want to replace passwords with strong multi-factor cryptographic authentication, limited to
 /// a known set of controlled and trusted authenticator types*
 ///
+/// This type requires `preview-features` enabled as the current form of the Attestation CA List
+/// may change in the future.
+///
 /// --> You should use `start_passwordlesskey_registration`
+///
 ///
 /// *I want users to have their identites stored on their devices, and for them to authenticate with
 ///  strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types*
 ///
-/// NOTE: This authenticator type consumes resources of the users devices, and may result in failures,
+/// This authenticator type consumes resources of the users devices, and may result in failures,
 /// so you should only use it in tightly controlled environments where you supply devices to your
 /// users.
 ///
 /// --> You should use `start_devicekey_registration` (still in development)
 ///
+///
 /// *I want a security token along with an external password to create multi-factor authentication*
 ///
-/// NOTE: If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration`
+/// If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration`
 /// instead - it's likely to provide a better user experience than security keys as MFA!
 ///
 /// --> If you really want a security key, you should use `start_securitykey_registration`
@@ -483,6 +489,231 @@ impl Webauthn {
         self.core.authenticate_credential(reg, &state.ast)
     }
 
+    /// Initiate the registration of a new security key for a user. A security key is any cryptographic
+    /// authenticator acting as a single factor of authentication to supplement a password or some
+    /// other authentication factor.
+    ///
+    /// Some examples of security keys include Yubikeys, Solokeys, and others.
+    ///
+    /// We don't recommend this over Passkeys or PasswordlessKeys, as today in Webauthn most devices
+    /// due to their construction require userVerification to be maintained for user trust. What this
+    /// means is that most users will require a password, their security key, and a pin or biometric
+    /// on the security key for a total of three factors. This adds friction to the user experience
+    /// but is required due to a consistency flaw in CTAP2.0 and newer devices. Since the user already
+    /// needs a pin or biometrics, why not just use the device as a self contained MFA?
+    ///
+    /// You MUST pair this authentication with another factor. A security key may opportunistically
+    /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
+    ///
+    /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
+    ///  identify the user during certain client side work flows.
+    ///
+    /// `user_name` and `user_display_name` *may* be stored in the authenticator. `user_name` is a
+    /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
+    /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
+    /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
+    /// present to allow client work flows to display human friendly identifiers.
+    ///
+    /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
+    /// You *should* provide the list of credentials that are already registered to this user's account
+    /// to prevent duplicate credential registrations.
+    ///
+    /// `attestation_ca_list` contains an optional list of Root CA certificates of authenticator
+    /// manufacturers that you wish to trust. For example, if you want to only allow Yubikeys on
+    /// your site, then you can provide the Yubico Root CA in this list, to validate that all
+    /// registered devices are manufactured by Yubico.
+    ///
+    /// Extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they can
+    /// ARE NOT trusted.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a `CreationChallengeResponse` which you must serialise to json and
+    /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
+    /// on the server the `SecurityKeyRegistration` which contains the state of this registration
+    /// attempt and is paired to the `CreationChallengeResponse`.
+    ///
+    /// ```
+    /// # use webauthn_rs::prelude::*;
+    ///
+    /// # let rp_id = "example.com";
+    /// # let rp_origin = Url::parse("https://idm.example.com")
+    /// #     .expect("Invalid URL");
+    /// # let mut builder = WebauthnBuilder::new(rp_id, &rp_origin)
+    /// #     .expect("Invalid configuration");
+    /// # let webauthn = builder.build()
+    /// #     .expect("Invalid configuration");
+    ///
+    /// // you must store this user's unique id with the account. Alternatelly you can
+    /// // use an existed UUID source.
+    /// let user_unique_id = Uuid::new_v4();
+    ///
+    /// // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
+    /// let (ccr, skr) = webauthn
+    ///     .start_securitykey_registration(
+    ///         user_unique_id,
+    ///         "claire",
+    ///         "Claire",
+    ///         None,
+    ///         None,
+    ///         None,
+    ///     )
+    ///     .expect("Failed to start registration.");
+    ///
+    /// // Initiate a basic registration flow, hinting that the device is probably roaming (i.e. a usb),
+    /// // but it could have any attachement in reality
+    /// let (ccr, skr) = webauthn
+    ///     .start_securitykey_registration(
+    ///         Uuid::new_v4(),
+    ///         "claire",
+    ///         "Claire",
+    ///         None,
+    ///         None,
+    ///         Some(AuthenticatorAttachment::CrossPlatform),
+    ///     )
+    ///     .expect("Failed to start registration.");
+    ///
+    /// // Only allow credentials from manufacturers that are trusted and part of the webauthn-rs
+    /// // strict "high quality" list.
+    /// let (ccr, skr) = webauthn
+    ///     .start_securitykey_registration(
+    ///         Uuid::new_v4(),
+    ///         "claire",
+    ///         "Claire",
+    ///         None,
+    ///         Some(AttestationCaList::strict()),
+    ///         None,
+    ///     )
+    ///     .expect("Failed to start registration.");
+    /// ```
+    pub fn start_securitykey_registration(
+        &self,
+        user_unique_id: Uuid,
+        user_name: &str,
+        user_display_name: &str,
+        exclude_credentials: Option<Vec<CredentialID>>,
+        attestation_ca_list: Option<AttestationCaList>,
+        ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
+    ) -> WebauthnResult<(CreationChallengeResponse, SecurityKeyRegistration)> {
+        let attestation = if let Some(ca_list) = attestation_ca_list.as_ref() {
+            if ca_list.is_empty() {
+                return Err(WebauthnError::MissingAttestationCaList);
+            } else {
+                AttestationConveyancePreference::Direct
+            }
+        } else {
+            AttestationConveyancePreference::None
+        };
+        let extensions = None;
+        let credential_algorithms = self.algorithms.clone();
+        let require_resident_key = false;
+        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
+        } else {
+            Some(UserVerificationPolicy::Preferred)
+        };
+        let reject_passkeys = true;
+
+        self.core
+            .generate_challenge_register_options(
+                user_unique_id.as_bytes(),
+                user_name,
+                user_display_name,
+                attestation,
+                policy,
+                exclude_credentials,
+                extensions,
+                credential_algorithms,
+                require_resident_key,
+                ui_hint_authenticator_attachment,
+                reject_passkeys,
+            )
+            .map(|(ccr, rs)| {
+                (
+                    ccr,
+                    SecurityKeyRegistration {
+                        rs,
+                        ca_list: attestation_ca_list,
+                    },
+                )
+            })
+    }
+
+    /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
+    /// and the server provides it's paired `SecurityKeyRegistration`. The details of the Authenticator
+    /// based on the registration parameters are asserted.
+    ///
+    /// # Errors
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
+    ///
+    /// # Returns
+    ///
+    /// The returned `SecurityKey` must be associated to the users account, and is used for future
+    /// authentications via `start_securitykey_authentication`.
+    ///
+    /// You MUST assert that the registered credential id has not previously been registered.
+    /// to any other account.
+    ///
+    /// # Verifying specific device models
+    /// If you wish to assert a specifc type of device model is in use, you can inspect the
+    /// PasswordlessKey `attestation()` and it's associated metadata. You can use this to check for
+    /// specific device aaguids for example.
+    ///
+    pub fn finish_securitykey_registration(
+        &self,
+        reg: &RegisterPublicKeyCredential,
+        state: &SecurityKeyRegistration,
+    ) -> WebauthnResult<SecurityKey> {
+        self.core
+            .register_credential(reg, &state.rs, state.ca_list.as_ref())
+            .map(|cred| SecurityKey { cred })
+    }
+
+    /// Given a set of `SecurityKey`'s, begin an authentication of the user. This returns
+    /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
+    /// The server must persist the `SecurityKeyAuthentication` state as it is paired to the
+    /// `RequestChallengeResponse` and required to complete the authentication.
+    pub fn start_securitykey_authentication(
+        &self,
+        creds: &[SecurityKey],
+    ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
+        let extensions = None;
+        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+
+        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+            UserVerificationPolicy::Discouraged_DO_NOT_USE
+        } else {
+            UserVerificationPolicy::Preferred
+        };
+
+        self.core
+            .generate_challenge_authenticate_policy(creds, policy, extensions)
+            .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
+    }
+
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `SecurityKeyAuthentication`
+    /// complete the authentication of the user.
+    ///
+    /// # Errors
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
+    ///
+    /// # Returns
+    /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
+    /// process.
+    ///
+    /// You should use `SecurityKey::update_credential` on the returned `AuthenticationResult` and
+    /// ensure it is persisted.
+    pub fn finish_securitykey_authentication(
+        &self,
+        reg: &PublicKeyCredential,
+        state: &SecurityKeyAuthentication,
+    ) -> WebauthnResult<AuthenticationResult> {
+        self.core.authenticate_credential(reg, &state.ast)
+    }
+}
+
+#[cfg(feature = "preview-features")]
+impl Webauthn {
     /// Initiate the registration of a new passwordless key for a user. A passwordless key is a
     /// cryptographic authenticator that is a self-contained multifactor authenticator. This means
     /// that the device (such as a yubikey) verifies the user is who they say they are via a PIN,
@@ -721,231 +952,6 @@ impl Webauthn {
         self.core.authenticate_credential(reg, &state.ast)
     }
 
-    /// Initiate the registration of a new security key for a user. A security key is any cryptographic
-    /// authenticator acting as a single factor of authentication to supplement a password or some
-    /// other authentication factor.
-    ///
-    /// Some examples of security keys include Yubikeys, Solokeys, and others.
-    ///
-    /// We don't recommend this over Passkeys or PasswordlessKeys, as today in Webauthn most devices
-    /// due to their construction require userVerification to be maintained for user trust. What this
-    /// means is that most users will require a password, their security key, and a pin or biometric
-    /// on the security key for a total of three factors. This adds friction to the user experience
-    /// but is required due to a consistency flaw in CTAP2.0 and newer devices. Since the user already
-    /// needs a pin or biometrics, why not just use the device as a self contained MFA?
-    ///
-    /// You MUST pair this authentication with another factor. A security key may opportunistically
-    /// allow and enforce user-verification (MFA), but this is NOT guaranteed.
-    ///
-    /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
-    ///  identify the user during certain client side work flows.
-    ///
-    /// `user_name` and `user_display_name` *may* be stored in the authenticator. `user_name` is a
-    /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
-    /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
-    /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
-    /// present to allow client work flows to display human friendly identifiers.
-    ///
-    /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
-    /// You *should* provide the list of credentials that are already registered to this user's account
-    /// to prevent duplicate credential registrations.
-    ///
-    /// `attestation_ca_list` contains an optional list of Root CA certificates of authenticator
-    /// manufacturers that you wish to trust. For example, if you want to only allow Yubikeys on
-    /// your site, then you can provide the Yubico Root CA in this list, to validate that all
-    /// registered devices are manufactured by Yubico.
-    ///
-    /// Extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they can
-    /// ARE NOT trusted.
-    ///
-    /// # Returns
-    ///
-    /// This function returns a `CreationChallengeResponse` which you must serialise to json and
-    /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
-    /// on the server the `SecurityKeyRegistration` which contains the state of this registration
-    /// attempt and is paired to the `CreationChallengeResponse`.
-    ///
-    /// ```
-    /// # use webauthn_rs::prelude::*;
-    ///
-    /// # let rp_id = "example.com";
-    /// # let rp_origin = Url::parse("https://idm.example.com")
-    /// #     .expect("Invalid URL");
-    /// # let mut builder = WebauthnBuilder::new(rp_id, &rp_origin)
-    /// #     .expect("Invalid configuration");
-    /// # let webauthn = builder.build()
-    /// #     .expect("Invalid configuration");
-    ///
-    /// // you must store this user's unique id with the account. Alternatelly you can
-    /// // use an existed UUID source.
-    /// let user_unique_id = Uuid::new_v4();
-    ///
-    /// // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
-    /// let (ccr, skr) = webauthn
-    ///     .start_securitykey_registration(
-    ///         user_unique_id,
-    ///         "claire",
-    ///         "Claire",
-    ///         None,
-    ///         None,
-    ///         None,
-    ///     )
-    ///     .expect("Failed to start registration.");
-    ///
-    /// // Initiate a basic registration flow, hinting that the device is probably roaming (i.e. a usb),
-    /// // but it could have any attachement in reality
-    /// let (ccr, skr) = webauthn
-    ///     .start_securitykey_registration(
-    ///         Uuid::new_v4(),
-    ///         "claire",
-    ///         "Claire",
-    ///         None,
-    ///         None,
-    ///         Some(AuthenticatorAttachment::CrossPlatform),
-    ///     )
-    ///     .expect("Failed to start registration.");
-    ///
-    /// // Only allow credentials from manufacturers that are trusted and part of the webauthn-rs
-    /// // strict "high quality" list.
-    /// let (ccr, skr) = webauthn
-    ///     .start_securitykey_registration(
-    ///         Uuid::new_v4(),
-    ///         "claire",
-    ///         "Claire",
-    ///         None,
-    ///         Some(AttestationCaList::strict()),
-    ///         None,
-    ///     )
-    ///     .expect("Failed to start registration.");
-    /// ```
-    pub fn start_securitykey_registration(
-        &self,
-        user_unique_id: Uuid,
-        user_name: &str,
-        user_display_name: &str,
-        exclude_credentials: Option<Vec<CredentialID>>,
-        attestation_ca_list: Option<AttestationCaList>,
-        ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
-    ) -> WebauthnResult<(CreationChallengeResponse, SecurityKeyRegistration)> {
-        let attestation = if let Some(ca_list) = attestation_ca_list.as_ref() {
-            if ca_list.is_empty() {
-                return Err(WebauthnError::MissingAttestationCaList);
-            } else {
-                AttestationConveyancePreference::Direct
-            }
-        } else {
-            AttestationConveyancePreference::None
-        };
-        let extensions = None;
-        let credential_algorithms = self.algorithms.clone();
-        let require_resident_key = false;
-        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
-            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
-        } else {
-            Some(UserVerificationPolicy::Preferred)
-        };
-        let reject_passkeys = true;
-
-        self.core
-            .generate_challenge_register_options(
-                user_unique_id.as_bytes(),
-                user_name,
-                user_display_name,
-                attestation,
-                policy,
-                exclude_credentials,
-                extensions,
-                credential_algorithms,
-                require_resident_key,
-                ui_hint_authenticator_attachment,
-                reject_passkeys,
-            )
-            .map(|(ccr, rs)| {
-                (
-                    ccr,
-                    SecurityKeyRegistration {
-                        rs,
-                        ca_list: attestation_ca_list,
-                    },
-                )
-            })
-    }
-
-    /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired `SecurityKeyRegistration`. The details of the Authenticator
-    /// based on the registration parameters are asserted.
-    ///
-    /// # Errors
-    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
-    ///
-    /// # Returns
-    ///
-    /// The returned `SecurityKey` must be associated to the users account, and is used for future
-    /// authentications via `start_securitykey_authentication`.
-    ///
-    /// You MUST assert that the registered credential id has not previously been registered.
-    /// to any other account.
-    ///
-    /// # Verifying specific device models
-    /// If you wish to assert a specifc type of device model is in use, you can inspect the
-    /// PasswordlessKey `attestation()` and it's associated metadata. You can use this to check for
-    /// specific device aaguids for example.
-    ///
-    pub fn finish_securitykey_registration(
-        &self,
-        reg: &RegisterPublicKeyCredential,
-        state: &SecurityKeyRegistration,
-    ) -> WebauthnResult<SecurityKey> {
-        self.core
-            .register_credential(reg, &state.rs, state.ca_list.as_ref())
-            .map(|cred| SecurityKey { cred })
-    }
-
-    /// Given a set of `SecurityKey`'s, begin an authentication of the user. This returns
-    /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the `SecurityKeyAuthentication` state as it is paired to the
-    /// `RequestChallengeResponse` and required to complete the authentication.
-    pub fn start_securitykey_authentication(
-        &self,
-        creds: &[SecurityKey],
-    ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
-        let extensions = None;
-        let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-
-        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
-            UserVerificationPolicy::Discouraged_DO_NOT_USE
-        } else {
-            UserVerificationPolicy::Preferred
-        };
-
-        self.core
-            .generate_challenge_authenticate_policy(creds, policy, extensions)
-            .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
-    }
-
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `SecurityKeyAuthentication`
-    /// complete the authentication of the user.
-    ///
-    /// # Errors
-    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
-    ///
-    /// # Returns
-    /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
-    /// process.
-    ///
-    /// You should use `SecurityKey::update_credential` on the returned `AuthenticationResult` and
-    /// ensure it is persisted.
-    pub fn finish_securitykey_authentication(
-        &self,
-        reg: &PublicKeyCredential,
-        state: &SecurityKeyAuthentication,
-    ) -> WebauthnResult<AuthenticationResult> {
-        self.core.authenticate_credential(reg, &state.ast)
-    }
-}
-
-#[cfg(feature = "resident-key-support")]
-impl Webauthn {
     /// WIP DO NOT USE
     pub fn start_discoverable_authentication(
         &self,

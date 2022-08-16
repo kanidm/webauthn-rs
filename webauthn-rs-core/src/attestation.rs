@@ -875,6 +875,7 @@ pub(crate) fn verify_tpm_attestation(
         ParsedAttestationData::AttCa(arr_x509),
         AttestationMetadata::Tpm {
             aaguid: Uuid::from_bytes(acd.aaguid),
+            firmware_version: certinfo.firmware_version,
         },
     ))
 }
