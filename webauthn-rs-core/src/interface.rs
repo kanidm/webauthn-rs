@@ -410,6 +410,10 @@ pub enum AttestationMetadata {
         /// This is the unique id of the class/type of device. Often this id can imply the
         /// properties of the device.
         aaguid: Uuid,
+        /// The firmware version of the device at registration. It can NOT be determined
+        /// if this updates later, which may require you to re-register the device if
+        /// you need to enforce a version update.
+        firmware_version: u64,
     },
     /// various attestation flags set by the device (attested by OS)
     AndroidKey {

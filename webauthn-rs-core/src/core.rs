@@ -3688,11 +3688,12 @@ mod tests {
             &RequestRegistrationExtensions::default(),
             true,
         );
-        dbg!(&result);
+
         if cfg!(feature = "insecure-rs1") {
             assert!(result.is_ok());
             match result.unwrap().attestation.metadata {
-                AttestationMetadata::Tpm { aaguid } => {
+                AttestationMetadata::Tpm { aaguid, firmware_version } => {
+                    assert!(firmware_version == 1390997124431944132);
                     assert!(
                         aaguid
                             == uuid::Uuid::parse_str("08987058cadc4b81b6e130de50dcbe96").unwrap()

@@ -996,6 +996,13 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             }
         });
 
+        if !supported_extensions.is_empty() && authenticator_get_info.is_some() {
+            warn!(
+                "Inconsistent supported extension descriptors in - {:?}, {:?}, {:?}",
+                aaid, aaguid, attestation_certificate_key_identifiers
+            );
+        }
+
         if invalid_metadata {
             return Err(());
         }

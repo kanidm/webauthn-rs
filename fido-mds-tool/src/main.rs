@@ -177,7 +177,7 @@ fn main() {
                             }
 
                             if let Some(authenticator_info) = &fd.authenticator_get_info {
-                                println!("  {:?}", authenticator_info);
+                                println!("authenticator_get_info: {:?}", authenticator_info);
                             } else {
                                 println!("authenticator_get_info: not present")
                             }

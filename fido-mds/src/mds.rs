@@ -250,7 +250,7 @@ pub enum AssertionScheme {
 }
 
 /// The family of protocols this device belongs to.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub enum ProtocolFamily {
     /// No protocol family was provided
