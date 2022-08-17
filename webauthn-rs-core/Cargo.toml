@@ -1,11 +1,11 @@
 [package]
 name = "webauthn-rs-core"
-version = "0.4.2"
+version = "0.4.3"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Cryptographic Operation Handling"
 repository = "https://github.com/kanidm/webauthn-rs"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["webauthn", "authentication"]
 categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
@@ -17,7 +17,7 @@ default = []
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
-webauthn-rs-proto = { version = "0.4.2", path = "../webauthn-rs-proto" }
+webauthn-rs-proto = { version = "0.4.3", path = "../webauthn-rs-proto" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = "0.11"
 serde_json = "1.0"

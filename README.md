@@ -1,4 +1,3 @@
-
 Webauthn-rs
 ==========
 
@@ -19,11 +18,15 @@ example javascript and wasm bindings to demonstrate the browser interactions req
 Documentation
 -------------
 
-This library consists of two major parts.
+This library consists of multiple major parts.
 
 A safe, use-case driven api, which is defined in [Webauthn-RS](https://docs.rs/webauthn-rs/)
 
 The low level, protocol level interactions which is defined in [Webauthn-Core-RS](https://docs.rs/webauthn-core-rs/)
+
+Protocol bindings which are defined in [Webauthn-RS-proto](https://docs.rs/webauthn-rs-proto/)
+
+The FIDO MDS (authenticator transparency) parser [FIDO-MDS](https://docs.rs/fido-mds/)
 
 We strongly recommend you use the safe api, as webauthn has many sharp edges and ways to hold it wrong!
 
