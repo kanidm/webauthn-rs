@@ -37,10 +37,10 @@ You can test this library via our [demonstration site](https://webauthn.firstyea
 
 Or you can run the demonstration your self locally with:
 
-    cd demo_site/webauthn-rs-demo
+    cd compat_tester/webauthn-rs-demo
     cargo run
 
-For additional configuration options:
+For additional configuration options for the demo site:
 
     cargo run -- --help
 
@@ -77,7 +77,7 @@ Known BROKEN Keys/Harwdare
 Standards Compliance
 --------------------
 
-This library has been carefully implemented to follow the w3c standard for webauthn level 3 processing
+This library has been carefully implemented to follow the w3c standard for webauthn level 3+ processing
 to ensure secure and correct behaviour. We support most major extensions and key types, but we do not claim
 to be standards complaint because:
 
@@ -88,37 +88,5 @@ to be standards complaint because:
 
 This library has passed a security audit performed by SUSE product security. Other security reviews
 are welcome!
-
-Feedback
---------
-
-The current design of the library is open to feedback on how it
-can be improved - please use this library and contact the project on what can be
-improved!
-
-Why OpenSSL?
-------------
-
-A question I expect is why OpenSSL rather than some other pure-Rust cryptographic
-providers. There are two major justfications.
-
-The first is that if this library will be used in corporate or major deployments,
-then cryptographic audits may have to be performed. It is much easier to point
-toward OpenSSL which has already undergone much more review and auditing than
-using a series of Rust crates which (while still great!) have not seen the same
-level of scrutiny.
-
-The second is that OpenSSL is the only library I have found that allows us to
-reconstruct an EC public key from its X/Y points or an RSA public key from its
-n/e for use with signature verification.
-Without this, we are not able to parse authenticator credentials to perform authentication.
-
-Resources
----------
-
-* Specification: https://www.w3.org/TR/webauthn-3
-* JSON details: https://fidoalliance.org/specs/fido-v2.0-rd-20180702/fido-server-v2.0-rd-20180702.html
-* Write up on interactions: https://medium.com/@herrjemand/introduction-to-webauthn-api-5fd1fb46c285
-
 
 
