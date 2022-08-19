@@ -65,7 +65,7 @@ impl From<Vec<u8>> for CredBlobSet {
 /// Extension option inputs for PublicKeyCredentialCreationOptions.
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestRegistrationExtensions {
     /// The `credProtect` extension options

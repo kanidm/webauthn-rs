@@ -8,13 +8,13 @@ use webauthn_rs_core::interface::{
 use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestation};
 
 /// An in progress registration session for a [Passkey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PasskeyRegistration {
     pub(crate) rs: RegistrationState,
 }
 
 /// An in progress authentication session for a [Passkey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }

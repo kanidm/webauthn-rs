@@ -27,7 +27,7 @@ pub type Counter = u32;
 /// The in progress state of a credential registration attempt. You must persist this in a server
 /// side location associated to the active session requesting the registration. This contains the
 /// user unique id which you can use to reference the user requesting the registration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct RegistrationState {
     pub(crate) policy: UserVerificationPolicy,
     pub(crate) exclude_credentials: Vec<CredentialID>,
@@ -41,7 +41,7 @@ pub struct RegistrationState {
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
 /// requesting the registration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AuthenticationState {
     pub(crate) credentials: Vec<Credential>,
     pub(crate) policy: UserVerificationPolicy,
