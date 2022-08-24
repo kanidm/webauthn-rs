@@ -87,6 +87,28 @@
 //! when they are elevated to be self-contained MFA as the user believes these UV prompts to be
 //! unreliable and not verified correctly. In these cases you MUST communicate to the user that
 //! the UV *may* occur on registration and then will not occur again, and that is *by design*.
+//!
+//! ## Allow Serialising Registration and Authentication State
+//!
+//! During a webauthn registration or authentication ceremony, a random challenge is produced and
+//! provided to the client. The full content of what is needed for the server to validate this
+//! challenge is stored in the associated registration or authentication state types. This value
+//! *MUST* be persisted on the server. If you store this in a cookie or some other form of client
+//! side stored value, the client can replay a previous authentication state and signature without
+//! possession of, or interaction with the authenticator, bypassing pretty much all of the guarantees
+//! of webauthn. Because of this risk by default these states are *not* allowed to be serialised
+//! which prevents them from accidentally being placed into a cookie.
+//!
+//! However there are some *safe* cases of serialising these values. This includes serialising to
+//! a database, or using a cookie "memory store" where the client side cookie is a key into a server-side
+//! map or similar. Both of these prevent the replay attack threat.
+//!
+//! An alternate but "less good" method to mitigate replay attacks is to associate a very short
+//! expiry window to the cookie if you need full client side state, but this may still allow some
+//! forms of real time replay attacks to occur.
+//!
+//! Enabling the feature `danger-allow-state-serialisation` allows you to re-enable serialisation
+//! of these types, provided you accept and understand the handling risks associated.
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
@@ -344,6 +366,11 @@ impl Webauthn {
     /// on the server the `PasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
+    /// WARNING ⚠️  YOU MUST STORE THE `PasskeyRegistration` VALUE SERVER SIDE.
+    ///
+    /// Failure to do so *may* open you to replay attacks which can significantly weaken the
+    /// security of this system.
+    ///
     /// ```
     /// # use webauthn_rs::prelude::*;
     ///
@@ -448,6 +475,11 @@ impl Webauthn {
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the `PasskeyAuthentication` state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
+    ///
+    /// WARNING ⚠️  YOU MUST STORE THE `PasskeyAuthentication` VALUE SERVER SIDE.
+    ///
+    /// Failure to do so *may* open you to replay attacks which can significantly weaken the
+    /// security of this system.
     pub fn start_passkey_authentication(
         &self,
         creds: &[Passkey],
@@ -532,6 +564,11 @@ impl Webauthn {
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the `SecurityKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
+    ///
+    /// WARNING ⚠️  YOU MUST STORE THE `SecurityKeyRegistration` VALUE SERVER SIDE.
+    ///
+    /// Failure to do so *may* open you to replay attacks which can significantly weaken the
+    /// security of this system.
     ///
     /// ```
     /// # use webauthn_rs::prelude::*;
@@ -673,6 +710,11 @@ impl Webauthn {
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the `SecurityKeyAuthentication` state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
+    ///
+    /// WARNING ⚠️  YOU MUST STORE THE `SecurityKeyAuthentication` VALUE SERVER SIDE.
+    ///
+    /// Failure to do so *may* open you to replay attacks which can significantly weaken the
+    /// security of this system.
     pub fn start_securitykey_authentication(
         &self,
         creds: &[SecurityKey],
@@ -773,6 +815,11 @@ impl Webauthn {
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the `PasswordlessKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
+    ///
+    /// WARNING ⚠️  YOU MUST STORE THE `PasswordlessKeyRegistration` VALUE SERVER SIDE.
+    ///
+    /// Failure to do so *may* open you to replay attacks which can significantly weaken the
+    /// security of this system.
     ///
     /// ```
     /// # use webauthn_rs::prelude::*;
@@ -902,6 +949,11 @@ impl Webauthn {
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the `PasswordlessKeyAuthentication` state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
+    ///
+    /// WARNING ⚠️  YOU MUST STORE THE `PasswordlessKeyAuthentication` VALUE SERVER SIDE.
+    ///
+    /// Failure to do so *may* open you to replay attacks which can significantly weaken the
+    /// security of this system.
     pub fn start_passwordlesskey_authentication(
         &self,
         creds: &[PasswordlessKey],

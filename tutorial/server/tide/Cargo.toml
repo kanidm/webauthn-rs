@@ -8,7 +8,7 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-webauthn-rs = { path = "../../../webauthn-rs" }
+webauthn-rs = { path = "../../../webauthn-rs", features = ["danger-allow-state-serialisation"] }
 tide = "0.16"
 async-std = { version = "1.6", features = ["attributes"] }
 tracing = "0.1"

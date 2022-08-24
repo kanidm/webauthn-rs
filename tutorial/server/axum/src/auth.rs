@@ -95,6 +95,9 @@ pub async fn start_register(
         exclude_credentials,
     ) {
         Ok((ccr, reg_state)) => {
+            // Note that due to the session store in use being a server side memory store, this is
+            // safe to store the reg_state into the session since it is not client controlled and
+            // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             session
                 .insert("reg_state", (username, user_unique_id, reg_state))
                 .expect("Failed to insert");
@@ -215,6 +218,9 @@ pub async fn start_authentication(
             // Drop the mutex to allow the mut borrows below to proceed
             drop(users_guard);
 
+            // Note that due to the session store in use being a server side memory store, this is
+            // safe to store the auth_state into the session since it is not client controlled and
+            // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             session
                 .insert("auth_state", (user_unique_id, auth_state))
                 .expect("Failed to insert");
