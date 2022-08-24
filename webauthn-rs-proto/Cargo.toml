@@ -1,11 +1,11 @@
 [package]
 name = "webauthn-rs-proto"
-version = "0.4.2-beta.6"
+version = "0.4.3"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Specification Bindings"
 repository = "https://github.com/kanidm/webauthn-rs"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["webauthn", "authentication"]
 categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
