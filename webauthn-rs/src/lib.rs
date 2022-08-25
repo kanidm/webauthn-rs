@@ -773,7 +773,7 @@ impl Webauthn {
     /// Additionally, these credentials can have an attestation or certificate of authenticity
     /// validated to give you stronger assertions in the types of devices in use.
     ///
-    /// You *should* recommend to the user to register multiple passwordkeys to their account on
+    /// You *should* recommend to the user to register multiple passwordless keys to their account on
     /// seperate devices so that they have fall back authentication.
     ///
     /// You *should* have a workflow that allows a user to register new devices without a need to register
