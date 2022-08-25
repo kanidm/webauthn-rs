@@ -8,13 +8,31 @@ use webauthn_rs_core::interface::{
 use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestation};
 
 /// An in progress registration session for a [Passkey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct PasskeyRegistration {
     pub(crate) rs: RegistrationState,
 }
 
 /// An in progress authentication session for a [Passkey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct PasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -93,14 +111,32 @@ impl PartialEq for Passkey {
 // PasswordlessKey
 
 /// An in progress registration session for a [PasswordlessKey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct PasswordlessKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
 }
 
-/// An in progress registration session for a [PasswordlessKey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// An in progress authentication session for a [PasswordlessKey].
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct PasswordlessKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -177,14 +213,32 @@ impl From<Credential> for PasswordlessKey {
 }
 
 /// An in progress registration session for a [SecurityKey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct SecurityKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: Option<AttestationCaList>,
 }
 
 /// An in progress authentication session for a [SecurityKey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct SecurityKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -267,14 +321,32 @@ impl From<Credential> for SecurityKey {
 }
 
 /// An in progress registration session for a [DeviceKey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct DeviceKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
 }
 
-/// An in progress registration session for a [DeviceKey].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// An in progress authentication session for a [DeviceKey].
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct DeviceKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -358,7 +430,16 @@ impl From<Credential> for DeviceKey {
 
 /// An in progress authentication session for a [DiscoverableKey]. [Passkey] and [DeviceKey]
 /// can be used with these workflows.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
+///
+/// Failure to do so *may* open you to replay attacks which can significantly weaken the
+/// security of this system.
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "danger-allow-state-serialisation",
+    derive(Serialize, Deserialize)
+)]
 pub struct DiscoverableAuthentication {
     pub(crate) ast: AuthenticationState,
 }

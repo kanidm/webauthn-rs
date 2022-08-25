@@ -141,6 +141,9 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
         exclude_credentials,
     ) {
         Ok((ccr, reg_state)) => {
+            // Note that due to the session store in use being a server side memory store, this is
+            // safe to store the reg_state into the session since it is not client controlled and
+            // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             request
                 .session_mut()
                 .insert("reg_state", (username, user_unique_id, reg_state))
@@ -262,6 +265,9 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
             // Drop the mutex to allow the mut borrows below to proceed
             drop(users_guard);
 
+            // Note that due to the session store in use being a server side memory store, this is
+            // safe to store the auth_state into the session since it is not client controlled and
+            // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             request
                 .session_mut()
                 .insert("auth_state", (user_unique_id, auth_state))

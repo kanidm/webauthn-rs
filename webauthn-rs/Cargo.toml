@@ -14,6 +14,7 @@ license = "MPL-2.0"
 resident-key-support = []
 preview-features = []
 danger-insecure-rs1 = ["webauthn-rs-core/insecure-rs1"]
+danger-allow-state-serialisation = []
 danger-credential-internals = []
 danger-user-presence-only-security-keys = []
 
