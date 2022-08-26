@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-authenticator-rs"
-version = "0.4.4"
+version = "0.4.5"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 license = "MPL-2.0"
@@ -18,8 +18,8 @@ default = []
 all-features = true
 
 [dependencies]
-base64urlsafedata = { path = "../base64urlsafedata" }
-webauthn-rs-proto = { version = "0.4.4", path = "../webauthn-rs-proto" }
+base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
+webauthn-rs-proto = { version = "0.4.5", path = "../webauthn-rs-proto" }
 
 tracing = "0.1"
 url = "2"
@@ -29,9 +29,8 @@ serde_cbor = "0.11"
 openssl = "0.10"
 rpassword = "5.0"
 
-# authenticator = { version = "0.3", optional = true }
-# authenticator = { path = "../../../authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"] }
-authenticator = { git = "https://github.com/Firstyear/authenticator-rs.git", branch = "webauthn-authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"] }
+# authenticator = { path = "../../../authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
+authenticator = { version = "0.3.2-dev.1", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
 
 pcsc = { version = "2", optional = true }
 serde = { version = "1.0", features = ["derive"] }

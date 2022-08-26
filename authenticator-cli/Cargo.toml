@@ -2,10 +2,14 @@
 name = "authenticator-cli"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/kanidm/webauthn-rs"
+license = "MPL-2.0"
+readme = "README.md"
+description = "Webauthn Authenticator Management Tool"
 
 [dependencies]
 
-authenticator = { git = "https://github.com/Firstyear/authenticator-rs.git", branch = "webauthn-authenticator-rs", default-features = false, features = ["crypto_openssl"] }
+authenticator = { version = "0.3.2-dev.1", default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
 clap = { version = "^3.0", features = ["derive"] }
 
 tracing = "0.1"
