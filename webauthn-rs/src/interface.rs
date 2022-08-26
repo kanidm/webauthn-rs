@@ -121,6 +121,7 @@ impl PartialEq for Passkey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[cfg(feature = "preview-features")]
 pub struct PasswordlessKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
@@ -137,6 +138,7 @@ pub struct PasswordlessKeyRegistration {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[cfg(feature = "preview-features")]
 pub struct PasswordlessKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -145,10 +147,12 @@ pub struct PasswordlessKeyAuthentication {
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "preview-features")]
 pub struct PasswordlessKey {
     pub(crate) cred: Credential,
 }
 
+#[cfg(feature = "preview-features")]
 impl PasswordlessKey {
     /// Retrieve a reference to this Passwordless Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
@@ -198,6 +202,7 @@ impl PasswordlessKey {
 }
 
 #[cfg(feature = "danger-credential-internals")]
+#[cfg(feature = "preview-features")]
 impl From<PasswordlessKey> for Credential {
     fn from(pk: PasswordlessKey) -> Self {
         pk.cred
@@ -205,6 +210,7 @@ impl From<PasswordlessKey> for Credential {
 }
 
 #[cfg(feature = "danger-credential-internals")]
+#[cfg(feature = "preview-features")]
 impl From<Credential> for PasswordlessKey {
     /// Convert a generic webauthn credential into a Passkey
     fn from(cred: Credential) -> Self {
@@ -331,6 +337,7 @@ impl From<Credential> for SecurityKey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[cfg(feature = "resident-key-support")]
 pub struct DeviceKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
@@ -347,6 +354,7 @@ pub struct DeviceKeyRegistration {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[cfg(feature = "resident-key-support")]
 pub struct DeviceKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -355,10 +363,12 @@ pub struct DeviceKeyAuthentication {
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "resident-key-support")]
 pub struct DeviceKey {
     pub(crate) cred: Credential,
 }
 
+#[cfg(feature = "resident-key-support")]
 impl DeviceKey {
     /// Retrieve a reference to this Resident Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
@@ -407,6 +417,7 @@ impl DeviceKey {
     }
 }
 
+#[cfg(feature = "resident-key-support")]
 impl PartialEq for DeviceKey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
@@ -440,16 +451,19 @@ impl From<Credential> for DeviceKey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[cfg(feature = "preview-features")]
 pub struct DiscoverableAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
 /// A key that can be used in discoverable workflows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg(feature = "preview-features")]
 pub struct DiscoverableKey {
     pub(crate) cred: Credential,
 }
 
+#[cfg(feature = "preview-features")]
 impl From<&DeviceKey> for DiscoverableKey {
     fn from(k: &DeviceKey) -> Self {
         DiscoverableKey {
@@ -458,6 +472,7 @@ impl From<&DeviceKey> for DiscoverableKey {
     }
 }
 
+#[cfg(feature = "preview-features")]
 impl From<&Passkey> for DiscoverableKey {
     fn from(k: &Passkey) -> Self {
         DiscoverableKey {
