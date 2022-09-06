@@ -562,10 +562,10 @@ impl Webauthn {
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
-    /// on the server the `SecurityKeyRegistration` which contains the state of this registration
+    /// on the server the [SecurityKeyRegistration] which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `SecurityKeyRegistration` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyRegistration] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
