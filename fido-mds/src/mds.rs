@@ -1,5 +1,5 @@
 //! An implementation of the types for the fido metadata service as defined by
-//! https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
+//! <https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html>
 //!
 //! This allows parsing the fido metadata blob and consuming it's content. See `FidoMds`
 //! for more.
@@ -87,19 +87,19 @@ pub struct BiometricAccuracyDescriptor {
     ///
     /// This value is self attested and, if the authenticator passed biometric certification, the
     /// data is an independently verified FRR as measured when meeting the FRR target specified in
-    /// the biometric certification requirements [FIDOBiometricsRequirements] for the indicated
+    /// the biometric certification requirements FIDOBiometricsRequirements for the indicated
     /// biometric certification level (see certLevel in related biometricStatusReport as specified
-    /// in [FIDOMetadataService]).
+    /// in FIDOMetadataService).
     #[serde(rename = "selfAttestedFRR")]
     pub self_attested_frr: Option<f32>,
-    /// The false acceptance rate [ISOIEC-19795-1] for a single template, i.e. the percentage of
+    /// The false acceptance rate ISOIEC-19795-1 for a single template, i.e. the percentage of
     /// verification transactions with wrongful claims of identity that are incorrectly confirmed.
     /// For example a FAR of 0.002% would be encoded as 0.00002.
     ///
     /// This value is self attested and, if the authenticator passed biometric certification, the
     /// data is an independently verified FAR specified in the biometric certification requirements
-    /// [FIDOBiometricsRequirements] for the indicated biomeric certification level (see certLevel
-    /// in related biometricStatusReport as specified in [FIDOMetadataService]).
+    /// FIDOBiometricsRequirements for the indicated biomeric certification level (see certLevel
+    /// in related biometricStatusReport as specified in FIDOMetadataService).
     #[serde(rename = "selfAttestedFAR")]
     pub self_attested_far: Option<f32>,
     /// Maximum number of alternative templates from different fingers allowed (for other modalities,
@@ -183,7 +183,7 @@ pub enum UserVerificationMethod {
 /// A descriptor for a specific base user verification method as implemented by the authenticator.
 pub struct VerificationMethodAndCombinations {
     /// a single USER_VERIFY constant case-sensitive string name. See section "User Verification
-    /// Methods" in [FIDORegistry] (e.g. "presence_internal"). This value MUST NOT be empty.
+    /// Methods" in FIDORegistry (e.g. "presence_internal"). This value MUST NOT be empty.
     pub user_verification_method: UserVerificationMethod,
     /// May optionally be used in the case of method USER_VERIFY_PASSCODE_INTERNAL or USER_VERIFY_PASSCODE_EXTERNAL.
     pub ca_desc: Option<CodeAccuracyDescriptor>,
@@ -200,20 +200,20 @@ pub struct VerificationMethodAndCombinations {
 /// In the case of ECDAA attestation, the ECDAA-Issuer's trust anchor must be specified in this field.
 pub struct EcdaaAnchor {
     /// base64url encoding of the result of ECPoint2ToB of the ECPoint2 X = P_2^xX=P
-    /// See [FIDOEcdaaAlgorithm] for the definition of ECPoint2ToB.
+    /// See FIDOEcdaaAlgorithm for the definition of ECPoint2ToB.
     #[serde(rename = "X")]
     pub x: String,
     /// base64url encoding of the result of ECPoint2ToB of the ECPoint2 Y = P_2^yY=P
-    /// See [FIDOEcdaaAlgorithm] for the definition of ECPoint2ToB.
+    /// See FIDOEcdaaAlgorithm for the definition of ECPoint2ToB.
     #[serde(rename = "X")]
     pub y: String,
-    /// base64url encoding of the result of BigNumberToB(cc). See section "Issuer Specific ECDAA Parameters" in [FIDOEcdaaAlgorithm] for an explanation of cc. See [FIDOEcdaaAlgorithm] for the definition of BigNumberToB.
+    /// base64url encoding of the result of BigNumberToB(cc). See section "Issuer Specific ECDAA Parameters" in FIDOEcdaaAlgorithm for an explanation of cc. See FIDOEcdaaAlgorithm for the definition of BigNumberToB.
     pub c: String,
-    /// base64url encoding of the result of BigNumberToB(sxsx). See section "Issuer Specific ECDAA Parameters" in [FIDOEcdaaAlgorithm] for an explanation of sxsx. See [FIDOEcdaaAlgorithm] for the definition of BigNumberToB.
+    /// base64url encoding of the result of BigNumberToB(sxsx). See section "Issuer Specific ECDAA Parameters" in FIDOEcdaaAlgorithm for an explanation of sxsx. See FIDOEcdaaAlgorithm for the definition of BigNumberToB.
     pub sx: String,
-    /// base64url encoding of the result of BigNumberToB(sysy). See section "Issuer Specific ECDAA Parameters" in [FIDOEcdaaAlgorithm] for an explanation of sysy. See [FIDOEcdaaAlgorithm] for the definition of BigNumberToB.
+    /// base64url encoding of the result of BigNumberToB(sysy). See section "Issuer Specific ECDAA Parameters" in FIDOEcdaaAlgorithm for an explanation of sysy. See FIDOEcdaaAlgorithm for the definition of BigNumberToB.
     pub sy: String,
-    /// Name of the Barreto-Naehrig elliptic curve for G1. "BN_P256", "BN_P638", "BN_ISOP256", and "BN_ISOP512" are supported. See section "Supported Curves for ECDAA" in [FIDOEcdaaAlgorithm] for details.
+    /// Name of the Barreto-Naehrig elliptic curve for G1. "BN_P256", "BN_P638", "BN_ISOP256", and "BN_ISOP512" are supported. See section "Supported Curves for ECDAA" in FIDOEcdaaAlgorithm for details.
     #[serde(rename = "G1Curve")]
     pub g1curve: String,
 }
@@ -462,15 +462,15 @@ pub struct AuthenticatorGetInfo {
 pub struct MetadataStatement {
     /// Legal Header
     pub legal_header: Option<String>,
-    /// The Authenticator Attestation ID. See [UAFProtocol] for the definition of the AAID structure.
+    /// The Authenticator Attestation ID. See UAFProtocol for the definition of the AAID structure.
     /// This field must be set if the authenticator implements FIDO UAF.
     pub aaid: Option<String>,
-    /// The Authenticator Attestation GUID. See [FIDOKeyAttestation] for the definition of the
+    /// The Authenticator Attestation GUID. See FIDOKeyAttestation for the definition of the
     /// AAGUID structure. This field must be set if the authenticator implements FIDO 2.
     pub aaguid: Option<Uuid>,
     /// A list of the attestation certificate public key identifiers encoded as hex string. This
     /// value must be calculated according to method 1 for computing the keyIdentifier as defined
-    /// in [RFC5280] section 4.2.1.2. The hex string must not contain any non-hex characters
+    /// in RFC5280 section 4.2.1.2. The hex string must not contain any non-hex characters
     /// (e.g. spaces). All hex letters must be lower case. This field must be set if neither aaid
     /// nor aaguid are set. Setting this field implies that the attestation certificate(s) are
     /// dedicated to a single authenticator model.
@@ -486,7 +486,7 @@ pub struct MetadataStatement {
     /// in this metadata statement.
     ///
     /// Adding new StatusReport entries with status UPDATE_AVAILABLE to the metadata TOC object
-    /// [FIDOMetadataService] must also change this authenticatorVersion if the update fixes severe
+    /// FIDOMetadataService must also change this authenticatorVersion if the update fixes severe
     /// security issues, e.g. the ones reported by preceding StatusReport entries with status code
     /// USER_VERIFICATION_BYPASS, ATTESTATION_KEY_COMPROMISE, USER_KEY_REMOTE_COMPROMISE, USER_KEY_PHYSICAL_COMPROMISE, REVOKED.
     ///
@@ -510,11 +510,11 @@ pub struct MetadataStatement {
     /// ⚠️  WARNING - Content of this value is not well documented to it's intent or usage!
     ///
     /// The FIDO unified protocol version(s) (related to the specific protocol family) supported by
-    /// this authenticator. See [UAFProtocol] for the definition of the Version structure.
+    /// this authenticator. See UAFProtocol for the definition of the Version structure.
     pub upv: Vec<Upv>,
     /// The list of authentication algorithms supported by the authenticator. Must be set to the
     /// complete list of the supported ALG_ constants defined in the FIDO Registry of Predefined
-    /// Values [FIDORegistry] if the authenticator supports multiple algorithms. Each value must be non-zero.
+    /// Values FIDORegistry if the authenticator supports multiple algorithms. Each value must be non-zero.
     ///
     /// ❗️ This is represented as an enum in this project to help you understand the possible values
     /// that *may* exist. This contradicts the MDS spec, but it's better for you the consumer.
@@ -522,7 +522,7 @@ pub struct MetadataStatement {
     pub authentication_algorithms: Vec<AuthenticationAlgorithm>,
     /// The list of public key formats supported by the authenticator during registration operations.
     /// Must be set to the complete list of the supported ALG_KEY constants defined in the FIDO Registry
-    /// of Predefined Values [FIDORegistry] if the authenticator model supports multiple encodings.
+    /// of Predefined Values FIDORegistry if the authenticator model supports multiple encodings.
     /// Because this information is not present in APIs related to authenticator discovery or policy,
     /// a FIDO server must be prepared to accept and process any and all key representations defined
     /// for any public key algorithm it supports. Each value must be non-zero.
@@ -598,8 +598,8 @@ pub struct MetadataStatement {
     /// The authenticator's overall claimed cryptographic strength in bits (sometimes also called
     /// security strength or security level). This is the minimum of the cryptographic strength of
     /// all involved cryptographic methods (e.g. RNG, underlying hash, key wrapping algorithm,
-    /// signing algorithm, attestation algorithm), e.g. see [FIPS180-4], [FIPS186-4], [FIPS198-1],
-    /// [SP800-38B], [SP800-38C], [SP800-38D], [SP800-38F], [SP800-90C], [SP800-90ar1], [FIPS140-2] etc.
+    /// signing algorithm, attestation algorithm), e.g. see FIPS180-4, FIPS186-4, FIPS198-1,
+    /// SP800-38B, SP800-38C, SP800-38D, SP800-38F, SP800-90C, SP800-90ar1, FIPS140-2 etc.
     ///
     /// If this value is absent, the cryptographic strength is unknown. If the cryptographic strength
     /// of one of the involved cryptographic methods is unknown the overall claimed cryptographic
@@ -617,7 +617,7 @@ pub struct MetadataStatement {
     /// ⚠️  WARNING - Content of this value is not well documented to it's intent or usage!
     ///
     /// A 16-bit number representing a combination of the bit flags defined by the
-    /// TRANSACTION_CONFIRMATION_DISPLAY constants in the FIDO Registry of Predefined Values [FIDORegistry].
+    /// TRANSACTION_CONFIRMATION_DISPLAY constants in the FIDO Registry of Predefined Values FIDORegistry.
     /// This value must be 0, if transaction confirmation is not supported by the authenticator.
     pub tc_display: Vec<String>,
     /// ⚠️  WARNING - Content of this value is not well documented to it's intent or usage!
@@ -633,13 +633,13 @@ pub struct MetadataStatement {
     /// ⚠️  WARNING - Content of this value MAY have extra leading or trailing whitespace which MAY
     /// cause issues when parsing.
     ///
-    /// Each element of this array represents a PKIX [RFC5280] X.509 certificate that is a valid
+    /// Each element of this array represents a PKIX RFC5280 X.509 certificate that is a valid
     /// trust anchor for this authenticator model. Multiple certificates might be used for different
     /// batches of the same model. The array does not represent a certificate chain, but only the
     /// trust anchor of that chain. A trust anchor can be a root certificate, an intermediate CA
     /// certificate or even the attestation certificate itself.
     ///
-    /// Each array element is a base64-encoded (section 4 of [RFC4648]), DER-encoded [ITU-X690-2008]
+    /// Each array element is a base64-encoded (section 4 of RFC4648), DER-encoded ITU-X690-2008
     /// PKIX certificate value. Each element must be dedicated for authenticator attestation.
     ///
     // /// ❗️ This is decoded from Base64 for you so that you can directly access the DER of the certificate.
@@ -659,7 +659,7 @@ pub struct MetadataStatement {
     /// Describes supported versions, extensions, AAGUID of the device and its capabilities.
     ///
     /// The information is the same reported by an authenticator when invoking the 'authenticatorGetInfo'
-    /// method, see [FIDOCTAP].
+    /// method, see FIDOCTAP.
     pub authenticator_get_info: Option<AuthenticatorGetInfo>,
 }
 
@@ -681,7 +681,7 @@ pub struct BiometricsStatusReport {
     /// Achieved level of the biometric certification of this biometric component of the authenticator
     pub cert_level: u16,
     /// A single a single USER_VERIFY short form case-sensitive string name constant, representing
-    /// biometric modality. See section "User Verification Methods" in [FIDORegistry]
+    /// biometric modality. See section "User Verification Methods" in FIDORegistry
     /// (e.g. "fingerprint_internal").
     ///
     /// ❗️ This is represented as an enum in this project to help you understand the possible values
@@ -701,7 +701,7 @@ pub struct BiometricsStatusReport {
     pub certificate_number: Option<String>,
     /// The version of the Biometric Certification Policy the implementation is Certified to, e.g. "1.0.0".
     pub certification_policy_version: Option<String>,
-    /// The version of the Biometric Requirements [FIDOBiometricsRequirements] the implementation is certified to, e.g. "1.0.0".
+    /// The version of the Biometric Requirements FIDOBiometricsRequirements the implementation is certified to, e.g. "1.0.0".
     pub certification_requirements_version: Option<String>,
 }
 
@@ -797,7 +797,7 @@ pub struct StatusReport {
     pub authenticator_version: Option<u32>,
     /// ⚠️  WARNING - Content of this value is not well documented to it's intent or usage!
     ///
-    /// Base64-encoded [RFC4648] (not base64url!) DER [ITU-X690-2008] PKIX certificate value related
+    /// Base64-encoded RFC4648 (not base64url!) DER ITU-X690-2008 PKIX certificate value related
     /// to the current status, if applicable.
     pub certificate: Option<String>,
     /// HTTPS URL where additional information may be found related to the current status, if applicable.
@@ -814,7 +814,7 @@ pub struct StatusReport {
     /// The version of the Authenticator Certification Policy the implementation is Certified to, e.g. "1.0.0".
     pub certification_policy_version: Option<String>,
     /// The Document Version of the Authenticator Security Requirements (DV)
-    /// [FIDOAuthenticatorSecurityRequirements] the implementation is certified to, e.g. "1.2.0".
+    /// FIDOAuthenticatorSecurityRequirements the implementation is certified to, e.g. "1.2.0".
     pub certification_requirements_version: Option<String>,
 }
 
@@ -829,7 +829,7 @@ pub struct FidoDevice {
     pub aaguid: Option<Uuid>,
     /// A list of the attestation certificate public key identifiers encoded as hex string. This
     /// value MUST be calculated according to method 1 for computing the keyIdentifier as defined
-    /// in [RFC5280] section 4.2.1.2.
+    /// in RFC5280 section 4.2.1.2.
     pub attestation_certificate_key_identifiers: Option<Vec<String>>,
     /// The FIDOMetadataStatement pertaining to this device.
     pub metadata_statement: MetadataStatement,
@@ -851,7 +851,7 @@ pub struct FidoDevice {
     /// ⚠️  WARNING - Content of this value is not well documented to it's intent or usage!
     ///
     /// The hash value computed over the Base64url encoding of the UTF-8 representation of the JSON
-    /// encoded rogueList available at rogueListURL (with type rogueListEntry[]). The hash algorithm
+    /// encoded rogueList available at rogueListURL (with type rogueListEntry). The hash algorithm
     /// related to the signature algorithm specified in the JWTHeader (see Metadata BLOB) MUST be used.
     ///
     /// This hash value MUST be present and non-empty whenever rogueListURL is present.
@@ -866,12 +866,12 @@ impl fmt::Display for FidoDevice {
 }
 
 /// The parsed content of the Fido Metadata Server. This content can be retrieved from it's online
-/// url at https://mds.fidoalliance.org/ . It's recommended you re-download this content every few weeks. This can be parsed
+/// url at <https://mds.fidoalliance.org/> . It's recommended you re-download this content every few weeks. This can be parsed
 /// from it's str representation - for from_str to suceed, the metadata jwt content MUST be correctly
 /// signed be pinned root certificate authority, the full chain is verified, and the content of the
 /// JWT is signed correctly.
 ///
-/// The fido metadata specification listed at https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html
+/// The fido metadata specification listed at <https://fidoalliance.org/specs/mds/fido-metadata-service-v3.0-ps-20210518.html>
 /// has a number of errors (~20 deviations). When they are found, the "true implementation" of the content of the JWT
 /// is used, rather than the specification.
 ///

@@ -367,7 +367,7 @@ impl Webauthn {
     /// on the server the `PasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `PasskeyRegistration` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [PasskeyRegistration] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -449,7 +449,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired `PasskeyRegistration`. The details of the Authenticator
+    /// and the server provides it's paired [PasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
@@ -474,10 +474,10 @@ impl Webauthn {
 
     /// Given a set of `Passkey`'s, begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the `PasskeyAuthentication` state as it is paired to the
+    /// The server must persist the [PasskeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `PasskeyAuthentication` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [PasskeyAuthentication] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -494,14 +494,14 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, PasskeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasskeyAuthentication`
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [PasskeyAuthentication]
     /// complete the authentication of the user.
     ///
     /// # Errors
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
-    /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
+    /// On success, [AuthenticationResult] is returned which contains some details of the Authentication
     /// process.
     ///
     /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
@@ -510,9 +510,9 @@ impl Webauthn {
     /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
     /// and you SHOULD invalidate and reject that credential as a result.
     ///
-    /// From this `AuthenticationResult` you *should* update the Credential's Counter value if it is
+    /// From this [AuthenticationResult] you *should* update the Credential's Counter value if it is
     /// valid per the above check. If you wish
-    /// you *may* use the content of the `AuthenticationResult` for extended validations (such as the
+    /// you *may* use the content of the [AuthenticationResult] for extended validations (such as the
     /// presence of the user verification flag).
     pub fn finish_passkey_authentication(
         &self,
@@ -678,7 +678,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired `SecurityKeyRegistration`. The details of the Authenticator
+    /// and the server provides it's paired [SecurityKeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
@@ -686,8 +686,8 @@ impl Webauthn {
     ///
     /// # Returns
     ///
-    /// The returned `SecurityKey` must be associated to the users account, and is used for future
-    /// authentications via `start_securitykey_authentication`.
+    /// The returned [SecurityKey] must be associated to the users account, and is used for future
+    /// authentications via [crate::Webauthn::start_securitykey_authentication].
     ///
     /// You MUST assert that the registered credential id has not previously been registered.
     /// to any other account.
@@ -709,10 +709,10 @@ impl Webauthn {
 
     /// Given a set of `SecurityKey`'s, begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the `SecurityKeyAuthentication` state as it is paired to the
+    /// The server must persist the [SecurityKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `SecurityKeyAuthentication` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyAuthentication] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -734,17 +734,17 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `SecurityKeyAuthentication`
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [SecurityKeyAuthentication]
     /// complete the authentication of the user.
     ///
     /// # Errors
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
-    /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
+    /// On success, [AuthenticationResult] is returned which contains some details of the Authentication
     /// process.
     ///
-    /// You should use `SecurityKey::update_credential` on the returned `AuthenticationResult` and
+    /// You should use `SecurityKey::update_credential` on the returned [AuthenticationResult] and
     /// ensure it is persisted.
     pub fn finish_securitykey_authentication(
         &self,
@@ -817,7 +817,7 @@ impl Webauthn {
     /// on the server the `PasswordlessKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `PasswordlessKeyRegistration` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyRegistration] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -921,15 +921,15 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired `PasswordlessKeyRegistration`. The details of the Authenticator
+    /// and the server provides it's paired [PasswordlessKeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
-    /// The returned `PasswordlessKey` must be associated to the users account, and is used for future
-    /// authentications via `start_passwordlesskey_authentication`.
+    /// The returned [PasswordlessKey] must be associated to the users account, and is used for future
+    /// authentications via [crate::Webauthn::start_passwordlesskey_authentication].
     ///
     /// # Verifying specific device models
     /// If you wish to assert a specifc type of device model is in use, you can inspect the
@@ -948,10 +948,10 @@ impl Webauthn {
 
     /// Given a set of `PasswordlessKey`'s, begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the `PasswordlessKeyAuthentication` state as it is paired to the
+    /// The server must persist the [PasswordlessKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `PasswordlessKeyAuthentication` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyAuthentication] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -974,7 +974,7 @@ impl Webauthn {
             .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored `PasswordlessKeyAuthentication`
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [PasswordlessKeyAuthentication]
     /// complete the authentication of the user. This asserts that user verification must have been correctly
     /// performed allowing you to trust this as a MFA interfaction.
     ///
@@ -982,7 +982,7 @@ impl Webauthn {
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
-    /// On success, `AuthenticationResult` is returned which contains some details of the Authentication
+    /// On success, [AuthenticationResult] is returned which contains some details of the Authentication
     /// process.
     ///
     /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
@@ -991,9 +991,9 @@ impl Webauthn {
     /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
     /// and you SHOULD invalidate and reject that credential as a result.
     ///
-    /// From this `AuthenticationResult` you *should* update the Credential's Counter value if it is
+    /// From this [AuthenticationResult] you *should* update the Credential's Counter value if it is
     /// valid per the above check. If you wish
-    /// you *may* use the content of the `AuthenticationResult` for extended validations (such as the
+    /// you *may* use the content of the [AuthenticationResult] for extended validations (such as the
     /// user verification flag).
     ///
     /// In *some* cases, you *may* be able to identify the user by examinin

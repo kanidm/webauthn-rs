@@ -13,6 +13,9 @@ use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAtt
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -28,6 +31,9 @@ pub struct PasskeyRegistration {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -116,6 +122,9 @@ impl PartialEq for Passkey {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -133,6 +142,9 @@ pub struct PasswordlessKeyRegistration {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -224,6 +236,9 @@ impl From<Credential> for PasswordlessKey {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -240,6 +255,9 @@ pub struct SecurityKeyRegistration {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -332,6 +350,9 @@ impl From<Credential> for SecurityKey {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -349,6 +370,9 @@ pub struct DeviceKeyRegistration {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
@@ -446,6 +470,9 @@ impl From<Credential> for DeviceKey {
 ///
 /// Failure to do so *may* open you to replay attacks which can significantly weaken the
 /// security of this system.
+///
+/// In some cases you *may* wish to serialise this value. For details on how to achieve this
+/// see the [crate#allow-serialising-registration-and-authentication-state] level documentation.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "danger-allow-state-serialisation",
