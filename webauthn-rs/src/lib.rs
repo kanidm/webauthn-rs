@@ -1,4 +1,4 @@
-//! Webauthn-rs - Webauthn for Rust Server Applications
+//! # Webauthn-rs - Webauthn for Rust Server Applications
 //!
 //! Webauthn is a standard allowing communication between servers, browsers and authenticators
 //! to allow strong, passwordless, cryptographic authentication to be performed. Webauthn
@@ -48,6 +48,28 @@
 //!
 //! # Features
 //!
+//! ## Allow Serialising Registration and Authentication State
+//!
+//! During a webauthn registration or authentication ceremony, a random challenge is produced and
+//! provided to the client. The full content of what is needed for the server to validate this
+//! challenge is stored in the associated registration or authentication state types. This value
+//! *MUST* be persisted on the server. If you store this in a cookie or some other form of client
+//! side stored value, the client can replay a previous authentication state and signature without
+//! possession of, or interaction with the authenticator, bypassing pretty much all of the guarantees
+//! of webauthn. Because of this risk by default these states are *not* allowed to be serialised
+//! which prevents them from accidentally being placed into a cookie.
+//!
+//! However there are some *safe* cases of serialising these values. This includes serialising to
+//! a database, or using a cookie "memory store" where the client side cookie is a key into a server-side
+//! map or similar. Both of these prevent the replay attack threat.
+//!
+//! An alternate but "less good" method to mitigate replay attacks is to associate a very short
+//! expiry window to the cookie if you need full client side state, but this may still allow some
+//! forms of real time replay attacks to occur.
+//!
+//! Enabling the feature `danger-allow-state-serialisation` allows you to re-enable serialisation
+//! of these types, provided you accept and understand the handling risks associated.
+//!
 //! This library supports some optional features that you may wish to use. These are all
 //! disabled by default as they have risks associated.
 //!
@@ -70,8 +92,8 @@
 //! may wish to migrate a key between types (security key to passkey, passwordlesskey to passkey)
 //! for example. Alternately, you may wish to access the internals of a credential to implement
 //! an alternate serialisation or storage mechanism. In these cases you can access the underlying
-//! `Credential` type via Into and From by enabling the feature `danger-credential-internals`. The
-//! `Credential` type is exposed via the `prelude` when this feature is enabled.
+//! [Credential] type via Into and From by enabling the feature `danger-credential-internals`. The
+//! [Credential] type is exposed via the [prelude] when this feature is enabled.
 //!
 //! ## User-Presence only SecurityKeys
 //!
@@ -88,27 +110,6 @@
 //! unreliable and not verified correctly. In these cases you MUST communicate to the user that
 //! the UV *may* occur on registration and then will not occur again, and that is *by design*.
 //!
-//! ## Allow Serialising Registration and Authentication State
-//!
-//! During a webauthn registration or authentication ceremony, a random challenge is produced and
-//! provided to the client. The full content of what is needed for the server to validate this
-//! challenge is stored in the associated registration or authentication state types. This value
-//! *MUST* be persisted on the server. If you store this in a cookie or some other form of client
-//! side stored value, the client can replay a previous authentication state and signature without
-//! possession of, or interaction with the authenticator, bypassing pretty much all of the guarantees
-//! of webauthn. Because of this risk by default these states are *not* allowed to be serialised
-//! which prevents them from accidentally being placed into a cookie.
-//!
-//! However there are some *safe* cases of serialising these values. This includes serialising to
-//! a database, or using a cookie "memory store" where the client side cookie is a key into a server-side
-//! map or similar. Both of these prevent the replay attack threat.
-//!
-//! An alternate but "less good" method to mitigate replay attacks is to associate a very short
-//! expiry window to the cookie if you need full client side state, but this may still allow some
-//! forms of real time replay attacks to occur.
-//!
-//! Enabling the feature `danger-allow-state-serialisation` allows you to re-enable serialisation
-//! of these types, provided you accept and understand the handling risks associated.
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
@@ -562,10 +563,10 @@ impl Webauthn {
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
-    /// on the server the `SecurityKeyRegistration` which contains the state of this registration
+    /// on the server the [SecurityKeyRegistration] which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE `SecurityKeyRegistration` VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyRegistration] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.

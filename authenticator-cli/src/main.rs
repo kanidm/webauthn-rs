@@ -1,9 +1,9 @@
-use clap::{Args, Subcommand};
+use clap::Subcommand;
 
 use authenticator::{
     authenticatorservice::{AuthenticatorService, CtapVersion},
     statecallback::StateCallback,
-    AuthenticatorInfo, InfoResult, StatusUpdate,
+    InfoResult, StatusUpdate,
 };
 use std::sync::mpsc::{channel, RecvError};
 use std::thread;
