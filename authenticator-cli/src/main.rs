@@ -7,6 +7,7 @@ use authenticator::{
 };
 use std::sync::mpsc::{channel, RecvError};
 use std::thread;
+use tracing::{debug, error, info, trace};
 
 #[derive(Debug, Subcommand)]
 #[clap(about = "Authenticator Utility")]
@@ -16,7 +17,7 @@ enum Opt {
 
 fn main() {
     tracing_subscriber::fmt::init();
-    tracing_log::LogTracer::init();
+    tracing_log::LogTracer::init().expect("Failed to create tracing log bridge");
 
     let timeout_ms = 25000;
 
@@ -30,20 +31,20 @@ fn main() {
     thread::spawn(move || loop {
         match status_rx.recv() {
             Ok(StatusUpdate::DeviceAvailable { dev_info }) => {
-                // println!("STATUS: device available: {}", dev_info)
+                trace!("STATUS: device available: {}", dev_info)
             }
             Ok(StatusUpdate::SelectDeviceNotice) => {
-                println!("STATUS: Please select a device by touching one of them.");
+                info!("STATUS: Please select a device by touching one of them.");
             }
-            Ok(StatusUpdate::DeviceSelected(_dev_info)) => {
-                // println!("STATUS: Continuing with device: {}", dev_info);
+            Ok(StatusUpdate::DeviceSelected(dev_info)) => {
+                debug!("STATUS: Continuing with device: {}", dev_info);
             }
             Err(RecvError) => {
-                println!("STATUS: end");
+                error!("STATUS: end");
                 return;
             }
             e => {
-                eprintln!("Unexpected State {:?}", e);
+                error!("Unexpected State {:?}", e);
             }
         }
     });
@@ -54,16 +55,16 @@ fn main() {
     }));
 
     if let Err(e) = manager.info(timeout_ms, status_tx, callback) {
-        eprintln!("Couldn't setup info request - {:?}", e);
+        error!("Couldn't setup info request - {:?}", e);
     }
 
     while let Ok(info_result) = register_rx.recv() {
         match info_result {
             Ok(InfoResult::CTAP2(info)) => {
-                println!("{}", info);
+                info!("{}", info);
             }
             Err(e) => {
-                eprintln!("An error occured: {:?}", e);
+                error!("An error occured: {:?}", e);
             }
         }
     }

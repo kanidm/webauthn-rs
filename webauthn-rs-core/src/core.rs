@@ -645,6 +645,7 @@ impl WebauthnCore {
         chal: &ChallengeRef,
         cred: &Credential,
         appid: &Option<String>,
+        allow_backup_eligible_upgrade: bool,
     ) -> Result<AuthenticatorData<Authentication>, WebauthnError> {
         // Steps 1 through 7 are performed by the caller of this fn.
 
@@ -742,9 +743,17 @@ impl WebauthnCore {
         // a compromise of the credential, tampering with the device, or some other change to its
         // risk profile from when it was originally enrolled. Reject the authentication if this
         // situation occurs.
-        if cred.backup_eligible != data.authenticator_data.backup_elligible {
-            debug!("Credential backup elligibility has changed!");
-            return Err(WebauthnError::CredentialBackupElligibilityInconsistent);
+
+        if cred.backup_eligible != data.authenticator_data.backup_eligible {
+            if allow_backup_eligible_upgrade
+                && !cred.backup_eligible
+                && data.authenticator_data.backup_eligible
+            {
+                debug!("Credential backup elligibility has changed!");
+            } else {
+                error!("Credential backup elligibility has changed!");
+                return Err(WebauthnError::CredentialBackupElligibilityInconsistent);
+            }
         }
 
         // OUT OF SPEC - It is invalid for a credential to indicate it is backed up
@@ -815,11 +824,13 @@ impl WebauthnCore {
                 verified,
                 UserVerificationPolicy::Required,
                 extensions,
+                false,
             ),
             (0, _) => self.generate_challenge_authenticate_inner(
                 unverified,
                 UserVerificationPolicy::Preferred,
                 extensions,
+                false,
             ),
             (_, _) => Err(WebauthnError::InconsistentUserVerificationPolicy),
         }
@@ -841,7 +852,7 @@ impl WebauthnCore {
         extensions: Option<RequestAuthenticationExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
         let policy = policy.unwrap_or(cred.registration_policy);
-        self.generate_challenge_authenticate_inner(vec![cred], policy, extensions)
+        self.generate_challenge_authenticate_inner(vec![cred], policy, extensions, false)
     }
 
     /// Authenticate a set of credentials allowing the user verification policy to be set.
@@ -856,8 +867,14 @@ impl WebauthnCore {
         creds: Vec<Credential>,
         policy: UserVerificationPolicy,
         extensions: Option<RequestAuthenticationExtensions>,
+        allow_backup_eligible_upgrade: bool,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        self.generate_challenge_authenticate_inner(creds, policy, extensions)
+        self.generate_challenge_authenticate_inner(
+            creds,
+            policy,
+            extensions,
+            allow_backup_eligible_upgrade,
+        )
     }
 
     /// Begin a discoverable authentication session.
@@ -866,7 +883,7 @@ impl WebauthnCore {
         policy: UserVerificationPolicy,
         extensions: Option<RequestAuthenticationExtensions>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        self.generate_challenge_authenticate_inner(vec![], policy, extensions)
+        self.generate_challenge_authenticate_inner(vec![], policy, extensions, false)
     }
 
     fn generate_challenge_authenticate_inner(
@@ -874,6 +891,7 @@ impl WebauthnCore {
         creds: Vec<Credential>,
         policy: UserVerificationPolicy,
         extensions: Option<RequestAuthenticationExtensions>,
+        allow_backup_eligible_upgrade: bool,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
         let chal = self.generate_challenge();
 
@@ -908,6 +926,7 @@ impl WebauthnCore {
             policy,
             challenge: chal.into(),
             appid,
+            allow_backup_eligible_upgrade,
         };
         Ok((r, st))
     }
@@ -938,6 +957,7 @@ impl WebauthnCore {
             policy,
             challenge: chal,
             appid,
+            allow_backup_eligible_upgrade,
         } = state;
         let chal: &ChallengeRef = chal.into();
 
@@ -1002,15 +1022,27 @@ impl WebauthnCore {
         // being basicly non-existant, that there is no point. As a result, we have already enforced
         // these conditions.
 
-        let auth_data = self.verify_credential_internal(rsp, *policy, chal, cred, appid)?;
+        let auth_data = self.verify_credential_internal(
+            rsp,
+            *policy,
+            chal,
+            cred,
+            appid,
+            *allow_backup_eligible_upgrade,
+        )?;
         let mut needs_update = false;
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
         let backup_state = auth_data.backup_state;
+        let backup_eligible = auth_data.backup_eligible;
 
         let extensions = process_authentication_extensions(&auth_data.extensions);
 
         if backup_state != cred.backup_state {
+            needs_update = true;
+        }
+
+        if backup_eligible != cred.backup_eligible {
             needs_update = true;
         }
 
@@ -1041,6 +1073,7 @@ impl WebauthnCore {
             cred_id: cred.cred_id.clone(),
             needs_update,
             user_verified,
+            backup_eligible,
             backup_state,
             counter,
             extensions,
@@ -1632,6 +1665,7 @@ mod tests {
             &zero_chal,
             &cred,
             &None,
+            false,
         );
         trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -1662,6 +1696,7 @@ mod tests {
             &zero_chal,
             &cred,
             &Some(String::from("https://unused.local")),
+            false,
         );
         trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -1752,6 +1787,7 @@ mod tests {
             &zero_chal,
             &cred,
             &Some(String::from("https://testing.local/app-id.json")),
+            false,
         );
         trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -1781,6 +1817,7 @@ mod tests {
             &zero_chal,
             &cred,
             &None,
+            false,
         );
         trace!("RESULT: {:?}", r);
         assert!(r.is_err());
@@ -2036,6 +2073,7 @@ mod tests {
             &chal,
             &cred,
             &None,
+            false,
         );
         trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
@@ -3026,6 +3064,7 @@ mod tests {
             &chal,
             &cred,
             &None,
+            false,
         );
         trace!("RESULT: {:?}", r);
         assert!(r.is_ok());
