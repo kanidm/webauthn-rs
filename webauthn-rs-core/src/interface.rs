@@ -47,6 +47,7 @@ pub struct AuthenticationState {
     pub(crate) policy: UserVerificationPolicy,
     pub(crate) challenge: Base64UrlSafeData,
     pub(crate) appid: Option<String>,
+    pub(crate) allow_backup_eligible_upgrade: bool,
 }
 
 impl AuthenticationState {
@@ -613,6 +614,11 @@ pub struct AuthenticationResult {
     /// The current backup state of the authenticator. It may have
     /// changed since registration.
     pub(crate) backup_state: bool,
+    /// The current backup eligibility of the authenticator. It may have
+    /// changed since registration in rare cases. This transition may ONLY
+    /// be false to true, never the reverse. This is common on passkeys
+    /// during some upgrades.
+    pub(crate) backup_eligible: bool,
     /// The state of the counter
     pub(crate) counter: Counter,
     /// The response from associated extensions.
@@ -640,6 +646,14 @@ impl AuthenticationResult {
     /// changed since registration.
     pub fn backup_state(&self) -> bool {
         self.backup_state
+    }
+
+    /// The current backup eligibility of the authenticator. It may have
+    /// changed since registration in rare cases. This transition may ONLY
+    /// be false to true, never the reverse. This is common on passkeys
+    /// during some upgrades.
+    pub fn backup_eligible(&self) -> bool {
+        self.backup_eligible
     }
 
     /// The state of the counter
@@ -715,7 +729,7 @@ impl AttestationCa {
 
     /// The microsoft root CA for TPM attestation.
     ///
-    /// Not ellible for strict - many TPM's use SHA1 in signatures, which means they are
+    /// Not eligible for strict - many TPM's use SHA1 in signatures, which means they are
     /// potentially weak.
     ///
     /// In the future we may reject RS1 signatures, allowing this to be moved into the
@@ -729,7 +743,7 @@ impl AttestationCa {
 
     /// Nitrokey root CA for their FIDO2 device range.
     ///
-    /// Not elligble for strict - hardware is difficult to interact with, low quality,
+    /// Not eligible for strict - hardware is difficult to interact with, low quality,
     /// and easy to break or destroy.
     pub fn nitrokey_fido2_root_ca() -> Self {
         AttestationCa {
@@ -739,7 +753,7 @@ impl AttestationCa {
 
     /// Nitrokey root CA for their U2F device range.
     ///
-    /// Not elligble for strict - hardware is difficult to interact with, low quality,
+    /// Not eligible for strict - hardware is difficult to interact with, low quality,
     /// and easy to break or destroy.
     pub fn nitrokey_u2f_root_ca() -> Self {
         AttestationCa {

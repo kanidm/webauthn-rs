@@ -86,6 +86,14 @@ impl Passkey {
                 changed = true;
             }
 
+            if res.backup_eligible() != self.cred.backup_eligible {
+                // MUST be false -> true
+                assert!(!self.cred.backup_eligible);
+                assert!(res.backup_eligible());
+                self.cred.backup_eligible = res.backup_eligible();
+                changed = true;
+            }
+
             Some(changed)
         } else {
             None

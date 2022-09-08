@@ -386,7 +386,9 @@ mod tests {
 
         trace!(?cred);
 
-        let (chal, auth_state) = wan.generate_challenge_authenticate(vec![cred], None).unwrap();
+        let (chal, auth_state) = wan
+            .generate_challenge_authenticate(vec![cred], None)
+            .unwrap();
 
         let r = u
             .perform_auth(

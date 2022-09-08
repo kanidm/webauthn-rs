@@ -488,9 +488,15 @@ impl Webauthn {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let policy = UserVerificationPolicy::Preferred;
+        let allow_backup_eligible_upgrade = true;
 
         self.core
-            .generate_challenge_authenticate_policy(creds, policy, extensions)
+            .generate_challenge_authenticate_policy(
+                creds,
+                policy,
+                extensions,
+                allow_backup_eligible_upgrade,
+            )
             .map(|(rcr, ast)| (rcr, PasskeyAuthentication { ast }))
     }
 
@@ -722,6 +728,7 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
+        let allow_backup_eligible_upgrade = false;
 
         let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
             UserVerificationPolicy::Discouraged_DO_NOT_USE
@@ -730,7 +737,12 @@ impl Webauthn {
         };
 
         self.core
-            .generate_challenge_authenticate_policy(creds, policy, extensions)
+            .generate_challenge_authenticate_policy(
+                creds,
+                policy,
+                extensions,
+                allow_backup_eligible_upgrade,
+            )
             .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
     }
 
@@ -968,9 +980,15 @@ impl Webauthn {
         });
 
         let policy = UserVerificationPolicy::Required;
+        let allow_backup_eligible_upgrade = false;
 
         self.core
-            .generate_challenge_authenticate_policy(creds, policy, extensions)
+            .generate_challenge_authenticate_policy(
+                creds,
+                policy,
+                extensions,
+                allow_backup_eligible_upgrade,
+            )
             .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
     }
 
@@ -1147,9 +1165,15 @@ impl Webauthn {
         });
 
         let policy = UserVerificationPolicy::Required;
+        let allow_backup_eligible_upgrade = false;
 
         self.core
-            .generate_challenge_authenticate_policy(creds, policy, extensions)
+            .generate_challenge_authenticate_policy(
+                creds,
+                policy,
+                extensions,
+                allow_backup_eligible_upgrade,
+            )
             .map(|(rcr, ast)| (rcr, DeviceKeyAuthentication { ast }))
     }
 

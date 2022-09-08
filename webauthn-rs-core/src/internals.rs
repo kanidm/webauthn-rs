@@ -177,7 +177,7 @@ impl Credential {
         trace!(?extensions);
         let counter = auth_data.counter;
         let user_verified = auth_data.user_verified;
-        let backup_elligible = auth_data.backup_elligible;
+        let backup_eligible = auth_data.backup_eligible;
         let backup_state = auth_data.backup_state;
 
         // due to bugs in chrome, we have to disable transports because lol.
@@ -189,7 +189,7 @@ impl Credential {
             counter,
             transports,
             user_verified,
-            backup_eligible: backup_elligible,
+            backup_eligible,
             backup_state,
             registration_policy,
             extensions,
@@ -348,7 +348,7 @@ fn authenticator_data_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], Authe
             counter,
             user_verified: data_flags.2,
             user_present: data_flags.3,
-            backup_elligible: data_flags.4,
+            backup_eligible: data_flags.4,
             backup_state: data_flags.5,
             acd,
             extensions,
@@ -369,7 +369,7 @@ pub struct AuthenticatorData<T: Ceremony> {
     pub user_verified: bool,
     /// Flag defining if the authenticator *could* be backed up OR transferred
     /// between multiple devices.
-    pub backup_elligible: bool,
+    pub backup_eligible: bool,
     /// Flag defining if the authenticator *knows* it is currently backed up or
     /// present on multiple devices.
     pub backup_state: bool,
