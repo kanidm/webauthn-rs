@@ -163,6 +163,7 @@ pub struct WebauthnBuilder<'a> {
     rp_name: Option<&'a str>,
     rp_id: &'a str,
     rp_origin: &'a Url,
+    facet_origins: Option<Vec<Url>>,
     allow_subdomains: bool,
     allow_any_port: bool,
     algorithms: Vec<COSEAlgorithm>,
@@ -217,6 +218,7 @@ impl<'a> WebauthnBuilder<'a> {
                 rp_name: None,
                 rp_id,
                 rp_origin,
+                facet_origins: None,
                 allow_subdomains: false,
                 allow_any_port: false,
                 algorithms: COSEAlgorithm::secure_algs(),
@@ -242,6 +244,12 @@ impl<'a> WebauthnBuilder<'a> {
     /// Setting this flag skips port checks on origin matches
     pub fn allow_any_port(mut self, allow: bool) -> Self {
         self.allow_any_port = allow;
+        self
+    }
+
+    /// ???
+    pub fn facet_origins(mut self, facet_origins: Vec<Url>) -> Self {
+        self.facet_origins = Some(facet_origins);
         self
     }
 
@@ -276,6 +284,7 @@ impl<'a> WebauthnBuilder<'a> {
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
                 self.rp_origin,
+                self.facet_origins.unwrap_or_else(|| vec![self.rp_origin.to_owned()]),
                 None,
                 Some(self.allow_subdomains),
                 Some(self.allow_any_port),

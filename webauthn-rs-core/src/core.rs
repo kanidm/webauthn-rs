@@ -53,6 +53,7 @@ pub struct WebauthnCore {
     rp_id: String,
     rp_id_hash: [u8; 32],
     rp_origin: Url,
+    facet_origins: Vec<Url>,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,
     #[allow(unused)]
@@ -83,6 +84,7 @@ impl WebauthnCore {
         rp_name: &str,
         rp_id: &str,
         rp_origin: &Url,
+        facet_origins: Vec<Url>,
         authenticator_timeout: Option<u32>,
         allow_subdomains_origin: Option<bool>,
         allow_any_port: Option<bool>,
@@ -93,6 +95,7 @@ impl WebauthnCore {
             rp_id: rp_id.to_string(),
             rp_id_hash,
             rp_origin: rp_origin.clone(),
+            facet_origins,
             authenticator_timeout: authenticator_timeout.unwrap_or(AUTHENTICATOR_TIMEOUT),
             require_valid_counter_value: true,
             ignore_unsupported_attestation_formats: true,
@@ -383,12 +386,16 @@ impl WebauthnCore {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        Self::validate_origin(
-            self.allow_subdomains_origin,
-            self.allow_any_port,
-            &data.client_data_json.origin,
-            &self.rp_origin,
-        )?;
+        if !self.facet_origins.iter().any(|facet| {
+            Self::origins_match(
+                self.allow_subdomains_origin,
+                self.allow_any_port,
+                &data.client_data_json.origin,
+                facet,
+            )
+        }) {
+            return Err(WebauthnError::InvalidRPOrigin);
+        }
 
         // ATM most browsers do not send this value, so we must default to
         // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
@@ -679,12 +686,16 @@ impl WebauthnCore {
         }
 
         // Verify that the value of C.origin matches the Relying Party's origin.
-        Self::validate_origin(
-            self.allow_subdomains_origin,
-            self.allow_any_port,
-            &c.origin,
-            &self.rp_origin,
-        )?;
+        if !self.facet_origins.iter().any(|facet| {
+            Self::origins_match(
+                self.allow_subdomains_origin,
+                self.allow_any_port,
+                &c.origin,
+                facet,
+            )
+        }) {
+            return Err(WebauthnError::InvalidRPOrigin);
+        }
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
         // TLS connection over which the attestation was obtained. If Token Binding was used on that
@@ -1080,12 +1091,12 @@ impl WebauthnCore {
         })
     }
 
-    fn validate_origin(
+    fn origins_match(
         allow_subdomains_origin: bool,
         allow_any_port: bool,
         ccd_url: &url::Url,
         cnf_url: &url::Url,
-    ) -> Result<(), WebauthnError> {
+    ) -> bool {
         if allow_subdomains_origin {
             match (ccd_url.origin(), cnf_url.origin()) {
                 (
@@ -1094,12 +1105,12 @@ impl WebauthnCore {
                 ) => {
                     if ccd_scheme != cnf_scheme {
                         debug!("{} != {}", ccd_url, cnf_url);
-                        return Err(WebauthnError::InvalidRPOrigin);
+                        return false;
                     }
 
                     if !allow_any_port && ccd_port != cnf_port {
                         debug!("{} != {}", ccd_url, cnf_url);
-                        return Err(WebauthnError::InvalidRPOrigin);
+                        return false;
                     }
 
                     let valid = match (ccd_host, cnf_host) {
@@ -1110,15 +1121,15 @@ impl WebauthnCore {
                     };
 
                     if valid {
-                        Ok(())
+                        true
                     } else {
                         debug!("Domain/IP in origin do not match");
-                        Err(WebauthnError::InvalidRPOrigin)
+                        false
                     }
                 }
                 _ => {
                     debug!("Origin is opaque");
-                    Err(WebauthnError::InvalidRPOrigin)
+                    false
                 }
             }
         } else if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
@@ -1126,13 +1137,13 @@ impl WebauthnCore {
                 && ccd_url.scheme() == cnf_url.scheme()
                 && allow_any_port
             {
-                Ok(())
+                true
             } else {
                 debug!("{} != {}", ccd_url, cnf_url);
-                Err(WebauthnError::InvalidRPOrigin)
+                false
             }
         } else {
-            Ok(())
+            true
         }
     }
 }
@@ -3674,16 +3685,16 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_origin_localhost_port() {
+    fn test_origins_match_localhost_port() {
         let collected = url::Url::parse("http://localhost:3000").unwrap();
         let config = url::Url::parse("http://localhost:8000").unwrap();
 
-        let result = super::WebauthnCore::validate_origin(false, true, &collected, &config);
-        dbg!(&result);
-        assert!(result.is_ok());
+        let result = super::WebauthnCore::origins_match(false, true, &collected, &config);
+        dbg!(result);
+        assert!(result);
 
-        let result = super::WebauthnCore::validate_origin(true, false, &collected, &config);
-        assert!(result.is_err());
+        let result = super::WebauthnCore::origins_match(true, false, &collected, &config);
+        assert!(!result);
     }
 
     #[test]
