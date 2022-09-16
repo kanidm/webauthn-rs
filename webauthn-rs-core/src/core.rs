@@ -52,7 +52,7 @@ pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
     rp_id_hash: [u8; 32],
-    rp_origin: Url,
+    allowed_origins: Vec<Url>,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,
     #[allow(unused)]
@@ -82,7 +82,7 @@ impl WebauthnCore {
     pub fn new_unsafe_experts_only(
         rp_name: &str,
         rp_id: &str,
-        rp_origin: &Url,
+        allowed_origins: Vec<Url>,
         authenticator_timeout: Option<u32>,
         allow_subdomains_origin: Option<bool>,
         allow_any_port: Option<bool>,
@@ -92,7 +92,7 @@ impl WebauthnCore {
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
             rp_id_hash,
-            rp_origin: rp_origin.clone(),
+            allowed_origins,
             authenticator_timeout: authenticator_timeout.unwrap_or(AUTHENTICATOR_TIMEOUT),
             require_valid_counter_value: true,
             ignore_unsupported_attestation_formats: true,
@@ -102,9 +102,9 @@ impl WebauthnCore {
         }
     }
 
-    /// Get the currently configured origin
-    pub fn get_origin(&self) -> &Url {
-        &self.rp_origin
+    /// Get the currently configured origins
+    pub fn get_allowed_origins(&self) -> &[Url] {
+        &self.allowed_origins
     }
 
     fn generate_challenge(&self) -> Challenge {
@@ -382,13 +382,17 @@ impl WebauthnCore {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
-        // Verify that the value of C.origin matches the Relying Party's origin.
-        Self::validate_origin(
-            self.allow_subdomains_origin,
-            self.allow_any_port,
-            &data.client_data_json.origin,
-            &self.rp_origin,
-        )?;
+        // Verify that the client's origin matches one of our allowed origins..
+        if !self.allowed_origins.iter().any(|origin| {
+            Self::origins_match(
+                self.allow_subdomains_origin,
+                self.allow_any_port,
+                &data.client_data_json.origin,
+                origin,
+            )
+        }) {
+            return Err(WebauthnError::InvalidRPOrigin);
+        }
 
         // ATM most browsers do not send this value, so we must default to
         // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
@@ -678,13 +682,17 @@ impl WebauthnCore {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
-        // Verify that the value of C.origin matches the Relying Party's origin.
-        Self::validate_origin(
-            self.allow_subdomains_origin,
-            self.allow_any_port,
-            &c.origin,
-            &self.rp_origin,
-        )?;
+        // Verify that the value of C.origin matches one of our allowed origins.
+        if !self.allowed_origins.iter().any(|origin| {
+            Self::origins_match(
+                self.allow_subdomains_origin,
+                self.allow_any_port,
+                &c.origin,
+                origin,
+            )
+        }) {
+            return Err(WebauthnError::InvalidRPOrigin);
+        }
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the
         // TLS connection over which the attestation was obtained. If Token Binding was used on that
@@ -1080,12 +1088,12 @@ impl WebauthnCore {
         })
     }
 
-    fn validate_origin(
+    fn origins_match(
         allow_subdomains_origin: bool,
         allow_any_port: bool,
         ccd_url: &url::Url,
         cnf_url: &url::Url,
-    ) -> Result<(), WebauthnError> {
+    ) -> bool {
         if allow_subdomains_origin {
             match (ccd_url.origin(), cnf_url.origin()) {
                 (
@@ -1094,12 +1102,12 @@ impl WebauthnCore {
                 ) => {
                     if ccd_scheme != cnf_scheme {
                         debug!("{} != {}", ccd_url, cnf_url);
-                        return Err(WebauthnError::InvalidRPOrigin);
+                        return false;
                     }
 
                     if !allow_any_port && ccd_port != cnf_port {
                         debug!("{} != {}", ccd_url, cnf_url);
-                        return Err(WebauthnError::InvalidRPOrigin);
+                        return false;
                     }
 
                     let valid = match (ccd_host, cnf_host) {
@@ -1110,15 +1118,15 @@ impl WebauthnCore {
                     };
 
                     if valid {
-                        Ok(())
+                        true
                     } else {
                         debug!("Domain/IP in origin do not match");
-                        Err(WebauthnError::InvalidRPOrigin)
+                        false
                     }
                 }
                 _ => {
                     debug!("Origin is opaque");
-                    Err(WebauthnError::InvalidRPOrigin)
+                    false
                 }
             }
         } else if ccd_url.origin() != cnf_url.origin() || !ccd_url.origin().is_tuple() {
@@ -1126,13 +1134,13 @@ impl WebauthnCore {
                 && ccd_url.scheme() == cnf_url.scheme()
                 && allow_any_port
             {
-                Ok(())
+                true
             } else {
                 debug!("{} != {}", ccd_url, cnf_url);
-                Err(WebauthnError::InvalidRPOrigin)
+                false
             }
         } else {
-            Ok(())
+            true
         }
     }
 }
@@ -1311,7 +1319,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://127.0.0.1:8080/auth",
             "127.0.0.1",
-            &Url::parse("http://127.0.0.1:8080").unwrap(),
+            vec![Url::parse("http://127.0.0.1:8080").unwrap()],
             None,
             None,
             None,
@@ -1364,7 +1372,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
-            &Url::parse("https://webauthn.io").unwrap(),
+            vec![Url::parse("https://webauthn.io").unwrap()],
             None,
             None,
             None,
@@ -1406,7 +1414,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8443/auth",
             "localhost",
-            &Url::parse("https://localhost:8443").unwrap(),
+            vec![Url::parse("https://localhost:8443").unwrap()],
             None,
             None,
             None,
@@ -1448,7 +1456,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -1493,7 +1501,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap()],
             None,
             None,
             None,
@@ -1538,7 +1546,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap()],
             None,
             None,
             None,
@@ -1586,7 +1594,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -1708,7 +1716,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://testing.local",
             "testing.local",
-            &Url::parse("https://testing.local").unwrap(),
+            vec![Url::parse("https://testing.local").unwrap()],
             None,
             None,
             None,
@@ -1831,7 +1839,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://172.20.0.141:8443/auth",
             "172.20.0.141",
-            &Url::parse("https://172.20.0.141:8443").unwrap(),
+            vec![Url::parse("https://172.20.0.141:8443").unwrap()],
             None,
             None,
             None,
@@ -1941,7 +1949,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
-            &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+            vec![Url::parse("https://etools-dev.example.com:8080").unwrap()],
             None,
             None,
             None,
@@ -2085,7 +2093,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
-            &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+            vec![Url::parse("https://etools-dev.example.com:8080").unwrap()],
             None,
             None,
             None,
@@ -2401,7 +2409,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
-            &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+            vec![Url::parse("https://etools-dev.example.com:8080").unwrap()],
             None,
             None,
             None,
@@ -2435,7 +2443,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
             "spectral.local",
-            &Url::parse("https://spectral.local:8443").unwrap(),
+            vec![Url::parse("https://spectral.local:8443").unwrap()],
             None,
             None,
             None,
@@ -2608,7 +2616,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
             "spectral.local",
-            &Url::parse("https://spectral.local:8443").unwrap(),
+            vec![Url::parse("https://spectral.local:8443").unwrap()],
             None,
             None,
             None,
@@ -2753,7 +2761,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://127.0.0.1:8080/auth",
             "127.0.0.1",
-            &Url::parse("http://127.0.0.1:8080").unwrap(),
+            vec![Url::parse("http://127.0.0.1:8080").unwrap()],
             None,
             None,
             None,
@@ -2904,7 +2912,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "rp_name",
             "idm.example.com",
-            &Url::parse("https://idm.example.com:8080").unwrap(),
+            vec![Url::parse("https://idm.example.com:8080").unwrap()],
             None,
             Some(true),
             None,
@@ -3076,7 +3084,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -3120,7 +3128,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3166,7 +3174,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3210,7 +3218,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3252,7 +3260,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3295,7 +3303,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3343,7 +3351,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3390,7 +3398,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -3510,7 +3518,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
-            &Url::parse("https://webauthn.io").unwrap(),
+            vec![Url::parse("https://webauthn.io").unwrap()],
             None,
             None,
             None,
@@ -3572,7 +3580,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
-            &Url::parse("https://webauthn.io").unwrap(),
+            vec![Url::parse("https://webauthn.io").unwrap()],
             None,
             None,
             None,
@@ -3633,7 +3641,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.org",
             "webauthn.org",
-            &Url::parse("https://webauthn.org").unwrap(),
+            vec![Url::parse("https://webauthn.org").unwrap()],
             None,
             None,
             None,
@@ -3674,16 +3682,16 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_origin_localhost_port() {
+    fn test_origins_match_localhost_port() {
         let collected = url::Url::parse("http://localhost:3000").unwrap();
         let config = url::Url::parse("http://localhost:8000").unwrap();
 
-        let result = super::WebauthnCore::validate_origin(false, true, &collected, &config);
-        dbg!(&result);
-        assert!(result.is_ok());
+        let result = super::WebauthnCore::origins_match(false, true, &collected, &config);
+        dbg!(result);
+        assert!(result);
 
-        let result = super::WebauthnCore::validate_origin(true, false, &collected, &config);
-        assert!(result.is_err());
+        let result = super::WebauthnCore::origins_match(true, false, &collected, &config);
+        assert!(!result);
     }
 
     #[test]
@@ -3704,7 +3712,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
