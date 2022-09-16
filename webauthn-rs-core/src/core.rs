@@ -1319,7 +1319,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://127.0.0.1:8080/auth",
             "127.0.0.1",
-            &Url::parse("http://127.0.0.1:8080").unwrap(),
+            vec![Url::parse("http://127.0.0.1:8080").unwrap()],
             None,
             None,
             None,
@@ -1372,7 +1372,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
-            &Url::parse("https://webauthn.io").unwrap(),
+            vec![Url::parse("https://webauthn.io").unwrap()],
             None,
             None,
             None,
@@ -1414,7 +1414,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8443/auth",
             "localhost",
-            &Url::parse("https://localhost:8443").unwrap(),
+            vec![Url::parse("https://localhost:8443").unwrap()],
             None,
             None,
             None,
@@ -1456,7 +1456,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -1501,7 +1501,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap()],
             None,
             None,
             None,
@@ -1546,7 +1546,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au/compat_test").unwrap()],
             None,
             None,
             None,
@@ -1594,7 +1594,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -1716,7 +1716,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://testing.local",
             "testing.local",
-            &Url::parse("https://testing.local").unwrap(),
+            vec![Url::parse("https://testing.local").unwrap()],
             None,
             None,
             None,
@@ -1839,7 +1839,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://172.20.0.141:8443/auth",
             "172.20.0.141",
-            &Url::parse("https://172.20.0.141:8443").unwrap(),
+            vec![Url::parse("https://172.20.0.141:8443").unwrap()],
             None,
             None,
             None,
@@ -1949,7 +1949,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
-            &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+            vec![Url::parse("https://etools-dev.example.com:8080").unwrap()],
             None,
             None,
             None,
@@ -2093,7 +2093,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
-            &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+            vec![Url::parse("https://etools-dev.example.com:8080").unwrap()],
             None,
             None,
             None,
@@ -2409,7 +2409,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",
-            &Url::parse("https://etools-dev.example.com:8080").unwrap(),
+            vec![Url::parse("https://etools-dev.example.com:8080").unwrap()],
             None,
             None,
             None,
@@ -2443,7 +2443,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
             "spectral.local",
-            &Url::parse("https://spectral.local:8443").unwrap(),
+            vec![Url::parse("https://spectral.local:8443").unwrap()],
             None,
             None,
             None,
@@ -2616,7 +2616,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
             "spectral.local",
-            &Url::parse("https://spectral.local:8443").unwrap(),
+            vec![Url::parse("https://spectral.local:8443").unwrap()],
             None,
             None,
             None,
@@ -2761,7 +2761,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://127.0.0.1:8080/auth",
             "127.0.0.1",
-            &Url::parse("http://127.0.0.1:8080").unwrap(),
+            vec![Url::parse("http://127.0.0.1:8080").unwrap()],
             None,
             None,
             None,
@@ -2912,7 +2912,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "rp_name",
             "idm.example.com",
-            &Url::parse("https://idm.example.com:8080").unwrap(),
+            vec![Url::parse("https://idm.example.com:8080").unwrap()],
             None,
             Some(true),
             None,
@@ -3084,7 +3084,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -3128,7 +3128,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3174,7 +3174,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3218,7 +3218,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3260,7 +3260,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3303,7 +3303,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3351,7 +3351,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
@@ -3398,7 +3398,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "http://localhost:8080/auth",
             "localhost",
-            &Url::parse("http://localhost:8080").unwrap(),
+            vec![Url::parse("http://localhost:8080").unwrap()],
             None,
             None,
             None,
@@ -3518,7 +3518,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
-            &Url::parse("https://webauthn.io").unwrap(),
+            vec![Url::parse("https://webauthn.io").unwrap()],
             None,
             None,
             None,
@@ -3580,7 +3580,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.io",
             "webauthn.io",
-            &Url::parse("https://webauthn.io").unwrap(),
+            vec![Url::parse("https://webauthn.io").unwrap()],
             None,
             None,
             None,
@@ -3641,7 +3641,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.org",
             "webauthn.org",
-            &Url::parse("https://webauthn.org").unwrap(),
+            vec![Url::parse("https://webauthn.org").unwrap()],
             None,
             None,
             None,
@@ -3712,7 +3712,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "webauthn.firstyear.id.au",
             "webauthn.firstyear.id.au",
-            &Url::parse("https://webauthn.firstyear.id.au").unwrap(),
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
             None,
             None,
             None,
