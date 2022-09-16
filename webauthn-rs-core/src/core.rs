@@ -1094,6 +1094,9 @@ impl WebauthnCore {
         ccd_url: &url::Url,
         cnf_url: &url::Url,
     ) -> bool {
+        if ccd_url == cnf_url {
+            return true;
+        }
         if allow_subdomains_origin {
             match (ccd_url.origin(), cnf_url.origin()) {
                 (
@@ -3757,5 +3760,22 @@ mod tests {
                 Err(WebauthnError::CredentialInsecureCryptography)
             ))
         }
+    }
+
+    #[test]
+    fn test_ios_origin_matches() {
+        assert!(Webauthn::origins_match(
+            false,
+            false,
+            &Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+            &Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+        ));
+
+        assert!(!Webauthn::origins_match(
+            false,
+            false,
+            &Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+            &Url::parse("ios:bundle-id:com.foo.baz").unwrap(),
+        ));
     }
 }
