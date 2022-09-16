@@ -163,7 +163,7 @@ pub struct WebauthnBuilder<'a> {
     rp_name: Option<&'a str>,
     rp_id: &'a str,
     rp_origin: &'a Url,
-    facet_origins: Option<Vec<Url>>,
+    allowed_origins: Vec<Url>,
     allow_subdomains: bool,
     allow_any_port: bool,
     algorithms: Vec<COSEAlgorithm>,
@@ -218,7 +218,7 @@ impl<'a> WebauthnBuilder<'a> {
                 rp_name: None,
                 rp_id,
                 rp_origin,
-                facet_origins: None,
+                allowed_origins: Vec::new(),
                 allow_subdomains: false,
                 allow_any_port: false,
                 algorithms: COSEAlgorithm::secure_algs(),
@@ -247,9 +247,11 @@ impl<'a> WebauthnBuilder<'a> {
         self
     }
 
-    /// HELP
-    pub fn facet_origins(mut self, facet_origins: Vec<Url>) -> Self {
-        self.facet_origins = Some(facet_origins);
+    /// Set an origin to be considered valid in Webauthn operations. A common example of this is
+    /// enabling use with iOS or Android native "webauthn-like" APIs, which return different
+    /// origins than a web browser would.
+    pub fn append_allowed_origin(mut self, origin: &Url) -> Self {
+        self.allowed_origins.push(origin.to_owned());
         self
     }
 
@@ -283,8 +285,11 @@ impl<'a> WebauthnBuilder<'a> {
             core: WebauthnCore::new_unsafe_experts_only(
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
-                self.facet_origins
-                    .unwrap_or_else(|| vec![self.rp_origin.to_owned()]),
+                if self.allowed_origins.len() == 0 {
+                    vec![self.rp_origin.to_owned()]
+                } else {
+                    self.allowed_origins
+                },
                 None,
                 Some(self.allow_subdomains),
                 Some(self.allow_any_port),
@@ -337,8 +342,8 @@ pub struct Webauthn {
 
 impl Webauthn {
     /// Get the currently configured origins
-    pub fn get_origins(&self) -> &[Url] {
-        self.core.get_origins()
+    pub fn get_allowed_origins(&self) -> &[Url] {
+        self.core.get_allowed_origins()
     }
 
     /// Initiate the registration of a new pass key for a user. A pass key is any cryptographic

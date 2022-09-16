@@ -52,7 +52,7 @@ pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
     rp_id_hash: [u8; 32],
-    facet_origins: Vec<Url>,
+    allowed_origins: Vec<Url>,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,
     #[allow(unused)]
@@ -82,7 +82,7 @@ impl WebauthnCore {
     pub fn new_unsafe_experts_only(
         rp_name: &str,
         rp_id: &str,
-        facet_origins: Vec<Url>,
+        allowed_origins: Vec<Url>,
         authenticator_timeout: Option<u32>,
         allow_subdomains_origin: Option<bool>,
         allow_any_port: Option<bool>,
@@ -92,7 +92,7 @@ impl WebauthnCore {
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
             rp_id_hash,
-            facet_origins,
+            allowed_origins,
             authenticator_timeout: authenticator_timeout.unwrap_or(AUTHENTICATOR_TIMEOUT),
             require_valid_counter_value: true,
             ignore_unsupported_attestation_formats: true,
@@ -103,8 +103,8 @@ impl WebauthnCore {
     }
 
     /// Get the currently configured origins
-    pub fn get_origins(&self) -> &[Url] {
-        &self.facet_origins
+    pub fn get_allowed_origins(&self) -> &[Url] {
+        &self.allowed_origins
     }
 
     fn generate_challenge(&self) -> Challenge {
@@ -382,13 +382,13 @@ impl WebauthnCore {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
-        // Verify that the client's origin matches one of our facets.
-        if !self.facet_origins.iter().any(|facet| {
+        // Verify that the client's origin matches one of our allowed origins..
+        if !self.allowed_origins.iter().any(|origin| {
             Self::origins_match(
                 self.allow_subdomains_origin,
                 self.allow_any_port,
                 &data.client_data_json.origin,
-                facet,
+                origin,
             )
         }) {
             return Err(WebauthnError::InvalidRPOrigin);
@@ -682,13 +682,13 @@ impl WebauthnCore {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
-        // Verify that the value of C.origin matches one of our facets.
-        if !self.facet_origins.iter().any(|facet| {
+        // Verify that the value of C.origin matches one of our allowed origins.
+        if !self.allowed_origins.iter().any(|origin| {
             Self::origins_match(
                 self.allow_subdomains_origin,
                 self.allow_any_port,
                 &c.origin,
-                facet,
+                origin,
             )
         }) {
             return Err(WebauthnError::InvalidRPOrigin);
