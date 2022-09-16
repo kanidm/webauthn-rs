@@ -162,7 +162,6 @@ pub mod prelude {
 pub struct WebauthnBuilder<'a> {
     rp_name: Option<&'a str>,
     rp_id: &'a str,
-    rp_origin: &'a Url,
     allowed_origins: Vec<Url>,
     allow_subdomains: bool,
     allow_any_port: bool,
@@ -217,8 +216,7 @@ impl<'a> WebauthnBuilder<'a> {
             Ok(WebauthnBuilder {
                 rp_name: None,
                 rp_id,
-                rp_origin,
-                allowed_origins: Vec::new(),
+                allowed_origins: vec![rp_origin.to_owned()],
                 allow_subdomains: false,
                 allow_any_port: false,
                 algorithms: COSEAlgorithm::secure_algs(),
@@ -285,11 +283,7 @@ impl<'a> WebauthnBuilder<'a> {
             core: WebauthnCore::new_unsafe_experts_only(
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
-                if self.allowed_origins.len() == 0 {
-                    vec![self.rp_origin.to_owned()]
-                } else {
-                    self.allowed_origins
-                },
+                self.allowed_origins,
                 None,
                 Some(self.allow_subdomains),
                 Some(self.allow_any_port),
