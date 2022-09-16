@@ -183,8 +183,6 @@ impl<'a> WebauthnBuilder<'a> {
     /// use webauthn_rs::prelude::*;
     ///
     /// let rp_id = "example.com";
-    /// let rp_origin = Url::parse("https://idm.example.com")
-    ///     .expect("Invalid URL");
     /// let mut builder = WebauthnBuilder::new(rp_id, &rp_origin)
     ///     .expect("Invalid configuration");
     /// ```
@@ -247,7 +245,7 @@ impl<'a> WebauthnBuilder<'a> {
         self
     }
 
-    /// ???
+    /// HELP
     pub fn facet_origins(mut self, facet_origins: Vec<Url>) -> Self {
         self.facet_origins = Some(facet_origins);
         self
@@ -283,7 +281,6 @@ impl<'a> WebauthnBuilder<'a> {
             core: WebauthnCore::new_unsafe_experts_only(
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
-                self.rp_origin,
                 self.facet_origins.unwrap_or_else(|| vec![self.rp_origin.to_owned()]),
                 None,
                 Some(self.allow_subdomains),
@@ -336,9 +333,9 @@ pub struct Webauthn {
 }
 
 impl Webauthn {
-    /// Get the currently configured origin
-    pub fn get_origin(&self) -> &Url {
-        self.core.get_origin()
+    /// Get the currently configured origins
+    pub fn get_origins(&self) -> &[Url] {
+        self.core.get_origins()
     }
 
     /// Initiate the registration of a new pass key for a user. A pass key is any cryptographic

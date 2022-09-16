@@ -52,7 +52,6 @@ pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
     rp_id_hash: [u8; 32],
-    rp_origin: Url,
     facet_origins: Vec<Url>,
     authenticator_timeout: u32,
     require_valid_counter_value: bool,
@@ -83,7 +82,6 @@ impl WebauthnCore {
     pub fn new_unsafe_experts_only(
         rp_name: &str,
         rp_id: &str,
-        rp_origin: &Url,
         facet_origins: Vec<Url>,
         authenticator_timeout: Option<u32>,
         allow_subdomains_origin: Option<bool>,
@@ -94,7 +92,6 @@ impl WebauthnCore {
             rp_name: rp_name.to_string(),
             rp_id: rp_id.to_string(),
             rp_id_hash,
-            rp_origin: rp_origin.clone(),
             facet_origins,
             authenticator_timeout: authenticator_timeout.unwrap_or(AUTHENTICATOR_TIMEOUT),
             require_valid_counter_value: true,
@@ -104,10 +101,9 @@ impl WebauthnCore {
             allow_any_port: allow_any_port.unwrap_or(false),
         }
     }
-
-    /// Get the currently configured origin
-    pub fn get_origin(&self) -> &Url {
-        &self.rp_origin
+    /// Get the currently configured origins
+    pub fn get_origins(&self) -> &[Url] {
+        &self.facet_origins
     }
 
     fn generate_challenge(&self) -> Challenge {
