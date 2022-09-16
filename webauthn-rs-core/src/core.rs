@@ -101,6 +101,7 @@ impl WebauthnCore {
             allow_any_port: allow_any_port.unwrap_or(false),
         }
     }
+
     /// Get the currently configured origins
     pub fn get_origins(&self) -> &[Url] {
         &self.facet_origins
@@ -381,7 +382,7 @@ impl WebauthnCore {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
-        // Verify that the value of C.origin matches the Relying Party's origin.
+        // Verify that the client's origin matches one of our facets.
         if !self.facet_origins.iter().any(|facet| {
             Self::origins_match(
                 self.allow_subdomains_origin,
@@ -681,7 +682,7 @@ impl WebauthnCore {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
-        // Verify that the value of C.origin matches the Relying Party's origin.
+        // Verify that the value of C.origin matches one of our facets.
         if !self.facet_origins.iter().any(|facet| {
             Self::origins_match(
                 self.allow_subdomains_origin,

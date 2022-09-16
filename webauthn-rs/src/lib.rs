@@ -183,6 +183,8 @@ impl<'a> WebauthnBuilder<'a> {
     /// use webauthn_rs::prelude::*;
     ///
     /// let rp_id = "example.com";
+    /// let rp_origin = Url::parse("https://idm.example.com")
+    ///     .expect("Invalid URL");
     /// let mut builder = WebauthnBuilder::new(rp_id, &rp_origin)
     ///     .expect("Invalid configuration");
     /// ```
@@ -281,7 +283,8 @@ impl<'a> WebauthnBuilder<'a> {
             core: WebauthnCore::new_unsafe_experts_only(
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
-                self.facet_origins.unwrap_or_else(|| vec![self.rp_origin.to_owned()]),
+                self.facet_origins
+                    .unwrap_or_else(|| vec![self.rp_origin.to_owned()]),
                 None,
                 Some(self.allow_subdomains),
                 Some(self.allow_any_port),
