@@ -797,6 +797,8 @@ pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic)]
+
     use super::*;
     use hex_literal::hex;
     use serde_cbor::Value;

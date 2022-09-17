@@ -149,6 +149,6 @@ mod tests {
     fn test_try_from_json() {
         // let _: Base64UrlSafeData = serde_json::from_str("\"aGVsbG8=\"")
         // .expect("Invalid Data");
-        let _: Base64UrlSafeData = serde_json::from_str("[0,1,2,3]").expect("Invalid Data");
+        assert!(serde_json::from_str::<Base64UrlSafeData>("[0,1,2,3]").is_ok());
     }
 }
