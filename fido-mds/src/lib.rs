@@ -510,18 +510,18 @@ impl StatusReport {
 
 impl PartialOrd for StatusReport {
     fn partial_cmp(&self, other: &StatusReport) -> Option<Ordering> {
-        match (self.effective_date(), other.effective_date()) {
-            (None, None) => Some(Ordering::Equal),
-            (Some(_), None) => Some(Ordering::Less),
-            (None, Some(_)) => Some(Ordering::Greater),
-            (Some(a), Some(b)) => Some(a.cmp(b)),
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for StatusReport {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).expect("Invalid ordering")
+        match (self.effective_date(), other.effective_date()) {
+            (None, None) => Ordering::Equal,
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
+            (Some(a), Some(b)) => a.cmp(b),
+        }
     }
 }
 
@@ -635,7 +635,7 @@ impl TryFrom<VerificationMethodAndCombinations> for UserVerificationMethod {
 
 #[derive(Debug, Clone)]
 enum FidoDevice {
-    UAF(UAF),
+    Uaf(UAF),
     U2F(U2F),
     FIDO2(FIDO2),
 }
@@ -1013,7 +1013,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             aaguid,
             attestation_certificate_key_identifiers,
         ) {
-            (ProtocolFamily::Uaf, Some(aaid), None, _) => Ok(FidoDevice::UAF(UAF {
+            (ProtocolFamily::Uaf, Some(aaid), None, _) => Ok(FidoDevice::Uaf(UAF {
                 aaid,
                 description,
                 alternative_descriptions,
@@ -1094,32 +1094,30 @@ pub struct FidoMds {
 
 impl From<RawFidoMds> for FidoMds {
     fn from(rawmds: RawFidoMds) -> Self {
-        let devices: Vec<FidoDevice> = rawmds
-            .entries
-            .into_iter()
-            .filter_map(|device| device.try_into().ok())
-            .collect();
-
         let mut fido2 = BTreeMap::new();
         let mut uaf = BTreeMap::new();
         let mut u2f = BTreeMap::new();
 
-        devices.into_iter().for_each(|fd| match fd {
-            FidoDevice::UAF(dev) => {
-                uaf.insert(dev.aaid.clone(), dev);
-            }
-            FidoDevice::U2F(dev) => {
-                let akis = dev.attestation_certificate_key_identifiers.clone();
-                let dev = rc::Rc::new(dev);
+        rawmds
+            .entries
+            .into_iter()
+            .filter_map(|device| device.try_into().ok())
+            .for_each(|fd| match fd {
+                FidoDevice::Uaf(dev) => {
+                    uaf.insert(dev.aaid.clone(), dev);
+                }
+                FidoDevice::U2F(dev) => {
+                    let akis = dev.attestation_certificate_key_identifiers.clone();
+                    let dev = rc::Rc::new(dev);
 
-                akis.into_iter().for_each(|aki| {
-                    u2f.insert(aki, dev.clone());
-                })
-            }
-            FidoDevice::FIDO2(dev) => {
-                fido2.insert(dev.aaguid, dev);
-            }
-        });
+                    akis.into_iter().for_each(|aki| {
+                        u2f.insert(aki, dev.clone());
+                    })
+                }
+                FidoDevice::FIDO2(dev) => {
+                    fido2.insert(dev.aaguid, dev);
+                }
+            });
 
         FidoMds { fido2, uaf, u2f }
     }

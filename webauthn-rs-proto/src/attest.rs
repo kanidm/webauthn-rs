@@ -60,7 +60,7 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
         let chal = Uint8Array::from(ccr.public_key.challenge.0.as_slice());
         let userid = Uint8Array::from(ccr.public_key.user.id.0.as_slice());
 
-        let jsv = JsValue::from_serde(&ccr).unwrap();
+        let jsv = serde_wasm_bindgen::to_value(&ccr).unwrap();
 
         let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
         js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
@@ -95,7 +95,7 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
                     if let Some(transports) = &ac.transports {
                         let tarray: Array = transports
                             .iter()
-                            .map(|trs| JsValue::from_serde(trs).unwrap())
+                            .map(|trs| serde_wasm_bindgen::to_value(trs).unwrap())
                             .collect();
 
                         js_sys::Reflect::set(&obj, &"transports".into(), &tarray).unwrap();

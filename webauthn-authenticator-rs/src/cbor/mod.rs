@@ -22,7 +22,7 @@ pub trait CBORCommand: Serialize + Sized {
     const HAS_PAYLOAD: bool = true;
 
     /// Converts a command into a binary form.
-    fn cbor(self: &Self) -> Result<Vec<u8>, serde_cbor::Error> {
+    fn cbor(&self) -> Result<Vec<u8>, serde_cbor::Error> {
         // CTAP v2.1, s8.2.9.1.2 (USB CTAPHID_CBOR), s8.3.5 (NFC framing).
         // TODO: BLE is different, it includes a u16 length after the command?
         if !Self::HAS_PAYLOAD {
@@ -134,9 +134,9 @@ fn value_to_vec_u32(v: Value, loc: &str) -> Option<Vec<u32>> {
     }
 }
 
-fn value_to_u32(v: Value, loc: &str) -> Option<u32> {
+fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {
     if let Value::Integer(i) = v {
-        u32::try_from(i)
+        u32::try_from(*i)
             .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
             .ok()
     } else {
@@ -155,7 +155,6 @@ macro_rules! deserialize_cbor {
             fn try_from(i: &[u8]) -> Result<Self, Self::Error> {
                 from_slice(&i).map_err(|e| {
                     error!("deserialise: {:?}", e);
-                    ()
                 })
             }
         }

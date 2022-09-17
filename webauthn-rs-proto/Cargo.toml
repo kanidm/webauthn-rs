@@ -13,7 +13,7 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-wasm = ["wasm-bindgen", "web-sys", "js-sys"]
+wasm = ["wasm-bindgen", "web-sys", "js-sys", "serde-wasm-bindgen"]
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
@@ -24,6 +24,7 @@ url = { version = "2", features = ["serde"] }
 
 # Webauthn Components
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"], optional = true }
+serde-wasm-bindgen = { version = "0.4", optional = true }
 js-sys = { version = "0.3", optional = true }
 
 [dependencies.web-sys]
