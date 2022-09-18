@@ -75,7 +75,7 @@ impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
             to_value(pub_key_cred_params).expect("Unable to encode pub_key_cred_params");
         keys.insert(0x4, pub_key_cred_params_value);
 
-        options.map(|o| {
+        if let Some(o) = options {
             let mut options_map = BTreeMap::new();
             for (option, value) in &o {
                 options_map.insert(Value::Text(option.to_string()), Value::Bool(*value));
@@ -83,15 +83,16 @@ impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
 
             let options_value = Value::Map(options_map);
             keys.insert(0x7, options_value);
-        });
+        }
 
-        pin_uv_auth_param.map(|p| {
+        if let Some(p) = pin_uv_auth_param {
             keys.insert(0x08, Value::Bytes(p));
-        });
+        }
 
-        pin_uv_auth_proto.map(|p| {
+        if let Some(p) = pin_uv_auth_proto {
             keys.insert(0x09, Value::Integer(p.into()));
-        });
+        }
+
         MakeCredentialRequestRawDict { keys }
     }
 }

@@ -1306,6 +1306,8 @@ pub trait WebauthnConfig {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::panic)]
+
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
     use crate::proto::*;
@@ -2409,6 +2411,8 @@ mod tests {
         name: &str,
         display_name: &str,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
+        #![allow(clippy::unwrap_used)]
+
         let wan = Webauthn::new_unsafe_experts_only(
             "https://etools-dev.example.com:8080/auth",
             "etools-dev.example.com",

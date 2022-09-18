@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 webauthn-rs-proto = { path = "../../webauthn-rs-proto", default-features = false, features = ["wasm"] }
 
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
+serde-wasm-bindgen = "0.4"
 wasm-bindgen-futures = { version = "0.4" }
 yew = "0.19"
 js-sys = "0.3"

@@ -17,7 +17,7 @@ use tracing::{debug, error};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
-static GLOBAL_SIGN_ROOT_CA_R3: &'static str = r#"
+static GLOBAL_SIGN_ROOT_CA_R3: &str = r#"
 -----BEGIN CERTIFICATE-----
 MIIDXzCCAkegAwIBAgILBAAAAAABIVhTCKIwDQYJKoZIhvcNAQELBQAwTDEgMB4G
 A1UECxMXR2xvYmFsU2lnbiBSb290IENBIC0gUjMxEzARBgNVBAoTCkdsb2JhbFNp
@@ -250,7 +250,7 @@ pub enum AssertionScheme {
 }
 
 /// The family of protocols this device belongs to.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub enum ProtocolFamily {
     /// No protocol family was provided
@@ -953,7 +953,7 @@ impl FromStr for FidoMds {
             })?;
 
         debug!(?res);
-        let _ = res?;
+        res?;
 
         // Now we can release the embedded cert, since we have asserted the trust in the chain
         // that has signed this metadata.

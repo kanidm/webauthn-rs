@@ -1,4 +1,4 @@
-on: [push]
+on: [push, pull_request]
 
 name: CI
 
@@ -15,6 +15,7 @@ jobs:
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
       - run: cargo build --release
+      - run: cargo clippy --all-targets
       - run: cargo test --all
 
   build_and_test_1_45:
@@ -29,5 +30,6 @@ jobs:
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
       - run: cargo build --release
+      - run: cargo clippy --all-targets
       - run: cargo test --all
 

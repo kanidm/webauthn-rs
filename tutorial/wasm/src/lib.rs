@@ -103,7 +103,8 @@ impl App {
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: CreationChallengeResponse = jsval.into_serde().unwrap_throw();
+            let ccr: CreationChallengeResponse =
+                serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::BeginRegisterChallenge(ccr))
         } else {
             let text = JsFuture::from(resp.text()?).await?;
@@ -258,7 +259,8 @@ impl App {
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let rcr: RequestChallengeResponse = jsval.into_serde().unwrap_throw();
+            let rcr: RequestChallengeResponse =
+                serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::BeginAuthenticateChallenge(rcr))
         } else {
             let text = JsFuture::from(resp.text()?).await?;

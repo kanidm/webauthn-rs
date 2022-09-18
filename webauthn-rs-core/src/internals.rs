@@ -515,7 +515,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
 /// A magic constant that defines that a Tpm attestation comes from a TPM
 pub const TPM_GENERATED_VALUE: u32 = 0xff544347;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u16)]
 /// Tpm statement types.
 pub enum TpmSt {
