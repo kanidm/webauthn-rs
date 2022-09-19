@@ -1,4 +1,6 @@
-/// Iterative Compact-TLV parser.
+//! [CompactTlv] is an [Iterator]-based Compact-TLV parser.
+
+/// An [Iterator]-based Compact-TLV parser.
 pub(crate) struct CompactTlv<'a> {
     b: &'a [u8],
 }

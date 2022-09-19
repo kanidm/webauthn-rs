@@ -11,6 +11,7 @@ pub struct GetInfoRequest {}
 impl CBORCommand for GetInfoRequest {
     const CMD: u8 = 0x04;
     const HAS_PAYLOAD: bool = false;
+    type Response = GetInfoResponse;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -176,6 +177,7 @@ crate::deserialize_cbor!(GetInfoResponse);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::transport::iso7816::ISO7816LengthForm;
 
     #[test]
     fn get_info_response_nfc_usb() {
@@ -195,7 +197,8 @@ mod tests {
             107, 101, 121,
         ];
 
-        let a = GetInfoResponse::try_from(raw_apdu.as_slice()).expect("Falied to decode apdu");
+        let a = <GetInfoResponse as CBORResponse>::try_from(raw_apdu.as_slice())
+            .expect("Falied to decode apdu");
 
         // Assert the content
         // info!(?a);
@@ -224,5 +227,37 @@ mod tests {
         assert!(a.max_cred_id_len == Some(128));
 
         assert!(a.transports == Some(vec!["nfc".to_string(), "usb".to_string()]));
+    }
+
+    #[test]
+    fn get_info_request() {
+        let req = GetInfoRequest {};
+        let short = vec![0x80, 0x10, 0, 0, 1, 0x4, 0];
+        let ext = vec![0x80, 0x10, 0, 0, 0, 0, 1, 0x4, 0xff, 0xff];
+
+        let a = req.to_short_apdus().unwrap();
+        assert_eq!(1, a.len());
+        assert_eq!(short, a[0].to_bytes(ISO7816LengthForm::ShortOnly).unwrap());
+        assert_eq!(short, a[0].to_bytes(ISO7816LengthForm::Extended).unwrap());
+
+        assert_eq!(
+            ext,
+            req.to_extended_apdu()
+                .unwrap()
+                .to_bytes(ISO7816LengthForm::Extended)
+                .unwrap()
+        );
+        assert_eq!(
+            ext,
+            req.to_extended_apdu()
+                .unwrap()
+                .to_bytes(ISO7816LengthForm::ExtendedOnly)
+                .unwrap()
+        );
+        assert!(req
+            .to_extended_apdu()
+            .unwrap()
+            .to_bytes(ISO7816LengthForm::ShortOnly)
+            .is_err());
     }
 }

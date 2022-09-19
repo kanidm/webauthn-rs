@@ -1,5 +1,6 @@
 use webauthn_authenticator_rs::cbor::*;
 use webauthn_authenticator_rs::nfc::*;
+use webauthn_authenticator_rs::transport::iso7816::*;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -74,7 +75,7 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
     }
 
     // We should be able to parse it, too...
-    let info = GetInfoResponse::try_from(&resp.data[1..]);
+    let info = <GetInfoResponse as CBORResponse>::try_from(&resp.data[1..]);
 
     if info.is_err() {
         return TestResult::Fail("Error parsing CBOR response");

@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum WebauthnCError {
     Json,
     Cbor,
@@ -13,4 +13,5 @@ pub enum WebauthnCError {
     ApduTransmission,
     InvalidAlgorithm,
     InvalidAssertion,
+    MessageTooLarge,
 }
