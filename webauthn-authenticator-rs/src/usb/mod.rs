@@ -14,7 +14,7 @@ use crate::error::WebauthnCError;
 use crate::transport::*;
 use crate::usb::framing::*;
 use crate::usb::responses::*;
-use hidapi::{DeviceInfo, HidApi, HidDevice};
+use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use std::fmt;
 
@@ -103,7 +103,7 @@ impl USBToken {
         trace!(">>> {:02x?}", d);
         self.device
             .write(&d)
-            .map_err(|e| WebauthnCError::Internal)
+            .map_err(|_| WebauthnCError::ApduTransmission)
             .map(|_| ())
     }
 
@@ -123,7 +123,7 @@ impl USBToken {
         let len = self
             .device
             .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
-            .map_err(|_| WebauthnCError::Internal)?;
+            .map_err(|_| WebauthnCError::ApduTransmission)?;
 
         trace!("<<< {:02x?}", &ret[..len]);
         U2FHIDFrame::try_from(&ret[..len])
@@ -160,11 +160,11 @@ impl Token for USBToken {
             len: cbor.len() as u16,
             data: cbor,
         };
-        self.send(&cmd);
+        self.send(&cmd)?;
 
         // Get a response
         match self.recv()? {
-            Response::Cbor(c) => R::try_from(&c.data).map_err(|e| WebauthnCError::Cbor),
+            Response::Cbor(c) => R::try_from(&c.data).map_err(|_| WebauthnCError::Cbor),
             e => {
                 error!("Unhandled response type: {:?}", e);
                 Err(WebauthnCError::Cbor)
@@ -182,7 +182,7 @@ impl Token for USBToken {
             cmd: U2FHID_INIT,
             len: nonce.len() as u16,
             data: nonce.to_vec(),
-        });
+        })?;
 
         match self.recv()? {
             Response::Init(i) => {

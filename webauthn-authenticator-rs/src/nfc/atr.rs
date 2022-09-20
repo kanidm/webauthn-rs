@@ -1,7 +1,6 @@
 //! ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
 use pcsc::*;
 
-use super::iso7816::ISO7816LengthForm;
 use super::tlv::*;
 
 /// ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.

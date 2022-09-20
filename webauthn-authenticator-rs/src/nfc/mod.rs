@@ -1,12 +1,9 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
 use crate::error::WebauthnCError;
 
-use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
-
 use pcsc::*;
 use std::ffi::CString;
 use std::fmt;
-use std::iter::FromIterator;
 
 mod atr;
 mod tlv;
@@ -125,8 +122,8 @@ impl Transport for NFCReader {
             error!("Failed to detect card: {:?}", e);
             return Err(WebauthnCError::Internal);
         }
-        // Check every reader ...
 
+        // Check every reader ...
         let r: Result<Vec<NFCCard>, WebauthnCError> = self
             .rdr_state
             .iter()
@@ -135,7 +132,7 @@ impl Transport for NFCReader {
                 self.ctx
                     .connect(&s.name(), ShareMode::Shared, Protocols::ANY)
                     .map(NFCCard::new)
-                    .map_err(|e| WebauthnCError::Internal)
+                    .map_err(|_| WebauthnCError::Internal)
             })
             .collect();
 
@@ -257,7 +254,7 @@ impl Token for NFCCard {
 
         // CTAP has its own extra status code over NFC in the first byte.
         // TODO: handle status byte
-        R::try_from(&resp.data[1..]).map_err(|e| {
+        R::try_from(&resp.data[1..]).map_err(|_| {
             //error!("error: {:?}", e);
             WebauthnCError::Cbor
         })

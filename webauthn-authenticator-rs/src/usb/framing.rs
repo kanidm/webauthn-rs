@@ -7,7 +7,7 @@
 //! So, we need to be able to fragment our messages before sending them to a
 //! token, and then defragment them on the other side.
 use crate::error::WebauthnCError;
-use crate::usb::{CAPABILITY_CBOR, CAPABILITY_NMSG, HID_RPT_SIZE};
+use crate::usb::HID_RPT_SIZE;
 use std::cmp::min;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign};
@@ -113,14 +113,15 @@ impl Iterator for U2FHIDFrameIterator<'_> {
     }
 }
 
-/// Merges a fragmented [U2FHIDFrame]s back together. Assumes the LHS of the
+/// Merges fragmented [U2FHIDFrame]s back together. Assumes the LHS of the
 /// operation is the initial fragment.
 impl Add for U2FHIDFrame {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        // Assume LHS is initial
         assert_eq!(self.cid, rhs.cid);
+        assert_ne!(self.len, 0);
+
         let mut o: Vec<u8> = vec![0; usize::from(self.len)];
         o[..self.data.len()].copy_from_slice(&self.data);
 
@@ -135,9 +136,12 @@ impl Add for U2FHIDFrame {
 /// operation is the initial fragment.
 impl AddAssign for U2FHIDFrame {
     fn add_assign(&mut self, rhs: U2FHIDFrame) {
-        // Assume LHS is initial
         assert_eq!(self.cid, rhs.cid);
+        assert_ne!(self.len, 0);
+
         if self.data.len() != usize::from(self.len) {
+            // The `data` buffer in `self` is too short, expand it to its proper
+            // size.
             let mut o: Vec<u8> = vec![0; usize::from(self.len)];
             o[..self.data.len()].copy_from_slice(&self.data);
             self.data = o;
@@ -213,7 +217,8 @@ impl TryFrom<&[u8]> for U2FHIDFrame {
 
     fn try_from(b: &[u8]) -> Result<Self, Self::Error> {
         if b.len() < 7 {
-            panic!("Response frame must be at least 7 bytes");
+            error!("Response frame must be at least 7 bytes");
+            return Err(WebauthnCError::MessageTooShort);
         }
 
         let (cid, b) = b.split_at(4);
@@ -223,9 +228,8 @@ impl TryFrom<&[u8]> for U2FHIDFrame {
             // Initial
             let (len, b) = b.split_at(2);
             let len = u16::from_be_bytes(len.try_into().unwrap());
-            if usize::from(len) < b.len() {
-                let b = &b[..usize::from(len)];
-            }
+            // Resize the buffer for short messages
+            let b = &b[..min(b.len(), usize::from(len))];
 
             Ok(Self {
                 cid,
@@ -333,6 +337,7 @@ mod tests {
         for f in &fragments[1..] {
             assert_eq!(f.cid, 1);
             assert_eq!(f.data, vec![0xFF; 59]);
+            assert_eq!(f.len, 0);
         }
 
         // Reassembly
