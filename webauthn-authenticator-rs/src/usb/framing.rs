@@ -224,12 +224,18 @@ impl TryFrom<&[u8]> for U2FHIDFrame {
         }
 
         let (cid, b) = b.split_at(4);
-        let cid = u32::from_be_bytes(cid.try_into().map_err(|_| WebauthnCError::MessageTooShort)?);
+        let cid = u32::from_be_bytes(
+            cid.try_into()
+                .map_err(|_| WebauthnCError::MessageTooShort)?,
+        );
         let (cmd, b) = (b[0], &b[1..]);
         if cmd & 0x80 > 0 {
             // Initial
             let (len, b) = b.split_at(2);
-            let len = u16::from_be_bytes(len.try_into().map_err(|_| WebauthnCError::MessageTooShort)?);
+            let len = u16::from_be_bytes(
+                len.try_into()
+                    .map_err(|_| WebauthnCError::MessageTooShort)?,
+            );
             // Resize the buffer for short messages
             let b = &b[..min(b.len(), usize::from(len))];
 

@@ -1,7 +1,7 @@
 //! ISO/IEC 7816-4 APDUs, used by CTAP v2 NFC tokens, and all CTAP v1/U2F
 //! tokens.
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     /// [`ISO7816RequestAPDU.to_bytes()`]: `data` was too long for the given
     /// length form.
@@ -188,7 +188,7 @@ impl ISO7816RequestAPDU {
 }
 
 /// ISO/IEC 7816-4 response APDU.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ISO7816ResponseAPDU {
     /// Response data field.
     pub data: Vec<u8>,
@@ -207,7 +207,7 @@ impl TryFrom<&[u8]> for ISO7816ResponseAPDU {
             Err(Error::ResponseTooShort)
         } else {
             Ok(Self {
-                data: (&raw[..raw.len() - 2]).to_vec(),
+                data: raw[..raw.len() - 2].to_vec(),
                 sw1: raw[raw.len() - 2],
                 sw2: raw[raw.len() - 1],
             })

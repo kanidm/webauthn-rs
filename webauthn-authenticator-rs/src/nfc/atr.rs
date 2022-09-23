@@ -24,7 +24,7 @@ use super::tlv::*;
 /// * [Wikipedia: Answer to reset](https://en.wikipedia.org/wiki/Answer_to_reset)
 ///
 /// [pcsc]: https://pcscworkgroup.com/specifications/download/
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Atr {
     /// Supported protocols (`T=`), specified in ISO/IEC 7816-3:2006 §8.2.3.
     pub protocols: Vec<u8>,
@@ -96,7 +96,7 @@ fn checksum(i: &[u8]) -> bool {
     o == 0
 }
 
-impl<'a> TryFrom<&[u8]> for Atr {
+impl TryFrom<&[u8]> for Atr {
     type Error = &'static str;
 
     /// Attempts to parse an ATR from a `&[u8]`.

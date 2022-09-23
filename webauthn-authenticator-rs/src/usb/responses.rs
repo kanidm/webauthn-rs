@@ -5,7 +5,7 @@ use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;
 
 /// Response type [U2FHID_INIT]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct InitResponse {
     pub nonce: Vec<u8>,
     /// Allocated channel identifier
@@ -58,7 +58,7 @@ impl TryFrom<&[u8]> for InitResponse {
 }
 
 /// CTAPv2 CBOR message
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CBORResponse {
     /// Status code
     pub status: u8,
@@ -79,7 +79,7 @@ impl TryFrom<&[u8]> for CBORResponse {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum U2FError {
     None,
     InvalidCommand,
@@ -123,7 +123,7 @@ impl From<&[u8]> for U2FError {
 }
 
 /// Type for parsing all responses from a FIDO token.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Response {
     Init(InitResponse),
     Msg(ISO7816ResponseAPDU),

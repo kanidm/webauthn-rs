@@ -1,6 +1,6 @@
 use crate::transport::iso7816::Error;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum WebauthnCError {
     Json,
     Cbor,
