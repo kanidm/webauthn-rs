@@ -12,8 +12,8 @@ use crate::options::*;
 pub struct PublicKeyCredentialRequestOptions {
     /// The challenge that should be signed by the authenticator.
     pub challenge: Base64UrlSafeData,
-    #[serde(skip_serializing_if = "Option::is_none")]
     /// The timeout for the authenticator in case of no interaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
     /// The relying party ID.
     pub rp_id: String,
@@ -22,6 +22,7 @@ pub struct PublicKeyCredentialRequestOptions {
     /// The verification policy the browser will request.
     pub user_verification: UserVerificationPolicy,
     /// extensions.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub extensions: Option<RequestAuthenticationExtensions>,
 }
 
@@ -67,7 +68,7 @@ impl Mediation {
 pub struct RequestChallengeResponse {
     /// The options.
     pub public_key: PublicKeyCredentialRequestOptions,
-    #[serde(skip_serializing_if = "Mediation::is_none", default)]
+    #[serde(default)]
     /// The mediation requested
     pub mediation: Mediation,
 }
