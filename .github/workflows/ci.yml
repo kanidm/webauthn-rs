@@ -3,33 +3,20 @@ on: [push, pull_request]
 name: CI
 
 jobs:
-  build_and_test_stable:
+  build_and_test:
+    strategy:
+      matrix:
+        rust_version: [stable, 1.45.0]
     name: WebAuthn Rust Frameworks (Build and Test)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: ${{ matrix.rust_version }}
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
       - run: cargo build --release
       - run: cargo clippy --all-targets
       - run: cargo test --all
-
-  build_and_test_1_45:
-    name: (1.45) WebAuthn Rust Frameworks (Build and Test)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.45.0
-      - run: |
-          sudo apt-get update && \
-          sudo apt-get -y install libudev-dev
-      - run: cargo build --release
-      - run: cargo clippy --all-targets
-      - run: cargo test --all
-
