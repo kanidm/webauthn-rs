@@ -5,16 +5,16 @@ use super::tlv::*;
 
 /// ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
 ///
-/// This supports a subset of the standards needed for compatibility with FIDO
-/// tokens, and is intentionally incomplete.
+/// This intentionally incomplete, and only supports a subset of the standards
+/// needed for compatibility with FIDO tokens.
 ///
 /// References:
 ///
-/// * "Answer-to-Reset", ISO/IEC 7816-3:2005 §8.2
-/// * "Historical bytes", ISO/IEC 7816-4:2006 §8.1.1
-/// * "ATR, Contactless Smart Cards", [PC/SC Specification][pcsc] Part 3,
+/// * "Answer-to-Reset", [ISO/IEC 7816-3:2005][iso7816-3] §8.2
+/// * "Historical bytes", [ISO/IEC 7816-4:2006][iso7816-4] §8.1.1
+/// * "ATR, Contactless Smart Cards", [PC/SC Specification][pcsc-spec] Part 3,
 ///   §3.1.3.2.3.1
-/// * "ATR, Contactless Storage Cards", [PC/SC Specification][pcsc] Part 3,
+/// * "ATR, Contactless Storage Cards", [PC/SC Specification][pcsc-spec] Part 3,
 ///   §3.1.3.2.3.2
 ///
 /// Other resources:
@@ -23,7 +23,9 @@ use super::tlv::*;
 /// * [Ludovic Rousseau's series about ATR bytes](https://ludovicrousseau.blogspot.com/2016/01/atr-list-study.html)
 /// * [Wikipedia: Answer to reset](https://en.wikipedia.org/wiki/Answer_to_reset)
 ///
-/// [pcsc]: https://pcscworkgroup.com/specifications/download/
+/// [iso7816-3]: https://www.iso.org/standard/38770.html
+/// [iso7816-4]: https://www.iso.org/standard/36134.html
+/// [pcsc-spec]: https://pcscworkgroup.com/specifications/download/
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Atr {
     /// Supported protocols (`T=`), specified in ISO/IEC 7816-3:2006 §8.2.3.
@@ -69,7 +71,7 @@ pub struct Atr {
     /// FIDO v2.0 [requires][nfc-ext] all NFC devices support short _and_
     /// extended length encoding.
     ///
-    /// See: [`ISO7816LengthForm`]
+    /// See: [`ISO7816LengthForm`][crate::transport::iso7816::ISO7816LengthForm]
     ///
     /// [nfc-ext]: https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#nfc-framing
     pub extended_lc: Option<bool>,
@@ -77,7 +79,10 @@ pub struct Atr {
 
 const PROTOCOL_T0: [u8; 1] = [0];
 
-/// PC/SC AID, per [PC/SC Specification][pcsc] Part 3 Supplemental Document.
+/// PC/SC AID, per [PC/SC Specification][pcsc-spec] Part 3 Supplemental
+/// Document.
+///
+/// [pcsc-spec]: https://pcscworkgroup.com/specifications/download/
 const PCSC_AID: [u8; 5] = [0xa0, 0x00, 0x00, 0x03, 0x06];
 
 /// Minimum response length for PC/SC storage card data in the ATR.

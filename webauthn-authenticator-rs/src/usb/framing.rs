@@ -35,7 +35,7 @@ pub(crate) struct U2FHIDFrame {
 
 impl U2FHIDFrame {
     /// Returns `true` if the frame is an initial fragment and
-    /// [Self::len] == 0 or [Self::data::len].
+    /// [Self::len] == 0 or [Self::data.len].
     ///
     /// Frames fragmented by [U2FHIDFrameIterator] return `false`.
     ///

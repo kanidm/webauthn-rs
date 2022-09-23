@@ -78,15 +78,15 @@ pub struct ISO7816RequestAPDU {
     /// Optional command data, up to 255 bytes in short form, or up to 65535
     /// bytes in extended form.
     ///
-    /// Extended form can only be used with smartcards which declare support for
-    /// it in the ATR ([`crate::nfc::Atr::extended_lc`]).
+    /// Extended form can only be used with smartcards which
+    /// [declare support for it in the ATR][crate::nfc::Atr::extended_lc].
     pub data: Vec<u8>,
 
     /// The maximum expected response length from the card (N<sub>e</sub>), in
     /// bytes, up to 256 bytes in short form, or 65535 bytes in extended form.
     ///
-    /// Extended form can only be used with smartcards which declare support for
-    /// it in the ATR ([`Atr::extended_lc`]).
+    /// Extended form can only be used with smartcards which
+    /// [declare support for it in the ATR][crate::nfc::Atr::extended_lc].
     pub ne: usize,
 }
 
