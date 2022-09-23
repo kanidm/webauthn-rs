@@ -27,15 +27,22 @@ pub(crate) struct U2FHIDFrame {
     pub cid: u32,
     /// Command identifier or sequence number
     pub cmd: u8,
-    /// Complete length, for fragmented packets
+    /// Complete length of the frame.
     pub len: u16,
-    /// Data payload
+    /// Data payload, of up to [MAX_SIZE] bytes.
     pub data: Vec<u8>,
 }
 
 impl U2FHIDFrame {
+    /// Returns `true` if the frame is an initial fragment and
+    /// [Self::len] == 0 or [Self::data::len].
+    ///
+    /// Frames fragmented by [U2FHIDFrameIterator] return `false`.
+    ///
+    /// Frames that have been _partially_ or _fully_ reassembled by [Add],
+    /// [AddAssign] or [Sum] return `true`.
     pub fn complete(&self) -> bool {
-        self.cmd & 0x80 > 0 && self.data.len() >= usize::from(self.len)
+        self.cmd & 0x80 > 0 && (self.len == 0 || self.data.len() == usize::from(self.len))
     }
 }
 
@@ -191,8 +198,6 @@ impl<'a> Sum<&'a U2FHIDFrame> for U2FHIDFrame {
 /// Serialises a [U2FHIDFrame] to bytes to be sent via a USB HID report.
 ///
 /// This does not fragment packets: see [U2FHIDFrameIterator].
-// impl Into<Vec<u8>> for &U2FHIDFrame {
-//     fn into(self) -> Vec<u8> {
 impl From<&U2FHIDFrame> for Vec<u8> {
     fn from(f: &U2FHIDFrame) -> Vec<u8> {
         let mut o: Vec<u8> = vec![0; HID_RPT_SIZE + 1];
@@ -203,7 +208,7 @@ impl From<&U2FHIDFrame> for Vec<u8> {
 
         if f.cmd & 0x80 > 0 {
             // Initial
-            o[6..8].copy_from_slice(&(f.data.len() as u16).to_be_bytes());
+            o[6..8].copy_from_slice(&(f.len as u16).to_be_bytes());
             o[8..8 + f.data.len()].copy_from_slice(&f.data);
         } else {
             o[6..6 + f.data.len()].copy_from_slice(&f.data);
@@ -287,42 +292,114 @@ mod tests {
             len: 255,
             data: (0..255).collect(),
         };
-        assert_eq!(full.complete(), true);
+        assert!(full.complete());
 
         let fragments: Vec<U2FHIDFrame> = U2FHIDFrameIterator::new(&full).unwrap().collect();
         // 57, 59, 59, 59, 21
         assert_eq!(fragments.len(), 5);
         for f in &fragments {
             assert_eq!(f.cid, 1);
-            assert_eq!(f.complete(), false);
+            assert!(!f.complete());
         }
 
         assert_eq!(fragments[0].cmd, 0x90);
         assert_eq!(fragments[0].len, 255);
         assert_eq!(fragments[0].data, (0..57).collect::<Vec<u8>>());
+        assert_eq!(
+            Vec::from(&fragments[0]),
+            [
+                0x00, // Report ID
+                0x00, 0x00, 0x00, 0x01, // cid
+                0x90, // cmd
+                0x00, 0xff, // len
+                // payload
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+                0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29,
+                0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+                0x38,
+            ]
+        );
 
         assert_eq!(fragments[1].cmd, 0);
         assert_eq!(fragments[1].data, (57..116).collect::<Vec<u8>>());
+        assert_eq!(
+            Vec::from(&fragments[1]),
+            [
+                0x00, // Report ID
+                0x00, 0x00, 0x00, 0x01, // cid
+                0x00, // cmd
+                // payload
+                0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46,
+                0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54,
+                0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x61, 0x62,
+                0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70,
+                0x71, 0x72, 0x73,
+            ]
+        );
 
         assert_eq!(fragments[2].cmd, 1);
         assert_eq!(fragments[2].data, (116..175).collect::<Vec<u8>>());
+        assert_eq!(
+            Vec::from(&fragments[2]),
+            [
+                0x00, // Report ID
+                0x00, 0x00, 0x00, 0x01, // cid
+                0x01, // cmd
+                // payload
+                0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f, 0x80, 0x81,
+                0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
+                0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d,
+                0x9e, 0x9f, 0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab,
+                0xac, 0xad, 0xae,
+            ]
+        );
 
         assert_eq!(fragments[3].cmd, 2);
         assert_eq!(fragments[3].data, (175..234).collect::<Vec<u8>>());
+        assert_eq!(
+            Vec::from(&fragments[3]),
+            [
+                0x00, // Report ID
+                0x00, 0x00, 0x00, 0x01, // cid
+                0x02, // cmd
+                // payload
+                0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbb, 0xbc,
+                0xbd, 0xbe, 0xbf, 0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca,
+                0xcb, 0xcc, 0xcd, 0xce, 0xcf, 0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8,
+                0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0xdf, 0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6,
+                0xe7, 0xe8, 0xe9,
+            ]
+        );
 
         assert_eq!(fragments[4].cmd, 3);
         assert_eq!(fragments[4].data, (234..255).collect::<Vec<u8>>());
+        assert_eq!(
+            Vec::from(&fragments[4]),
+            [
+                0x00, // Report ID
+                0x00, 0x00, 0x00, 0x01, // cid
+                0x03, // cmd
+                // payload
+                0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
+                0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, //
+                // padding
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ]
+        );
 
         let assembled: U2FHIDFrame = fragments.iter().sum();
         assert_eq!(assembled, full);
-        assert_eq!(assembled.complete(), true);
+        assert!(assembled.complete());
 
         let mut p: U2FHIDFrame = fragments[0].clone() + fragments[1].clone();
         p += fragments[2].clone();
         p += fragments[3].clone();
         p += fragments[4].clone();
         assert_eq!(p, full);
-        assert_eq!(p.complete(), true);
+        assert!(p.complete());
     }
 
     #[test]
@@ -341,17 +418,41 @@ mod tests {
         assert_eq!(fragments[0].cid, 1);
         assert_eq!(fragments[0].cmd, 0x90);
         assert_eq!(fragments[0].len, 7609);
-        assert_eq!(fragments[0].data, vec![0xFF; 57]);
+        assert_eq!(fragments[0].data, [0xFF; 57]);
+
+        assert_eq!(
+            Vec::from(&fragments[0]),
+            [
+                0x00, // Report ID
+                0x00, 0x00, 0x00, 0x01, // cid
+                0x90, // cmd
+                0x1d, 0xb9, // len
+                // payload
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                0xff
+            ]
+        );
+
         for f in &fragments[1..] {
             assert_eq!(f.cid, 1);
-            assert_eq!(f.data, vec![0xFF; 59]);
+            assert_eq!(f.data, [0xFF; 59]);
             assert_eq!(f.len, 0);
+
+            let b = Vec::from(f);
+            // Report ID, CID
+            assert_eq!(&b[..5], [0x00, 0x00, 0x00, 0x00, 0x01]);
+            // Skip command ID
+            // Payload
+            assert_eq!(&b[6..], [0xFF; 59]);
         }
 
         // Reassembly
         let assembled: U2FHIDFrame = fragments.iter().sum();
         assert_eq!(assembled, full);
-        assert_eq!(assembled.complete(), true);
+        assert!(assembled.complete());
 
         // One more byte should error, and it shouldn't matter what `len` says
         let full = U2FHIDFrame {
