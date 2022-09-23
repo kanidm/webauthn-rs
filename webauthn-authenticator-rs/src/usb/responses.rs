@@ -155,9 +155,9 @@ impl TryFrom<&U2FHIDFrame> for Response {
     }
 }
 
+#[allow(clippy::panic)]
 #[cfg(test)]
 mod tests {
-    #[allow(clippy::panic)]
     use super::*;
 
     #[test]
