@@ -22,6 +22,7 @@ use std::fmt;
 const FIDO_USAGE_PAGE: u16 = 0xf1d0;
 const FIDO_USAGE_U2FHID: u16 = 0x01;
 const HID_RPT_SIZE: usize = 64;
+const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
 const U2FHID_TRANS_TIMEOUT: i32 = 3000;
 
 const TYPE_INIT: u8 = 0x80;
@@ -33,6 +34,9 @@ const CAPABILITY_CBOR: u8 = 0x04;
 const CAPABILITY_NMSG: u8 = 0x08;
 
 const CID_BROADCAST: u32 = 0xffffffff;
+
+type HidReportBytes = [u8; HID_RPT_SIZE];
+type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
 
 pub struct USBTransport {
     api: HidApi,
@@ -99,7 +103,7 @@ impl USBToken {
 
     /// Sends a single [U2FHIDFrame] to the device, without fragmentation.
     fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
-        let d: Vec<u8> = frame.into();
+        let d: HidSendReportBytes = frame.into();
         trace!(">>> {:02x?}", d);
         self.device
             .write(&d)
@@ -118,15 +122,14 @@ impl USBToken {
 
     /// Receives a single [U2FHIDFrame] from the device, without fragmentation.
     fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
-        let mut ret: Vec<u8> = vec![0; HID_RPT_SIZE];
+        let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
 
-        let len = self
-            .device
+        self.device
             .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
             .map_err(|_| WebauthnCError::ApduTransmission)?;
 
-        trace!("<<< {:02x?}", &ret[..len]);
-        U2FHIDFrame::try_from(&ret[..len])
+        trace!("<<< {:02x?}", &ret);
+        U2FHIDFrame::try_from(&ret)
     }
 
     /// Recives a [Response] from the device, handling fragmented [U2FHIDFrame]

@@ -7,7 +7,7 @@
 //! So, we need to be able to fragment our messages before sending them to a
 //! token, and then defragment them on the other side.
 use crate::error::WebauthnCError;
-use crate::usb::HID_RPT_SIZE;
+use crate::usb::{HidReportBytes, HidSendReportBytes, HID_RPT_SEND_SIZE, HID_RPT_SIZE};
 use std::cmp::min;
 use std::iter::Sum;
 use std::ops::{Add, AddAssign};
@@ -184,7 +184,7 @@ impl<'a> Sum<&'a U2FHIDFrame> for U2FHIDFrame {
                     assert_eq!(f.cid, first.cid);
                     let p = INITIAL_FRAGMENT_SIZE + (usize::from(f.cmd) * FRAGMENT_SIZE);
                     let q = min(p + f.data.len(), usize::from(first.len));
-                    o[p..q].copy_from_slice(&f.data);
+                    o[p..q].copy_from_slice(&f.data[..q - p]);
                 }
             }
         }
@@ -198,9 +198,9 @@ impl<'a> Sum<&'a U2FHIDFrame> for U2FHIDFrame {
 /// Serialises a [U2FHIDFrame] to bytes to be sent via a USB HID report.
 ///
 /// This does not fragment packets: see [U2FHIDFrameIterator].
-impl From<&U2FHIDFrame> for Vec<u8> {
-    fn from(f: &U2FHIDFrame) -> Vec<u8> {
-        let mut o: Vec<u8> = vec![0; HID_RPT_SIZE + 1];
+impl From<&U2FHIDFrame> for HidSendReportBytes {
+    fn from(f: &U2FHIDFrame) -> HidSendReportBytes {
+        let mut o: HidSendReportBytes = [0; HID_RPT_SEND_SIZE];
 
         // o[0] = 0; (Report ID)
         o[1..5].copy_from_slice(&f.cid.to_be_bytes());
@@ -219,15 +219,10 @@ impl From<&U2FHIDFrame> for Vec<u8> {
 }
 
 /// Deserialises bytes from a USB HID report into a [U2FHIDFrame].
-impl TryFrom<&[u8]> for U2FHIDFrame {
+impl TryFrom<&HidReportBytes> for U2FHIDFrame {
     type Error = WebauthnCError;
 
-    fn try_from(b: &[u8]) -> Result<Self, Self::Error> {
-        if b.len() < 7 {
-            error!("Response frame must be at least 7 bytes");
-            return Err(WebauthnCError::MessageTooShort);
-        }
-
+    fn try_from(b: &HidReportBytes) -> Result<Self, Self::Error> {
         let (cid, b) = b.split_at(4);
         let cid = u32::from_be_bytes(
             cid.try_into()
@@ -306,7 +301,7 @@ mod tests {
         assert_eq!(fragments[0].len, 255);
         assert_eq!(fragments[0].data, (0..57).collect::<Vec<u8>>());
         assert_eq!(
-            Vec::from(&fragments[0]),
+            HidSendReportBytes::from(&fragments[0]),
             [
                 0x00, // Report ID
                 0x00, 0x00, 0x00, 0x01, // cid
@@ -324,7 +319,7 @@ mod tests {
         assert_eq!(fragments[1].cmd, 0);
         assert_eq!(fragments[1].data, (57..116).collect::<Vec<u8>>());
         assert_eq!(
-            Vec::from(&fragments[1]),
+            HidSendReportBytes::from(&fragments[1]),
             [
                 0x00, // Report ID
                 0x00, 0x00, 0x00, 0x01, // cid
@@ -341,7 +336,7 @@ mod tests {
         assert_eq!(fragments[2].cmd, 1);
         assert_eq!(fragments[2].data, (116..175).collect::<Vec<u8>>());
         assert_eq!(
-            Vec::from(&fragments[2]),
+            HidSendReportBytes::from(&fragments[2]),
             [
                 0x00, // Report ID
                 0x00, 0x00, 0x00, 0x01, // cid
@@ -358,7 +353,7 @@ mod tests {
         assert_eq!(fragments[3].cmd, 2);
         assert_eq!(fragments[3].data, (175..234).collect::<Vec<u8>>());
         assert_eq!(
-            Vec::from(&fragments[3]),
+            HidSendReportBytes::from(&fragments[3]),
             [
                 0x00, // Report ID
                 0x00, 0x00, 0x00, 0x01, // cid
@@ -375,7 +370,7 @@ mod tests {
         assert_eq!(fragments[4].cmd, 3);
         assert_eq!(fragments[4].data, (234..255).collect::<Vec<u8>>());
         assert_eq!(
-            Vec::from(&fragments[4]),
+            HidSendReportBytes::from(&fragments[4]),
             [
                 0x00, // Report ID
                 0x00, 0x00, 0x00, 0x01, // cid
@@ -421,7 +416,7 @@ mod tests {
         assert_eq!(fragments[0].data, [0xFF; 57]);
 
         assert_eq!(
-            Vec::from(&fragments[0]),
+            HidSendReportBytes::from(&fragments[0]),
             [
                 0x00, // Report ID
                 0x00, 0x00, 0x00, 0x01, // cid
@@ -441,7 +436,7 @@ mod tests {
             assert_eq!(f.data, [0xFF; 59]);
             assert_eq!(f.len, 0);
 
-            let b = Vec::from(f);
+            let b = HidSendReportBytes::from(f);
             // Report ID, CID
             assert_eq!(&b[..5], [0x00, 0x00, 0x00, 0x00, 0x01]);
             // Skip command ID

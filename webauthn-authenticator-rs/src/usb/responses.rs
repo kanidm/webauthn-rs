@@ -169,7 +169,7 @@ mod tests {
             data: vec![0x7f, 0x4d, 0x02, 0x24, 0x8e, 0xb5, 0xcb, 0x48],
         };
 
-        let expected: Vec<u8> = vec![
+        let expected: HidSendReportBytes = [
             0x00, // Report
             0xff, 0xff, 0xff, 0xff, // CID
             0x86, // Command
@@ -182,9 +182,9 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        assert_eq!(&Into::<Vec<u8>>::into(&c), &expected);
+        assert_eq!(HidSendReportBytes::from(&c), expected);
 
-        let d: Vec<u8> = vec![
+        let d: HidReportBytes = [
             0xff, 0xff, 0xff, 0xff, // CID
             0x86, // Command
             0x00, 0x11, // Length
@@ -210,7 +210,7 @@ mod tests {
             capabilities: 5,
         });
 
-        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(d.as_slice()).expect("init frame");
+        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(&d).expect("init frame");
 
         assert_eq!(frame.cid, 0xffffffff);
         assert_eq!(frame.cmd, 0x86);
@@ -227,13 +227,13 @@ mod tests {
         }
 
         // Skip leading byte (report ID)
-        assert_eq!(&Into::<Vec<u8>>::into(&frame)[1..], d)
+        assert_eq!(HidSendReportBytes::from(&frame)[1..], d)
     }
 
     #[test]
     fn init_capabilities() {
         // Yubico Security Key NFC C in FIDO2-only mode
-        let d: Vec<u8> = vec![
+        let d: [u8; 64] = [
             0xff, 0xff, 0xff, 0xff, // CID
             0x86, // Command
             0x00, 0x11, // Length
@@ -249,7 +249,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(d.as_slice()).expect("init frame");
+        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(&d).expect("init frame");
         let r: Response = Response::try_from(&frame).expect("init response");
         if let Response::Init(r) = r {
             assert!(!r.supports_ctap1());
@@ -259,7 +259,7 @@ mod tests {
         }
 
         // Nitrokey U2F Plug-up
-        let d: Vec<u8> = vec![
+        let d: [u8; 64] = [
             0xff, 0xff, 0xff, 0xff, // CID
             0x86, // Command
             0x00, 0x11, // Length
@@ -275,7 +275,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(d.as_slice()).expect("init frame");
+        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(&d).expect("init frame");
         let r: Response = Response::try_from(&frame).expect("init response");
         if let Response::Init(r) = r {
             assert!(r.supports_ctap1());
@@ -287,7 +287,7 @@ mod tests {
 
     #[test]
     fn error() {
-        let d: Vec<u8> = vec![
+        let d: [u8; 64] = [
             0x6f, 0xdf, 0x43, 0x22, // CID
             0xbf, // Command
             0x00, 0x01, // Length
@@ -298,11 +298,89 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
-        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(d.as_slice()).expect("error frame");
+        let frame: U2FHIDFrame = <U2FHIDFrame>::try_from(&d).expect("error frame");
         assert_eq!(frame.cid, 0x6fdf4322);
         assert_eq!(frame.len, 1);
 
         let r: Response = Response::try_from(&frame).expect("error response");
         assert_eq!(r, Response::Error(U2FError::InvalidCommand));
+    }
+
+    #[test]
+    fn get_info() {
+        let _ = tracing_subscriber::fmt().try_init();
+        let d: [[u8; 64]; 4] = [
+            [
+                0x6f, 0x1c, 0xc9, 0xca, 0x90, 0x00, 0xc5, 0x00, 0xac, 0x01, 0x82, 0x68, 0x46, 0x49,
+                0x44, 0x4f, 0x5f, 0x32, 0x5f, 0x30, 0x6c, 0x46, 0x49, 0x44, 0x4f, 0x5f, 0x32, 0x5f,
+                0x31, 0x5f, 0x50, 0x52, 0x45, 0x02, 0x82, 0x6b, 0x63, 0x72, 0x65, 0x64, 0x50, 0x72,
+                0x6f, 0x74, 0x65, 0x63, 0x74, 0x6b, 0x68, 0x6d, 0x61, 0x63, 0x2d, 0x73, 0x65, 0x63,
+                0x72, 0x65, 0x74, 0x03, 0x50, 0x14, 0x9a, 0x20,
+            ],
+            [
+                0x6f, 0x1c, 0xc9, 0xca, 0x00, 0x21, 0x8e, 0xf6, 0x41, 0x33, 0x96, 0xb8, 0x81, 0xf8,
+                0xd5, 0xb7, 0xf1, 0xf5, 0x04, 0xa5, 0x62, 0x72, 0x6b, 0xf5, 0x62, 0x75, 0x70, 0xf5,
+                0x64, 0x70, 0x6c, 0x61, 0x74, 0xf4, 0x69, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x50,
+                0x69, 0x6e, 0xf5, 0x75, 0x63, 0x72, 0x65, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x61, 0x6c,
+                0x4d, 0x67, 0x6d, 0x74, 0x50, 0x72, 0x65, 0x76,
+            ],
+            [
+                0x6f, 0x1c, 0xc9, 0xca, 0x01, 0x69, 0x65, 0x77, 0xf5, 0x05, 0x19, 0x04, 0xb0, 0x06,
+                0x82, 0x02, 0x01, 0x07, 0x08, 0x08, 0x18, 0x80, 0x09, 0x82, 0x63, 0x6e, 0x66, 0x63,
+                0x63, 0x75, 0x73, 0x62, 0x0a, 0x82, 0xa2, 0x63, 0x61, 0x6c, 0x67, 0x26, 0x64, 0x74,
+                0x79, 0x70, 0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x2d, 0x6b, 0x65, 0x79,
+                0xa2, 0x63, 0x61, 0x6c, 0x67, 0x27, 0x64, 0x74,
+            ],
+            [
+                0x6f, 0x1c, 0xc9, 0xca, 0x02, 0x79, 0x70, 0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69,
+                0x63, 0x2d, 0x6b, 0x65, 0x79, 0x0d, 0x04, 0x0e, 0x1a, 0x00, 0x05, 0x04, 0x03, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+        ];
+
+        let frames: Vec<U2FHIDFrame> = d
+            .iter()
+            .map(|f| <U2FHIDFrame>::try_from(f))
+            .collect::<Result<Vec<U2FHIDFrame>, WebauthnCError>>()
+            .unwrap();
+
+        let frame: U2FHIDFrame = frames.iter().sum();
+        let r: Response = Response::try_from(&frame).expect("init response");
+        let r = if let Response::Cbor(r) = r {
+            r
+        } else {
+            panic!("expected Response::Cbor");
+        };
+
+        let a: GetInfoResponse = CBORResponse::try_from(&r.data).expect("failed to decode message");
+
+        // Assert the content
+        // info!(?a);
+
+        assert!(a.versions.len() == 2);
+        assert!(a.versions.contains("FIDO_2_0"));
+        assert!(a.versions.contains("FIDO_2_1_PRE"));
+
+        assert!(a.extensions == Some(vec!["credProtect".to_string(), "hmac-secret".to_string()]));
+        assert!(
+            a.aaguid
+                == vec![20, 154, 32, 33, 142, 246, 65, 51, 150, 184, 129, 248, 213, 183, 241, 245]
+        );
+
+        let m = a.options.as_ref().unwrap();
+        assert!(m.len() == 5);
+        assert!(m.get("clientPin") == Some(&true));
+        assert!(m.get("credentialMgmtPreview") == Some(&true));
+        assert!(m.get("plat") == Some(&false));
+        assert!(m.get("rk") == Some(&true));
+        assert!(m.get("up") == Some(&true));
+
+        assert!(a.max_msg_size == Some(1200));
+        assert!(a.max_cred_count_in_list == Some(8));
+        assert!(a.max_cred_id_len == Some(128));
+
+        assert!(a.transports == Some(vec!["nfc".to_string(), "usb".to_string()]));
     }
 }
