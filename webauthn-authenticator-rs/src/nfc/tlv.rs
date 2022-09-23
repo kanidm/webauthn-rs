@@ -26,7 +26,7 @@ impl<'a> Iterator for CompactTlv<'a> {
     type Item = (u8, &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.b.len() == 0 {
+        if self.b.is_empty() {
             return None;
         }
         let tl = self.b[0];

@@ -64,7 +64,7 @@ impl fmt::Debug for USBToken {
 impl Default for USBTransport {
     fn default() -> Self {
         Self {
-            api: HidApi::new().unwrap(),
+            api: HidApi::new().expect("Error initializing USB HID API"),
         }
     }
 }
@@ -110,7 +110,7 @@ impl USBToken {
     /// Sends a [U2FHIDFrame] to the device, fragmenting the message to fit
     /// within the USB HID MTU.
     fn send(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
-        for f in U2FHIDFrameIterator::new(&frame)? {
+        for f in U2FHIDFrameIterator::new(frame)? {
             self.send_one(&f)?;
         }
         Ok(())

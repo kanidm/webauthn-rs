@@ -66,7 +66,7 @@ impl<'a> U2FHIDFrameIterator<'a> {
             return Err(WebauthnCError::MessageTooLarge);
         }
         Ok(U2FHIDFrameIterator {
-            f: &f,
+            f,
             p: &f.data,
             i: 0,
             s: false,
@@ -170,7 +170,7 @@ impl<'a> Sum<&'a U2FHIDFrame> for U2FHIDFrame {
                     o = vec![0; usize::from(f.len)];
                     let p = min(f.data.len(), usize::from(f.len));
                     o[..p].copy_from_slice(&f.data[..p]);
-                    s = Some(&f);
+                    s = Some(f);
                 }
 
                 Some(first) => {
@@ -191,20 +191,22 @@ impl<'a> Sum<&'a U2FHIDFrame> for U2FHIDFrame {
 /// Serialises a [U2FHIDFrame] to bytes to be sent via a USB HID report.
 ///
 /// This does not fragment packets: see [U2FHIDFrameIterator].
-impl Into<Vec<u8>> for &U2FHIDFrame {
-    fn into(self) -> Vec<u8> {
+// impl Into<Vec<u8>> for &U2FHIDFrame {
+//     fn into(self) -> Vec<u8> {
+impl From<&U2FHIDFrame> for Vec<u8> {
+    fn from(f: &U2FHIDFrame) -> Vec<u8> {
         let mut o: Vec<u8> = vec![0; HID_RPT_SIZE + 1];
 
         // o[0] = 0; (Report ID)
-        o[1..5].copy_from_slice(&self.cid.to_be_bytes());
-        o[5] = self.cmd;
+        o[1..5].copy_from_slice(&f.cid.to_be_bytes());
+        o[5] = f.cmd;
 
-        if self.cmd & 0x80 > 0 {
+        if f.cmd & 0x80 > 0 {
             // Initial
-            o[6..8].copy_from_slice(&(self.data.len() as u16).to_be_bytes());
-            o[8..8 + self.data.len()].copy_from_slice(&self.data);
+            o[6..8].copy_from_slice(&(f.data.len() as u16).to_be_bytes());
+            o[8..8 + f.data.len()].copy_from_slice(&f.data);
         } else {
-            o[6..6 + self.data.len()].copy_from_slice(&self.data);
+            o[6..6 + f.data.len()].copy_from_slice(&f.data);
         }
 
         o
@@ -222,12 +224,12 @@ impl TryFrom<&[u8]> for U2FHIDFrame {
         }
 
         let (cid, b) = b.split_at(4);
-        let cid = u32::from_be_bytes(cid.try_into().unwrap());
+        let cid = u32::from_be_bytes(cid.try_into().map_err(|_| WebauthnCError::MessageTooShort)?);
         let (cmd, b) = (b[0], &b[1..]);
         if cmd & 0x80 > 0 {
             // Initial
             let (len, b) = b.split_at(2);
-            let len = u16::from_be_bytes(len.try_into().unwrap());
+            let len = u16::from_be_bytes(len.try_into().map_err(|_| WebauthnCError::MessageTooShort)?);
             // Resize the buffer for short messages
             let b = &b[..min(b.len(), usize::from(len))];
 

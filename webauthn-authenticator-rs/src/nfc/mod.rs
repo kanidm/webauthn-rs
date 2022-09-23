@@ -78,7 +78,7 @@ impl Default for NFCReader {
 }
 
 impl NFCReader {
-    pub fn wait_for_card(&mut self) -> Result<NFCCard, ()> {
+    pub fn wait_for_card(&mut self) -> Result<NFCCard, WebauthnCError> {
         loop {
             for read_state in &mut self.rdr_state {
                 read_state.sync_current_state();
@@ -86,7 +86,7 @@ impl NFCReader {
 
             if let Err(e) = self.ctx.get_status_change(None, &mut self.rdr_state) {
                 error!("Failed to detect card: {:?}", e);
-                return Err(());
+                return Err(WebauthnCError::Internal);
             } else {
                 // Check every reader ...
                 for read_state in &self.rdr_state {
@@ -130,7 +130,7 @@ impl Transport for NFCReader {
             .filter(|s| s.event_state().contains(State::PRESENT))
             .map(|s| {
                 self.ctx
-                    .connect(&s.name(), ShareMode::Shared, Protocols::ANY)
+                    .connect(s.name(), ShareMode::Shared, Protocols::ANY)
                     .map(NFCCard::new)
                     .map_err(|_| WebauthnCError::Internal)
             })
@@ -143,7 +143,7 @@ impl Transport for NFCReader {
 fn transmit(
     card: &Card,
     request: &ISO7816RequestAPDU,
-    form: ISO7816LengthForm,
+    form: &ISO7816LengthForm,
 ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
     let req = request.to_bytes(form).map_err(|e| {
         error!("Failed to build APDU command: {:?}", e);
@@ -188,15 +188,14 @@ impl NFCCard {
         let atr = Atr::try_from(card_status.atr()).expect("oops atr");
         trace!("Parsed: {:?}", &atr);
 
-        let card = NFCCard { card_ref, atr: atr };
-        return card;
+        NFCCard { card_ref, atr }
     }
 
     /// Transmits a single ISO 7816-4 APDU to the card.
     pub fn transmit(
         &self,
         request: &ISO7816RequestAPDU,
-        form: ISO7816LengthForm,
+        form: &ISO7816LengthForm,
     ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
         transmit(&self.card_ref, request, form)
     }
@@ -210,14 +209,15 @@ impl NFCCard {
         let mut r = EMPTY_RESPONSE;
 
         for chunk in requests {
-            r = self.transmit(chunk, ISO7816LengthForm::ShortOnly)?;
+            r = self.transmit(chunk, &ISO7816LengthForm::ShortOnly)?;
             if !r.is_success() {
                 return Err(WebauthnCError::ApduTransmission);
             }
         }
 
         if r.ctap_needs_get_response() {
-            unimplemented!("NFCCTAP_GETRESPONSE");
+            error!("NFCCTAP_GETRESPONSE not supported, but token sent it");
+            return Err(WebauthnCError::ApduTransmission);
         }
 
         if r.bytes_available() == 0 {
@@ -230,7 +230,7 @@ impl NFCCard {
         while r.bytes_available() > 0 {
             r = self.transmit(
                 &get_response(0x80, r.bytes_available()),
-                ISO7816LengthForm::ShortOnly,
+                &ISO7816LengthForm::ShortOnly,
             )?;
             if !r.is_success() {
                 return Err(WebauthnCError::ApduTransmission);
@@ -249,7 +249,7 @@ impl Token for NFCCard {
         C: CBORCommand<Response = R>,
         R: CBORResponse,
     {
-        let apdus = cmd.to_short_apdus().unwrap();
+        let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
         let resp = self.transmit_chunks(&apdus)?;
 
         // CTAP has its own extra status code over NFC in the first byte.
@@ -262,7 +262,7 @@ impl Token for NFCCard {
 
     fn init(&mut self) -> Result<(), WebauthnCError> {
         let resp = self
-            .transmit(&select_by_df_name(&APPLET_DF), ISO7816LengthForm::ShortOnly)
+            .transmit(&select_by_df_name(&APPLET_DF), &ISO7816LengthForm::ShortOnly)
             .expect("Failed to select CTAP2.1 applet");
 
         if !resp.is_ok() {
@@ -270,7 +270,7 @@ impl Token for NFCCard {
             return Err(WebauthnCError::NotSupported);
         }
 
-        if resp.data != &APPLET_U2F_V2 {
+        if resp.data != APPLET_U2F_V2 {
             error!("Unsupported applet: {:02x?}", &resp.data);
             return Err(WebauthnCError::NotSupported);
         }
@@ -280,7 +280,7 @@ impl Token for NFCCard {
 
     fn close(&self) -> Result<(), WebauthnCError> {
         let resp = self
-            .transmit(&DESELECT_APPLET, ISO7816LengthForm::ShortOnly)
+            .transmit(&DESELECT_APPLET, &ISO7816LengthForm::ShortOnly)
             .expect("Failed to deselect CTAP2.1 applet");
 
         if !resp.is_ok() {

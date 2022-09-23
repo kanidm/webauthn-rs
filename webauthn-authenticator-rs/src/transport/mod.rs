@@ -67,7 +67,7 @@ pub trait Token: Sized + fmt::Debug {
             }))
         } else {
             error!(?tokinfo.versions);
-            return Err(WebauthnCError::NotSupported);
+            Err(WebauthnCError::NotSupported)
         }
     }
 

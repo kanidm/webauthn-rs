@@ -130,7 +130,7 @@ fn push_length_value(buf: &mut Vec<u8>, value: usize, form: u8) -> Result<(), Er
 
 impl ISO7816RequestAPDU {
     /// Serializes a request APDU into bytes to send to the card.
-    pub fn to_bytes(&self, form: ISO7816LengthForm) -> Result<Vec<u8>, Error> {
+    pub fn to_bytes(&self, form: &ISO7816LengthForm) -> Result<Vec<u8>, Error> {
         let extended_form = match form {
             ISO7816LengthForm::Extended => self.ne > 256 || self.data.len() > 255,
             ISO7816LengthForm::ShortOnly => false,
@@ -150,7 +150,7 @@ impl ISO7816RequestAPDU {
 
         // §5.1: "short and extended length fields shall not be combined: either
         // both of them are short, or both of them are extended".
-        let lc_len: u8 = if self.data.len() == 0 {
+        let lc_len: u8 = if self.data.is_empty() {
             0
         } else if extended_form {
             3
@@ -177,15 +177,8 @@ impl ISO7816RequestAPDU {
         buf.push(self.p1);
         buf.push(self.p2);
 
-        push_length_value(
-            &mut buf,
-            self.data
-                .len()
-                .try_into()
-                .map_err(|_| Error::IntegerOverflow)?,
-            lc_len,
-        )?;
-        if self.data.len() > 0 {
+        push_length_value(&mut buf, self.data.len(), lc_len)?;
+        if !self.data.is_empty() {
             buf.extend_from_slice(&self.data);
         }
         push_length_value(&mut buf, self.ne, le_len)?;
@@ -276,12 +269,12 @@ pub fn select_by_df_name(df: &[u8]) -> ISO7816RequestAPDU {
 /// Reference: ISO/IEC 7816-4:2005 §7.6.1
 pub fn get_response(cla: u8, ne: usize) -> ISO7816RequestAPDU {
     ISO7816RequestAPDU {
-        cla: cla,
+        cla,
         ins: 0xC0, // GET RESPONSE
         p1: 0x00,
         p2: 0x00,
         data: vec![],
-        ne: ne,
+        ne,
     }
 }
 
@@ -333,7 +326,7 @@ mod tests {
             #[test]
             fn $name() {
                 let (input, form, expected): (ISO7816RequestAPDU, ISO7816LengthForm, &[u8]) = $value;
-                let b = input.to_bytes(form).expect("serialisation error");
+                let b = input.to_bytes(&form).expect("serialisation error");
                 assert_eq!(expected, b);
             }
         )*
@@ -346,7 +339,7 @@ mod tests {
             #[test]
             fn $name() {
                 let (input, form, expected): (ISO7816RequestAPDU, ISO7816LengthForm, Error) = $value;
-                let err = input.to_bytes(form).expect_err("expected error");
+                let err = input.to_bytes(&form).expect_err("expected error");
                 assert_eq!(expected, err);
             }
         )*

@@ -40,7 +40,10 @@ impl TryFrom<&[u8]> for InitResponse {
         let (nonce, d) = d.split_at(8);
         let nonce = nonce.to_vec();
         let (cid, d) = d.split_at(4);
-        let cid = u32::from_be_bytes(cid.try_into().unwrap());
+        let cid = u32::from_be_bytes(
+            cid.try_into()
+                .map_err(|_| WebauthnCError::MessageTooShort)?,
+        );
 
         Ok(InitResponse {
             nonce,
@@ -66,7 +69,7 @@ pub struct CBORResponse {
 impl TryFrom<&[u8]> for CBORResponse {
     type Error = WebauthnCError;
     fn try_from(d: &[u8]) -> Result<Self, Self::Error> {
-        if d.len() < 1 {
+        if d.is_empty() {
             return Err(WebauthnCError::MessageTooShort);
         }
         Ok(Self {
@@ -111,7 +114,7 @@ impl From<u8> for U2FError {
 
 impl From<&[u8]> for U2FError {
     fn from(d: &[u8]) -> Self {
-        if d.len() >= 1 {
+        if !d.is_empty() {
             U2FError::from(d[0])
         } else {
             U2FError::Unknown

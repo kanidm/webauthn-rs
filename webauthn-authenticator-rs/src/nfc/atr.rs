@@ -93,7 +93,7 @@ fn checksum(i: &[u8]) -> bool {
         let last = i.last().unwrap_or(&0);
         trace!("i.last == {:02x?}, expected {:02x?}", last, o ^ last);
     }
-    return o == 0;
+    o == 0
 }
 
 impl<'a> TryFrom<&[u8]> for Atr {
@@ -113,7 +113,7 @@ impl<'a> TryFrom<&[u8]> for Atr {
         && atr[1] & 0x80 != 0x00 // TD0 present, no implicit T=0 only
         && (atr[2] & 0x0F != 0x00  // First protocol is not T=0, or
             || atr[2] & 0x80 != 0x00) // there is more than one protocol
-        && !checksum(&atr)
+        && !checksum(atr)
         {
             return Err("ATR checksum incorrect");
         }
@@ -165,7 +165,7 @@ impl<'a> TryFrom<&[u8]> for Atr {
 
             if tlv_payload.len() > PCSC_RESPONSE_LEN
                 && tlv_payload[0] == 0x4f
-                && &tlv_payload[2..7] == &PCSC_AID
+                && tlv_payload[2..7] == PCSC_AID
             {
                 // PC/SC Spec, Part 3, §3.1.3.2.3.2 (Contactless Storage Cards)
                 // is incorrectly defined in Simple-TLV, not Compact-TLV. FIDO
@@ -173,7 +173,7 @@ impl<'a> TryFrom<&[u8]> for Atr {
                 // This just means we don't barf on transit cards.
                 storage_card = true;
             } else {
-                let tlv = CompactTlv::new(&tlv_payload);
+                let tlv = CompactTlv::new(tlv_payload);
                 for (t, v) in tlv {
                     // trace!("tlv: {:02x?} = {:02x?}", t, v);
                     if t == 7 {
@@ -207,8 +207,8 @@ impl Atr {
     /// Returns `None` if [`Self::card_issuers_data`] is missing, or if it
     /// contains invalid UTF-8.
     pub fn card_issuers_data_str(&self) -> Option<&str> {
-        std::str::from_utf8(&self.card_issuers_data.as_ref()?)
-            .map(|v| Some(v))
+        std::str::from_utf8(self.card_issuers_data.as_ref()?)
+            .map(Some)
             .unwrap_or(None)
     }
 }

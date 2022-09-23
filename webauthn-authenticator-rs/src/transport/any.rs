@@ -9,7 +9,7 @@ use crate::usb::*;
 ///
 /// If you don't care which transport is used for tokens, prefer to use
 /// [AnyTransport] for the best experience.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AnyTransport {
     #[cfg(feature = "nfc")]
     nfc: NFCReader,
@@ -20,7 +20,7 @@ pub struct AnyTransport {
 /// [AnyToken] abstracts calls to NFC and USB security tokens.
 #[derive(Debug)]
 pub enum AnyToken {
-    /// No-op stub, used when there are no transports available.
+    /// No-op stub entry, never used.
     Stub,
     #[cfg(feature = "nfc")]
     Nfc(NFCCard),
@@ -28,20 +28,10 @@ pub enum AnyToken {
     Usb(USBToken),
 }
 
-impl Default for AnyTransport {
-    fn default() -> Self {
-        Self {
-            #[cfg(feature = "nfc")]
-            nfc: NFCReader::default(),
-            #[cfg(feature = "usb")]
-            usb: USBTransport::default(),
-        }
-    }
-}
-
 impl Transport for AnyTransport {
     type Token = AnyToken;
 
+    #[allow(unreachable_code)]
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
         #[cfg(not(any(feature = "nfc", feature = "usb")))]
         {
@@ -61,6 +51,7 @@ impl Transport for AnyTransport {
 }
 
 impl Token for AnyToken {
+    #[allow(unused_variables, clippy::unimplemented)]
     fn transmit<C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
@@ -75,6 +66,7 @@ impl Token for AnyToken {
         }
     }
 
+    #[allow(clippy::unimplemented)]
     fn init(&mut self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
@@ -85,6 +77,7 @@ impl Token for AnyToken {
         }
     }
 
+    #[allow(clippy::unimplemented)]
     fn close(&self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
