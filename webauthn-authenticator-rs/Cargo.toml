@@ -25,7 +25,7 @@ tracing = "0.1"
 url = "2"
 serde_json = "1.0"
 nom = "7.1"
-serde_cbor = "0.11"
+serde_cbor = { version = "0.12.0-dev", package = "serde_cbor_2" }
 openssl = "0.10"
 rpassword = "5.0"
 
