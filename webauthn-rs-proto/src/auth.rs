@@ -31,11 +31,12 @@ pub struct PublicKeyCredentialRequestOptions {
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Mediation {
-    /// No mediation is provided
-    None,
+    // /// No mediation is provided - This is represented by "None" on the Option
+    // below. We can't use None here as a variant because it confuses serde-wasm-bindgen :(
+    // None,
     // /// Silent, try to do things without the user being involved. Probably a bad idea.
     // Silent,
-    // /// If we can get creds without the user having to do anything, gread, other wise ask the user. Probably a bad idea.
+    // /// If we can get creds without the user having to do anything, great, other wise ask the user. Probably a bad idea.
     // Optional,
     /// Discovered credentials are presented to the user in a dialog.
     /// Conditional UI is used. See <https://github.com/w3c/webauthn/wiki/Explainer:-WebAuthn-Conditional-UI>
@@ -43,20 +44,6 @@ pub enum Mediation {
     Conditional,
     // /// The user needs to do something.
     // Required
-}
-
-impl Default for Mediation {
-    /// Return the default value of None
-    fn default() -> Self {
-        Mediation::None
-    }
-}
-
-impl Mediation {
-    /// Test if the mediation is set to None.
-    pub fn is_none(m: &Mediation) -> bool {
-        matches!(m, Mediation::None)
-    }
 }
 
 /// A JSON serializable challenge which is issued to the user's webbrowser
@@ -68,9 +55,9 @@ impl Mediation {
 pub struct RequestChallengeResponse {
     /// The options.
     pub public_key: PublicKeyCredentialRequestOptions,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     /// The mediation requested
-    pub mediation: Mediation,
+    pub mediation: Option<Mediation>,
 }
 
 #[cfg(feature = "wasm")]

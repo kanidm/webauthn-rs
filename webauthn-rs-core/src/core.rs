@@ -927,7 +927,7 @@ impl WebauthnCore {
                 user_verification: policy,
                 extensions,
             },
-            mediation: Mediation::None,
+            mediation: None,
         };
         let st = AuthenticationState {
             credentials: creds,
