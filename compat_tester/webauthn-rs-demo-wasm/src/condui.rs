@@ -138,7 +138,7 @@ impl Component for ConduiTest {
 
             (ConduiTestState::Main(ChallengeState::Waiting), AppMsg::BeginLoginChallenge(mut ccr)) => {
                 // Setup conditional mediation.
-                ccr.mediation = Mediation::Conditional;
+                ccr.mediation = Some(Mediation::Conditional);
 
                 // No state change, we are just triggering a callback.
                 ConduiTestState::Main(ChallengeState::Presented(ccr))

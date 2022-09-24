@@ -174,16 +174,16 @@ pub struct CredProps {
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct RegistrationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appid: Option<bool>,
 
     /// Indicates if the client used the provided cred_blob extensions.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cred_blob: Option<bool>,
 
     /// Indicates if the client believes it created a resident key. This
     /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cred_props: Option<CredProps>,
 }
 
