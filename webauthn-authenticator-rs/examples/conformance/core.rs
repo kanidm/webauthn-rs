@@ -1,5 +1,6 @@
 use webauthn_authenticator_rs::cbor::*;
 use webauthn_authenticator_rs::nfc::*;
+use webauthn_authenticator_rs::transport::iso7816::*;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -23,7 +24,7 @@ fn test_extended_lc_select(card: &NFCCard) -> TestResult {
     let resp = card
         .transmit(
             &select_by_df_name(&APPLET_DF),
-            ISO7816LengthForm::ExtendedOnly,
+            &ISO7816LengthForm::ExtendedOnly,
         )
         .expect("Failed to select applet");
 
@@ -45,7 +46,10 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
 
     // Select the applet, but only use short form
     let mut resp = card
-        .transmit(&select_by_df_name(&APPLET_DF), ISO7816LengthForm::ShortOnly)
+        .transmit(
+            &select_by_df_name(&APPLET_DF),
+            &ISO7816LengthForm::ShortOnly,
+        )
         .expect("Failed to select applet");
 
     if !resp.is_ok() {
@@ -53,14 +57,14 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
     }
 
     // Check return value
-    if resp.data != &APPLET_U2F_V2 {
+    if resp.data != APPLET_U2F_V2 {
         return TestResult::Fail("Unsupported CTAP applet");
     }
 
     let mut get_info = (GetInfoRequest {}).to_extended_apdu().unwrap();
     get_info.ne = 65536;
     resp = card
-        .transmit(&get_info, ISO7816LengthForm::Extended)
+        .transmit(&get_info, &ISO7816LengthForm::Extended)
         .expect("Failed to get info, ne=65536");
 
     if !resp.is_ok() {
@@ -69,12 +73,12 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
         );
     }
 
-    if resp.data.len() < 1 || resp.data[0] != 0 {
+    if resp.data.is_empty() || resp.data[0] != 0 {
         return TestResult::Fail("Authenticator did not return 'SUCCESS' CTAP error code.");
     }
 
     // We should be able to parse it, too...
-    let info = GetInfoResponse::try_from(&resp.data[1..]);
+    let info = <GetInfoResponse as CBORResponse>::try_from(&resp.data[1..]);
 
     if info.is_err() {
         return TestResult::Fail("Error parsing CBOR response");
@@ -93,11 +97,11 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
     // use long form anyway. Nothing about ISO 7816-4 requires you to use short
     // form when a card says it supports it!
     let resp2 = card
-        .transmit(&get_info, ISO7816LengthForm::Extended)
+        .transmit(&get_info, &ISO7816LengthForm::Extended)
         .expect("Failed to get info, ne=255");
 
     if resp2.is_ok() {
-        if &resp.data == &resp2.data {
+        if resp.data == resp2.data {
             TestResult::Pass
         } else {
             TestResult::Fail("Authenticator gave different responses for ne<256 and ne=65536")
@@ -121,7 +125,7 @@ fn test_incorrect_aid(card: &NFCCard) -> TestResult {
 
     for l in APPLET_DF.len() + 1..aid.len() {
         let resp = card
-            .transmit(&select_by_df_name(&aid[..l]), ISO7816LengthForm::ShortOnly)
+            .transmit(&select_by_df_name(&aid[..l]), &ISO7816LengthForm::ShortOnly)
             .expect("Failed to select applet");
 
         if resp.is_ok() {
@@ -168,7 +172,7 @@ fn test_select_zero_ne(card: &NFCCard) -> TestResult {
     let mut req = select_by_df_name(&APPLET_DF);
     req.ne = 0;
     let resp = card
-        .transmit(&req, ISO7816LengthForm::ShortOnly)
+        .transmit(&req, &ISO7816LengthForm::ShortOnly)
         .expect("Failed to select applet");
 
     if !resp.is_success() {
@@ -181,7 +185,7 @@ fn test_select_zero_ne(card: &NFCCard) -> TestResult {
         );
     }
 
-    if resp.data.len() > 0 {
+    if !resp.data.is_empty() {
         // We got some data back.
         // This suggests the card is reading the command buffer out of bounds.
         return TestResult::Fail("Expected no response data for Ne=0, card is reading from the command buffer out of bounds!");
@@ -194,7 +198,7 @@ fn test_select_zero_ne(card: &NFCCard) -> TestResult {
     // Repeat with correct length
     req.ne = resp.bytes_available();
     let resp = card
-        .transmit(&req, ISO7816LengthForm::ShortOnly)
+        .transmit(&req, &ISO7816LengthForm::ShortOnly)
         .expect("Failed to select applet");
 
     if !resp.is_ok() {
@@ -217,7 +221,7 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
     for ne in 1..256 {
         req.ne = ne;
         let resp = card
-            .transmit(&req, ISO7816LengthForm::ShortOnly)
+            .transmit(&req, &ISO7816LengthForm::ShortOnly)
             .expect("Failed to select applet");
 
         if !resp.is_success() {
@@ -225,7 +229,7 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
             return TestResult::Fail("Selecting applet with short Ne should succeed");
         }
 
-        if resp.data.len() > ne.into() {
+        if resp.data.len() > ne {
             // Limit
             return TestResult::Fail("Card responded with too many bytes for Ne");
         }
@@ -255,7 +259,10 @@ fn test_card(card: NFCCard) {
 
     // Try to select the applet in short form.
     let resp = card
-        .transmit(&select_by_df_name(&APPLET_DF), ISO7816LengthForm::ShortOnly)
+        .transmit(
+            &select_by_df_name(&APPLET_DF),
+            &ISO7816LengthForm::ShortOnly,
+        )
         .expect("Failed to select applet");
     if !resp.is_ok() {
         panic!("Could not select FIDO2 applet, is this a FIDO2 token?");
@@ -289,40 +296,41 @@ fn test_card(card: NFCCard) {
     }
 
     println!("# Conformance tests finished!");
-    println!("");
+    println!();
     println!("{:?}", card.atr);
     match card.atr.card_issuers_data_str() {
         Some(s) => println!("Card issuer's data: {}", s),
-        None => match card.atr.card_issuers_data {
-            Some(d) => println!("Card issuer's data: {:02x?}", d),
-            None => (),
-        },
+        None => {
+            if let Some(d) = card.atr.card_issuers_data {
+                println!("Card issuer's data: {:02x?}", d);
+            }
+        }
     }
-    println!("");
+    println!();
     println!("## {}/{} tests passed:", passes.len(), TESTS.len());
-    println!("");
+    println!();
     for n in passes {
         println!("* {}", n);
     }
-    println!("");
-    if skips.len() > 0 {
+    println!();
+    if !skips.is_empty() {
         println!("## {}/{} tests skipped:", skips.len(), TESTS.len());
-        println!("");
+        println!();
         for (n, m) in skips {
             println!("* {} ({})", n, m);
         }
-        println!("");
+        println!();
     }
-    if failures.len() == 0 {
+    if failures.is_empty() {
         println!("## No tests failed!");
     } else {
         println!("## {}/{} tests failed:", failures.len(), TESTS.len());
-        println!("");
+        println!();
         for (n, m) in failures {
             println!("* {} ({})", n, m);
         }
     }
-    println!("");
+    println!();
     println!("Tip: run with `RUST_LOG=trace` to see raw APDUs");
 }
 

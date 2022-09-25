@@ -3,7 +3,7 @@ use serde_cbor::{value::to_value, Value};
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
-use super::CBORCommand;
+use super::{CBORCommand, NoResponse};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct MakeCredentialRequestRawDict {
@@ -28,6 +28,7 @@ pub struct MakeCredentialRequest {
 
 impl CBORCommand for MakeCredentialRequest {
     const CMD: u8 = 0x01;
+    type Response = NoResponse;
 }
 
 impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {

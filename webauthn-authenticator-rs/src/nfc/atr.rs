@@ -1,20 +1,20 @@
+//! ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
 use pcsc::*;
 
-use super::iso7816::ISO7816LengthForm;
 use super::tlv::*;
 
 /// ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
 ///
-/// This supports a subset of the standards needed for compatibility with FIDO
-/// tokens, and is intentionally incomplete.
+/// This intentionally incomplete, and only supports a subset of the standards
+/// needed for compatibility with FIDO tokens.
 ///
 /// References:
 ///
-/// * "Answer-to-Reset", ISO/IEC 7816-3:2005 §8.2
-/// * "Historical bytes", ISO/IEC 7816-4:2006 §8.1.1
-/// * "ATR, Contactless Smart Cards", [PC/SC Specification][pcsc] Part 3,
+/// * "Answer-to-Reset", [ISO/IEC 7816-3:2005][iso7816-3] §8.2
+/// * "Historical bytes", [ISO/IEC 7816-4:2006][iso7816-4] §8.1.1
+/// * "ATR, Contactless Smart Cards", [PC/SC Specification][pcsc-spec] Part 3,
 ///   §3.1.3.2.3.1
-/// * "ATR, Contactless Storage Cards", [PC/SC Specification][pcsc] Part 3,
+/// * "ATR, Contactless Storage Cards", [PC/SC Specification][pcsc-spec] Part 3,
 ///   §3.1.3.2.3.2
 ///
 /// Other resources:
@@ -23,8 +23,10 @@ use super::tlv::*;
 /// * [Ludovic Rousseau's series about ATR bytes](https://ludovicrousseau.blogspot.com/2016/01/atr-list-study.html)
 /// * [Wikipedia: Answer to reset](https://en.wikipedia.org/wiki/Answer_to_reset)
 ///
-/// [pcsc]: https://pcscworkgroup.com/specifications/download/
-#[derive(Debug, Clone, PartialEq)]
+/// [iso7816-3]: https://www.iso.org/standard/38770.html
+/// [iso7816-4]: https://www.iso.org/standard/36134.html
+/// [pcsc-spec]: https://pcscworkgroup.com/specifications/download/
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Atr {
     /// Supported protocols (`T=`), specified in ISO/IEC 7816-3:2006 §8.2.3.
     pub protocols: Vec<u8>,
@@ -66,10 +68,10 @@ pub struct Atr {
     /// capabilities" value (§8.1.1.2.7), and therefore does not support
     /// extended fields (§5.1).
     ///
-    /// FIDO v2.0 [requires][nfc-ext] all devices support short _and_ extended
-    /// length encoding.
+    /// FIDO v2.0 [requires][nfc-ext] all NFC devices support short _and_
+    /// extended length encoding.
     ///
-    /// See: [`ISO7816LengthForm`]
+    /// See: [`ISO7816LengthForm`][crate::transport::iso7816::ISO7816LengthForm]
     ///
     /// [nfc-ext]: https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#nfc-framing
     pub extended_lc: Option<bool>,
@@ -77,7 +79,10 @@ pub struct Atr {
 
 const PROTOCOL_T0: [u8; 1] = [0];
 
-/// PC/SC AID, per [PC/SC Specification][pcsc] Part 3 Supplemental Document.
+/// PC/SC AID, per [PC/SC Specification][pcsc-spec] Part 3 Supplemental
+/// Document.
+///
+/// [pcsc-spec]: https://pcscworkgroup.com/specifications/download/
 const PCSC_AID: [u8; 5] = [0xa0, 0x00, 0x00, 0x03, 0x06];
 
 /// Minimum response length for PC/SC storage card data in the ATR.
@@ -93,10 +98,10 @@ fn checksum(i: &[u8]) -> bool {
         let last = i.last().unwrap_or(&0);
         trace!("i.last == {:02x?}, expected {:02x?}", last, o ^ last);
     }
-    return o == 0;
+    o == 0
 }
 
-impl<'a> TryFrom<&[u8]> for Atr {
+impl TryFrom<&[u8]> for Atr {
     type Error = &'static str;
 
     /// Attempts to parse an ATR from a `&[u8]`.
@@ -113,7 +118,7 @@ impl<'a> TryFrom<&[u8]> for Atr {
         && atr[1] & 0x80 != 0x00 // TD0 present, no implicit T=0 only
         && (atr[2] & 0x0F != 0x00  // First protocol is not T=0, or
             || atr[2] & 0x80 != 0x00) // there is more than one protocol
-        && !checksum(&atr)
+        && !checksum(atr)
         {
             return Err("ATR checksum incorrect");
         }
@@ -165,7 +170,7 @@ impl<'a> TryFrom<&[u8]> for Atr {
 
             if tlv_payload.len() > PCSC_RESPONSE_LEN
                 && tlv_payload[0] == 0x4f
-                && &tlv_payload[2..7] == &PCSC_AID
+                && tlv_payload[2..7] == PCSC_AID
             {
                 // PC/SC Spec, Part 3, §3.1.3.2.3.2 (Contactless Storage Cards)
                 // is incorrectly defined in Simple-TLV, not Compact-TLV. FIDO
@@ -173,7 +178,7 @@ impl<'a> TryFrom<&[u8]> for Atr {
                 // This just means we don't barf on transit cards.
                 storage_card = true;
             } else {
-                let tlv = CompactTlv::new(&tlv_payload);
+                let tlv = CompactTlv::new(tlv_payload);
                 for (t, v) in tlv {
                     // trace!("tlv: {:02x?} = {:02x?}", t, v);
                     if t == 7 {
@@ -207,8 +212,8 @@ impl Atr {
     /// Returns `None` if [`Self::card_issuers_data`] is missing, or if it
     /// contains invalid UTF-8.
     pub fn card_issuers_data_str(&self) -> Option<&str> {
-        std::str::from_utf8(&self.card_issuers_data.as_ref()?)
-            .map(|v| Some(v))
+        std::str::from_utf8(self.card_issuers_data.as_ref()?)
+            .map(Some)
             .unwrap_or(None)
     }
 }

@@ -1,4 +1,6 @@
-/// Iterative Compact-TLV parser.
+//! [CompactTlv] is an [Iterator]-based Compact-TLV parser.
+
+/// An [Iterator]-based Compact-TLV parser.
 pub(crate) struct CompactTlv<'a> {
     b: &'a [u8],
 }
@@ -24,7 +26,7 @@ impl<'a> Iterator for CompactTlv<'a> {
     type Item = (u8, &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.b.len() == 0 {
+        if self.b.is_empty() {
             return None;
         }
         let tl = self.b[0];

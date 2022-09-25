@@ -1,6 +1,7 @@
-use super::atr::Atr;
+//! ISO/IEC 7816-4 APDUs, used by CTAP v2 NFC tokens, and all CTAP v1/U2F
+//! tokens.
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     /// [`ISO7816RequestAPDU.to_bytes()`]: `data` was too long for the given
     /// length form.
@@ -15,26 +16,50 @@ pub enum Error {
     ResponseTooShort,
 }
 
-/// The L<sub>c</sub> and L<sub>e</sub> form to use for [`ISO7816RequestAPDU`],
+/// The L<sub>c</sub> and L<sub>e</sub> form to use for [ISO7816RequestAPDU],
 /// per ISO/IEC 7816-4:2005 §5.1.
+///
+/// All smartcards **must** support short form, and communication in extended
+/// form may only be used if
+/// [declared in the ATR][crate::nfc::Atr::extended_lc]. Smartcards which do not
+/// support extended form must use [ISO7816LengthForm::ShortOnly].
+///
+/// FIDO tokens on non-NFC transports are **not required** to support short
+/// form, and **must** support extended form on **all** transports – so must use
+/// [ISO7816LengthForm::ExtendedOnly] for CTAP v1 / U2F commands.
+///
+/// FIDO tokens on NFC transports are required to support **both** short and
+/// extended form.
+///
+/// Truth table:
+///
+/// Spec           | Short Form    | Extended Form
+/// -------------- | ------------- | ------------------
+/// ISO 7816       | required      | optional
+/// FIDO / BTLE    | not supported | required (CTAP v1)
+/// FIDO / NFC     | required      | required
+/// FIDO / USB-HID | not supported | required (CTAP v1)
 pub enum ISO7816LengthForm {
-    /// Only use short form (1 byte). This limits
+    /// Only use short form (1 byte length field). This limits
     /// [`ISO7816RequestAPDU::data`] to 255 bytes, and
     /// [`ISO7816RequestAPDU::ne`] to 256 bytes.
     ///
-    /// This mode is always supported.
+    /// This mode is always supported by smart cards, but may not be supported
+    /// by non-NFC FIDO tokens (in CTAPv1 / U2F mode).
     ShortOnly,
-    /// Automatically use extended form (3 bytes), if the request requires it.
+    /// Automatically use extended form (3 bytes length field), if the request
+    /// requires it, otherwise use short form (1 byte length field). This
+    /// reduces the size of short messages.
     ///
-    /// This may only be used if the card declares support for it in the ATR
-    /// ([`Atr::extended_lc`]).
+    /// This mode is recommended only for NFC FIDO tokens. This may not be
+    /// supported by non-NFC FIDO tokens (in CTAPv1 / U2F mode).
     Extended,
-    /// Always use extended form, even if the request does not require it.
+    /// Always use extended form (3 bytes length field), even if the request is
+    /// short enough to not require it. This increases the size of short
+    /// messages.
     ///
-    /// This may only be used if the card declares support for it in the ATR
-    /// ([`Atr::extended_lc`]).
-    ///
-    /// _This is probably only useful for testing._
+    /// This is needed to communicate with non-NFC FIDO tokens in CTAPv1 mode.
+    /// This may not be supported by non-FIDO smartcards.
     ExtendedOnly,
 }
 
@@ -53,15 +78,15 @@ pub struct ISO7816RequestAPDU {
     /// Optional command data, up to 255 bytes in short form, or up to 65535
     /// bytes in extended form.
     ///
-    /// Extended form can only be used on cards that declare support for it in
-    /// the ATR ([`Atr::extended_lc`]).
+    /// Extended form can only be used with smartcards which
+    /// [declare support for it in the ATR][crate::nfc::Atr::extended_lc].
     pub data: Vec<u8>,
 
     /// The maximum expected response length from the card (N<sub>e</sub>), in
     /// bytes, up to 256 bytes in short form, or 65535 bytes in extended form.
     ///
-    /// Extended form can only be used on cards that declare support for it in
-    /// the ATR ([`Atr::extended_lc`]).
+    /// Extended form can only be used with smartcards which
+    /// [declare support for it in the ATR][crate::nfc::Atr::extended_lc].
     pub ne: usize,
 }
 
@@ -93,8 +118,7 @@ fn push_length_value(buf: &mut Vec<u8>, value: usize, form: u8) -> Result<(), Er
             // uint16be prefixed with 0
             buf.push(0);
         }
-        buf.push(((value >> 8) & 0xff) as u8);
-        buf.push((value & 0xff) as u8);
+        buf.extend_from_slice(&(value as u16).to_be_bytes());
     } else if value > 256 {
         return Err(Error::IntegerOverflow);
     } else {
@@ -106,7 +130,7 @@ fn push_length_value(buf: &mut Vec<u8>, value: usize, form: u8) -> Result<(), Er
 
 impl ISO7816RequestAPDU {
     /// Serializes a request APDU into bytes to send to the card.
-    pub fn to_bytes(&self, form: ISO7816LengthForm) -> Result<Vec<u8>, Error> {
+    pub fn to_bytes(&self, form: &ISO7816LengthForm) -> Result<Vec<u8>, Error> {
         let extended_form = match form {
             ISO7816LengthForm::Extended => self.ne > 256 || self.data.len() > 255,
             ISO7816LengthForm::ShortOnly => false,
@@ -126,7 +150,7 @@ impl ISO7816RequestAPDU {
 
         // §5.1: "short and extended length fields shall not be combined: either
         // both of them are short, or both of them are extended".
-        let lc_len: u8 = if self.data.len() == 0 {
+        let lc_len: u8 = if self.data.is_empty() {
             0
         } else if extended_form {
             3
@@ -153,15 +177,8 @@ impl ISO7816RequestAPDU {
         buf.push(self.p1);
         buf.push(self.p2);
 
-        push_length_value(
-            &mut buf,
-            self.data
-                .len()
-                .try_into()
-                .map_err(|_| Error::IntegerOverflow)?,
-            lc_len,
-        )?;
-        if self.data.len() > 0 {
+        push_length_value(&mut buf, self.data.len(), lc_len)?;
+        if !self.data.is_empty() {
             buf.extend_from_slice(&self.data);
         }
         push_length_value(&mut buf, self.ne, le_len)?;
@@ -171,7 +188,7 @@ impl ISO7816RequestAPDU {
 }
 
 /// ISO/IEC 7816-4 response APDU.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ISO7816ResponseAPDU {
     /// Response data field.
     pub data: Vec<u8>,
@@ -181,7 +198,7 @@ pub struct ISO7816ResponseAPDU {
     pub sw2: u8,
 }
 
-impl<'a> TryFrom<&[u8]> for ISO7816ResponseAPDU {
+impl TryFrom<&[u8]> for ISO7816ResponseAPDU {
     type Error = self::Error;
 
     /// Attempts to deserialize a ISO/IEC 7816-4 response APDU.
@@ -190,7 +207,7 @@ impl<'a> TryFrom<&[u8]> for ISO7816ResponseAPDU {
             Err(Error::ResponseTooShort)
         } else {
             Ok(Self {
-                data: (&raw[..raw.len() - 2]).to_vec(),
+                data: raw[..raw.len() - 2].to_vec(),
                 sw1: raw[raw.len() - 2],
                 sw2: raw[raw.len() - 1],
             })
@@ -247,17 +264,17 @@ pub fn select_by_df_name(df: &[u8]) -> ISO7816RequestAPDU {
 }
 
 /// Requests a chunked response from the previous command that was too long for
-/// the previous [`ISO7816RequestAPDU.ne`].
+/// the previous [`ISO7816RequestAPDU::ne`].
 ///
 /// Reference: ISO/IEC 7816-4:2005 §7.6.1
 pub fn get_response(cla: u8, ne: usize) -> ISO7816RequestAPDU {
     ISO7816RequestAPDU {
-        cla: cla,
+        cla,
         ins: 0xC0, // GET RESPONSE
         p1: 0x00,
         p2: 0x00,
         data: vec![],
-        ne: ne,
+        ne,
     }
 }
 
@@ -270,7 +287,9 @@ pub const EMPTY_RESPONSE: ISO7816ResponseAPDU = ISO7816ResponseAPDU {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nfc::APPLET_DF;
+
+    // Copy of crate::nfc::APPLET_DF, so that the tests don't require NFC.
+    const APPLET_DF: [u8; 8] = [0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01];
 
     macro_rules! length_tests {
         ($($name:ident: $value:expr,)*) => {
@@ -307,7 +326,7 @@ mod tests {
             #[test]
             fn $name() {
                 let (input, form, expected): (ISO7816RequestAPDU, ISO7816LengthForm, &[u8]) = $value;
-                let b = input.to_bytes(form).expect("serialisation error");
+                let b = input.to_bytes(&form).expect("serialisation error");
                 assert_eq!(expected, b);
             }
         )*
@@ -320,7 +339,7 @@ mod tests {
             #[test]
             fn $name() {
                 let (input, form, expected): (ISO7816RequestAPDU, ISO7816LengthForm, Error) = $value;
-                let err = input.to_bytes(form).expect_err("expected error");
+                let err = input.to_bytes(&form).expect_err("expected error");
                 assert_eq!(expected, err);
             }
         )*

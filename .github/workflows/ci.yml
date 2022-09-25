@@ -7,6 +7,11 @@ jobs:
     strategy:
       matrix:
         rust_version: [stable, 1.45.0]
+        features:
+          - ""
+          - --features nfc
+          - --features usb
+          - --features nfc,usb
     name: WebAuthn Rust Frameworks (Build and Test)
     runs-on: ubuntu-latest
     steps:
@@ -17,6 +22,12 @@ jobs:
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
-      - run: cargo build --release
-      - run: cargo clippy --all-targets
-      - run: cargo test --all
+
+      - if: contains(matrix.features, 'nfc')
+        run: sudo apt-get -y install libpcsclite-dev
+      - if: contains(matrix.features, 'usb')
+        run: sudo apt-get -y install libusb-1.0-0-dev
+
+      - run: cargo build --release ${{ matrix.features }}
+      - run: cargo clippy --all-targets ${{ matrix.features }}
+      - run: cargo test --all ${{ matrix.features }}

@@ -1,21 +1,26 @@
+//! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
 use crate::error::WebauthnCError;
-use base64urlsafedata::Base64UrlSafeData;
-
-use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
 use pcsc::*;
 use std::ffi::CString;
 use std::fmt;
 
-mod apdu;
 mod atr;
-mod iso7816;
 mod tlv;
 
-pub use self::apdu::*;
 pub use self::atr::*;
-pub use self::iso7816::*;
 use super::cbor::*;
+use crate::transport::iso7816::*;
+use crate::transport::*;
+
+/// Version string for a token which supports CTAP v1 / U2F
+pub const APPLET_U2F_V2: [u8; 6] = [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32];
+/// Version string for a token which only supports CTAP v2
+pub const APPLET_FIDO_2_0: [u8; 8] = [0x46, 0x49, 0x44, 0x4f, 0x5f, 0x32, 0x5f, 0x30];
+/// ISO 7816 FIDO applet name
+pub const APPLET_DF: [u8; 8] = [
+    /* RID */ 0xA0, 0x00, 0x00, 0x06, 0x47, /* PIX */ 0x2F, 0x00, 0x01,
+];
 
 pub struct NFCReader {
     ctx: Context,
@@ -29,25 +34,17 @@ pub struct NFCCard {
     pub atr: Atr,
 }
 
-#[allow(non_camel_case_types)]
-pub enum Selected {
-    // FIDO_2_1(),
-    FIDO_2_1_PRE(Ctap2_1_pre),
-    // FIDO_2_0(),
-    // U2F(),
-}
-
-#[allow(non_camel_case_types)]
-pub struct Ctap2_1_pre {
-    tokinfo: GetInfoResponse,
-    card: NFCCard,
-}
-
 impl fmt::Debug for NFCReader {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NFCReader")
             .field("reader_id", &self.rdr_id)
             .finish()
+    }
+}
+
+impl fmt::Debug for NFCCard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NFCCard").field("atr", &self.atr).finish()
     }
 }
 
@@ -81,7 +78,7 @@ impl Default for NFCReader {
 }
 
 impl NFCReader {
-    pub fn wait_for_card(&mut self) -> Result<NFCCard, ()> {
+    pub fn wait_for_card(&mut self) -> Result<NFCCard, WebauthnCError> {
         loop {
             for read_state in &mut self.rdr_state {
                 read_state.sync_current_state();
@@ -89,7 +86,7 @@ impl NFCReader {
 
             if let Err(e) = self.ctx.get_status_change(None, &mut self.rdr_state) {
                 error!("Failed to detect card: {:?}", e);
-                return Err(());
+                return Err(WebauthnCError::Internal);
             } else {
                 // Check every reader ...
                 for read_state in &self.rdr_state {
@@ -113,10 +110,40 @@ impl NFCReader {
     }
 }
 
+impl Transport for NFCReader {
+    type Token = NFCCard;
+
+    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+        for read_state in &mut self.rdr_state {
+            read_state.sync_current_state();
+        }
+
+        if let Err(e) = self.ctx.get_status_change(None, &mut self.rdr_state) {
+            error!("Failed to detect card: {:?}", e);
+            return Err(WebauthnCError::Internal);
+        }
+
+        // Check every reader ...
+        let r: Result<Vec<NFCCard>, WebauthnCError> = self
+            .rdr_state
+            .iter()
+            .filter(|s| s.event_state().contains(State::PRESENT))
+            .map(|s| {
+                self.ctx
+                    .connect(s.name(), ShareMode::Shared, Protocols::ANY)
+                    .map(NFCCard::new)
+                    .map_err(|_| WebauthnCError::Internal)
+            })
+            .collect();
+
+        r
+    }
+}
+
 fn transmit(
     card: &Card,
     request: &ISO7816RequestAPDU,
-    form: ISO7816LengthForm,
+    form: &ISO7816LengthForm,
 ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
     let req = request.to_bytes(form).map_err(|e| {
         error!("Failed to build APDU command: {:?}", e);
@@ -161,15 +188,14 @@ impl NFCCard {
         let atr = Atr::try_from(card_status.atr()).expect("oops atr");
         trace!("Parsed: {:?}", &atr);
 
-        let card = NFCCard { card_ref, atr: atr };
-        return card;
+        NFCCard { card_ref, atr }
     }
 
     /// Transmits a single ISO 7816-4 APDU to the card.
     pub fn transmit(
         &self,
         request: &ISO7816RequestAPDU,
-        form: ISO7816LengthForm,
+        form: &ISO7816LengthForm,
     ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
         transmit(&self.card_ref, request, form)
     }
@@ -183,14 +209,15 @@ impl NFCCard {
         let mut r = EMPTY_RESPONSE;
 
         for chunk in requests {
-            r = self.transmit(chunk, ISO7816LengthForm::ShortOnly)?;
+            r = self.transmit(chunk, &ISO7816LengthForm::ShortOnly)?;
             if !r.is_success() {
                 return Err(WebauthnCError::ApduTransmission);
             }
         }
 
         if r.ctap_needs_get_response() {
-            unimplemented!("NFCCTAP_GETRESPONSE");
+            error!("NFCCTAP_GETRESPONSE not supported, but token sent it");
+            return Err(WebauthnCError::ApduTransmission);
         }
 
         if r.bytes_available() == 0 {
@@ -203,7 +230,7 @@ impl NFCCard {
         while r.bytes_available() > 0 {
             r = self.transmit(
                 &get_response(0x80, r.bytes_available()),
-                ISO7816LengthForm::ShortOnly,
+                &ISO7816LengthForm::ShortOnly,
             )?;
             if !r.is_success() {
                 return Err(WebauthnCError::ApduTransmission);
@@ -214,22 +241,31 @@ impl NFCCard {
         r.data = response_data;
         Ok(r)
     }
+}
 
-    pub fn authenticator_get_info(&mut self) -> Result<GetInfoResponse, WebauthnCError> {
-        let apdus = (GetInfoRequest {}).to_short_apdus().unwrap();
+impl Token for NFCCard {
+    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    where
+        C: CBORCommand<Response = R>,
+        R: CBORResponse,
+    {
+        let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
         let resp = self.transmit_chunks(&apdus)?;
 
         // CTAP has its own extra status code over NFC in the first byte.
-        GetInfoResponse::try_from(&resp.data[1..]).map_err(|e| {
-            error!("error: {:?}", e);
+        // TODO: handle status byte
+        R::try_from(&resp.data[1..]).map_err(|_| {
+            //error!("error: {:?}", e);
             WebauthnCError::Cbor
         })
     }
 
-    /// Selects the U2Fv2 applet.
-    pub fn select_u2f_v2_applet(mut self) -> Result<Selected, WebauthnCError> {
+    fn init(&mut self) -> Result<(), WebauthnCError> {
         let resp = self
-            .transmit(&select_by_df_name(&APPLET_DF), ISO7816LengthForm::ShortOnly)
+            .transmit(
+                &select_by_df_name(&APPLET_DF),
+                &ISO7816LengthForm::ShortOnly,
+            )
             .expect("Failed to select CTAP2.1 applet");
 
         if !resp.is_ok() {
@@ -237,73 +273,17 @@ impl NFCCard {
             return Err(WebauthnCError::NotSupported);
         }
 
-        if resp.data != &APPLET_U2F_V2 {
+        if resp.data != APPLET_U2F_V2 {
             error!("Unsupported applet: {:02x?}", &resp.data);
             return Err(WebauthnCError::NotSupported);
         }
 
-        // Read the card info.
-        let tokinfo = self.authenticator_get_info()?;
-
-        debug!(?tokinfo);
-
-        if tokinfo.versions.contains("FIDO_2_1_PRE") {
-            Ok(Selected::FIDO_2_1_PRE(Ctap2_1_pre {
-                tokinfo,
-                card: self,
-            }))
-        } else {
-            error!(?tokinfo.versions);
-            return Err(WebauthnCError::NotSupported);
-        }
-    }
-}
-
-impl fmt::Debug for Ctap2_1_pre {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Ctap2_1_pre")
-            .field("token_info", &self.tokinfo)
-            .finish()
-    }
-}
-
-impl Ctap2_1_pre {
-    pub fn hack_make_cred(&mut self) -> Result<(), WebauthnCError> {
-        let mc = MakeCredentialRequest {
-            client_data_hash: vec![
-                104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106, 226,
-                47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65,
-            ],
-            rp: RelyingParty {
-                name: "test".to_string(),
-                id: "test".to_string(),
-            },
-            user: User {
-                id: Base64UrlSafeData("test".as_bytes().into()),
-                name: "test".to_string(),
-                display_name: "test".to_string(),
-            },
-            pub_key_cred_params: vec![PubKeyCredParams {
-                type_: "public-key".to_string(),
-                alg: -7,
-            }],
-            options: None,
-            pin_uv_auth_param: None,
-            pin_uv_auth_proto: None,
-            enterprise_attest: None,
-        };
-        // TODO: handle extended APDUs
-        let pdus = mc.to_short_apdus().unwrap();
-        let rapdu = self.card.transmit_chunks(&pdus)?;
-        trace!("got encoded APDU: {:x?}", rapdu);
-
         Ok(())
     }
 
-    pub fn deselect_applet(&self) -> Result<(), WebauthnCError> {
+    fn close(&self) -> Result<(), WebauthnCError> {
         let resp = self
-            .card
-            .transmit(&DESELECT_APPLET, ISO7816LengthForm::ShortOnly)
+            .transmit(&DESELECT_APPLET, &ISO7816LengthForm::ShortOnly)
             .expect("Failed to deselect CTAP2.1 applet");
 
         if !resp.is_ok() {
