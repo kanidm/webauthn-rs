@@ -116,7 +116,7 @@ pub struct CredBlobGet(pub bool);
 /// Extension option inputs for PublicKeyCredentialRequestOptions
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestAuthenticationExtensions {
     /// The `credBlob` extension options
@@ -140,8 +140,9 @@ pub struct AuthenticationExtensionsClientOutputs {
     #[serde(default)]
     pub appid: Option<bool>,
 
-    /// Indicates if the client used the provided cred_blob extensions.
-    pub cred_blob: Option<bool>,
+    /// Buffer containing the `credBlob` value stored for the credential.
+    #[serde(default)]
+    pub cred_blob: Option<CredBlobSet>,
 }
 
 #[cfg(feature = "wasm")]
@@ -157,7 +158,9 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
 
         let cred_blob = js_sys::Reflect::get(&ext, &"credBlob".into())
             .ok()
-            .and_then(|jv| jv.as_bool());
+            .as_ref()
+            .map(js_sys::Uint8Array::new)
+            .map(|b| b.to_vec().into());
 
         AuthenticationExtensionsClientOutputs { appid, cred_blob }
     }
@@ -177,7 +180,7 @@ pub struct RegistrationExtensionsClientOutputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appid: Option<bool>,
 
-    /// Indicates if the client used the provided cred_blob extensions.
+    /// Indicates whether the client was able to store the `credBlob` value.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cred_blob: Option<bool>,
 
@@ -185,6 +188,10 @@ pub struct RegistrationExtensionsClientOutputs {
     /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cred_props: Option<CredProps>,
+
+    /// Indicates if the client successfully applied a credential protection policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cred_protect: Option<CredentialProtectionPolicy>,
 }
 
 #[cfg(feature = "wasm")]
@@ -210,10 +217,16 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
                     .map(|rk| CredProps { rk })
             });
 
+        let cred_protect = js_sys::Reflect::get(&ext, &"credProtect".into())
+            .ok()
+            .and_then(|jv| jv.as_f64())
+            .and_then(|f| CredentialProtectionPolicy::try_from(f as u8).ok());
+
         RegistrationExtensionsClientOutputs {
             appid,
             cred_blob,
             cred_props,
+            cred_protect,
         }
     }
 }
