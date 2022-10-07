@@ -289,6 +289,9 @@ pub enum AuthenticationAlgorithm {
     /// secp384r1_ecdsa_sha384_raw
     #[serde(rename = "secp384r1_ecdsa_sha384_raw")]
     Secp384r1EcdsaSha384Raw,
+    /// rsassa_pkcsv15_sha256_raw
+    #[serde(rename = "rsassa_pkcsv15_sha256_raw")]
+    RsassaPkcsv15Sha256Raw,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
