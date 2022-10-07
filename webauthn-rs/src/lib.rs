@@ -432,7 +432,6 @@ impl Webauthn {
 
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: None,
-            cred_blob: None,
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: None,
@@ -908,7 +907,6 @@ impl Webauthn {
 
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: None,
-            cred_blob: None,
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: Some(true),
@@ -982,7 +980,6 @@ impl Webauthn {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
         let extensions = Some(RequestAuthenticationExtensions {
-            get_cred_blob: None,
             appid: None,
             uvm: Some(true),
         });
@@ -1037,7 +1034,6 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
         let policy = UserVerificationPolicy::Required;
         let extensions = Some(RequestAuthenticationExtensions {
-            get_cred_blob: None,
             appid: None,
             uvm: Some(true),
         });
@@ -1104,7 +1100,6 @@ impl Webauthn {
                 // then enforce it there.
                 enforce_credential_protection_policy: Some(false),
             }),
-            cred_blob: None,
             // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
             uvm: Some(true),
             cred_props: Some(true),
@@ -1167,7 +1162,6 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, DeviceKeyAuthentication)> {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let extensions = Some(RequestAuthenticationExtensions {
-            get_cred_blob: None,
             appid: None,
             uvm: Some(true),
         });

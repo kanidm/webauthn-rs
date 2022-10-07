@@ -1,6 +1,4 @@
 //! Extensions allowing certain types of authenticators to provide supplemental information.
-
-use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
 /// Valid credential protection policies
@@ -51,17 +49,6 @@ pub struct CredProtect {
     pub enforce_credential_protection_policy: Option<bool>,
 }
 
-/// Wrapper for an ArrayBuffer containing opaque data in an RP-specific format.
-/// <https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-credBlob-extension>
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
-pub struct CredBlobSet(pub Base64UrlSafeData);
-
-impl From<Vec<u8>> for CredBlobSet {
-    fn from(bytes: Vec<u8>) -> Self {
-        CredBlobSet(Base64UrlSafeData(bytes))
-    }
-}
-
 /// Extension option inputs for PublicKeyCredentialCreationOptions.
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec.
@@ -71,10 +58,6 @@ pub struct RequestRegistrationExtensions {
     /// The `credProtect` extension options
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub cred_protect: Option<CredProtect>,
-
-    /// The `credBlob` extension options
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cred_blob: Option<CredBlobSet>,
 
     /// Uvm
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,7 +80,6 @@ impl Default for RequestRegistrationExtensions {
     fn default() -> Self {
         RequestRegistrationExtensions {
             cred_protect: None,
-            cred_blob: None,
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: None,
@@ -108,21 +90,12 @@ impl Default for RequestRegistrationExtensions {
 
 // ========== Auth exten ============
 
-/// Wrapper for a boolean value to indicate that this extension is requested by
-/// the Relying Party.
-#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
-pub struct CredBlobGet(pub bool);
-
 /// Extension option inputs for PublicKeyCredentialRequestOptions
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestAuthenticationExtensions {
-    /// The `credBlob` extension options
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub get_cred_blob: Option<CredBlobGet>,
-
     /// The `appid` extension options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub appid: Option<String>,
@@ -139,9 +112,6 @@ pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
     pub appid: Option<bool>,
-
-    /// Indicates if the client used the provided cred_blob extensions.
-    pub cred_blob: Option<bool>,
 }
 
 #[cfg(feature = "wasm")]
@@ -155,11 +125,7 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
             .ok()
             .and_then(|jv| jv.as_bool());
 
-        let cred_blob = js_sys::Reflect::get(&ext, &"credBlob".into())
-            .ok()
-            .and_then(|jv| jv.as_bool());
-
-        AuthenticationExtensionsClientOutputs { appid, cred_blob }
+        AuthenticationExtensionsClientOutputs { appid }
     }
 }
 
@@ -177,10 +143,6 @@ pub struct RegistrationExtensionsClientOutputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appid: Option<bool>,
 
-    /// Indicates if the client used the provided cred_blob extensions.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cred_blob: Option<bool>,
-
     /// Indicates if the client believes it created a resident key. This
     /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -196,10 +158,6 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
             .ok()
             .and_then(|jv| jv.as_bool());
 
-        let cred_blob = js_sys::Reflect::get(&ext, &"credBlob".into())
-            .ok()
-            .and_then(|jv| jv.as_bool());
-
         // Destructure "credProps":{"rk":false} from within a map.
         let cred_props = js_sys::Reflect::get(&ext, &"credProps".into())
             .ok()
@@ -212,7 +170,6 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
 
         RegistrationExtensionsClientOutputs {
             appid,
-            cred_blob,
             cred_props,
         }
     }

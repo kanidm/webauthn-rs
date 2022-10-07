@@ -254,12 +254,6 @@ impl WebauthnActor {
 
         debug!("handle ChallengeRegister -> {:?}", username);
 
-        /*
-        let exts = RequestRegistrationExtensions::builder()
-            .cred_blob(vec![0xde, 0xad, 0xbe, 0xef])
-            .build();
-        */
-
         let user_unique_id = Uuid::new_v4();
 
         let (ccr, rs) = self.wan.generate_challenge_register_options(
@@ -293,12 +287,6 @@ impl WebauthnActor {
         } = auth_settings;
 
         debug!("handle ChallengeAuthenticate -> {:?}", username);
-
-        /*
-        let exts = RequestAuthenticationExtensions::builder()
-            .get_cred_blob(true)
-            .build();
-        */
 
         // If use_cred_id is set, only allow this cred to be used. This also allows
         // some extra "stuff".

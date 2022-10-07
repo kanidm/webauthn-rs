@@ -68,12 +68,8 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
         let user = js_sys::Reflect::get(&pkcco, &"user".into()).unwrap();
         js_sys::Reflect::set(&user, &"id".into(), &userid).unwrap();
 
-        if let Some(extensions) = ccr.public_key.extensions {
-            if let Some(cred_blob) = extensions.cred_blob {
-                let exts = js_sys::Reflect::get(&pkcco, &"extensions".into()).unwrap();
-                let cred_blob = Uint8Array::from(cred_blob.0.as_ref());
-                js_sys::Reflect::set(&exts, &"credBlob".into(), &cred_blob).unwrap();
-            }
+        if let Some(_extensions) = ccr.public_key.extensions {
+            // TODO: Add registration extensions here
         }
 
         if let Some(exclude_credentials) = ccr.public_key.exclude_credentials {

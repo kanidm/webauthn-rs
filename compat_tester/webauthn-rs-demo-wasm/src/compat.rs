@@ -101,7 +101,6 @@ fn reg_extensions_full() -> RequestRegistrationExtensions {
                 CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIDList,
             enforce_credential_protection_policy: Some(false),
         }),
-        cred_blob: None,
         uvm: Some(true),
         cred_props: Some(true),
         min_pin_length: Some(true),
@@ -112,7 +111,6 @@ fn reg_extensions_full() -> RequestRegistrationExtensions {
 fn auth_extensions_full() -> RequestAuthenticationExtensions {
     RequestAuthenticationExtensions {
         appid: None,
-        get_cred_blob: None,
         uvm: Some(true),
     }
 }
