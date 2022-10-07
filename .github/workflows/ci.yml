@@ -2,6 +2,9 @@ on: [push, pull_request]
 
 name: CI
 
+env:
+  VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+
 jobs:
   build_and_test:
     strategy:
@@ -12,21 +15,31 @@ jobs:
           - --features nfc
           - --features usb
           - --features nfc,usb
+        os:
+          - ubuntu-latest
+          - windows-latest
     name: WebAuthn Rust Frameworks (Build and Test)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust_version }}
-      - run: |
+
+      - if: runner.os != 'windows'
+        run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
-
-      - if: contains(matrix.features, 'nfc')
+      - if: contains(matrix.features, 'nfc') && runner.os != 'windows'
         run: sudo apt-get -y install libpcsclite-dev
-      - if: contains(matrix.features, 'usb')
+      - if: contains(matrix.features, 'usb') && runner.os != 'windows'
         run: sudo apt-get -y install libusb-1.0-0-dev
+
+      - if: runner.os == 'windows'
+        uses: johnwason/vcpkg-action@v3
+        with:
+          pkgs: openssl
+          triplet: x64-windows-static-md
 
       - run: cargo build --release ${{ matrix.features }}
       - run: cargo clippy --all-targets ${{ matrix.features }}
