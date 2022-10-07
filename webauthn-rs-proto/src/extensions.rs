@@ -147,6 +147,18 @@ pub struct RegistrationExtensionsClientOutputs {
     /// property is managed by the webbrowser, and is NOT SIGNED and CAN NOT be trusted!
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cred_props: Option<CredProps>,
+
+    /// Indicates if the client successfully applied a HMAC Secret
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hmac_secret: Option<bool>,
+
+    /// Indicates if the client successfully applied a credential protection policy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cred_protect: Option<CredentialProtectionPolicy>,
+
+    /// Indicates the current minimum PIN length
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_pin_length: Option<u32>,
 }
 
 #[cfg(feature = "wasm")]
@@ -168,9 +180,26 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
                     .map(|rk| CredProps { rk })
             });
 
+        let hmac_secret = js_sys::Reflect::get(&ext, &"hmac-secret".into())
+            .ok()
+            .and_then(|jv| jv.as_bool());
+
+        let cred_protect = js_sys::Reflect::get(&ext, &"credProtect".into())
+            .ok()
+            .and_then(|jv| jv.as_f64())
+            .and_then(|f| CredentialProtectionPolicy::try_from(f as u8).ok());
+
+        let min_pin_length = js_sys::Reflect::get(&ext, &"minPinLength".into())
+            .ok()
+            .and_then(|jv| jv.as_f64())
+            .map(|f| f as u32);
+
         RegistrationExtensionsClientOutputs {
             appid,
             cred_props,
+            hmac_secret,
+            cred_protect,
+            min_pin_length,
         }
     }
 }
