@@ -63,6 +63,7 @@ pub struct RelyingParty {
     pub name: String,
     /// The id of the relying party.
     pub id: String,
+    // Note: "icon" is deprecated: https://github.com/w3c/webauthn/pull/1337
 }
 
 /// User Entity
@@ -73,10 +74,11 @@ pub struct User {
     /// must NOT contain personally identifying information, as this value can NEVER
     /// be changed. If in doubt, use a UUID.
     pub id: Base64UrlSafeData,
-    /// The users preferred name for display.
+    /// A detailed name for the account, such as an email address.
     pub name: String,
-    /// The users preferred name for display.
+    /// The user's preferred name for display.
     pub display_name: String,
+    // Note: "icon" is deprecated: https://github.com/w3c/webauthn/pull/1337
 }
 
 /// Public key cryptographic parameters
@@ -119,6 +121,8 @@ pub enum AuthenticatorTransport {
     Ble,
     /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-internal>
     Internal,
+    /// Test transport; used for Windows 10.
+    Test,
     // ///
     // Hybrid
 }
