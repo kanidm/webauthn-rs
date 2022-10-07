@@ -1,6 +1,7 @@
 use crate::error::WebauthnCError;
 use crate::AuthenticatorBackend;
 use crate::Url;
+use crate::util::compute_sha256;
 use openssl::x509::{
     extension::{AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier},
     X509NameBuilder, X509Ref, X509ReqBuilder, X509,
@@ -12,8 +13,6 @@ use std::collections::HashMap;
 use std::iter;
 use uuid::Uuid;
 
-use openssl::sha;
-
 use base64urlsafedata::Base64UrlSafeData;
 
 use webauthn_rs_proto::{
@@ -23,13 +22,10 @@ use webauthn_rs_proto::{
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
 
-fn compute_sha256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = sha::Sha256::new();
-    hasher.update(data);
-    hasher.finish()
-}
-
-pub const AAGUID: Uuid = uuid::uuid!("0fb9bcbc-a0d4-4042-bbb0-559bc1631e28");
+// This is 0fb9bcbc-a0d4-4042-bbb0-559bc1631e28
+pub const AAGUID: [u8; 16] = [
+    15, 185, 188, 188, 160, 212, 64, 66, 187, 176, 85, 155, 193, 99, 30, 40,
+];
 
 pub struct SoftToken {
     _ca_key: pkey::PKey<pkey::Private>,

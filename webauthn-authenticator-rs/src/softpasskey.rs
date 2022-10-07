@@ -1,13 +1,12 @@
 use crate::error::WebauthnCError;
 use crate::AuthenticatorBackend;
 use crate::Url;
+use crate::util::compute_sha256;
 use openssl::{bn, ec, hash, nid, pkey, rand, sign};
 use serde_cbor::value::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
-
-use openssl::sha;
 
 use base64urlsafedata::Base64UrlSafeData;
 
@@ -17,12 +16,6 @@ use webauthn_rs_proto::{
     PublicKeyCredential, PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
-
-fn compute_sha256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = sha::Sha256::new();
-    hasher.update(data);
-    hasher.finish()
-}
 
 pub struct SoftPasskey {
     tokens: HashMap<Vec<u8>, Vec<u8>>,

@@ -28,6 +28,8 @@ pub struct MakeCredentialRequest {
 
 impl CBORCommand for MakeCredentialRequest {
     const CMD: u8 = 0x01;
+    // TODO: this is actually wrong...
+    // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authenticatormakecredential-response-structure
     type Response = NoResponse;
 }
 
@@ -46,7 +48,7 @@ impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
 
         let mut keys = BTreeMap::new();
 
-        keys.insert(0x1, Value::Bytes(client_data_hash));
+        keys.insert(0x01, Value::Bytes(client_data_hash));
 
         let rp_value = to_value(rp).expect("Unable to encode rp");
         keys.insert(0x2, rp_value);
@@ -72,9 +74,16 @@ impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
         info!("{:?}", user_value);
         keys.insert(0x3, user_value);
 
-        let pub_key_cred_params_value =
+        // let ps = Value::Array(pub_key_cred_params.iter().map(|p| {
+        //     let mut m = BTreeMap::new();
+        //     m.insert(Value::Text("type".to_string()), Value::Text(p.type_.clone()));
+        //     m.insert(Value::Text("alg".to_string()), Value::Integer(p.alg as i128));
+        //     Value::Map(m)
+        // }).collect());
+
+        let ps =
             to_value(pub_key_cred_params).expect("Unable to encode pub_key_cred_params");
-        keys.insert(0x4, pub_key_cred_params_value);
+        keys.insert(0x4, ps);
 
         if let Some(o) = options {
             let mut options_map = BTreeMap::new();
@@ -100,15 +109,52 @@ impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
 
 #[cfg(test)]
 mod test {
+    use std::{slice::Chunks, num::ParseIntError};
+
     use crate::cbor::make_credential::*;
     use base64urlsafedata::Base64UrlSafeData;
     use serde_cbor::{from_slice, to_vec, Value};
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
+    pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+            .collect()
+    }
+
     #[test]
     fn make_credential() {
         let _ = tracing_subscriber::fmt().try_init();
 
+        // dropped 01 at start
+        let b = "A8015820687134968222EC17202E42505F8ED2B16AE22F16BB05B88C25DB9E602645F14102A262696469746573742E63746170646E616D6569746573742E6374617003A362696458202B6689BB18F4169F069FBCDF50CB6EA3C60A861B9A7B63946983E0B577B78C70646E616D6571746573746374617040637461702E636F6D6B646973706C61794E616D65695465737420437461700483A263616C672664747970656A7075626C69632D6B6579A263616C6739010064747970656A7075626C69632D6B6579A263616C67382464747970656A7075626C69632D6B657906A16B686D61632D736563726574F507A162726BF50850FC43AAA411D948CC6C37068B8DA1D5080901";
+        let b = decode_hex(b).expect("bad");
+        info!("canonical thhing = {:?}", b);
+        let v: Value = from_slice(&b[..]).expect("also bad");
+        /* Ok(Map({
+        Integer(1): Bytes([104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106, 226, 47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65]),
+        Integer(2): Map({Text("id"): Text("test.ctap"), Text("name"): Text("test.ctap")}),
+        Integer(3): Map({Text("id"): Bytes([43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80, 203, 110, 163, 198, 10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140, 112]),
+            Text("name"): Text("testctap@ctap.com"), Text("displayName"): Text("Test Ctap")}),
+        Integer(4): Array([
+            Map({Text("alg"): Integer(-7), Text("type"): Text("public-key")}),
+            Map({Text("alg"): Integer(-257), Text("type"): Text("public-key")}),
+            Map({Text("alg"): Integer(-37), Text("type"): Text("public-key")})]),
+        Integer(6): Map({Text("hmac-secret"): Bool(true)}),
+        Integer(7): Map({Text("rk"): Bool(true)}),
+        Integer(8): Bytes([252, 67, 170, 164, 17, 217, 72, 204, 108, 55, 6, 139, 141, 161, 213, 8]),
+        Integer(9): Integer(1)}))
+
+        will send = Ok(Map({
+        Integer(1): Bytes([148, 145, 139, 124, 8, 224, 156, 143, 91, 32, 250, 54, 89, 205, 14, 229, 185, 87, 249, 200, 63, 52, 60, 28, 179, 209, 104, 241, 133, 181, 28, 208]),
+        Integer(2): Map({Text("id"): Text("localhost"), Text("name"): Text("https://localhost:8080/auth")}),
+        Integer(3): Map({Text("id"): Bytes([158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238]),
+            Text("name"): Text("william"), Text("displayName"): Text("william")}),
+        Integer(4): Array([
+            Map({Text("alg"): Integer(-7), Text("type"): Text("public-key")}),
+            Map({Text("alg"): Integer(-257), Text("type"): Text("public-key")})])}))
+        */
         // let map: BTreeMap<Value, Value> = BTreeMap::new();
 
         // clientDataHash 0x01

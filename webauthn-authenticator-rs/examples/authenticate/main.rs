@@ -5,14 +5,40 @@ use std::io::{stdin, stdout, Write};
 
 use webauthn_authenticator_rs::prelude::Url;
 use webauthn_authenticator_rs::softtoken::SoftToken;
+use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
+use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::AuthenticatorBackend;
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
+
+fn access_card<T: Token>(card: T) -> Ctap21PreAuthenticator<T> {
+    info!("Card detected ...");
+
+    card.auth().expect("couldn't open card")
+}
+
+fn select_transport() -> Box<dyn AuthenticatorBackend> {
+    let mut reader = AnyTransport::default();
+    info!("Using reader: {:?}", reader);
+
+    match reader.tokens() {
+        Ok(mut tokens) => {
+            while let Some(mut card) = tokens.pop() {
+                card.init().expect("couldn't init card");
+                return Box::new(access_card(card));
+            }
+        }
+        Err(e) => panic!("Error: {:?}", e),
+    }
+
+    panic!("no card");
+}
 
 fn select_provider() -> Box<dyn AuthenticatorBackend> {
     let mut providers: Vec<(&str, fn() -> Box<dyn AuthenticatorBackend>)> = Vec::new();
 
     providers.push(("SoftToken", || Box::new(SoftToken::new().unwrap().0)));
+    providers.push(("CTAP", select_transport));
 
     #[cfg(feature = "u2fhid")]
     providers.push(("Mozilla", || {

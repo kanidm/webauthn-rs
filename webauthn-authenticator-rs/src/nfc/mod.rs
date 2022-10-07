@@ -1,5 +1,5 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
-use crate::error::WebauthnCError;
+use crate::error::{WebauthnCError, CtapError, CtapOrWebauthnCError};
 
 use pcsc::*;
 use std::ffi::CString;
@@ -244,19 +244,25 @@ impl NFCCard {
 }
 
 impl Token for NFCCard {
-    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, CtapOrWebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse,
     {
-        let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
+        const CBOR_ERROR: CtapOrWebauthnCError = CtapOrWebauthnCError::Webauthn(WebauthnCError::Cbor);
+
+        let apdus = cmd.to_short_apdus().map_err(|_| CBOR_ERROR)?;
         let resp = self.transmit_chunks(&apdus)?;
 
         // CTAP has its own extra status code over NFC in the first byte.
-        // TODO: handle status byte
+        let err = CtapError::from(resp.data[0]);
+        if !err.is_ok() {
+            return Err(err.into());
+        }
+
         R::try_from(&resp.data[1..]).map_err(|_| {
             //error!("error: {:?}", e);
-            WebauthnCError::Cbor
+            CBOR_ERROR
         })
     }
 
@@ -264,7 +270,7 @@ impl Token for NFCCard {
         let resp = self
             .transmit(
                 &select_by_df_name(&APPLET_DF),
-                &ISO7816LengthForm::ShortOnly,
+                &ISO7816LengthForm::ExtendedOnly,
             )
             .expect("Failed to select CTAP2.1 applet");
 

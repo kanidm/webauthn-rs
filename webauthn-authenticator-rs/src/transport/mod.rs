@@ -1,5 +1,6 @@
 //! Transport abstraction layer for communication with FIDO tokens.
 mod any;
+pub mod ctap21pre;
 pub mod iso7816;
 
 pub use crate::transport::any::{AnyToken, AnyTransport};
@@ -9,7 +10,9 @@ use std::fmt;
 use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
 use crate::cbor::*;
-use crate::error::WebauthnCError;
+use crate::error::{WebauthnCError, CtapOrWebauthnCError, CtapError};
+
+use self::ctap21pre::Ctap21PreAuthenticator;
 
 #[allow(non_camel_case_types)]
 pub enum Selected<T>
@@ -46,7 +49,7 @@ pub trait Transport: Sized + Default + fmt::Debug {
 /// Represents a connection to a single CTAP token over a [Transport].
 pub trait Token: Sized + fmt::Debug {
     /// Transmit a CBOR message to a token
-    fn transmit<C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    fn transmit<C, R>(&self, cmd: C) -> Result<R, CtapOrWebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse;
@@ -55,7 +58,7 @@ pub trait Token: Sized + fmt::Debug {
     fn init(&mut self) -> Result<(), WebauthnCError>;
 
     /// Selects any available CTAP applet on the [Token]
-    fn select_any(self) -> Result<Selected<Self>, WebauthnCError> {
+    fn select_any(self) -> Result<Selected<Self>, CtapOrWebauthnCError> {
         let tokinfo = self.transmit(GetInfoRequest {})?;
 
         debug!(?tokinfo);
@@ -67,7 +70,21 @@ pub trait Token: Sized + fmt::Debug {
             }))
         } else {
             error!(?tokinfo.versions);
-            Err(WebauthnCError::NotSupported)
+            Err(CtapOrWebauthnCError::Webauthn(WebauthnCError::NotSupported))
+        }
+    }
+
+    // TODO: implement better
+    fn auth(self) -> Result<Ctap21PreAuthenticator<Self>, CtapOrWebauthnCError> {
+        let info = self.transmit(GetInfoRequest {})?;
+
+        debug!(?info);
+
+        if info.versions.contains("FIDO_2_1_PRE") {
+            Ok(Ctap21PreAuthenticator::new(info, self))
+        } else {
+            error!(?info.versions);
+            Err(CtapOrWebauthnCError::Webauthn(WebauthnCError::NotSupported))
         }
     }
 
@@ -109,7 +126,8 @@ impl<T: Token> Ctap2_1_pre<T> {
             enterprise_attest: None,
         };
 
-        self.token.transmit(mc)
+        todo!();
+        // self.token.transmit(mc)
     }
 
     pub fn deselect_applet(&self) -> Result<(), WebauthnCError> {
