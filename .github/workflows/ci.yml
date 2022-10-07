@@ -18,7 +18,18 @@ jobs:
         os:
           - ubuntu-latest
           - windows-latest
-    name: WebAuthn Rust Frameworks (Build and Test)
+        include:
+          - os: windows-latest
+            features: --features win10
+            rust_version: stable
+          - os: windows-latest
+            features: --features nfc,usb,win10
+            rust_version: stable
+        exclude:
+          - os: windows-latest
+            rust_version: 1.45.0
+
+    name: Build and Test
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
