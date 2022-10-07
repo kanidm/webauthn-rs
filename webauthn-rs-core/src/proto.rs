@@ -46,7 +46,6 @@ pub struct RequestAuthenticationExtensionsBuilder(RequestAuthenticationExtension
 impl RequestAuthenticationExtensionsBuilder {
     pub(crate) fn new() -> Self {
         Self(RequestAuthenticationExtensions {
-            get_cred_blob: Some(CredBlobGet(false)),
             appid: None,
         })
     }
@@ -54,22 +53,6 @@ impl RequestAuthenticationExtensionsBuilder {
     /// Returns the inner extensions struct
     pub fn build(self) -> RequestAuthenticationExtensions {
         self.0
-    }
-
-    /// Set whether you want to get the credential blob extension
-    ///
-    /// # Example
-    /// ```
-    /// # use webauthn_rs_core::proto::{RequestAuthenticationExtensions, CredBlobGet};
-    /// let extensions = RequestAuthenticationExtensions::builder()
-    ///     .get_cred_blob(true)
-    ///     .build();
-    ///
-    /// assert_eq!(extensions.get_cred_blob, Some(CredBlobGet(true)));
-    /// ```
-    pub fn get_cred_blob(mut self, get_cred_blob: bool) -> Self {
-        self.0.get_cred_blob = Some(CredBlobGet(get_cred_blob));
-        self
     }
 
     /// Set the AppId extension, for backwards compatibility with FIDO U2F credentials
@@ -105,7 +88,6 @@ impl RequestRegistrationExtensionsBuilder {
     pub(crate) fn new() -> Self {
         Self(RequestRegistrationExtensions {
             cred_protect: None,
-            cred_blob: None,
         })
     }
 
@@ -131,23 +113,6 @@ impl RequestRegistrationExtensionsBuilder {
     /// ```
     pub fn cred_protect(mut self, cred_protect: CredProtect) -> Self {
         self.0.cred_protect = Some(cred_protect);
-        self
-    }
-
-    /// Set the credential blob extension options
-    ///
-    /// # Example
-    /// ```
-    /// # use webauthn_rs_core::proto::{RequestRegistrationExtensions, CredBlobSet};
-    /// let cred_blob = vec![0xde, 0xad, 0xbe, 0xef];
-    /// let extensions = RequestRegistrationExtensions::builder()
-    ///     .cred_blob(cred_blob.clone())
-    ///     .build();
-    ///
-    /// assert_eq!(extensions.cred_blob, Some(CredBlobSet::from(cred_blob)));
-    /// ```
-    pub fn cred_blob(mut self, cred_blob: Vec<u8>) -> Self {
-        self.0.cred_blob = Some(CredBlobSet(Base64UrlSafeData(cred_blob)));
         self
     }
 }

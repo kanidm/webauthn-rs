@@ -194,8 +194,6 @@ impl WebauthnCore {
 
         // Have a UV strict?
 
-        // CredBlob needs to limit to 32 bytes.
-
         // minPinLength
 
         // hmacSecret
