@@ -141,12 +141,10 @@ impl AuthenticatorBackend for U2FHid {
             relying_party: RelyingParty {
                 id: options.rp.id,
                 name: Some(options.rp.name),
-                icon: None,
             },
             origin: origin.to_string(),
             user: User {
                 id: options.user.id.0,
-                icon: None,
                 name: Some(options.user.name),
                 display_name: Some(options.user.display_name),
             },
