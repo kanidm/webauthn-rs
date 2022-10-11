@@ -5,14 +5,8 @@ use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
 use super::{CBORCommand, NoResponse};
 
-#[derive(Serialize, Deserialize, Debug)]
-struct MakeCredentialRequestRawDict {
-    #[serde(flatten)]
-    pub keys: BTreeMap<u32, Value>,
-}
-
 #[derive(Serialize, Debug, Clone)]
-#[serde(into = "MakeCredentialRequestRawDict")]
+#[serde(into = "BTreeMap<u32, Value>")]
 pub struct MakeCredentialRequest {
     pub client_data_hash: Vec<u8>,
     pub rp: RelyingParty,
@@ -33,7 +27,7 @@ impl CBORCommand for MakeCredentialRequest {
     type Response = NoResponse;
 }
 
-impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
+impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
     fn from(value: MakeCredentialRequest) -> Self {
         let MakeCredentialRequest {
             client_data_hash,
@@ -103,7 +97,7 @@ impl From<MakeCredentialRequest> for MakeCredentialRequestRawDict {
             keys.insert(0x09, Value::Integer(p.into()));
         }
 
-        MakeCredentialRequestRawDict { keys }
+        keys
     }
 }
 

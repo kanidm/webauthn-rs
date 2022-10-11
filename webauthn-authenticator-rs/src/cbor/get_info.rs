@@ -14,14 +14,8 @@ impl CBORCommand for GetInfoRequest {
     type Response = GetInfoResponse;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct GetInfoResponseDict {
-    #[serde(flatten)]
-    pub keys: BTreeMap<u32, Value>,
-}
-
 #[derive(Deserialize, Debug)]
-#[serde(try_from = "GetInfoResponseDict")]
+#[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct GetInfoResponse {
     pub versions: BTreeSet<String>,
     pub extensions: Option<Vec<String>>,
@@ -35,24 +29,21 @@ pub struct GetInfoResponse {
     pub algorithms: Option<Value>,
 }
 
-impl TryFrom<GetInfoResponseDict> for GetInfoResponse {
+impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
     type Error = &'static str;
 
-    fn try_from(mut raw: GetInfoResponseDict) -> Result<Self, Self::Error> {
+    fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
         // trace!("raw = {:?}", raw);
         let versions = raw
-            .keys
             .remove(&0x01)
             .and_then(|v| value_to_set_string(v, "0x01"))
             .ok_or("0x01")?;
 
         let extensions = raw
-            .keys
             .remove(&0x02)
             .and_then(|v| value_to_vec_string(v, "0x02"));
 
         let aaguid = raw
-            .keys
             .remove(&0x03)
             .and_then(|v| match v {
                 Value::Bytes(x) => Some(x),
@@ -63,7 +54,7 @@ impl TryFrom<GetInfoResponseDict> for GetInfoResponse {
             })
             .ok_or("0x03")?;
 
-        let options = raw.keys.remove(&0x04).and_then(|v| {
+        let options = raw.remove(&0x04).and_then(|v| {
             if let Value::Map(v) = v {
                 let mut x = BTreeMap::new();
                 for (ka, va) in v.into_iter() {
@@ -82,31 +73,26 @@ impl TryFrom<GetInfoResponseDict> for GetInfoResponse {
         });
 
         let max_msg_size = raw
-            .keys
             .remove(&0x05)
             .and_then(|v| value_to_u32(&v, "0x05"));
 
         let pin_protocols = raw
-            .keys
             .remove(&0x06)
             .and_then(|v| value_to_vec_u32(v, "0x06"));
 
         let max_cred_count_in_list = raw
-            .keys
             .remove(&0x07)
             .and_then(|v| value_to_u32(&v, "0x07"));
 
         let max_cred_id_len = raw
-            .keys
             .remove(&0x08)
             .and_then(|v| value_to_u32(&v, "0x08"));
 
         let transports = raw
-            .keys
             .remove(&0x09)
             .and_then(|v| value_to_vec_string(v, "0x09"));
 
-        let algorithms = raw.keys.remove(&0x0A);
+        let algorithms = raw.remove(&0x0A);
         // .map(|v| );
 
         /*
