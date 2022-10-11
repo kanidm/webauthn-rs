@@ -47,6 +47,9 @@ pub mod usb;
 #[cfg(feature = "u2fhid")]
 pub mod u2fhid;
 
+#[cfg(feature = "win10")]
+pub mod win10;
+
 pub struct WebauthnAuthenticator<T>
 where
     T: AuthenticatorBackend,

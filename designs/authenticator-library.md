@@ -1,9 +1,12 @@
 # Authenticator library
 
+* **Published:** 2022-09-24
+* **Last updated:** 2022-10-07
+
 This describes the state of the `webauthn-authenticator-rs` library, and some
 potential longer term improvements.
 
-## Current state
+## Current state (Sep 2022)
 
 At present, there are two disjoint traits provided by the `webauthn-authenticator-rs` library:
 
@@ -93,6 +96,9 @@ This would let us validate and improve upon the `Transport` level API to a point
 This would provide access to NFC and USB-HID tokens through our own library, and allow us to potentially replace Mozilla's library.
 
 ### Implement an `AuthenticatorBackend` for platform-specific WebAuthn APIs
+
+- [ ] macOS Passkey API
+- [x] Windows 10 WebAuthn API (added Oct 2022)
 
 This will require `webauthn-authenticator-rs` to carry some platform-specific code.
 
