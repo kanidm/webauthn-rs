@@ -22,6 +22,7 @@ all-features = true
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
 webauthn-rs-proto = { version = "0.4.7", path = "../webauthn-rs-proto" }
+webauthn-rs-core = { path = "../webauthn-rs-core" }
 
 tracing = "0.1"
 url = "2"
@@ -41,7 +42,6 @@ windows = { version = "0.41.0", optional = true, features = ["Win32_Graphics_Gdi
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-webauthn-rs-core = { path = "../webauthn-rs-core" }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
 base64 = "0.13"
 

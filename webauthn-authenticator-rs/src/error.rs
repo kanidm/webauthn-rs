@@ -17,6 +17,7 @@ pub enum WebauthnCError {
     InvalidAssertion,
     MessageTooLarge,
     MessageTooShort,
+    Ctap(CtapError),
 }
 
 impl From<Error> for WebauthnCError {
@@ -32,12 +33,13 @@ impl From<Error> for WebauthnCError {
 #[derive(Debug, PartialEq, Eq)]
 pub enum CtapError {
     Ok,
-    CTAP1_ERR_INVALID_COMMAND,
-    CTAP1_ERR_INVALID_PARAMETER,
+    Ctap1InvalidCommand,
+    Ctap1InvalidParameter,
     // TODO
-    CTAP2_ERR_CBOR_UNEXPECTED_TYPE,
+    Ctap2CborUnexpectedType,
     // CTAP2_ERR_PIN_AUTH_INVALID
     Ctap2PinAuthInvalid,
+    Ctap2PUATRequired,
     UNKNOWN(u8),
 }
 
@@ -52,29 +54,18 @@ impl From<u8> for CtapError {
         use CtapError::*;
         match e {
             0x00 => Ok,
-            0x01 => CTAP1_ERR_INVALID_COMMAND,
-            0x02 => CTAP1_ERR_INVALID_PARAMETER,
-            0x11 => CTAP2_ERR_CBOR_UNEXPECTED_TYPE,
+            0x01 => Ctap1InvalidCommand,
+            0x02 => Ctap1InvalidParameter,
+            0x11 => Ctap2CborUnexpectedType,
             0x33 => Ctap2PinAuthInvalid,
+            0x36 => Ctap2PUATRequired,
             e => UNKNOWN(e),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum CtapOrWebauthnCError {
-    Ctap(CtapError),
-    Webauthn(WebauthnCError),
-}
-
-impl From<CtapError> for CtapOrWebauthnCError {
+impl From<CtapError> for WebauthnCError {
     fn from(e: CtapError) -> Self {
-        CtapOrWebauthnCError::Ctap(e)
-    }
-}
-
-impl From<WebauthnCError> for CtapOrWebauthnCError {
-    fn from(e: WebauthnCError) -> Self {
-        CtapOrWebauthnCError::Webauthn(e)
+        Self::Ctap(e)
     }
 }

@@ -42,29 +42,36 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
                     ..Default::default()
                 };
 
-                let ret = self.token.transmit(p);
+                let ret = self.token.transmit(p)?;
                 trace!(?ret);
             }
         }
         
-
-        /*
-        // TODO: implement PINs
-        let mc = MakeCredentialRequest {
-            client_data_hash,
-            rp: options.rp,
-            user: options.user,
-            pub_key_cred_params: options.pub_key_cred_params,
-
-            options: None,
-            pin_uv_auth_param: None,
-            pin_uv_auth_proto: None,
-            enterprise_attest: None,
+        // TODO: select protocol wisely
+        let p = ClientPinRequest {
+            pin_uv_protocol: Some(2),
+            sub_command: ClientPinSubCommand::GetKeyAgreement,
+            ..Default::default()
         };
+        let ret = self.token.transmit(p)?;
+        trace!("keyagreement = {:?}", ret);
 
-        let ret = self.token.transmit(mc);
-        trace!(?ret);
-        */
+
+        // TODO: implement PINs
+        // let mc = MakeCredentialRequest {
+        //     client_data_hash,
+        //     rp: options.rp,
+        //     user: options.user,
+        //     pub_key_cred_params: options.pub_key_cred_params,
+
+        //     options: None,
+        //     pin_uv_auth_param: None,
+        //     pin_uv_auth_proto: None,
+        //     enterprise_attest: None,
+        // };
+
+        // let ret = self.token.transmit(mc);
+        // trace!(?ret);
 
         todo!();
     }

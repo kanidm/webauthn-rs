@@ -52,7 +52,7 @@ impl Transport for AnyTransport {
 
 impl Token for AnyToken {
     #[allow(unused_variables, clippy::unimplemented)]
-    fn transmit<C, R>(&self, cmd: C) -> Result<R, CtapOrWebauthnCError>
+    fn transmit<C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse,

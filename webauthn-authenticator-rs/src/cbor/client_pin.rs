@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
+use webauthn_rs_core::proto::{COSEKey, COSEKeyTypeId, ECDSACurve, COSEKeyType, COSEEC2Key};
+use webauthn_rs_proto::COSEAlgorithm;
 
 use self::CBORCommand;
 use super::*;
@@ -48,7 +50,7 @@ impl CBORCommand for ClientPinRequest {
 #[derive(Deserialize, Debug, Default, PartialEq, Eq)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct ClientPinResponse {
-    // pub key_agreement: Option<COSEKey>,
+    pub key_agreement: Option<COSEKey>,
     pub pin_uv_auth_token: Option<Vec<u8>>,
     pub pin_retries: Option<u32>,
     pub power_cycle_state: Option<bool>,
@@ -62,6 +64,7 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
         let ClientPinRequest {
             pin_uv_protocol,
             sub_command,
+            // key_agreement,
             pin_uv_auth_param,
             new_pin_enc,
             pin_hash_enc,
@@ -75,7 +78,9 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
             keys.insert(0x01, Value::Integer(v.into()));
         }
         keys.insert(0x02, Value::Integer((sub_command as u32).into()));
-        // key_agreement: 0x03
+        // if let Some(v) = key_agreement {
+        //     keys.insert(0x03, );
+        // }
         if let Some(v) = pin_uv_auth_param {
             keys.insert(0x04, Value::Bytes(v));
         }
@@ -88,6 +93,9 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
         if permissions != 0 {
             keys.insert(0x09, Value::Integer(permissions.into()));
         }
+        if let Some(v) = rp_id {
+            keys.insert(0x0a, Value::Text(v));
+        }
 
         keys
     }
@@ -96,8 +104,35 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
 impl TryFrom<BTreeMap<u32, Value>> for ClientPinResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
+        trace!(?raw);
         Ok(Self {
-            // key_agreement: 0x01
+            key_agreement: raw
+                .remove(&0x01)
+                .and_then(|v| if let Value::Map(m) = v { Some(m) } else { None })
+                .and_then(|mut m| {
+                    // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#pinProto1
+                    if m.remove(&Value::Integer(1)) != Some(Value::Integer(COSEKeyTypeId::EC_EC2 as i128))
+                        || m.remove(&Value::Integer(3)) != Some(Value::Integer(-25))
+                        || m.remove(&Value::Integer(-1)) != Some(Value::Integer(ECDSACurve::SECP256R1 as i128))
+                    {
+                        return None;
+                    }
+
+                    let x = m.remove(&Value::Integer(-2)).and_then(|v| value_to_vec_u8(v, "-2"))?;
+                    let y = m.remove(&Value::Integer(-3)).and_then(|v| value_to_vec_u8(v, "-3"))?;
+                    if x.len() != 32 || y.len() != 32 {
+                        return None;
+                    }
+
+                    Some(COSEKey {
+                        type_: COSEAlgorithm::PinUvProtocol,
+                        key: COSEKeyType::EC_EC2(COSEEC2Key {
+                            curve: ECDSACurve::SECP256R1,
+                            x: x.to_vec().into(),
+                            y: y.to_vec().into(),
+                        }),
+                    })
+                }),
             pin_uv_auth_token: raw.remove(&0x02).and_then(|v| value_to_vec_u8(v, "0x02")),
             pin_retries: raw.remove(&0x03).and_then(|v| value_to_u32(&v, "0x03")),
             power_cycle_state: raw.remove(&0x04).and_then(|v| value_to_bool(v, "0x04")),

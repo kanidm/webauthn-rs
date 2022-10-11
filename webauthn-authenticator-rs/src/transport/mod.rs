@@ -10,7 +10,7 @@ use std::fmt;
 use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
 use crate::cbor::*;
-use crate::error::{WebauthnCError, CtapOrWebauthnCError, CtapError};
+use crate::error::{WebauthnCError, CtapError};
 
 use self::ctap21pre::Ctap21PreAuthenticator;
 
@@ -49,7 +49,7 @@ pub trait Transport: Sized + Default + fmt::Debug {
 /// Represents a connection to a single CTAP token over a [Transport].
 pub trait Token: Sized + fmt::Debug {
     /// Transmit a CBOR message to a token
-    fn transmit<C, R>(&self, cmd: C) -> Result<R, CtapOrWebauthnCError>
+    fn transmit<C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse;
@@ -58,7 +58,7 @@ pub trait Token: Sized + fmt::Debug {
     fn init(&mut self) -> Result<(), WebauthnCError>;
 
     /// Selects any available CTAP applet on the [Token]
-    fn select_any(self) -> Result<Selected<Self>, CtapOrWebauthnCError> {
+    fn select_any(self) -> Result<Selected<Self>, WebauthnCError> {
         let tokinfo = self.transmit(GetInfoRequest {})?;
 
         debug!(?tokinfo);
@@ -70,12 +70,12 @@ pub trait Token: Sized + fmt::Debug {
             }))
         } else {
             error!(?tokinfo.versions);
-            Err(CtapOrWebauthnCError::Webauthn(WebauthnCError::NotSupported))
+            Err(WebauthnCError::NotSupported)
         }
     }
 
     // TODO: implement better
-    fn auth(self) -> Result<Ctap21PreAuthenticator<Self>, CtapOrWebauthnCError> {
+    fn auth(self) -> Result<Ctap21PreAuthenticator<Self>, WebauthnCError> {
         let info = self.transmit(GetInfoRequest {})?;
 
         debug!(?info);
@@ -84,7 +84,7 @@ pub trait Token: Sized + fmt::Debug {
             Ok(Ctap21PreAuthenticator::new(info, self))
         } else {
             error!(?info.versions);
-            Err(CtapOrWebauthnCError::Webauthn(WebauthnCError::NotSupported))
+            Err(WebauthnCError::NotSupported)
         }
     }
 

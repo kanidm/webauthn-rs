@@ -1,5 +1,5 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
-use crate::error::{WebauthnCError, CtapError, CtapOrWebauthnCError};
+use crate::error::{WebauthnCError, CtapError};
 
 use pcsc::*;
 use std::ffi::CString;
@@ -244,14 +244,12 @@ impl NFCCard {
 }
 
 impl Token for NFCCard {
-    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, CtapOrWebauthnCError>
+    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse,
     {
-        const CBOR_ERROR: CtapOrWebauthnCError = CtapOrWebauthnCError::Webauthn(WebauthnCError::Cbor);
-
-        let apdus = cmd.to_short_apdus().map_err(|_| CBOR_ERROR)?;
+        let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
         let resp = self.transmit_chunks(&apdus)?;
 
         // CTAP has its own extra status code over NFC in the first byte.
@@ -262,7 +260,7 @@ impl Token for NFCCard {
 
         R::try_from(&resp.data[1..]).map_err(|_| {
             //error!("error: {:?}", e);
-            CBOR_ERROR
+            WebauthnCError::Cbor
         })
     }
 
