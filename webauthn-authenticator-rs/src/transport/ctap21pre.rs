@@ -1,5 +1,5 @@
 use crate::{
-    cbor::{MakeCredentialRequest, GetInfoResponse},
+    cbor::*,
     error::WebauthnCError,
     transport::Token,
     util::{compute_sha256, creation_to_clientdata, get_to_clientdata},
@@ -32,6 +32,23 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
             serde_json::to_string(&client_data).map_err(|_| WebauthnCError::Json)?.into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
 
+        // Get pin retries
+        trace!("supported pin protocols = {:?}", self.info.pin_protocols);
+        if let Some(protocols) = &self.info.pin_protocols {
+            for protocol in protocols {
+                let p = ClientPinRequest {
+                    pin_uv_protocol: Some(*protocol),
+                    sub_command: ClientPinSubCommand::GetPinRetries,
+                    ..Default::default()
+                };
+
+                let ret = self.token.transmit(p);
+                trace!(?ret);
+            }
+        }
+        
+
+        /*
         // TODO: implement PINs
         let mc = MakeCredentialRequest {
             client_data_hash,
@@ -47,7 +64,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 
         let ret = self.token.transmit(mc);
         trace!(?ret);
-
+        */
 
         todo!();
     }
