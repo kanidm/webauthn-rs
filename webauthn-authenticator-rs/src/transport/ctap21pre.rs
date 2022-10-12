@@ -291,8 +291,8 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         // (see [RFC5869] for the definition of HKDF).
         let mut o: Vec<u8> = vec![0; 64];
         let zero: [u8; 32] = [0; 32];
-        hkdf_sha_256(&zero, z, "CTAP2 HMAC key".as_bytes(), &mut o[0..32]).expect("hkdf_sha_256");
-        hkdf_sha_256(&zero, z, "CTAP2 AES key".as_bytes(), &mut o[32..64]).expect("hkdf_sha_256");
+        hkdf_sha_256(&zero, z, b"CTAP2 HMAC key", &mut o[0..32]).expect("hkdf_sha_256");
+        hkdf_sha_256(&zero, z, b"CTAP2 AES key", &mut o[32..64]).expect("hkdf_sha_256");
 
         o
     }
@@ -329,7 +329,7 @@ fn ecdh(
     output: &mut [u8],
 ) -> Result<(), openssl::error::ErrorStack> {
     let peer_key = PKey::from_ec_key(peer_key.into())?;
-    let mut pkey = PKey::from_ec_key(private_key)?;
+    let pkey = PKey::from_ec_key(private_key)?;
     let mut ctx = PkeyCtx::new(&pkey)?;
     ctx.derive_init()?;
     ctx.derive_set_peer(&peer_key)?;

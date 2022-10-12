@@ -75,8 +75,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
         //     Value::Map(m)
         // }).collect());
 
-        let ps =
-            to_value(pub_key_cred_params).expect("Unable to encode pub_key_cred_params");
+        let ps = to_value(pub_key_cred_params).expect("Unable to encode pub_key_cred_params");
         keys.insert(0x4, ps);
 
         if let Some(o) = options {
@@ -103,7 +102,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 
 #[cfg(test)]
 mod test {
-    use std::{slice::Chunks, num::ParseIntError};
+    use std::num::ParseIntError;
 
     use crate::cbor::make_credential::*;
     use base64urlsafedata::Base64UrlSafeData;
