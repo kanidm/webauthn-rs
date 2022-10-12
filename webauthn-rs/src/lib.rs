@@ -1105,7 +1105,7 @@ impl Webauthn {
             cred_props: Some(true),
             // https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-minpinlength-extension
             min_pin_length: Some(true),
-            hmac_create_secret: None,
+            hmac_create_secret: Some(true),
         });
 
         self.core
