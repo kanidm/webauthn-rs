@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use openssl::hash::MessageDigest;
-use openssl::x509;
+use openssl::{bn, ec, nid, pkey, x509};
 use uuid::Uuid;
 
 /// Representation of an AAGUID
@@ -113,6 +113,16 @@ impl ECDSACurve {
     }
 }
 
+impl From<&ECDSACurve> for nid::Nid {
+    fn from(c: &ECDSACurve) -> Self {
+        use ECDSACurve::*;
+        match c {
+            SECP256R1 => nid::Nid::X9_62_PRIME256V1,
+            _ => todo!(),
+        }
+    }
+}
+
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
@@ -125,6 +135,21 @@ pub struct COSEEC2Key {
     pub x: Base64UrlSafeData,
     /// The key's public Y coordinate.
     pub y: Base64UrlSafeData,
+}
+
+impl From<&COSEEC2Key> for ec::EcKey<pkey::Public> {
+    fn from(k: &COSEEC2Key) -> Self {
+        let group = ec::EcGroup::from_curve_name((&k.curve).into()).unwrap();
+        let mut ctx = bn::BigNumContext::new().unwrap();
+        let mut point = ec::EcPoint::new(&group).unwrap();
+        let x = bn::BigNum::from_slice(k.x.0.as_slice()).unwrap();
+        let y = bn::BigNum::from_slice(k.y.0.as_slice()).unwrap();
+        point
+            .set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)
+            .unwrap();
+
+        ec::EcKey::from_public_key(&group, &point).unwrap()
+    }
 }
 
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential

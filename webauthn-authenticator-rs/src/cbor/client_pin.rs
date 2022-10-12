@@ -146,7 +146,6 @@ crate::deserialize_cbor!(ClientPinResponse);
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn get_pin_retries() {
         let c = ClientPinRequest {
