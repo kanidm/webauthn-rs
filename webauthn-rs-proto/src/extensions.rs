@@ -76,7 +76,7 @@ pub struct RequestRegistrationExtensions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_pin_length: Option<bool>,
 
-    /// ⚠️  - Browsers do not support this!
+    /// ⚠️  - Browsers support the *creation* of the secret, but not the retrieval of it.
     /// CTAP2.1 create hmac secret
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hmac_create_secret: Option<bool>,
@@ -176,6 +176,7 @@ pub struct RequestAuthenticationExtensions {
     pub uvm: Option<bool>,
 
     /// ⚠️  - Browsers do not support this!
+    /// <https://bugs.chromium.org/p/chromium/issues/detail?id=1023225>
     /// Hmac get secret
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hmac_get_secret: Option<HmacGetSecretInput>,
