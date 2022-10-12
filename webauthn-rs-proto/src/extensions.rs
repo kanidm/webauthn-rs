@@ -1,4 +1,6 @@
 //! Extensions allowing certain types of authenticators to provide supplemental information.
+
+use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
 /// Valid credential protection policies
@@ -59,11 +61,14 @@ pub struct RequestRegistrationExtensions {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub cred_protect: Option<CredProtect>,
 
+    /// ⚠️  - Browsers do not support this!
     /// Uvm
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uvm: Option<bool>,
 
-    /// CredProps
+    /// ⚠️  - This extension result is always unsigned, and only indicates if the
+    /// browser *requests* a residentKey to be created. It has no bearing on the
+    /// true rk state of the credential.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cred_props: Option<bool>,
 
@@ -71,6 +76,7 @@ pub struct RequestRegistrationExtensions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_pin_length: Option<bool>,
 
+    /// ⚠️  - Browsers do not support this!
     /// CTAP2.1 create hmac secret
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hmac_create_secret: Option<bool>,
@@ -88,7 +94,71 @@ impl Default for RequestRegistrationExtensions {
     }
 }
 
+#[cfg(feature = "wasm")]
+impl Into<js_sys::Object> for &RequestRegistrationExtensions {
+    fn into(self) -> js_sys::Object {
+        use js_sys::Object;
+        use wasm_bindgen::JsValue;
+
+        let RequestRegistrationExtensions {
+            cred_protect,
+            uvm,
+            cred_props,
+            min_pin_length,
+            hmac_create_secret,
+        } = self;
+
+        let obj = Object::new();
+
+        if let Some(cred_protect) = cred_protect {
+            let jsv = serde_wasm_bindgen::to_value(&cred_protect).unwrap();
+            js_sys::Reflect::set(&obj, &"credProtect".into(), &jsv).unwrap();
+        }
+
+        if let Some(uvm) = uvm {
+            js_sys::Reflect::set(&obj, &"uvm".into(), &JsValue::from_bool(*uvm)).unwrap();
+        }
+
+        if let Some(cred_props) = cred_props {
+            js_sys::Reflect::set(&obj, &"credProps".into(), &JsValue::from_bool(*cred_props))
+                .unwrap();
+        }
+
+        if let Some(min_pin_length) = min_pin_length {
+            js_sys::Reflect::set(
+                &obj,
+                &"minPinLength".into(),
+                &JsValue::from_bool(*min_pin_length),
+            )
+            .unwrap();
+        }
+
+        if let Some(hmac_create_secret) = hmac_create_secret {
+            js_sys::Reflect::set(
+                &obj,
+                &"hmacCreateSecret".into(),
+                &JsValue::from_bool(*hmac_create_secret),
+            )
+            .unwrap();
+        }
+
+        obj
+    }
+}
+
 // ========== Auth exten ============
+
+/// The inputs to the hmac secret if it was created during registration.
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#sctn-hmac-secret-extension>
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HmacGetSecretInput {
+    /// Retrieve a symmetric secrets from the authenticator with this input.
+    pub output1: Base64UrlSafeData,
+    /// Rotate the secret in the same operation.
+    pub output2: Option<Base64UrlSafeData>,
+}
 
 /// Extension option inputs for PublicKeyCredentialRequestOptions
 ///
@@ -100,9 +170,62 @@ pub struct RequestAuthenticationExtensions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub appid: Option<String>,
 
+    /// ⚠️  - Browsers do not support this!
     /// Uvm
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uvm: Option<bool>,
+
+    /// ⚠️  - Browsers do not support this!
+    /// Hmac get secret
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hmac_get_secret: Option<HmacGetSecretInput>,
+}
+
+#[cfg(feature = "wasm")]
+impl Into<js_sys::Object> for &RequestAuthenticationExtensions {
+    fn into(self) -> js_sys::Object {
+        use js_sys::{Object, Uint8Array};
+        use wasm_bindgen::JsValue;
+
+        let RequestAuthenticationExtensions {
+            // I don't think we care?
+            appid: _,
+            uvm,
+            hmac_get_secret,
+        } = self;
+
+        let obj = Object::new();
+
+        if let Some(uvm) = uvm {
+            js_sys::Reflect::set(&obj, &"uvm".into(), &JsValue::from_bool(*uvm)).unwrap();
+        }
+
+        if let Some(HmacGetSecretInput { output1, output2 }) = hmac_get_secret {
+            let hmac = Object::new();
+
+            let o1 = Uint8Array::from(output1.0.as_slice());
+            js_sys::Reflect::set(&hmac, &"output1".into(), &o1).unwrap();
+
+            if let Some(output2) = output2 {
+                let o2 = Uint8Array::from(output2.0.as_slice());
+                js_sys::Reflect::set(&hmac, &"output2".into(), &o2).unwrap();
+            }
+
+            js_sys::Reflect::set(&obj, &"hmacGetSecret".into(), &hmac).unwrap();
+        }
+
+        obj
+    }
+}
+
+/// The response to a hmac get secret request.
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HmacGetSecretOutput {
+    /// Output of HMAC(Salt 1 || Client Secret)
+    pub output1: Base64UrlSafeData,
+    /// Output of HMAC(Salt 2 || Client Secret)
+    pub output2: Option<Base64UrlSafeData>,
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
@@ -112,6 +235,9 @@ pub struct AuthenticationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default)]
     pub appid: Option<bool>,
+    /// The response to a hmac get secret request.
+    #[serde(default)]
+    pub hmac_get_secret: Option<HmacGetSecretOutput>,
 }
 
 #[cfg(feature = "wasm")]
@@ -121,11 +247,33 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
     fn from(
         ext: web_sys::AuthenticationExtensionsClientOutputs,
     ) -> AuthenticationExtensionsClientOutputs {
+        use js_sys::Uint8Array;
+
         let appid = js_sys::Reflect::get(&ext, &"appid".into())
             .ok()
             .and_then(|jv| jv.as_bool());
 
-        AuthenticationExtensionsClientOutputs { appid }
+        let hmac_get_secret = js_sys::Reflect::get(&ext, &"hmacGetSecret".into())
+            .ok()
+            .and_then(|jv| {
+                let output2 = js_sys::Reflect::get(&jv, &"output2".into())
+                    .map(|v| Uint8Array::new(&v).to_vec())
+                    .map(|v| Base64UrlSafeData(v))
+                    .ok();
+
+                let output1 = js_sys::Reflect::get(&jv, &"output1".into())
+                    .map(|v| Uint8Array::new(&v).to_vec())
+                    .map(|v| Base64UrlSafeData(v))
+                    .ok();
+
+                if let Some(output1) = output1 {
+                    Some(HmacGetSecretOutput { output1, output2 })
+                } else {
+                    None
+                }
+            });
+
+        AuthenticationExtensionsClientOutputs { appid, hmac_get_secret }
     }
 }
 

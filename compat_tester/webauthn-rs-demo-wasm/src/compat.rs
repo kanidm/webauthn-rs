@@ -112,6 +112,7 @@ fn auth_extensions_full() -> RequestAuthenticationExtensions {
     RequestAuthenticationExtensions {
         appid: None,
         uvm: Some(true),
+        hmac_get_secret: None,
     }
 }
 
