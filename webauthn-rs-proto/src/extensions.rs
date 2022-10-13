@@ -94,6 +94,8 @@ impl Default for RequestRegistrationExtensions {
     }
 }
 
+// Unable to create from, because it's an out of crate struct
+#[allow(clippy::from_over_into)]
 #[cfg(feature = "wasm")]
 impl Into<js_sys::Object> for &RequestRegistrationExtensions {
     fn into(self) -> js_sys::Object {
@@ -182,6 +184,8 @@ pub struct RequestAuthenticationExtensions {
     pub hmac_get_secret: Option<HmacGetSecretInput>,
 }
 
+// Unable to create from, because it's an out of crate struct
+#[allow(clippy::from_over_into)]
 #[cfg(feature = "wasm")]
 impl Into<js_sys::Object> for &RequestAuthenticationExtensions {
     fn into(self) -> js_sys::Object {
@@ -259,22 +263,21 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
             .and_then(|jv| {
                 let output2 = js_sys::Reflect::get(&jv, &"output2".into())
                     .map(|v| Uint8Array::new(&v).to_vec())
-                    .map(|v| Base64UrlSafeData(v))
+                    .map(Base64UrlSafeData)
                     .ok();
 
                 let output1 = js_sys::Reflect::get(&jv, &"output1".into())
                     .map(|v| Uint8Array::new(&v).to_vec())
-                    .map(|v| Base64UrlSafeData(v))
+                    .map(Base64UrlSafeData)
                     .ok();
 
-                if let Some(output1) = output1 {
-                    Some(HmacGetSecretOutput { output1, output2 })
-                } else {
-                    None
-                }
+                output1.map(|output1| HmacGetSecretOutput { output1, output2 })
             });
 
-        AuthenticationExtensionsClientOutputs { appid, hmac_get_secret }
+        AuthenticationExtensionsClientOutputs {
+            appid,
+            hmac_get_secret,
+        }
     }
 }
 
