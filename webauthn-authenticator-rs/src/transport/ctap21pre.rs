@@ -132,11 +132,23 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
             enterprise_attest: None,
         };
 
-        let (ret, raw) = self.token.transmit_plus_raw(mc)?;
+        let ret = self.token.transmit(mc)?;
         trace!(?ret);
-        // TODO
-        let cred_id = b"TODO".to_vec();
-        let id: String = Base64UrlSafeData(cred_id.clone()).to_string();
+
+        // The obvious thing to do here would be to pass the raw authenticator
+        // data back, but it seems like everything expects a Map<String, Value>
+        // here, rather than a Map<u32, Value>... so we need to re-serialize
+        // that data!
+        let raw = serde_cbor::to_vec(&ret).map_err(|e| {
+            error!("MakeCredentialResponse re-serialization: {:?}", e);
+            WebauthnCError::Cbor
+        })?;
+
+        // HACK: parsing out the real ID is complicated, and other parts of the 
+        // library will do it for us, so we'll put in empty data here.
+        let cred_id = vec![];
+        let id = String::new();
+
         let type_ = ret.fmt.clone().ok_or(WebauthnCError::InvalidAlgorithm)?;
         let att_stmt = ret.att_stmt.ok_or(WebauthnCError::Cbor)?;
 

@@ -1,3 +1,4 @@
+use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 use serde_cbor::{value::to_value, Value};
 use std::collections::BTreeMap;
@@ -27,14 +28,15 @@ impl CBORCommand for MakeCredentialRequest {
     type Response = MakeCredentialResponse;
 }
 
+// Note: this needs to have the same names as AttestationObjectInner
 #[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(try_from = "BTreeMap<u32, Value>", into = "BTreeMap<u32, Value>")]
+#[serde(rename_all = "camelCase", try_from = "BTreeMap<u32, Value>")]
 pub struct MakeCredentialResponse {
     pub fmt: Option<String>,
-    pub auth_data: Option<Vec<u8>>,
+    pub auth_data: Option<Value>,
     pub att_stmt: Option<Value>,
-    pub enterprise_attestation: Option<bool>,
-    pub large_blob_key: Option<Vec<u8>>,
+    pub epp_att: Option<bool>,
+    pub large_blob_key: Option<Value>,
 }
 
 // impl CBORResponse for AttestationObject<Registration> {
@@ -126,43 +128,13 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialResponse {
         trace!(?raw);
         Ok(Self {
             fmt: raw.remove(&0x01).and_then(|v| value_to_string(v, "0x01")),
-            auth_data: raw.remove(&0x02).and_then(|v| value_to_vec_u8(v, "0x02")),
+            auth_data: raw
+                .remove(&0x02),
             att_stmt: raw.remove(&0x03),
-            enterprise_attestation: raw.remove(&0x04).and_then(|v| value_to_bool(v, "0x04")),
-            large_blob_key: raw.remove(&0x05).and_then(|v| value_to_vec_u8(v, "0x05")),
+            epp_att: raw.remove(&0x04).and_then(|v| value_to_bool(v, "0x04")),
+            large_blob_key: raw
+                .remove(&0x05),
         })
-    }
-}
-
-impl From<MakeCredentialResponse> for BTreeMap<u32, Value> {
-    fn from(v: MakeCredentialResponse) -> Self {
-        let MakeCredentialResponse {
-            fmt,
-            auth_data,
-            att_stmt,
-            enterprise_attestation,
-            large_blob_key,
-        } = v;
-
-        let mut keys = BTreeMap::new();
-        if let Some(v) = fmt {
-            keys.insert(0x01, Value::Text(v));
-        }
-        if let Some(v) = auth_data {
-            keys.insert(0x02, Value::Bytes(v));
-        }
-        if let Some(v) = att_stmt {
-            keys.insert(0x03, v);
-        }
-        if let Some(v) = enterprise_attestation {
-            keys.insert(0x04, Value::Bool(v));
-        }
-        if let Some(v) = large_blob_key {
-            keys.insert(0x05, Value::Bytes(v));
-        }
-
-        keys
-
     }
 }
 

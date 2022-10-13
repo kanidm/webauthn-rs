@@ -139,12 +139,16 @@ pub struct RegisterPublicKeyCredential {
     /// This is NEVER actually
     /// used in a real registration, because the true credential ID is taken from the
     /// attestation data.
+    /// 
+    /// FIXME: can this be removed?
     pub id: String,
     /// The id of the credential, as binary.
     ///
     /// This is NEVER actually
     /// used in a real registration, because the true credential ID is taken from the
     /// attestation data.
+    ///
+    /// FIXME: can this be removed?
     #[serde(rename = "rawId")]
     pub raw_id: Base64UrlSafeData,
     /// <https://w3c.github.io/webauthn/#dom-publickeycredential-response>

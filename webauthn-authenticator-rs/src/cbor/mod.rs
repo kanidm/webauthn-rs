@@ -81,7 +81,7 @@ pub trait CBORCommand: Serialize + Sized {
         Ok(ISO7816RequestAPDU {
             cla: 0x80,
             ins: 0x10,
-            p1: 0x80,  // client supports NFCCTAP_GETRESPONSE
+            p1: 0, // 0x80,  // client supports NFCCTAP_GETRESPONSE
             p2: 0x00,
             data: self.cbor()?,
             ne: 65536,
