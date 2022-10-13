@@ -7,13 +7,15 @@ use crate::{
 };
 
 use openssl::{
-    bn::{self, BigNumContext, BigNum, BigNumContextRef},
-    ec::{self, EcKey, EcPoint},
+    bn,
+    ec::{self, EcKey},
     md::Md,
     nid,
-    pkey::{PKey, Private, Public},
+    pkey::{PKey, Private},
     pkey_ctx::PkeyCtx,
     rand::rand_bytes,
+    sign,
+    symm, hash,
 };
 use url::Url;
 use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
@@ -214,7 +216,7 @@ trait PinUvPlatformInterface: Default {
             }),
         }
     }
-    
+
     fn get_private_key(&self) -> &EcKey<Private>;
     fn kdf(&self, z: &[u8]) -> Vec<u8>;
 
@@ -234,6 +236,20 @@ struct PinUvPlatformInterfaceProtocolOne {
     private_key: Option<EcKey<Private>>,
 }
 
+/// Encrypts some data using AES-256-CBC, with no padding.
+///
+/// `plaintext.len()` must be a multiple of the cipher's blocksize.
+fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Vec<u8> {
+    let cipher = symm::Cipher::aes_256_cbc();
+    let mut ct = vec![0; plaintext.len() + cipher.block_size()];
+    let mut c = symm::Crypter::new(cipher, symm::Mode::Encrypt, &key, None).unwrap();
+    c.pad(false);
+    let l = c.update(&plaintext, &mut ct).unwrap();
+    let l = l + c.finalize(&mut ct[l..]).unwrap();
+    ct.truncate(l);
+    ct
+}
+
 impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
     fn kdf(&self, z: &[u8]) -> Vec<u8> {
         // Return SHA-256(Z)
@@ -243,8 +259,7 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
     fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
         // Return the AES-256-CBC encryption of demPlaintext using an all-zero IV.
         // (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
-        let cipher = openssl::symm::Cipher::aes_256_cbc();
-        openssl::symm::encrypt(cipher, key, None, dem_plaintext).expect("oopsencrypt")
+        encrypt(key, None, dem_plaintext)
     }
 
     fn decrypt(
@@ -258,14 +273,15 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
-        // Return the first 16 bytes of the result of computing HMAC-SHA-256 with the given key and message.
-        todo!()
+        // Return the first 16 bytes of the result of computing HMAC-SHA-256
+        // with the given key and message.
+        let key = PKey::hmac(&key).unwrap();
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key).unwrap();
+        signer.update(&message).unwrap();
+        signer.sign_to_vec().unwrap()
     }
 
-
-
-    fn reset_pin_uv_auth_token(&mut self) {
-    }
+    fn reset_pin_uv_auth_token(&mut self) {}
 
     fn set_private_key(&mut self, private_key: EcKey<Private>) {
         self.private_key = Some(private_key)
@@ -286,17 +302,18 @@ struct PinUvPlatformInterfaceProtocolTwo {
 
 impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
     fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
-        // 1. Discard the first 32 bytes of key. (This selects the AES-key portion of the shared secret.)
+        // 1. Discard the first 32 bytes of key. (This selects the AES-key
+        //    portion of the shared secret.)
         let key = &key[32..];
 
         // 2. Let iv be a 16-byte, random bytestring.
         let mut iv: [u8; 16] = [0; 16];
         rand_bytes(&mut iv).expect("encrypt::iv");
 
-        // 3. Let ct be the AES-256-CBC encryption of demPlaintext using key and iv. (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
-        let cipher = openssl::symm::Cipher::aes_256_cbc();
-        let ct =
-            openssl::symm::encrypt(cipher, key, Some(&iv), dem_plaintext).expect("oopsencrypt");
+        // 3. Let ct be the AES-256-CBC encryption of demPlaintext using key and
+        //    iv. (No padding is performed as the size of demPlaintext is
+        //    required to be a multiple of the AES block length.)
+        let ct = encrypt(key, Some(iv.as_slice()), dem_plaintext);
 
         // 4. Return iv || ct.
         let mut o = iv.to_vec();
@@ -394,7 +411,7 @@ fn ecdh(
     // let mut y = BigNum::new()?;
     // let peer_key: EcKey<Public> = peer_key.into();
     // let peer_key_pub = peer_key.public_key();
-    
+
     // let pk = private_key.private_key();
     // let group = private_key.group();
 
