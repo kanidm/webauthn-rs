@@ -80,6 +80,34 @@ impl TryFrom<&[u8]> for CBORResponse {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum KeepAliveStatus {
+    Processing,
+    UserPresenceNeeded,
+    Unknown(u8),
+}
+
+impl From<u8> for KeepAliveStatus {
+    fn from(v: u8) -> Self {
+        use KeepAliveStatus::*;
+        match v {
+            1 => Processing,
+            2 => UserPresenceNeeded,
+            v => Unknown(v),
+        }
+    }
+}
+
+impl From<&[u8]> for KeepAliveStatus {
+    fn from(d: &[u8]) -> Self {
+        if !d.is_empty() {
+            Self::from(d[0])
+        } else {
+            Self::Unknown(0)
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum U2FError {
     None,
     InvalidCommand,
@@ -129,6 +157,7 @@ pub enum Response {
     Msg(ISO7816ResponseAPDU),
     Cbor(CBORResponse),
     Error(U2FError),
+    KeepAlive(KeepAliveStatus),
     Unknown,
 }
 
@@ -149,8 +178,12 @@ impl TryFrom<&U2FHIDFrame> for Response {
             U2FHID_INIT => InitResponse::try_from(b).map(Response::Init)?,
             U2FHID_MSG => ISO7816ResponseAPDU::try_from(b).map(Response::Msg)?,
             U2FHID_CBOR => CBORResponse::try_from(b).map(Response::Cbor)?,
+            U2FHID_KEEPALIVE => Response::KeepAlive(KeepAliveStatus::from(b)),
             U2FHID_ERROR => Response::Error(U2FError::from(b)),
-            _ => Response::Unknown,
+            _ => {
+                error!("unknown USB HID command: 0x{:02x} (0x{:02x})", f.cmd, f.cmd ^ TYPE_INIT);
+                Response::Unknown
+            },
         })
     }
 }

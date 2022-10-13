@@ -17,6 +17,8 @@ use crate::usb::responses::*;
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use std::fmt;
+use std::thread;
+use std::time::Duration;
 
 // u2f_hid.h
 const FIDO_USAGE_PAGE: u16 = 0xf1d0;
@@ -29,6 +31,7 @@ const TYPE_INIT: u8 = 0x80;
 const U2FHID_MSG: u8 = TYPE_INIT | 0x03;
 const U2FHID_INIT: u8 = TYPE_INIT | 0x06;
 const U2FHID_CBOR: u8 = TYPE_INIT | 0x10;
+const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b;
 const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f;
 const CAPABILITY_CBOR: u8 = 0x04;
 const CAPABILITY_NMSG: u8 = 0x08;
@@ -151,10 +154,9 @@ impl USBToken {
 }
 
 impl Token for USBToken {
-    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    fn transmit_raw<'a, C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand<Response = R>,
-        R: CBORResponse,
+        C: CBORCommand,
     {
         let cbor = cmd.cbor().map_err(|_| WebauthnCError::Cbor)?;
         let cmd = U2FHIDFrame {
@@ -165,9 +167,22 @@ impl Token for USBToken {
         };
         self.send(&cmd)?;
 
+        // Get a response, checking for keep-alive
+        let resp = loop {
+            let resp = self.recv()?;
+
+            if let Response::KeepAlive(r) = resp {
+                // TODO: maybe time out at some point
+                trace!("waiting for {:?}", r);
+                thread::sleep(Duration::from_millis(100));
+            } else {
+                break resp;
+            }
+        };
+
         // Get a response
-        match self.recv()? {
-            Response::Cbor(c) => R::try_from(&c.data).map_err(|_| WebauthnCError::Cbor),
+        match resp {
+            Response::Cbor(c) => Ok(c.data),
             e => {
                 error!("Unhandled response type: {:?}", e);
                 Err(WebauthnCError::Cbor)
