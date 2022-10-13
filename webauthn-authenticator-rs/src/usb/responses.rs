@@ -1,5 +1,5 @@
 //! All [Response] frame types, used by FIDO tokens over USB HID.
-use crate::error::WebauthnCError;
+use crate::error::{WebauthnCError, CtapError};
 use crate::transport::iso7816::ISO7816ResponseAPDU;
 use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;
@@ -61,7 +61,7 @@ impl TryFrom<&[u8]> for InitResponse {
 #[derive(Debug, PartialEq, Eq)]
 pub struct CBORResponse {
     /// Status code
-    pub status: u8,
+    pub status: CtapError,
     /// Data payload
     pub data: Vec<u8>,
 }
@@ -73,7 +73,7 @@ impl TryFrom<&[u8]> for CBORResponse {
             return Err(WebauthnCError::MessageTooShort);
         }
         Ok(Self {
-            status: d[0],
+            status: d[0].into(),
             data: d[1..].to_vec(),
         })
     }

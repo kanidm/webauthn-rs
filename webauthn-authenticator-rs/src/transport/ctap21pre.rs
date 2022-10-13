@@ -145,6 +145,9 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
         // data back, but it seems like everything expects a Map<String, Value>
         // here, rather than a Map<u32, Value>... so we need to re-serialize
         // that data!
+        //
+        // Alternatively, it may be possible to do this "more cheaply" by
+        // remapping the keys of the map.
         let raw = serde_cbor::to_vec(&ret).map_err(|e| {
             error!("MakeCredentialResponse re-serialization: {:?}", e);
             WebauthnCError::Cbor

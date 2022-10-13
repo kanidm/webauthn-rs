@@ -187,7 +187,13 @@ impl Token for USBToken {
 
         // Get a response
         match resp {
-            Response::Cbor(c) => Ok(c.data),
+            Response::Cbor(c) => {
+                if c.status.is_ok() {
+                    Ok(c.data)
+                } else {
+                    Err(WebauthnCError::Ctap(c.status))
+                }
+            },
             e => {
                 error!("Unhandled response type: {:?}", e);
                 Err(WebauthnCError::Cbor)
