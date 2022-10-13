@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
-use webauthn_rs_core::proto::{COSEKey, COSEKeyTypeId, ECDSACurve, COSEKeyType, COSEEC2Key};
+use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, ECDSACurve};
 use webauthn_rs_proto::COSEAlgorithm;
+use bitflags::bitflags;
 
 use self::CBORCommand;
 use super::*;
@@ -14,7 +15,7 @@ pub struct ClientPinRequest {
     pub pin_uv_protocol: Option<u32>,
     /// Action being requested
     pub sub_command: ClientPinSubCommand,
-    // pub key_agreement: Option<COSEKey>,
+    pub key_agreement: Option<COSEKey>,
     /// OUtput of calling "Authenticate" on some context specific to [Self::sub_comand]
     pub pin_uv_auth_param: Option<Vec<u8>>,
     /// An encrypted PIN
@@ -22,7 +23,7 @@ pub struct ClientPinRequest {
     /// An encrypted proof-of-knowledge of a PIN
     pub pin_hash_enc: Option<Vec<u8>>,
     /// Permissions bitfield, omitted if 0.
-    pub permissions: u32,
+    pub permissions: Permissions,
     /// The RP ID to assign as the permissions RP ID
     pub rp_id: Option<String>,
 }
@@ -39,6 +40,18 @@ pub enum ClientPinSubCommand {
     GetPinUvAuthTokenUsingUvWithPermissions = 0x06,
     GetUvRetries = 0x07,
     GetPinUvAuthTokenUsingPinWithPermissions = 0x08,
+}
+
+bitflags! {
+    #[derive(Default)]
+    pub struct Permissions: u8 {
+        const MAKE_CREDENTIAL = 0x01;
+        const GET_ASSERTION = 0x02;
+        const CREDENTIAL_MANAGEMENT = 0x04;
+        const BIO_ENROLLMENT = 0x08;
+        const LARGE_BLOB_WRITE = 0x10;
+        const AUTHENTICATOR_CONFIGURATION = 0x20;
+    }
 }
 
 impl CBORCommand for ClientPinRequest {
@@ -64,7 +77,7 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
         let ClientPinRequest {
             pin_uv_protocol,
             sub_command,
-            // key_agreement,
+            key_agreement,
             pin_uv_auth_param,
             new_pin_enc,
             pin_hash_enc,
@@ -78,9 +91,20 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
             keys.insert(0x01, Value::Integer(v.into()));
         }
         keys.insert(0x02, Value::Integer((sub_command as u32).into()));
-        // if let Some(v) = key_agreement {
-        //     keys.insert(0x03, );
-        // }
+        if let Some(v) = key_agreement {
+            if let COSEKeyType::EC_EC2(e) = v.key {
+                // This uses the special type of COSE key for PinUvToken
+                let m = BTreeMap::from([
+                    (Value::Integer(1), Value::Integer(2)),    // kty
+                    (Value::Integer(3), Value::Integer(-25)),  // alg
+                    (Value::Integer(-1), Value::Integer(1)),   // crv
+                    (Value::Integer(-2), Value::Bytes(e.x.0)), // x
+                    (Value::Integer(-3), Value::Bytes(e.y.0)), // y
+                ]);
+
+                keys.insert(0x03, Value::Map(m));
+            }
+        }
         if let Some(v) = pin_uv_auth_param {
             keys.insert(0x04, Value::Bytes(v));
         }
@@ -90,8 +114,8 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
         if let Some(v) = pin_hash_enc {
             keys.insert(0x06, Value::Bytes(v));
         }
-        if permissions != 0 {
-            keys.insert(0x09, Value::Integer(permissions.into()));
+        if !permissions.is_empty() {
+            keys.insert(0x09, Value::Integer(permissions.bits().into()));
         }
         if let Some(v) = rp_id {
             keys.insert(0x0a, Value::Text(v));
@@ -111,15 +135,21 @@ impl TryFrom<BTreeMap<u32, Value>> for ClientPinResponse {
                 .and_then(|v| if let Value::Map(m) = v { Some(m) } else { None })
                 .and_then(|mut m| {
                     // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#pinProto1
-                    if m.remove(&Value::Integer(1)) != Some(Value::Integer(COSEKeyTypeId::EC_EC2 as i128))
+                    if m.remove(&Value::Integer(1))
+                        != Some(Value::Integer(COSEKeyTypeId::EC_EC2 as i128))
                         || m.remove(&Value::Integer(3)) != Some(Value::Integer(-25))
-                        || m.remove(&Value::Integer(-1)) != Some(Value::Integer(ECDSACurve::SECP256R1 as i128))
+                        || m.remove(&Value::Integer(-1))
+                            != Some(Value::Integer(ECDSACurve::SECP256R1 as i128))
                     {
                         return None;
                     }
 
-                    let x = m.remove(&Value::Integer(-2)).and_then(|v| value_to_vec_u8(v, "-2"))?;
-                    let y = m.remove(&Value::Integer(-3)).and_then(|v| value_to_vec_u8(v, "-3"))?;
+                    let x = m
+                        .remove(&Value::Integer(-2))
+                        .and_then(|v| value_to_vec_u8(v, "-2"))?;
+                    let y = m
+                        .remove(&Value::Integer(-3))
+                        .and_then(|v| value_to_vec_u8(v, "-3"))?;
                     if x.len() != 32 || y.len() != 32 {
                         return None;
                     }

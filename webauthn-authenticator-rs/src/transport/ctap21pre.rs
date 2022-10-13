@@ -7,11 +7,11 @@ use crate::{
 };
 
 use openssl::{
-    bn,
-    ec::{self, EcKey},
+    bn::{self, BigNumContext, BigNum, BigNumContextRef},
+    ec::{self, EcKey, EcPoint},
     md::Md,
     nid,
-    pkey::{PKey, Private},
+    pkey::{PKey, Private, Public},
     pkey_ctx::PkeyCtx,
     rand::rand_bytes,
 };
@@ -56,8 +56,20 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 
                 let ret = self.token.transmit(p)?;
                 trace!(?ret);
+
+                // let p = ClientPinRequest {
+                //     pin_uv_protocol: Some(*protocol),
+                //     sub_command: ClientPinSubCommand::GetUvRetries,
+                //     ..Default::default()
+                // };
+
+                // let ret = self.token.transmit(p)?;
+                // trace!(?ret);
             }
         }
+
+        // TODO: get the pin
+        let pin = "1234";
 
         // 6.5.5.4: Obtaining the shared secret
         // TODO: select protocol wisely
@@ -72,9 +84,41 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 
         // The platform calls encapsulate with the public key that the authenticator
         // returned in order to generate the platform key-agreement key and the shared secret.
-        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
+        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
         iface.initialize();
-        let (platform_key_agreement_key, shared_secret) = iface.encapsulate(key_agreement)?;
+        let shared_secret = iface.encapsulate(key_agreement)?;
+        trace!(?shared_secret);
+
+        todo!();
+
+        // broken
+        // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
+        let p = ClientPinRequest {
+            pin_uv_protocol: Some(2),
+            sub_command: ClientPinSubCommand::GetPinToken,
+            key_agreement: Some(iface.get_public_key()),
+            pin_hash_enc: Some(iface.encrypt(
+                shared_secret.as_slice(),
+                &(compute_sha256(pin.as_bytes()))[..16],
+            )),
+            ..Default::default()
+        };
+
+        // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
+        /*
+        let p = ClientPinRequest {
+            pin_uv_protocol: Some(2),
+            sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions,
+            key_agreement: Some(iface.get_public_key()),
+            pin_hash_enc: Some(iface.encrypt(shared_secret.as_slice(), &(compute_sha256(pin.as_bytes()))[..16])),
+            permissions: Permissions::MAKE_CREDENTIAL,
+            // need rpId?
+            ..Default::default()
+        };
+        */
+
+        let ret = self.token.transmit(p)?;
+        trace!(?ret);
 
         // Get a pin token
 
@@ -109,13 +153,13 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 }
 
 trait PinUvPlatformInterface: Default {
-    fn encrypt(&self, key: Vec<u8>, dem_plaintext: Vec<u8>) -> Vec<u8>;
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8>;
     fn decrypt(
         &self,
-        key: Vec<u8>,
-        ciphertext: Vec<u8>,
+        key: &[u8],
+        ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError>;
-    fn authenticate(&self, key: Vec<u8>, message: Vec<u8>) -> Vec<u8>;
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8>;
 
     fn ecdh(&self, peer_cose_key: COSEKey) -> Result<Vec<u8>, WebauthnCError> {
         // 1. Parse peerCoseKey as specified for getPublicKey, below, and produce a P-256 point, Y.
@@ -133,38 +177,62 @@ trait PinUvPlatformInterface: Default {
         }
         // 3. Let Z be the 32-byte, big-endian encoding of the x-coordinate of the shared point.
         // ???
+        trace!(?z);
 
         // 4. Return kdf(Z).
         Ok(self.kdf(&z))
     }
 
-    fn encapsulate(
-        &self,
-        peer_cose_key: COSEKey,
-    ) -> Result<(&COSEKey, /* shared_secret */ Vec<u8>), WebauthnCError> {
+    fn encapsulate(&self, peer_cose_key: COSEKey) -> Result<Vec<u8>, WebauthnCError> {
         // Let sharedSecret be the result of calling ecdh(peerCoseKey). Return any resulting error.
         // Return (getPublicKey(), sharedSecret)
         let shared_secret = self.ecdh(peer_cose_key)?;
 
-        Ok((self.get_public_key(), shared_secret))
+        Ok(shared_secret)
     }
 
-    fn get_public_key(&self) -> &COSEKey;
+    fn get_public_key(&self) -> COSEKey {
+        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1).unwrap();
+        let eckey = self.get_private_key();
+        // Extract the public x and y coords.
+        let ecpub_points = eckey.public_key();
+
+        let mut bnctx = bn::BigNumContext::new().unwrap();
+        let mut xbn = bn::BigNum::new().unwrap();
+        let mut ybn = bn::BigNum::new().unwrap();
+
+        ecpub_points
+            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)
+            .unwrap();
+
+        COSEKey {
+            type_: COSEAlgorithm::PinUvProtocol,
+            key: COSEKeyType::EC_EC2(COSEEC2Key {
+                curve: ECDSACurve::SECP256R1,
+                x: xbn.to_vec().into(),
+                y: ybn.to_vec().into(),
+            }),
+        }
+    }
+    
     fn get_private_key(&self) -> &EcKey<Private>;
     fn kdf(&self, z: &[u8]) -> Vec<u8>;
 
-    fn set_key(&mut self, public_key: COSEKey, private_key: EcKey<Private>);
+    fn set_private_key(&mut self, private_key: EcKey<Private>);
     fn reset_pin_uv_auth_token(&mut self);
 
     fn initialize(&mut self) {
-        let (public, private) = regenerate().expect("generating key");
-        self.set_key(public, private);
+        let private = regenerate().expect("generating key");
+        self.set_private_key(private);
         self.reset_pin_uv_auth_token();
     }
 }
 
 #[derive(Default)]
-struct PinUvPlatformInterfaceProtocolOne {}
+struct PinUvPlatformInterfaceProtocolOne {
+    pin_uv_auth_token: [u8; 32],
+    private_key: Option<EcKey<Private>>,
+}
 
 impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
     fn kdf(&self, z: &[u8]) -> Vec<u8> {
@@ -172,53 +240,52 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
         compute_sha256(z).to_vec()
     }
 
-    fn encrypt(&self, key: Vec<u8>, dem_plaintext: Vec<u8>) -> Vec<u8> {
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
         // Return the AES-256-CBC encryption of demPlaintext using an all-zero IV.
         // (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
-        todo!()
+        let cipher = openssl::symm::Cipher::aes_256_cbc();
+        openssl::symm::encrypt(cipher, key, None, dem_plaintext).expect("oopsencrypt")
     }
 
     fn decrypt(
         &self,
-        key: Vec<u8>,
-        ciphertext: Vec<u8>,
+        key: &[u8],
+        ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
         // If the size of demCiphertext is not a multiple of the AES block length, return error.
         // Otherwise return the AES-256-CBC decryption of demCiphertext using an all-zero IV.
         todo!()
     }
 
-    fn authenticate(&self, key: Vec<u8>, message: Vec<u8>) -> Vec<u8> {
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
         // Return the first 16 bytes of the result of computing HMAC-SHA-256 with the given key and message.
         todo!()
     }
 
-    fn get_public_key(&self) -> &COSEKey {
-        todo!()
-    }
+
 
     fn reset_pin_uv_auth_token(&mut self) {
-        todo!()
     }
 
-    fn set_key(&mut self, public_key: COSEKey, private_key: EcKey<Private>) {
-        todo!()
+    fn set_private_key(&mut self, private_key: EcKey<Private>) {
+        self.private_key = Some(private_key)
     }
 
     fn get_private_key(&self) -> &EcKey<Private> {
-        todo!()
+        self.private_key
+            .as_ref()
+            .expect("private key not initialised")
     }
 }
 
 #[derive(Default)]
 struct PinUvPlatformInterfaceProtocolTwo {
     pin_uv_auth_token: [u8; 32],
-    public_key: Option<COSEKey>,
     private_key: Option<EcKey<Private>>,
 }
 
 impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
-    fn encrypt(&self, key: Vec<u8>, dem_plaintext: Vec<u8>) -> Vec<u8> {
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key portion of the shared secret.)
         let key = &key[32..];
 
@@ -228,8 +295,8 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
 
         // 3. Let ct be the AES-256-CBC encryption of demPlaintext using key and iv. (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
         let cipher = openssl::symm::Cipher::aes_256_cbc();
-        let ct = openssl::symm::encrypt(cipher, key, Some(&iv), dem_plaintext.as_slice())
-            .expect("oopsencrypt");
+        let ct =
+            openssl::symm::encrypt(cipher, key, Some(&iv), dem_plaintext).expect("oopsencrypt");
 
         // 4. Return iv || ct.
         let mut o = iv.to_vec();
@@ -240,8 +307,8 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
 
     fn decrypt(
         &self,
-        key: Vec<u8>,
-        ciphertext: Vec<u8>,
+        key: &[u8],
+        ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key portion of the shared secret.)
         let key = &key[..32];
@@ -263,19 +330,13 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         Ok(pt)
     }
 
-    fn authenticate(&self, key: Vec<u8>, message: Vec<u8>) -> Vec<u8> {
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
         // 1. If key is longer than 32 bytes, discard the excess.
         //    (This selects the HMAC-key portion of the shared secret. When key is the
         //    pinUvAuthToken, it is exactly 32 bytes long and thus this step has no effect.)
         // 2. Return the result of computing HMAC-SHA-256 on key and message.
 
         todo!()
-    }
-
-    fn get_public_key(&self) -> &COSEKey {
-        self.public_key
-            .as_ref()
-            .expect("public key not initialised")
     }
 
     fn get_private_key(&self) -> &EcKey<Private> {
@@ -301,8 +362,7 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         rand_bytes(&mut self.pin_uv_auth_token).expect("rand_bytes");
     }
 
-    fn set_key(&mut self, public_key: COSEKey, private_key: EcKey<Private>) {
-        self.public_key = Some(public_key);
+    fn set_private_key(&mut self, private_key: EcKey<Private>) {
         self.private_key = Some(private_key);
     }
 }
@@ -328,41 +388,44 @@ fn ecdh(
     peer_key: &COSEEC2Key,
     output: &mut [u8],
 ) -> Result<(), openssl::error::ErrorStack> {
+    // let mut ctx = BigNumContext::new()?;
+
+    // let mut x = BigNum::new()?;
+    // let mut y = BigNum::new()?;
+    // let peer_key: EcKey<Public> = peer_key.into();
+    // let peer_key_pub = peer_key.public_key();
+    
+    // let pk = private_key.private_key();
+    // let group = private_key.group();
+
+    // let mut pt = EcPoint::new(group)?;
+    // pt.mul(group, peer_key_pub, pk, &ctx)?;
+    // pt.affine_coordinates_gfp(group, &mut x, &mut y, &mut ctx)?;
+
+    // let buflen = (group.degree() + 7) / 8;
+    // trace!(?buflen);
+    // let x = x.to_vec();
+    // trace!(?x);
+    //output.copy_from_slice(x.as_slice());
+
+    // Both the low level and high level return same outputs.
     let peer_key = PKey::from_ec_key(peer_key.into())?;
     let pkey = PKey::from_ec_key(private_key)?;
     let mut ctx = PkeyCtx::new(&pkey)?;
     ctx.derive_init()?;
     ctx.derive_set_peer(&peer_key)?;
     ctx.derive(Some(output))?;
+    // trace!(?output);
 
     Ok(())
 }
 
-fn regenerate() -> Result<(COSEKey, EcKey<Private>), openssl::error::ErrorStack> {
+fn regenerate() -> Result<EcKey<Private>, openssl::error::ErrorStack> {
     // Create a new key.
     let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
     let eckey = ec::EcKey::generate(&ecgroup)?;
 
-    // Extract the public x and y coords.
-    let ecpub_points = eckey.public_key();
-
-    let mut bnctx = bn::BigNumContext::new()?;
-    let mut xbn = bn::BigNum::new()?;
-    let mut ybn = bn::BigNum::new()?;
-
-    ecpub_points.affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
-
-    Ok((
-        COSEKey {
-            type_: COSEAlgorithm::PinUvProtocol,
-            key: COSEKeyType::EC_EC2(COSEEC2Key {
-                curve: ECDSACurve::SECP256R1,
-                x: xbn.to_vec().into(),
-                y: ybn.to_vec().into(),
-            }),
-        },
-        eckey,
-    ))
+    Ok(eckey)
 }
 
 #[cfg(test)]
@@ -385,5 +448,46 @@ mod tests {
         hkdf_sha_256(salt.as_slice(), &ikm, info.as_slice(), &mut output)
             .expect("hkdf_sha_256 fail");
         assert_eq!(expected, output);
+    }
+
+    #[test]
+    fn test_pin_encryption_and_hashing() {
+        // https://github.com/mozilla/authenticator-rs/blob/f2d255c48d3e3762a27873b270520072bf501d0e/src/crypto/mod.rs#L833
+        let pin = "1234";
+
+        let shared_secret = vec![
+            0x82, 0xE3, 0xD8, 0x41, 0xE2, 0x5C, 0x5C, 0x13, 0x46, 0x2C, 0x12, 0x3C, 0xC3, 0xD3,
+            0x98, 0x78, 0x65, 0xBA, 0x3D, 0x20, 0x46, 0x74, 0xFB, 0xED, 0xD4, 0x7E, 0xF5, 0xAB,
+            0xAB, 0x8D, 0x13, 0x72,
+        ];
+        let expected_new_pin_enc = vec![
+            0x70, 0x66, 0x4B, 0xB5, 0x81, 0xE2, 0x57, 0x45, 0x1A, 0x3A, 0xB9, 0x1B, 0xF1, 0xAA,
+            0xD8, 0xE4, 0x5F, 0x6C, 0xE9, 0xB5, 0xC3, 0xB0, 0xF3, 0x2B, 0x5E, 0xCD, 0x62, 0xD0,
+            0xBA, 0x3B, 0x60, 0x5F, 0xD9, 0x18, 0x31, 0x66, 0xF6, 0xC5, 0xFA, 0xF3, 0xE4, 0xDA,
+            0x24, 0x81, 0x50, 0x2C, 0xD0, 0xCE, 0xE0, 0x15, 0x8B, 0x35, 0x1F, 0xC3, 0x92, 0x08,
+            0xA7, 0x7C, 0xB2, 0x74, 0x4B, 0xD4, 0x3C, 0xF9,
+        ];
+        let expected_pin_auth = vec![
+            0x8E, 0x7F, 0x01, 0x69, 0x97, 0xF3, 0xB0, 0xA2, 0x7B, 0xA4, 0x34, 0x7A, 0x0E, 0x49,
+            0xFD, 0xF5,
+        ];
+
+        // Padding to 64 bytes
+        let input: Vec<u8> = pin
+            .as_bytes()
+            .iter()
+            .chain(std::iter::repeat(&0x00))
+            .take(64)
+            .cloned()
+            .collect();
+
+        let mut t = PinUvPlatformInterfaceProtocolOne::default();
+        t.initialize();
+
+        let new_pin_enc = t.encrypt(&shared_secret, &input);
+        assert_eq!(new_pin_enc, expected_new_pin_enc);
+
+        let pin_auth = t.authenticate(&shared_secret, &new_pin_enc);
+        assert_eq!(pin_auth[0..16], expected_pin_auth);
     }
 }
