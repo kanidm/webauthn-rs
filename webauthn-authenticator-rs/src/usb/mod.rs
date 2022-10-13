@@ -12,6 +12,7 @@ mod responses;
 use crate::cbor::*;
 use crate::error::WebauthnCError;
 use crate::transport::*;
+use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use crate::usb::responses::*;
 use hidapi::{HidApi, HidDevice};
@@ -154,9 +155,10 @@ impl USBToken {
 }
 
 impl Token for USBToken {
-    fn transmit_raw<'a, C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
+    fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
+        U: UiCallback,
     {
         let cbor = cmd.cbor().map_err(|_| WebauthnCError::Cbor)?;
         let cmd = U2FHIDFrame {
@@ -172,8 +174,11 @@ impl Token for USBToken {
             let resp = self.recv()?;
 
             if let Response::KeepAlive(r) = resp {
-                // TODO: maybe time out at some point
                 trace!("waiting for {:?}", r);
+                if r == KeepAliveStatus::UserPresenceNeeded {
+                    ui.request_touch();
+                }
+                // TODO: maybe time out at some point
                 thread::sleep(Duration::from_millis(100));
             } else {
                 break resp;

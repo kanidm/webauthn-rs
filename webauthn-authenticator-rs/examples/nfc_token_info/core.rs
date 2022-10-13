@@ -1,10 +1,10 @@
 // use webauthn_authenticator_rs::nfc::*;
-use webauthn_authenticator_rs::transport::*;
+use webauthn_authenticator_rs::{transport::*, ui::Cli};
 
 fn access_card<T: Token>(card: T) {
     info!("Card detected ...");
 
-    match card.select_any() {
+    match card.select_any(Cli {}) {
         Ok(Selected::FIDO_2_1_PRE(mut token)) => {
             info!("Using token {:?}", token);
 

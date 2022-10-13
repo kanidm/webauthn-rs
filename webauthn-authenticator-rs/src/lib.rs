@@ -37,6 +37,7 @@ pub mod error;
 pub mod softpasskey;
 pub mod softtoken;
 pub mod transport;
+pub mod ui;
 mod util;
 
 #[cfg(feature = "nfc")]

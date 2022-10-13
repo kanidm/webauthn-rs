@@ -1,9 +1,8 @@
-use std::collections::BTreeMap;
-
 use crate::{
     cbor::*,
     error::WebauthnCError,
     transport::Token,
+    ui::UiCallback,
     util::{compute_sha256, creation_to_clientdata, get_to_clientdata},
     AuthenticatorBackend,
 };
@@ -27,18 +26,23 @@ use webauthn_rs_proto::{
     RegistrationExtensionsClientOutputs,
 };
 
-pub struct Ctap21PreAuthenticator<T: Token> {
+pub struct Ctap21PreAuthenticator<T: Token, U: UiCallback> {
     info: GetInfoResponse,
     token: T,
+    ui_callback: U,
 }
 
-impl<T: Token> Ctap21PreAuthenticator<T> {
-    pub fn new(info: GetInfoResponse, token: T) -> Self {
-        Self { info, token }
+impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
+    pub fn new(info: GetInfoResponse, token: T, ui_callback: U) -> Self {
+        Self {
+            info,
+            token,
+            ui_callback,
+        }
     }
 }
 
-impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
+impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T, U> {
     fn perform_register(
         &mut self,
         origin: Url,
@@ -62,7 +66,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
                     ..Default::default()
                 };
 
-                let ret = self.token.transmit(p)?;
+                let ret = self.token.transmit(p, &self.ui_callback)?;
                 trace!(?ret);
 
                 // let p = ClientPinRequest {
@@ -76,8 +80,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
             }
         }
 
-        // TODO: get the pin
-        let pin = "1234";
+        let pin = self.ui_callback.request_pin().ok_or(WebauthnCError::Cancelled)?;
 
         // TODO: select protocol wisely
         let mut iface = PinUvPlatformInterfaceProtocolOne::default();
@@ -85,7 +88,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 
         // 6.5.5.4: Obtaining the shared secret
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p)?;
+        let ret = self.token.transmit(p, &self.ui_callback)?;
         let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
@@ -111,7 +114,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
         };
         */
 
-        let ret = self.token.transmit(p)?;
+        let ret = self.token.transmit(p, &self.ui_callback)?;
         trace!(?ret);
         let pin_token = ret.pin_uv_auth_token.unwrap();
         // Decrypt the pin_token
@@ -135,7 +138,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
             enterprise_attest: None,
         };
 
-        let ret = self.token.transmit(mc)?;
+        let ret = self.token.transmit(mc, &self.ui_callback)?;
         trace!(?ret);
 
         // The obvious thing to do here would be to pass the raw authenticator
@@ -153,7 +156,6 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
         let id = String::new();
 
         let type_ = ret.fmt.clone().ok_or(WebauthnCError::InvalidAlgorithm)?;
-        let att_stmt = ret.att_stmt.ok_or(WebauthnCError::Cbor)?;
 
         Ok(RegisterPublicKeyCredential {
             id,

@@ -52,16 +52,17 @@ impl Transport for AnyTransport {
 
 impl Token for AnyToken {
     #[allow(unused_variables, clippy::unimplemented)]
-    fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
+    fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
+        U: UiCallback,
     {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => Token::transmit_raw(n, cmd),
+            AnyToken::Nfc(n) => Token::transmit_raw(n, cmd, ui),
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => Token::transmit_raw(u, cmd),
+            AnyToken::Usb(u) => Token::transmit_raw(u, cmd, ui),
         }
     }
 

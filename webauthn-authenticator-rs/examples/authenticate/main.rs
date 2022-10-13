@@ -3,6 +3,7 @@ extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
 
+use webauthn_authenticator_rs::ui::{UiCallback, Cli};
 use webauthn_authenticator_rs::prelude::Url;
 use webauthn_authenticator_rs::softtoken::SoftToken;
 use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
@@ -11,13 +12,16 @@ use webauthn_authenticator_rs::AuthenticatorBackend;
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
 
-fn access_card<T: Token>(card: T) -> Ctap21PreAuthenticator<T> {
+fn access_card<T: Token, U: UiCallback>(card: T, ui: U) -> Ctap21PreAuthenticator<T, U> {
     info!("Card detected ...");
 
-    card.auth().expect("couldn't open card")
+    card.auth(ui).expect("couldn't open card")
 }
 
 fn select_transport() -> Box<dyn AuthenticatorBackend> {
+    // TODO
+    let ui = Cli {};
+
     let mut reader = AnyTransport::default();
     info!("Using reader: {:?}", reader);
 
@@ -25,7 +29,7 @@ fn select_transport() -> Box<dyn AuthenticatorBackend> {
         Ok(mut tokens) => {
             while let Some(mut card) = tokens.pop() {
                 card.init().expect("couldn't init card");
-                return Box::new(access_card(card));
+                return Box::new(access_card(card, ui));
             }
         }
         Err(e) => panic!("Error: {:?}", e),

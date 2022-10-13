@@ -1,5 +1,6 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
 use crate::error::{CtapError, WebauthnCError};
+use crate::ui::UiCallback;
 
 use pcsc::*;
 use std::ffi::CString;
@@ -244,9 +245,10 @@ impl NFCCard {
 }
 
 impl Token for NFCCard {
-    fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
+    fn transmit_raw<C, U>(&self, cmd: C, _ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
+        U: UiCallback,
     {
         // let apdu = cmd.to_extended_apdu().map_err(|_| WebauthnCError::Cbor)?;
         // let mut resp = self.transmit(&apdu, &ISO7816LengthForm::ExtendedOnly)?;

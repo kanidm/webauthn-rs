@@ -4,6 +4,7 @@ pub mod ctap21pre;
 pub mod iso7816;
 
 pub use crate::transport::any::{AnyToken, AnyTransport};
+use crate::ui::UiCallback;
 
 use base64urlsafedata::Base64UrlSafeData;
 use std::fmt;
@@ -49,12 +50,13 @@ pub trait Transport: Sized + Default + fmt::Debug {
 /// Represents a connection to a single CTAP token over a [Transport].
 pub trait Token: Sized + fmt::Debug {
     /// Transmit a CBOR message to a token
-    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    fn transmit<'a, C, R, U>(&self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse,
+        U: UiCallback,
     {
-        let resp = self.transmit_raw(cmd)?;
+        let resp = self.transmit_raw(cmd, ui)?;
 
         R::try_from(resp.as_slice()).map_err(|_| {
             //error!("error: {:?}", e);
@@ -62,6 +64,7 @@ pub trait Token: Sized + fmt::Debug {
         })
     }
 
+    /*
     /// Transmits a CBOR command to a token, returning the deserialized response
     /// and original response.
     fn transmit_plus_raw<'a, C, R>(&self, cmd: C) -> Result<(R, Vec<u8>), WebauthnCError>
@@ -78,17 +81,19 @@ pub trait Token: Sized + fmt::Debug {
             })
             .map(|v| (v, resp))
     }
+    */
 
-    fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
+    fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand;
+        C: CBORCommand,
+        U: UiCallback;
 
     /// Initializes the [Token]
     fn init(&mut self) -> Result<(), WebauthnCError>;
 
     /// Selects any available CTAP applet on the [Token]
-    fn select_any(self) -> Result<Selected<Self>, WebauthnCError> {
-        let tokinfo = self.transmit(GetInfoRequest {})?;
+    fn select_any<U: UiCallback>(self, ui: U) -> Result<Selected<Self>, WebauthnCError> {
+        let tokinfo = self.transmit(GetInfoRequest {}, &ui)?;
 
         debug!(?tokinfo);
 
@@ -104,13 +109,13 @@ pub trait Token: Sized + fmt::Debug {
     }
 
     // TODO: implement better
-    fn auth(self) -> Result<Ctap21PreAuthenticator<Self>, WebauthnCError> {
-        let info = self.transmit(GetInfoRequest {})?;
+    fn auth<U: UiCallback>(self, ui: U) -> Result<Ctap21PreAuthenticator<Self, U>, WebauthnCError> {
+        let info = self.transmit(GetInfoRequest {}, &ui)?;
 
         debug!(?info);
 
         if info.versions.contains("FIDO_2_1_PRE") {
-            Ok(Ctap21PreAuthenticator::new(info, self))
+            Ok(Ctap21PreAuthenticator::new(info, self, ui))
         } else {
             error!(?info.versions);
             Err(WebauthnCError::NotSupported)

@@ -17,6 +17,7 @@ pub enum WebauthnCError {
     InvalidAssertion,
     MessageTooLarge,
     MessageTooShort,
+    Cancelled,
     Ctap(CtapError),
 }
 
