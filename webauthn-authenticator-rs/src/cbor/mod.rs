@@ -1,5 +1,5 @@
 use serde::Serialize;
-use serde_cbor::{from_slice, Value, ser::to_vec_packed};
+use serde_cbor::{Value, ser::to_vec_packed};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod client_pin;
@@ -81,10 +81,10 @@ pub trait CBORCommand: Serialize + Sized {
         Ok(ISO7816RequestAPDU {
             cla: 0x80,
             ins: 0x10,
-            p1: 0x00,
+            p1: 0x80,  // client supports NFCCTAP_GETRESPONSE
             p2: 0x00,
             data: self.cbor()?,
-            ne: 0xFFFF,
+            ne: 65536,
         })
     }
 }
@@ -176,6 +176,15 @@ fn value_to_vec_u8(v: Value, loc: &str) -> Option<Vec<u8>> {
     }
 }
 
+fn value_to_string(v: Value, loc: &str) -> Option<String> {
+    if let Value::Text(s) = v {
+        Some(s)
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
+}
+
 #[derive(Debug)]
 pub struct NoResponse {}
 impl CBORResponse for NoResponse {
@@ -188,11 +197,11 @@ impl CBORResponse for NoResponse {
 #[macro_export]
 macro_rules! deserialize_cbor {
     ($name:ident) => {
-        impl CBORResponse for $name {
-            fn try_from(i: &[u8]) -> Result<Self, WebauthnCError> {
-                from_slice(&i).map_err(|e| {
+        impl crate::cbor::CBORResponse for $name {
+            fn try_from(i: &[u8]) -> Result<Self, crate::error::WebauthnCError> {
+                serde_cbor::from_slice(&i).map_err(|e| {
                     error!("deserialise: {:?}", e);
-                    WebauthnCError::Cbor
+                    crate::error::WebauthnCError::Cbor
                 })
             }
         }

@@ -8,6 +8,7 @@ use std::fmt;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
+pub use crate::internals::AttestationObject;
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::de::DeserializeOwned;

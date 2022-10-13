@@ -1,5 +1,5 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
-use crate::error::{WebauthnCError, CtapError};
+use crate::error::{CtapError, WebauthnCError};
 
 use pcsc::*;
 use std::ffi::CString;
@@ -244,24 +244,30 @@ impl NFCCard {
 }
 
 impl Token for NFCCard {
-    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand<Response = R>,
-        R: CBORResponse,
+        C: CBORCommand,
     {
+        // let apdu = cmd.to_extended_apdu().map_err(|_| WebauthnCError::Cbor)?;
+        // let mut resp = self.transmit(&apdu, &ISO7816LengthForm::ExtendedOnly)?;
+
+        // while resp.ctap_needs_get_response() {
+        //     // TODO: sleep here, add retry limit?
+        //     info!("Needs GetResponse");
+
+        //     resp = self.transmit(&NFCCTAP_GETRESPONSE, &ISO7816LengthForm::ExtendedOnly)?;
+        // };
+
         let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
         let resp = self.transmit_chunks(&apdus)?;
-
-        // CTAP has its own extra status code over NFC in the first byte.
-        let err = CtapError::from(resp.data[0]);
+        let mut data = resp.data;
+        let err = CtapError::from(data.remove(0));
         if !err.is_ok() {
             return Err(err.into());
         }
 
-        R::try_from(&resp.data[1..]).map_err(|_| {
-            //error!("error: {:?}", e);
-            WebauthnCError::Cbor
-        })
+
+        Ok(data)
     }
 
     fn init(&mut self) -> Result<(), WebauthnCError> {

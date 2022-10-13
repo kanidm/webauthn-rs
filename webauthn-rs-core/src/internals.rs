@@ -395,8 +395,8 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) fmt: &'a str,
-    pub(crate) att_stmt: serde_cbor::Value,
     pub(crate) auth_data: &'a [u8],
+    pub(crate) att_stmt: serde_cbor::Value,
     pub(crate) ep_att: Option<bool>,
     pub(crate) large_blob_key: Option<&'a [u8]>,
 }
@@ -427,7 +427,8 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
         trace!(?v, "AttestationObjectInner");
 
         let aoi: AttestationObjectInner =
-            serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
+            serde_cbor::from_slice(data).expect("oops attestationobjectinner");
+        trace!(?aoi, "AOI done");
         let auth_data_bytes: &[u8] = aoi.auth_data;
         let auth_data = AuthenticatorData::try_from(auth_data_bytes)?;
 

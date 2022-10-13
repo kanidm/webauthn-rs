@@ -284,6 +284,15 @@ pub const EMPTY_RESPONSE: ISO7816ResponseAPDU = ISO7816ResponseAPDU {
     sw2: 0,
 };
 
+pub const NFCCTAP_GETRESPONSE: ISO7816RequestAPDU = ISO7816RequestAPDU {
+    cla: 0x80,
+    ins: 0x11, // NFCCTAP_GETRESPONSE
+    p1: 0,
+    p2: 0,
+    data: vec![],
+    ne: 65536,
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;

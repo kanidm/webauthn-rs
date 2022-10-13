@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{
     cbor::*,
     error::WebauthnCError,
@@ -6,6 +8,7 @@ use crate::{
     AuthenticatorBackend,
 };
 
+use base64urlsafedata::Base64UrlSafeData;
 use openssl::{
     bn,
     ec::{self, EcKey},
@@ -19,7 +22,7 @@ use openssl::{
 };
 use url::Url;
 use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
-use webauthn_rs_proto::COSEAlgorithm;
+use webauthn_rs_proto::{COSEAlgorithm, RegisterPublicKeyCredential, AuthenticatorAttestationResponseRaw, RegistrationExtensionsClientOutputs};
 
 pub struct Ctap21PreAuthenticator<T: Token> {
     info: GetInfoResponse,
@@ -74,7 +77,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
         let pin = "1234";
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
+        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
         iface.initialize();
 
         // 6.5.5.4: Obtaining the shared secret
@@ -107,27 +110,51 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 
         let ret = self.token.transmit(p)?;
         trace!(?ret);
+        let pin_token = ret.pin_uv_auth_token.unwrap();
+        // Decrypt the pin_token
+        let pin_token = iface.decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
+        trace!(?pin_token);
 
-        // Get a pin token
+        let mut pin_uv_auth_param =
+            iface.authenticate(pin_token.as_slice(), client_data_hash.as_slice());
+        pin_uv_auth_param.truncate(16);
+        let pin_uv_auth_param = Some(pin_uv_auth_param);
 
-        // TODO: implement PINs
-        // let mc = MakeCredentialRequest {
-        //     client_data_hash,
-        //     rp: options.rp,
-        //     user: options.user,
-        //     pub_key_cred_params: options.pub_key_cred_params,
+        let mc = MakeCredentialRequest {
+            client_data_hash,
+            rp: options.rp,
+            user: options.user,
+            pub_key_cred_params: options.pub_key_cred_params,
 
-        //     options: None,
-        //     pin_uv_auth_param: None,
-        //     pin_uv_auth_proto: None,
-        //     enterprise_attest: None,
-        // };
+            options: None,
+            pin_uv_auth_param,
+            pin_uv_auth_proto: iface.get_pin_uv_protocol(),
+            enterprise_attest: None,
+        };
 
-        // let ret = self.token.transmit(mc);
-        // trace!(?ret);
+        let (ret, raw) = self.token.transmit_plus_raw(mc)?;
+        trace!(?ret);
+        // TODO
+        let cred_id = b"TODO".to_vec();
+        let id: String = Base64UrlSafeData(cred_id.clone()).to_string();
+        let type_ = ret.fmt.clone().ok_or(WebauthnCError::InvalidAlgorithm)?;
+        let att_stmt = ret.att_stmt.ok_or(WebauthnCError::Cbor)?;
 
-        todo!();
+        Ok(RegisterPublicKeyCredential {
+            id,
+            raw_id: Base64UrlSafeData(cred_id),
+            type_,
+            extensions: RegistrationExtensionsClientOutputs::default(), // TODO
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: Base64UrlSafeData(raw),
+                client_data_json: Base64UrlSafeData(
+                    client_data,
+                ),
+                transports: None, // TODO
+            },
+        })
     }
+
     fn perform_auth(
         &mut self,
         origin: Url,
@@ -141,8 +168,9 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
 }
 
 trait PinUvPlatformInterface: Default {
-    fn encrypt(key: &[u8], dem_plaintext: &[u8]) -> Vec<u8>;
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8>;
     fn decrypt(
+        &self,
         key: &[u8],
         ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError>;
@@ -216,6 +244,10 @@ trait PinUvPlatformInterface: Default {
 
     const PIN_UV_PROTOCOL: u32;
 
+    fn get_pin_uv_protocol(&self) -> Option<u32> {
+        Some(Self::PIN_UV_PROTOCOL)
+    }
+
     fn get_key_agreement_cmd(&self) -> ClientPinRequest {
         ClientPinRequest {
             pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
@@ -230,7 +262,7 @@ trait PinUvPlatformInterface: Default {
             sub_command: ClientPinSubCommand::GetPinToken,
             key_agreement: Some(self.get_public_key()),
             pin_hash_enc: Some(
-                Self::encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
+                self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
             ),
             ..Default::default()
         }
@@ -257,25 +289,42 @@ fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Vec<u8> {
     ct
 }
 
+fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
+    let cipher = openssl::symm::Cipher::aes_256_cbc();
+    if ciphertext.len() % cipher.block_size() != 0 {
+        error!("ciphertext length {} is not a multiple of {} bytes", ciphertext.len(), cipher.block_size());
+        return Err(WebauthnCError::OpenSSL);
+    }
+
+    let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
+    let mut c = symm::Crypter::new(cipher, symm::Mode::Decrypt, &key, iv).unwrap();
+    c.pad(false);
+    let l = c.update(&ciphertext, &mut pt).unwrap();
+    let l = l + c.finalize(&mut pt[l..]).unwrap();
+    pt.truncate(l);
+    Ok(pt)
+}
+
 impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
     fn kdf(&self, z: &[u8]) -> Vec<u8> {
         // Return SHA-256(Z)
         compute_sha256(z).to_vec()
     }
 
-    fn encrypt(key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
         // Return the AES-256-CBC encryption of demPlaintext using an all-zero IV.
         // (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
         encrypt(key, None, dem_plaintext)
     }
 
     fn decrypt(
+        &self,
         key: &[u8],
         ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
         // If the size of demCiphertext is not a multiple of the AES block length, return error.
         // Otherwise return the AES-256-CBC decryption of demCiphertext using an all-zero IV.
-        todo!()
+        decrypt(key, None, ciphertext)
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
@@ -309,7 +358,7 @@ struct PinUvPlatformInterfaceProtocolTwo {
 }
 
 impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
-    fn encrypt(key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key
         //    portion of the shared secret.)
         let key = &key[32..];
@@ -331,6 +380,7 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
     }
 
     fn decrypt(
+        &self,
         key: &[u8],
         ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
@@ -348,19 +398,19 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         let (iv, ct) = ciphertext.split_at(16);
 
         // 4. Return the AES-256-CBC decryption of ct using key and iv.
-        let cipher = openssl::symm::Cipher::aes_256_cbc();
-        let pt = openssl::symm::decrypt(cipher, key, Some(iv), ct).expect("openssl decrypt");
-
-        Ok(pt)
+        decrypt(key, Some(iv), ct)
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
         // 1. If key is longer than 32 bytes, discard the excess.
         //    (This selects the HMAC-key portion of the shared secret. When key is the
         //    pinUvAuthToken, it is exactly 32 bytes long and thus this step has no effect.)
-        // 2. Return the result of computing HMAC-SHA-256 on key and message.
+        let key = PKey::hmac(&key[..32]).unwrap();
 
-        todo!()
+        // 2. Return the result of computing HMAC-SHA-256 on key and message.
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key).unwrap();
+        signer.update(&message).unwrap();
+        signer.sign_to_vec().unwrap()
     }
 
     fn get_private_key(&self) -> &EcKey<Private> {

@@ -49,10 +49,36 @@ pub trait Transport: Sized + Default + fmt::Debug {
 /// Represents a connection to a single CTAP token over a [Transport].
 pub trait Token: Sized + fmt::Debug {
     /// Transmit a CBOR message to a token
-    fn transmit<C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    fn transmit<'a, C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
-        R: CBORResponse;
+        R: CBORResponse,
+    {
+        let resp = self.transmit_raw(cmd)?;
+
+        R::try_from(resp.as_slice()).map_err(|_| {
+            //error!("error: {:?}", e);
+            WebauthnCError::Cbor
+        })
+    }
+
+    /// Transmits a CBOR command to a token, returning the deserialized response
+    /// and original response.
+    fn transmit_plus_raw<'a, C, R>(&self, cmd: C) -> Result<(R, Vec<u8>), WebauthnCError>
+    where
+        C: CBORCommand<Response = R>,
+        R: CBORResponse,
+    {
+        let resp = self.transmit_raw(cmd)?;
+
+        R::try_from(resp.as_slice()).map_err(|_| {
+            //error!("error: {:?}", e);
+            WebauthnCError::Cbor
+        }).map(|v| (v, resp))
+    }
+
+    fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
+    where C: CBORCommand;
 
     /// Initializes the [Token]
     fn init(&mut self) -> Result<(), WebauthnCError>;

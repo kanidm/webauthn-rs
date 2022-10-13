@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::{value::to_value, Value};
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
+// use webauthn_rs_core::proto::{AttestationObject, Registration};
 
-use super::{CBORCommand, NoResponse};
+use crate::cbor::{value_to_bool, value_to_string, value_to_vec_u8, CBORCommand};
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
@@ -22,10 +23,29 @@ pub struct MakeCredentialRequest {
 
 impl CBORCommand for MakeCredentialRequest {
     const CMD: u8 = 0x01;
-    // TODO: this is actually wrong...
-    // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authenticatormakecredential-response-structure
-    type Response = NoResponse;
+    // type Response = AttestationObject<Registration>;
+    type Response = MakeCredentialResponse;
 }
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(try_from = "BTreeMap<u32, Value>", into = "BTreeMap<u32, Value>")]
+pub struct MakeCredentialResponse {
+    pub fmt: Option<String>,
+    pub auth_data: Option<Vec<u8>>,
+    pub att_stmt: Option<Value>,
+    pub enterprise_attestation: Option<bool>,
+    pub large_blob_key: Option<Vec<u8>>,
+}
+
+// impl CBORResponse for AttestationObject<Registration> {
+//     fn try_from(i: &[u8]) -> Result<Self, WebauthnCError> {
+//         TryFrom::<&[u8]>::try_from(i).map_err(|e| {
+//             // TODO: propagate this properly
+//             error!("WebauthnError: {:?}", e);
+//             WebauthnCError::Internal
+//         })
+//     }
+// }
 
 impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
     fn from(value: MakeCredentialRequest) -> Self {
@@ -100,6 +120,54 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
     }
 }
 
+impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialResponse {
+    type Error = &'static str;
+    fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
+        trace!(?raw);
+        Ok(Self {
+            fmt: raw.remove(&0x01).and_then(|v| value_to_string(v, "0x01")),
+            auth_data: raw.remove(&0x02).and_then(|v| value_to_vec_u8(v, "0x02")),
+            att_stmt: raw.remove(&0x03),
+            enterprise_attestation: raw.remove(&0x04).and_then(|v| value_to_bool(v, "0x04")),
+            large_blob_key: raw.remove(&0x05).and_then(|v| value_to_vec_u8(v, "0x05")),
+        })
+    }
+}
+
+impl From<MakeCredentialResponse> for BTreeMap<u32, Value> {
+    fn from(v: MakeCredentialResponse) -> Self {
+        let MakeCredentialResponse {
+            fmt,
+            auth_data,
+            att_stmt,
+            enterprise_attestation,
+            large_blob_key,
+        } = v;
+
+        let mut keys = BTreeMap::new();
+        if let Some(v) = fmt {
+            keys.insert(0x01, Value::Text(v));
+        }
+        if let Some(v) = auth_data {
+            keys.insert(0x02, Value::Bytes(v));
+        }
+        if let Some(v) = att_stmt {
+            keys.insert(0x03, v);
+        }
+        if let Some(v) = enterprise_attestation {
+            keys.insert(0x04, Value::Bool(v));
+        }
+        if let Some(v) = large_blob_key {
+            keys.insert(0x05, Value::Bytes(v));
+        }
+
+        keys
+
+    }
+}
+
+crate::deserialize_cbor!(MakeCredentialResponse);
+
 #[cfg(test)]
 mod test {
     use std::num::ParseIntError;
@@ -124,7 +192,7 @@ mod test {
         let b = "A8015820687134968222EC17202E42505F8ED2B16AE22F16BB05B88C25DB9E602645F14102A262696469746573742E63746170646E616D6569746573742E6374617003A362696458202B6689BB18F4169F069FBCDF50CB6EA3C60A861B9A7B63946983E0B577B78C70646E616D6571746573746374617040637461702E636F6D6B646973706C61794E616D65695465737420437461700483A263616C672664747970656A7075626C69632D6B6579A263616C6739010064747970656A7075626C69632D6B6579A263616C67382464747970656A7075626C69632D6B657906A16B686D61632D736563726574F507A162726BF50850FC43AAA411D948CC6C37068B8DA1D5080901";
         let b = decode_hex(b).expect("bad");
         info!("canonical thhing = {:?}", b);
-        let v: Value = from_slice(&b[..]).expect("also bad");
+        let _v: Value = from_slice(&b[..]).expect("also bad");
         /* Ok(Map({
         Integer(1): Bytes([104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106, 226, 47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65]),
         Integer(2): Map({Text("id"): Text("test.ctap"), Text("name"): Text("test.ctap")}),
