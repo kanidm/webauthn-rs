@@ -1,7 +1,7 @@
 use crate::error::WebauthnCError;
+use crate::util::compute_sha256;
 use crate::AuthenticatorBackend;
 use crate::Url;
-use crate::util::compute_sha256;
 use openssl::{bn, ec, hash, nid, pkey, rand, sign};
 use serde_cbor::value::Value;
 use std::collections::BTreeMap;

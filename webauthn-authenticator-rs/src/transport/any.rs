@@ -54,7 +54,7 @@ impl Token for AnyToken {
     #[allow(unused_variables, clippy::unimplemented)]
     fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand
+        C: CBORCommand,
     {
         match self {
             AnyToken::Stub => unimplemented!(),

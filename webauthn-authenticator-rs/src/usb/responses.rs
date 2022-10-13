@@ -181,9 +181,13 @@ impl TryFrom<&U2FHIDFrame> for Response {
             U2FHID_KEEPALIVE => Response::KeepAlive(KeepAliveStatus::from(b)),
             U2FHID_ERROR => Response::Error(U2FError::from(b)),
             _ => {
-                error!("unknown USB HID command: 0x{:02x} (0x{:02x})", f.cmd, f.cmd ^ TYPE_INIT);
+                error!(
+                    "unknown USB HID command: 0x{:02x} (0x{:02x})",
+                    f.cmd,
+                    f.cmd ^ TYPE_INIT
+                );
                 Response::Unknown
-            },
+            }
         })
     }
 }

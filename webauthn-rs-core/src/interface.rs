@@ -119,7 +119,8 @@ impl From<&ECDSACurve> for nid::Nid {
         use ECDSACurve::*;
         match c {
             SECP256R1 => nid::Nid::X9_62_PRIME256V1,
-            _ => todo!(),
+            SECP384R1 => nid::Nid::SECP384R1,
+            SECP521R1 => nid::Nid::SECP521R1,
         }
     }
 }

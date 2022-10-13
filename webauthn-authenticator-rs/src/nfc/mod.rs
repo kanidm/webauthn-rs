@@ -266,7 +266,6 @@ impl Token for NFCCard {
             return Err(err.into());
         }
 
-
         Ok(data)
     }
 

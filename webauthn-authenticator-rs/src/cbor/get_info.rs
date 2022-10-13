@@ -72,21 +72,13 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
             }
         });
 
-        let max_msg_size = raw
-            .remove(&0x05)
-            .and_then(|v| value_to_u32(&v, "0x05"));
+        let max_msg_size = raw.remove(&0x05).and_then(|v| value_to_u32(&v, "0x05"));
 
-        let pin_protocols = raw
-            .remove(&0x06)
-            .and_then(|v| value_to_vec_u32(v, "0x06"));
+        let pin_protocols = raw.remove(&0x06).and_then(|v| value_to_vec_u32(v, "0x06"));
 
-        let max_cred_count_in_list = raw
-            .remove(&0x07)
-            .and_then(|v| value_to_u32(&v, "0x07"));
+        let max_cred_count_in_list = raw.remove(&0x07).and_then(|v| value_to_u32(&v, "0x07"));
 
-        let max_cred_id_len = raw
-            .remove(&0x08)
-            .and_then(|v| value_to_u32(&v, "0x08"));
+        let max_cred_id_len = raw.remove(&0x08).and_then(|v| value_to_u32(&v, "0x08"));
 
         let transports = raw
             .remove(&0x09)

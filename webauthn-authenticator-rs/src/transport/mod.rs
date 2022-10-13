@@ -10,7 +10,7 @@ use std::fmt;
 use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
 use crate::cbor::*;
-use crate::error::{WebauthnCError, CtapError};
+use crate::error::{CtapError, WebauthnCError};
 
 use self::ctap21pre::Ctap21PreAuthenticator;
 
@@ -71,14 +71,17 @@ pub trait Token: Sized + fmt::Debug {
     {
         let resp = self.transmit_raw(cmd)?;
 
-        R::try_from(resp.as_slice()).map_err(|_| {
-            //error!("error: {:?}", e);
-            WebauthnCError::Cbor
-        }).map(|v| (v, resp))
+        R::try_from(resp.as_slice())
+            .map_err(|_| {
+                //error!("error: {:?}", e);
+                WebauthnCError::Cbor
+            })
+            .map(|v| (v, resp))
     }
 
     fn transmit_raw<C>(&self, cmd: C) -> Result<Vec<u8>, WebauthnCError>
-    where C: CBORCommand;
+    where
+        C: CBORCommand;
 
     /// Initializes the [Token]
     fn init(&mut self) -> Result<(), WebauthnCError>;

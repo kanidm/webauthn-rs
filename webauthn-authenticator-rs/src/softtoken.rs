@@ -1,7 +1,7 @@
 use crate::error::WebauthnCError;
+use crate::util::compute_sha256;
 use crate::AuthenticatorBackend;
 use crate::Url;
-use crate::util::compute_sha256;
 use openssl::x509::{
     extension::{AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier},
     X509NameBuilder, X509Ref, X509ReqBuilder, X509,

@@ -22,7 +22,10 @@ use openssl::{
 };
 use url::Url;
 use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
-use webauthn_rs_proto::{COSEAlgorithm, RegisterPublicKeyCredential, AuthenticatorAttestationResponseRaw, RegistrationExtensionsClientOutputs};
+use webauthn_rs_proto::{
+    AuthenticatorAttestationResponseRaw, COSEAlgorithm, RegisterPublicKeyCredential,
+    RegistrationExtensionsClientOutputs,
+};
 
 pub struct Ctap21PreAuthenticator<T: Token> {
     info: GetInfoResponse,
@@ -144,7 +147,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
             WebauthnCError::Cbor
         })?;
 
-        // HACK: parsing out the real ID is complicated, and other parts of the 
+        // HACK: parsing out the real ID is complicated, and other parts of the
         // library will do it for us, so we'll put in empty data here.
         let cred_id = vec![];
         let id = String::new();
@@ -159,9 +162,7 @@ impl<T: Token> AuthenticatorBackend for Ctap21PreAuthenticator<T> {
             extensions: RegistrationExtensionsClientOutputs::default(), // TODO
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(raw),
-                client_data_json: Base64UrlSafeData(
-                    client_data,
-                ),
+                client_data_json: Base64UrlSafeData(client_data),
                 transports: None, // TODO
             },
         })
@@ -304,7 +305,11 @@ fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Vec<u8> {
 fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
     let cipher = openssl::symm::Cipher::aes_256_cbc();
     if ciphertext.len() % cipher.block_size() != 0 {
-        error!("ciphertext length {} is not a multiple of {} bytes", ciphertext.len(), cipher.block_size());
+        error!(
+            "ciphertext length {} is not a multiple of {} bytes",
+            ciphertext.len(),
+            cipher.block_size()
+        );
         return Err(WebauthnCError::OpenSSL);
     }
 
