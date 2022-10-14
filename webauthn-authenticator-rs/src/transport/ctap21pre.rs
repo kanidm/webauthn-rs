@@ -42,21 +42,21 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             ui_callback,
         }
     }
-}
 
-impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T, U> {
-    fn perform_register(
-        &mut self,
-        origin: Url,
-        options: webauthn_rs_proto::PublicKeyCredentialCreationOptions,
-        timeout_ms: u32,
-    ) -> Result<webauthn_rs_proto::RegisterPublicKeyCredential, crate::prelude::WebauthnCError>
-    {
-        let client_data = creation_to_clientdata(origin, options.challenge.clone());
-        let client_data: Vec<u8> = serde_json::to_string(&client_data)
-            .map_err(|_| WebauthnCError::Json)?
-            .into();
-        let client_data_hash = compute_sha256(&client_data).to_vec();
+    /// Gets a PIN/UV auth token, if required.
+    ///
+    /// Returns:
+    /// * `Option<u32>`: the `pin_uv_auth_protocol`
+    /// * `Option<Vec<u8>>`: the `pin_uv_auth_param`
+    fn get_pin_uv_auth_token(
+        &self,
+        client_data_hash: &[u8],
+    ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
+        // TODO: handle no PIN required
+        // TODO: handle getPinUvAuthTokenUsingPinWithPermissions
+        // TODO: handle biometric auth
+        // TODO: handle cancels, timeouts
+        // TODO: handle lockouts
 
         // Get pin retries
         trace!("supported pin protocols = {:?}", self.info.pin_protocols);
@@ -82,7 +82,10 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             }
         }
 
-        let pin = self.ui_callback.request_pin().ok_or(WebauthnCError::Cancelled)?;
+        let pin = self
+            .ui_callback
+            .request_pin()
+            .ok_or(WebauthnCError::Cancelled)?;
 
         // TODO: select protocol wisely
         let mut iface = PinUvPlatformInterfaceProtocolOne::default();
@@ -123,10 +126,29 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
         let pin_token = iface.decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
         trace!(?pin_token);
 
-        let mut pin_uv_auth_param =
-            iface.authenticate(pin_token.as_slice(), client_data_hash.as_slice());
+        let mut pin_uv_auth_param = iface.authenticate(pin_token.as_slice(), client_data_hash);
         pin_uv_auth_param.truncate(16);
-        let pin_uv_auth_param = Some(pin_uv_auth_param);
+
+        Ok((iface.get_pin_uv_protocol(), Some(pin_uv_auth_param)))
+    }
+}
+
+impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T, U> {
+    fn perform_register(
+        &mut self,
+        origin: Url,
+        options: webauthn_rs_proto::PublicKeyCredentialCreationOptions,
+        timeout_ms: u32,
+    ) -> Result<webauthn_rs_proto::RegisterPublicKeyCredential, crate::prelude::WebauthnCError>
+    {
+        let client_data = creation_to_clientdata(origin, options.challenge.clone());
+        let client_data: Vec<u8> = serde_json::to_string(&client_data)
+            .map_err(|_| WebauthnCError::Json)?
+            .into();
+        let client_data_hash = compute_sha256(&client_data).to_vec();
+
+        let (pin_uv_auth_proto, pin_uv_auth_param) =
+            self.get_pin_uv_auth_token(client_data_hash.as_slice())?;
 
         let mc = MakeCredentialRequest {
             client_data_hash,
@@ -136,7 +158,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
 
             options: None,
             pin_uv_auth_param,
-            pin_uv_auth_proto: iface.get_pin_uv_protocol(),
+            pin_uv_auth_proto,
             enterprise_attest: None,
         };
 
