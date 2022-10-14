@@ -30,6 +30,7 @@ pub struct GetInfoResponse {
     pub max_cred_id_len: Option<u32>,
     pub transports: Option<Vec<String>>,
     pub algorithms: Option<Value>,
+    pub min_pin_length: Option<usize>,
 }
 
 impl GetInfoResponse {
@@ -111,6 +112,11 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
         let algorithms = raw.remove(&0x0A);
         // .map(|v| );
 
+        let min_pin_length = raw
+            .remove(&0x0d)
+            .and_then(|v| value_to_u32(&v, "0x0d"))
+            .map(|v| v as usize);
+
         /*
         let max_ser_large_blob = raw.keys.remove(&0x0B)
             .map(|v| );
@@ -157,6 +163,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
             max_cred_id_len,
             transports,
             algorithms,
+            min_pin_length,
             /*
             max_ser_large_blob,
             force_pin_change,

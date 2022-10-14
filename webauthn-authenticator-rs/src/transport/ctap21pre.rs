@@ -5,7 +5,7 @@ use crate::{
     error::WebauthnCError,
     transport::Token,
     ui::UiCallback,
-    util::{compute_sha256, creation_to_clientdata, get_to_clientdata},
+    util::{compute_sha256, creation_to_clientdata, get_to_clientdata, CheckPinResult, check_pin},
     AuthenticatorBackend,
 };
 
@@ -42,6 +42,17 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             token,
             ui_callback,
         }
+    }
+
+    /// Checks whether a provided PIN follows the rules defined by the
+    /// authenticator. This does not share the PIN with the authenticator.
+    pub fn validate_pin(&self, pin: &str) -> CheckPinResult {
+        let min_length = self.info.min_pin_length.unwrap_or(4);
+        check_pin(pin, min_length)
+    }
+
+    pub fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
+        todo!()
     }
 
     /// Gets a PIN/UV auth token, if required.
