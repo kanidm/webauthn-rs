@@ -19,6 +19,7 @@ pub enum WebauthnCError {
     MessageTooShort,
     Cancelled,
     Ctap(CtapError),
+    InvalidPin,
 }
 
 impl From<Error> for WebauthnCError {

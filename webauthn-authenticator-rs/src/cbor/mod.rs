@@ -204,10 +204,17 @@ macro_rules! deserialize_cbor {
     ($name:ident) => {
         impl crate::cbor::CBORResponse for $name {
             fn try_from(i: &[u8]) -> Result<Self, crate::error::WebauthnCError> {
-                serde_cbor::from_slice(&i).map_err(|e| {
-                    error!("deserialise: {:?}", e);
-                    crate::error::WebauthnCError::Cbor
-                })
+                if i.is_empty() {
+                    TryFrom::try_from(BTreeMap::new()).map_err(|e| {
+                        error!("Tried to deserialise empty input, got error: {:?}", e);
+                        crate::error::WebauthnCError::Cbor
+                    })
+                } else {
+                    serde_cbor::from_slice(&i).map_err(|e| {
+                        error!("deserialise: {:?}", e);
+                        crate::error::WebauthnCError::Cbor
+                    })
+                }
             }
         }
     };

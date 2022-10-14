@@ -5,7 +5,7 @@ use crate::{
     error::WebauthnCError,
     transport::Token,
     ui::UiCallback,
-    util::{compute_sha256, creation_to_clientdata, get_to_clientdata, CheckPinResult, check_pin},
+    util::{check_pin, compute_sha256, creation_to_clientdata, get_to_clientdata, CheckPinResult},
     AuthenticatorBackend,
 };
 
@@ -52,7 +52,32 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
     }
 
     pub fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
-        todo!()
+        let pin = match self.validate_pin(pin) {
+            CheckPinResult::Ok(p) => p,
+            _ => return Err(WebauthnCError::InvalidPin),
+        };
+
+        let mut padded_pin: [u8; 64] = [0; 64];
+        padded_pin[..pin.len()].copy_from_slice(pin.as_bytes());
+
+        // TODO: select protocol wisely
+        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
+        iface.initialize();
+
+        let p = iface.get_key_agreement_cmd();
+        let ret = self.token.transmit(p, &self.ui_callback)?;
+        let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
+        trace!(?key_agreement);
+
+        // The platform calls encapsulate with the public key that the authenticator
+        // returned in order to generate the platform key-agreement key and the shared secret.
+        let shared_secret = iface.encapsulate(key_agreement)?;
+        trace!(?shared_secret);
+
+        let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice());
+        let ret = self.token.transmit(set_pin, &self.ui_callback)?;
+        trace!(?ret);
+        Ok(())
     }
 
     /// Gets a PIN/UV auth token, if required.
@@ -127,7 +152,6 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             error!("alwaysUv = true, but built-in user verification (biometrics) and PIN are both unconfigured. Set one (or both) of them before continuing.");
             return Err(WebauthnCError::Security);
         }
-        
 
         // TODO: handle getPinUvAuthTokenUsingPinWithPermissions
         // TODO: handle biometric auth
@@ -438,6 +462,19 @@ trait PinUvPlatformInterface: Default {
             pin_hash_enc: Some(
                 self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
             ),
+            ..Default::default()
+        }
+    }
+
+    fn set_pin_cmd(&self, padded_pin: [u8; 64], shared_secret: &[u8]) -> ClientPinRequest {
+        let new_pin_enc = self.encrypt(shared_secret, &padded_pin);
+        let pin_uv_auth_param = Some(self.authenticate(shared_secret, new_pin_enc.as_slice()));
+        ClientPinRequest {
+            pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
+            sub_command: ClientPinSubCommand::SetPin,
+            key_agreement: Some(self.get_public_key()),
+            new_pin_enc: Some(new_pin_enc),
+            pin_uv_auth_param,
             ..Default::default()
         }
     }
