@@ -87,4 +87,15 @@ impl Token for AnyToken {
             AnyToken::Usb(u) => u.close(),
         }
     }
+    
+    #[allow(clippy::unimplemented)]
+    fn get_transport(&self) -> AuthenticatorTransport {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(n) => n.get_transport(),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.get_transport(),
+        }
+    }
 }

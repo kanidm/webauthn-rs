@@ -3,6 +3,7 @@ use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
 use pcsc::*;
+use webauthn_rs_proto::AuthenticatorTransport;
 use std::ffi::CString;
 use std::fmt;
 
@@ -302,6 +303,10 @@ impl Token for NFCCard {
         } else {
             Ok(())
         }
+    }
+
+    fn get_transport(&self) -> AuthenticatorTransport {
+        AuthenticatorTransport::Nfc
     }
 }
 

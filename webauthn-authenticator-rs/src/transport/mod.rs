@@ -8,7 +8,7 @@ use crate::ui::UiCallback;
 
 use base64urlsafedata::Base64UrlSafeData;
 use std::fmt;
-use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
+use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User, AuthenticatorTransport};
 
 use crate::cbor::*;
 use crate::error::{CtapError, WebauthnCError};
@@ -49,6 +49,9 @@ pub trait Transport: Sized + Default + fmt::Debug {
 
 /// Represents a connection to a single CTAP token over a [Transport].
 pub trait Token: Sized + fmt::Debug {
+    /// Gets the transport layer used for communication with this token.
+    fn get_transport(&self) -> AuthenticatorTransport;
+
     /// Transmit a CBOR message to a token
     fn transmit<'a, C, R, U>(&self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
     where

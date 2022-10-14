@@ -3,7 +3,7 @@
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 /// A credential ID type. At the moment this is a vector of bytes, but
 /// it could also be a future change for this to be base64 string instead.
@@ -111,7 +111,7 @@ pub enum AttestationConveyancePreference {
 }
 
 /// <https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport>
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 #[allow(unused)]
 pub enum AuthenticatorTransport {
@@ -127,6 +127,16 @@ pub enum AuthenticatorTransport {
     Test,
     // ///
     // Hybrid
+}
+
+impl FromStr for AuthenticatorTransport {
+    type Err = serde_json::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Convert the input value to a JSON string, and then use serde:json's
+        // deserialization
+        let s = serde_json::ser::to_string(s)?;
+        serde_json::from_str(&s)
+    }
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
@@ -236,4 +246,29 @@ pub struct TokenBinding {
     pub status: String,
     /// id
     pub id: Option<String>,
+}
+
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use crate::AuthenticatorTransport;
+
+    #[test]
+    fn test_authenticator_transports() {
+        let cases: [(&str, AuthenticatorTransport); 5] = [
+            ("ble", AuthenticatorTransport::Ble),
+            ("internal", AuthenticatorTransport::Internal),
+            ("nfc", AuthenticatorTransport::Nfc),
+            ("usb", AuthenticatorTransport::Usb),
+            ("test", AuthenticatorTransport::Test),
+        ];
+
+        for (s, t) in cases {
+            assert_eq!(t, AuthenticatorTransport::from_str(s).expect("unknown authenticatorTransport"));
+        }
+
+        assert!(AuthenticatorTransport::from_str("fake fake").is_err());
+    }
 }

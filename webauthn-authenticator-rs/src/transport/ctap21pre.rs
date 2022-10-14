@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crate::{
     cbor::*,
     error::WebauthnCError,
@@ -168,7 +170,9 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(raw),
                 client_data_json: Base64UrlSafeData(client_data),
-                transports: None, // TODO
+                // All transports the token supports, as opposed to the
+                // transport which was actually used.
+                transports: self.info.get_transports(),
             },
         })
     }

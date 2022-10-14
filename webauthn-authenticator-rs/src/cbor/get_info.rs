@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
+use webauthn_rs_proto::AuthenticatorTransport;
 
 use self::CBORCommand;
 use super::*;
@@ -27,6 +30,18 @@ pub struct GetInfoResponse {
     pub max_cred_id_len: Option<u32>,
     pub transports: Option<Vec<String>>,
     pub algorithms: Option<Value>,
+}
+
+impl GetInfoResponse {
+    /// Gets all supported transports for this authenticator which match known
+    /// [AuthenticatorTransport] values. Unknown values are silently discarded.
+    pub fn get_transports(&self) -> Option<Vec<AuthenticatorTransport>> {
+        self.transports.as_ref().map(|transports| {
+            transports.iter().filter_map(|transport| {
+                FromStr::from_str(transport).ok()
+            }).collect()
+        })
+    }
 }
 
 impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {

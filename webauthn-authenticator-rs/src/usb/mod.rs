@@ -17,6 +17,7 @@ use crate::usb::framing::*;
 use crate::usb::responses::*;
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
+use webauthn_rs_proto::AuthenticatorTransport;
 use std::fmt;
 use std::thread;
 use std::time::Duration;
@@ -231,5 +232,9 @@ impl Token for USBToken {
 
     fn close(&self) -> Result<(), WebauthnCError> {
         Ok(())
+    }
+
+    fn get_transport(&self) -> AuthenticatorTransport {
+        AuthenticatorTransport::Usb
     }
 }
