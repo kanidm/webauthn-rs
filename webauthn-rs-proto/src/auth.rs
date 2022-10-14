@@ -66,7 +66,17 @@ impl From<RequestChallengeResponse> for web_sys::CredentialRequestOptions {
         use js_sys::{Array, Object, Uint8Array};
         use wasm_bindgen::JsValue;
 
+        let jsv = serde_wasm_bindgen::to_value(&rcr).unwrap();
+        let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
+
         let chal = Uint8Array::from(rcr.public_key.challenge.0.as_slice());
+        js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
+
+        if let Some(extensions) = rcr.public_key.extensions {
+            let obj: Object = (&extensions).into();
+            js_sys::Reflect::set(&pkcco, &"extensions".into(), &obj).unwrap();
+        }
+
         let allow_creds: Array = rcr
             .public_key
             .allow_credentials
@@ -91,12 +101,6 @@ impl From<RequestChallengeResponse> for web_sys::CredentialRequestOptions {
                 obj
             })
             .collect();
-
-        let jsv = serde_wasm_bindgen::to_value(&rcr).unwrap();
-
-        let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
-        js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
-
         js_sys::Reflect::set(&pkcco, &"allowCredentials".into(), &allow_creds).unwrap();
 
         web_sys::CredentialRequestOptions::from(jsv)
@@ -191,6 +195,7 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         .to_vec();
 
         let data_extensions = data.get_client_extension_results();
+        web_sys::console::log_1(&data_extensions);
 
         // Base64 it
 

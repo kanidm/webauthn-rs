@@ -68,8 +68,9 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
         let user = js_sys::Reflect::get(&pkcco, &"user".into()).unwrap();
         js_sys::Reflect::set(&user, &"id".into(), &userid).unwrap();
 
-        if let Some(_extensions) = ccr.public_key.extensions {
-            // TODO: Add registration extensions here
+        if let Some(extensions) = ccr.public_key.extensions {
+            let obj: Object = (&extensions).into();
+            js_sys::Reflect::set(&pkcco, &"extensions".into(), &obj).unwrap();
         }
 
         if let Some(exclude_credentials) = ccr.public_key.exclude_credentials {

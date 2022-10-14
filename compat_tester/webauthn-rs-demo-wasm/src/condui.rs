@@ -286,6 +286,13 @@ impl ConduiTest {
     }
     */
 
+    /*
+          <div class="form-floating">
+            <input type="password" name="password" autocomplete="current-password webauthn" class="form-control"/>
+            <label for="password">{ "Password:" }</label>
+          </div>
+    */
+
     fn view_main(&self, ctx: &Context<Self>) -> Html {
         html! {
             <div class="form-description">
@@ -293,10 +300,6 @@ impl ConduiTest {
                   <div class="form-floating">
                     <input id="autofocus" type="text" name="name" autocomplete="username webauthn" class="form-control" />
                     <label for="autofocus">{ "Username" }</label>
-                  </div>
-                  <div class="form-floating">
-                    <input type="password" name="password" autocomplete="current-password webauthn" class="form-control"/>
-                    <label for="password">{ "Password:" }</label>
                   </div>
                   <button type="button" class="btn btn-lg btn-primary"
                     onclick={ ctx.link().callback(|_| AppMsg::Register) }>
@@ -434,6 +437,7 @@ impl ConduiTest {
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
             let ccr: CreationChallengeResponse = jsval.into_serde().unwrap_throw();
+            console::log!(format!("rp ccr -> {:?}", ccr).as_str());
             let c_options = ccr.into();
             Ok(AppMsg::BeginRegisterChallenge(c_options))
         } else if status == 400 {
@@ -539,8 +543,9 @@ impl ConduiTest {
     async fn login_complete(
         data: web_sys::PublicKeyCredential,
     ) -> Result<AppMsg, FetchError> {
+        console::log!(format!("pkc -> {:?}", data).as_str());
         let pkc = PublicKeyCredential::from(data);
-        console::log!(format!("pkc -> {:?}", pkc).as_str());
+        console::log!(format!("rp pkc -> {:?}", pkc).as_str());
 
         let req_jsvalue = serde_json::to_string(&pkc)
             .map(|s| JsValue::from(&s))
