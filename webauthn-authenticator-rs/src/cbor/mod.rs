@@ -3,10 +3,12 @@ use serde_cbor::{ser::to_vec_packed, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod client_pin;
+mod get_assertion;
 mod get_info;
 mod make_credential;
 
 pub use self::client_pin::*;
+pub use self::get_assertion::*;
 pub use self::get_info::*;
 pub use self::make_credential::*;
 use crate::error::WebauthnCError;

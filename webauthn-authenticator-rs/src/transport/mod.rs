@@ -157,6 +157,7 @@ impl<T: Token> Ctap2_1_pre<T> {
                 type_: "public-key".to_string(),
                 alg: -7,
             }],
+            exclude_list: vec![],
             options: None,
             pin_uv_auth_param: None,
             pin_uv_auth_proto: None,

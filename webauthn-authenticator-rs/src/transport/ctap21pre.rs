@@ -24,8 +24,9 @@ use openssl::{
 use url::Url;
 use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
 use webauthn_rs_proto::{
-    AuthenticatorAttestationResponseRaw, COSEAlgorithm, RegisterPublicKeyCredential,
-    RegistrationExtensionsClientOutputs,
+    AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
+    AuthenticatorAttestationResponseRaw, COSEAlgorithm, PublicKeyCredential,
+    RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs,
 };
 
 pub struct Ctap21PreAuthenticator<T: Token, U: UiCallback> {
@@ -155,6 +156,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             rp: options.rp,
             user: options.user,
             pub_key_cred_params: options.pub_key_cred_params,
+            exclude_list: options.exclude_credentials.unwrap_or_default(),
 
             options: None,
             pin_uv_auth_param,
@@ -205,9 +207,56 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
         options: webauthn_rs_proto::PublicKeyCredentialRequestOptions,
         timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::PublicKeyCredential, crate::prelude::WebauthnCError> {
-        let clientdata = get_to_clientdata(origin, options.challenge.clone());
+        trace!("trying to authenticate...");
+        let client_data = get_to_clientdata(origin, options.challenge.clone());
+        let client_data: Vec<u8> = serde_json::to_string(&client_data)
+            .map_err(|_| WebauthnCError::Json)?
+            .into();
+        let client_data_hash = compute_sha256(&client_data).to_vec();
 
-        todo!();
+        let (pin_uv_auth_proto, pin_uv_auth_param) =
+            self.get_pin_uv_auth_token(client_data_hash.as_slice())?;
+
+        let ga = GetAssertionRequest {
+            rp_id: options.rp_id,
+            client_data_hash,
+            allow_list: options.allow_credentials,
+            options: None, // TODO
+            pin_uv_auth_param,
+            pin_uv_auth_proto,
+        };
+
+        trace!(?ga);
+        let ret = self.token.transmit(ga, &self.ui_callback)?;
+        trace!(?ret);
+
+        let raw_id = ret
+            .credential
+            .as_ref()
+            .map(|c| c.id.to_owned())
+            .ok_or(WebauthnCError::Cbor)?;
+        let id = raw_id.to_string();
+        let type_ = ret
+            .credential
+            .map(|c| c.type_)
+            .ok_or(WebauthnCError::Cbor)?;
+        let signature = Base64UrlSafeData(ret.signature.ok_or(WebauthnCError::Cbor)?);
+        let authenticator_data = Base64UrlSafeData(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
+
+        Ok(PublicKeyCredential {
+            id,
+            raw_id,
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data,
+                client_data_json: Base64UrlSafeData(client_data),
+                signature,
+                // TODO
+                user_handle: None,
+            },
+            // TODO
+            extensions: AuthenticationExtensionsClientOutputs::default(),
+            type_,
+        })
     }
 }
 

@@ -1,11 +1,10 @@
-use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 use serde_cbor::{value::to_value, Value};
 use std::collections::BTreeMap;
-use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
+use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User};
 // use webauthn_rs_core::proto::{AttestationObject, Registration};
 
-use crate::cbor::{value_to_bool, value_to_string, value_to_vec_u8, CBORCommand};
+use crate::cbor::{value_to_bool, value_to_string, CBORCommand};
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
@@ -14,7 +13,7 @@ pub struct MakeCredentialRequest {
     pub rp: RelyingParty,
     pub user: User,
     pub pub_key_cred_params: Vec<PubKeyCredParams>,
-    // exclude_list: Option<Vec<PublicKeyCredentialDescriptor>>,
+    pub exclude_list: Vec<PublicKeyCredentialDescriptor>,
     // extensions:
     pub options: Option<BTreeMap<String, bool>>,
     pub pin_uv_auth_param: Option<Vec<u8>>,
@@ -56,6 +55,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
             rp,
             user,
             pub_key_cred_params,
+            exclude_list,
             options,
             pin_uv_auth_param,
             pin_uv_auth_proto,
@@ -99,6 +99,47 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 
         let ps = to_value(pub_key_cred_params).expect("Unable to encode pub_key_cred_params");
         keys.insert(0x4, ps);
+
+        if !exclude_list.is_empty() {
+            keys.insert(
+                0x05,
+                Value::Array(
+                    exclude_list
+                        .iter()
+                        .map(|a| {
+                            let mut m = BTreeMap::from([
+                                (
+                                    Value::Text("type".to_string()),
+                                    Value::Text(a.type_.to_owned()),
+                                ),
+                                (
+                                    Value::Text("id".to_string()),
+                                    Value::Bytes(a.id.0.to_owned()),
+                                ),
+                            ]);
+
+                            if let Some(transports) = &a.transports {
+                                let transports: Vec<Value> = transports
+                                    .iter()
+                                    .filter_map(|t| {
+                                        None // TODO
+                                    })
+                                    .collect();
+
+                                if !transports.is_empty() {
+                                    m.insert(
+                                        Value::Text("transports".to_string()),
+                                        Value::Array(transports),
+                                    );
+                                }
+                            }
+
+                            Value::Map(m)
+                        })
+                        .collect(),
+                ),
+            );
+        }
 
         if let Some(o) = options {
             let mut options_map = BTreeMap::new();
