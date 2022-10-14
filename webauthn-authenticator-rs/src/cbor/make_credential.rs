@@ -318,6 +318,7 @@ mod test {
                 alg: -7,
             }],
             options: None,
+            exclude_list: vec![],
             pin_uv_auth_param: None,
             pin_uv_auth_proto: None,
             enterprise_attest: None,

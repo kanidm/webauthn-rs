@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{AllowCredentials, PublicKeyCredentialDescriptor, User};
-// use webauthn_rs_core::proto::{AttestationObject, Registration};
 
 use crate::cbor::{value_to_bool, value_to_string, value_to_u32, value_to_vec_u8, CBORCommand};
 

@@ -37,10 +37,19 @@ impl GetInfoResponse {
     /// [AuthenticatorTransport] values. Unknown values are silently discarded.
     pub fn get_transports(&self) -> Option<Vec<AuthenticatorTransport>> {
         self.transports.as_ref().map(|transports| {
-            transports.iter().filter_map(|transport| {
-                FromStr::from_str(transport).ok()
-            }).collect()
+            transports
+                .iter()
+                .filter_map(|transport| FromStr::from_str(transport).ok())
+                .collect()
         })
+    }
+
+    /// Gets the state of an option.
+    pub fn get_option(&self, option: &str) -> Option<bool> {
+        self.options
+            .as_ref()
+            .and_then(|o| o.get(option))
+            .map(|v| v.to_owned())
     }
 }
 

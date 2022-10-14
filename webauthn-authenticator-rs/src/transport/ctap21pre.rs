@@ -46,14 +46,78 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
 
     /// Gets a PIN/UV auth token, if required.
     ///
+    /// This automatically selects an appropriate verification mode.
+    ///
+    /// Parameters:
+    /// * `client_data_hash`: the SHA256 hash of the client data JSON.
+    /// * `permissions`: a bitmask of permissions to request. This is only
+    ///   effective when the authenticator supports
+    ///   `getPinUvAuthToken...WithPermissions`.
+    /// * `rp_id`: the Relying Party to associate with the request. This is
+    ///   required for `GetAssertion` and `MakeCredential` requests, and
+    ///   optional for `CredentialManagement` requests. This is only effective
+    ///   when the authenticator supports `getPinUvAuthToken...WithPermissions`.
+    ///
     /// Returns:
     /// * `Option<u32>`: the `pin_uv_auth_protocol`
     /// * `Option<Vec<u8>>`: the `pin_uv_auth_param`
+    /// * `Ok((None, None))` if PIN and/or UV auth is not required.
+    /// * `Err` for errors from the token.
+    ///
+    /// References:
+    /// * <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken>
     fn get_pin_uv_auth_token(
         &self,
         client_data_hash: &[u8],
+        permissions: Permissions,
+        rp_id: Option<&str>,
     ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
-        // TODO: handle no PIN required
+        if permissions.is_empty() {
+            error!("no permissions were requested");
+            return Err(WebauthnCError::Internal);
+        }
+        if permissions.intersects(Permissions::MAKE_CREDENTIAL | Permissions::GET_ASSERTION)
+            && rp_id == None
+        {
+            error!("rp_id is required for MakeCredential and GetAssertion requests");
+            return Err(WebauthnCError::Internal);
+        }
+
+        let client_pin = self.info.get_option("clientPin");
+        let always_uv = self.info.get_option("alwaysUv");
+        let make_cred_uv_not_required = self.info.get_option("makeCredUvNotRqd");
+        let pin_uv_auth_token = self.info.get_option("pinUvAuthToken");
+        let uv = self.info.get_option("uv");
+        let bio_enroll = self.info.get_option("bioEnroll");
+        let bio_enroll_preview = self.info.get_option("userVerificationMgmtPreview");
+
+        if client_pin != Some(true) && always_uv != Some(true) {
+            trace!("Skipping PIN and UV auth because they are disabled");
+            return Ok((None, None));
+        }
+
+        if make_cred_uv_not_required == Some(true) && permissions == Permissions::MAKE_CREDENTIAL {
+            trace!("Skipping UV because makeCredUvNotRqd = true and this is a MakeCredential only request");
+            return Ok((None, None));
+        }
+
+        if pin_uv_auth_token == Some(true) {
+            if uv == Some(true) {
+                trace!("UV with in-built verification (biometrics) supported");
+            }
+
+            if client_pin == Some(true) {
+                trace!("UV with client pin supported");
+            }
+        }
+
+        if always_uv == Some(true) && uv != Some(true) && client_pin != Some(true) {
+            // TODO: this will need to change once we can enroll biometrics
+            error!("alwaysUv = true, but built-in user verification (biometrics) and PIN are both unconfigured. Set one (or both) of them before continuing.");
+            return Err(WebauthnCError::Security);
+        }
+        
+
         // TODO: handle getPinUvAuthTokenUsingPinWithPermissions
         // TODO: handle biometric auth
         // TODO: handle cancels, timeouts
@@ -148,8 +212,11 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
 
-        let (pin_uv_auth_proto, pin_uv_auth_param) =
-            self.get_pin_uv_auth_token(client_data_hash.as_slice())?;
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
+            client_data_hash.as_slice(),
+            Permissions::MAKE_CREDENTIAL,
+            Some(&options.rp.id),
+        )?;
 
         let mc = MakeCredentialRequest {
             client_data_hash,
@@ -214,8 +281,11 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
 
-        let (pin_uv_auth_proto, pin_uv_auth_param) =
-            self.get_pin_uv_auth_token(client_data_hash.as_slice())?;
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
+            client_data_hash.as_slice(),
+            Permissions::GET_ASSERTION,
+            Some(&options.rp_id),
+        )?;
 
         let ga = GetAssertionRequest {
             rp_id: options.rp_id,
