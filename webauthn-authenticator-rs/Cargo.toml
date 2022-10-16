@@ -46,4 +46,4 @@ unicode-normalization = "0.1.22"
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
 base64 = "0.13"
-
+clap = { version = "^3.2", features = ["derive", "env"] }

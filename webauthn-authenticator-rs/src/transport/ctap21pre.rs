@@ -80,6 +80,34 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         Ok(())
     }
 
+    pub fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
+        // TODO: we actually really only need this in normal form C
+        let old_pin = match self.validate_pin(old_pin) {
+            CheckPinResult::Ok(p) => p,
+            _ => return Err(WebauthnCError::InvalidPin),
+        };
+        let new_pin = match self.validate_pin(new_pin) {
+            CheckPinResult::Ok(p) => p,
+            _ => return Err(WebauthnCError::InvalidPin),
+        };
+        let mut padded_pin: [u8; 64] = [0; 64];
+        padded_pin[..new_pin.len()].copy_from_slice(new_pin.as_bytes());
+
+        // TODO: select protocol wisely
+        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
+        iface.initialize();
+
+        let p = iface.get_key_agreement_cmd();
+        let ret = self.token.transmit(p, &self.ui_callback)?;
+        let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
+        let shared_secret = iface.encapsulate(key_agreement)?;
+        
+        let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret);
+        let ret = self.token.transmit(change_pin, &self.ui_callback)?;
+        trace!(?ret);
+        Ok(())
+    }
+
     /// Gets a PIN/UV auth token, if required.
     ///
     /// This automatically selects an appropriate verification mode.
@@ -473,6 +501,27 @@ trait PinUvPlatformInterface: Default {
             pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
             sub_command: ClientPinSubCommand::SetPin,
             key_agreement: Some(self.get_public_key()),
+            new_pin_enc: Some(new_pin_enc),
+            pin_uv_auth_param,
+            ..Default::default()
+        }
+    }
+
+    fn change_pin_cmd(&self, old_pin: &str, new_padded_pin: [u8; 64], shared_secret: &[u8]) -> ClientPinRequest {
+        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#changingExistingPin
+        let pin_hash_enc = self.encrypt(shared_secret, &(compute_sha256(old_pin.as_bytes()))[..16]);
+        let new_pin_enc = self.encrypt(shared_secret, &new_padded_pin);
+
+        let mut pin_uv_auth_param = Vec::with_capacity(pin_hash_enc.len() + new_pin_enc.len());
+        pin_uv_auth_param.extend_from_slice(new_pin_enc.as_slice());
+        pin_uv_auth_param.extend_from_slice(pin_hash_enc.as_slice());
+        let pin_uv_auth_param = Some(self.authenticate(shared_secret, pin_uv_auth_param.as_slice()));
+
+        ClientPinRequest {
+            pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
+            sub_command: ClientPinSubCommand::ChangePin,
+            key_agreement: Some(self.get_public_key()),
+            pin_hash_enc: Some(pin_hash_enc),
             new_pin_enc: Some(new_pin_enc),
             pin_uv_auth_param,
             ..Default::default()
