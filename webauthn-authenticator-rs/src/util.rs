@@ -39,6 +39,7 @@ pub enum CheckPinResult {
     Ok(String),
     TooShort,
     TooLong,
+    ContainsNull,
 }
 
 /// Checks whether a PIN meets some rules, and returns the PIN in Unicode Normal
@@ -50,7 +51,9 @@ pub fn check_pin(pin: &str, min_length: usize) -> CheckPinResult {
     let pin_codepoints = pin.chars().count();
     let pin_bytes = pin.len();
 
-    if pin_codepoints < min_length {
+    if pin.contains("\0") {
+        ContainsNull
+    } else if pin_codepoints < min_length {
         trace!("PIN too short: {} codepoints", pin_codepoints);
         TooShort
     } else if pin_bytes > 63 {
@@ -75,6 +78,12 @@ mod test {
             ("1234567890123456789012345678901234567890123456789012345678901234", 4, TooLong),
             ("1234", 6, TooShort),
             ("123456", 6, Ok("123456".to_string())),
+
+            // PINs cannot contain null
+            ("\0\0\0\0", 4, ContainsNull),
+            ("1234\0", 4, ContainsNull),
+            ("\01234", 4, ContainsNull),
+            ("1234\05678", 4, ContainsNull),
 
             // Full-width romaji
             // = 3 codepoints, 9 bytes
