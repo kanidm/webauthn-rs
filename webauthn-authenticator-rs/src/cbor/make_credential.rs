@@ -78,7 +78,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
         } = user;
 
         let mut user_map = BTreeMap::new();
-        info!("{:?}", id);
+        // info!("{:?}", id);
         user_map.insert(Value::Text("id".to_string()), Value::Bytes(id.0));
         user_map.insert(Value::Text("name".to_string()), Value::Text(name));
         user_map.insert(
@@ -87,7 +87,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
         );
 
         let user_value = Value::Map(user_map);
-        info!("{:?}", user_value);
+        // info!("{:?}", user_value);
         keys.insert(0x3, user_value);
 
         // let ps = Value::Array(pub_key_cred_params.iter().map(|p| {
