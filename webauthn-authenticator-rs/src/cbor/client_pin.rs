@@ -8,7 +8,7 @@ use self::CBORCommand;
 use super::*;
 
 // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authnrClientPin-cmd-dfn
-#[derive(Serialize, Debug, Clone, Default)]
+#[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct ClientPinRequest {
     /// PIN / UV protocol version chosen by the platform
