@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::{
     cbor::*,
     error::WebauthnCError,
@@ -44,6 +42,22 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         }
     }
 
+    // pub fn select_pin_protocol(&self) -> Option<Box<dyn PinUvPlatformInterface>> {
+    //     self.info.pin_protocols.as_ref().and_then(|protocols| {
+    //         for p in protocols.iter() {
+    //             match p {
+    //                 1 => return Some(PinUvPlatformInterfaceProtocolOne::default()),
+    //                 2 => return Some(PinUvPlatformInterfaceProtocolTwo::default()),
+    //                 // Ignore unsupported protocols
+    //                 _ => (),
+    //             }
+    //         }
+
+    //         // No protocols supported
+    //         None
+    //     }).map(|i| Box::new(i))
+    // }
+
     /// Checks whether a provided PIN follows the rules defined by the
     /// authenticator. This does not share the PIN with the authenticator.
     pub fn validate_pin(&self, pin: &str) -> CheckPinResult {
@@ -61,7 +75,9 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         padded_pin[..pin.len()].copy_from_slice(pin.as_bytes());
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
+        let mut iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())
+            .ok_or(WebauthnCError::Unknown)?; // TODO
+
         iface.initialize();
 
         let p = iface.get_key_agreement_cmd();
@@ -94,14 +110,15 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         padded_pin[..new_pin.len()].copy_from_slice(new_pin.as_bytes());
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
+        let mut iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())
+            .ok_or(WebauthnCError::Unknown)?; // TODO
         iface.initialize();
 
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, &self.ui_callback)?;
         let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
         let shared_secret = iface.encapsulate(key_agreement)?;
-        
+
         let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret);
         let ret = self.token.transmit(change_pin, &self.ui_callback)?;
         trace!(?ret);
@@ -216,7 +233,8 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             .ok_or(WebauthnCError::Cancelled)?;
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
+        let mut iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())
+            .ok_or(WebauthnCError::Unknown)?; // TODO
         iface.initialize();
 
         // 6.5.5.4: Obtaining the shared secret
@@ -393,14 +411,81 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
     }
 }
 
-trait PinUvPlatformInterface: Default {
-    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8>;
+
+enum PinUvPlatformInterface {
+    One(PinUvPlatformInterfaceProtocolOne),
+    Two(PinUvPlatformInterfaceProtocolTwo),
+}
+
+impl PinUvPlatformInterface {
+    fn select_protocol(protocols: Option<&Vec<u32>>) -> Option<Self> {
+        protocols.and_then(|protocols| {
+            for p in protocols.iter() {
+                match p {
+                    1 => return Some(Self::One(PinUvPlatformInterfaceProtocolOne::default())),
+                    2 => return Some(Self::Two(PinUvPlatformInterfaceProtocolTwo::default())),
+                    // Ignore unsupported protocols
+                    _ => (),
+                }
+            }
+            None
+        })
+    }
+
+    // Traits
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
+        match self {
+            Self::One(p) => p.encrypt(key, dem_plaintext),
+            Self::Two(p) => p.encrypt(key, dem_plaintext),
+        }
+    }
+
     fn decrypt(
         &self,
         key: &[u8],
         ciphertext: &[u8],
-    ) -> Result</* plaintext */ Vec<u8>, WebauthnCError>;
-    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8>;
+    ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
+        match self {
+            Self::One(p) => p.decrypt(key, ciphertext),
+            Self::Two(p) => p.decrypt(key, ciphertext),
+        }
+    }
+
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
+        match self {
+            Self::One(p) => p.authenticate(key, message),
+            Self::Two(p) => p.authenticate(key, message),
+        }
+    }
+
+    fn get_private_key(&self) -> Option<&EcKey<Private>> {
+        // TODO: may be able to store this elsewhere now?
+        match self {
+            Self::One(p) => p.private_key.as_ref(),
+            Self::Two(p) => p.private_key.as_ref(),
+        }
+    }
+
+    fn kdf(&self, z: &[u8]) -> Vec<u8> {
+        match self {
+            Self::One(p) => p.kdf(z),
+            Self::Two(p) => p.kdf(z),
+        }
+    }
+
+    fn set_private_key(&mut self, private_key: EcKey<Private>) {
+        match self {
+            Self::One(p) => p.set_private_key(private_key),
+            Self::Two(p) => p.set_private_key(private_key),
+        }
+    }
+
+    fn get_pin_uv_protocol(&self) -> Option<u32> {
+        match self {
+            Self::One(_) => Some(1),
+            Self::Two(_) => Some(2),
+        }
+    }
 
     fn ecdh(&self, peer_cose_key: COSEKey) -> Result<Vec<u8>, WebauthnCError> {
         // 1. Parse peerCoseKey as specified for getPublicKey, below, and produce a P-256 point, Y.
@@ -408,7 +493,8 @@ trait PinUvPlatformInterface: Default {
 
         // 2. Calculate xY, the shared point. (I.e. the scalar-multiplication of the peer’s point, Y,
         //    with the local private key agreement key.)
-        let private_key = self.get_private_key().to_owned();
+        // TODO: handle missing private key
+        let private_key = self.get_private_key().unwrap().to_owned();
         let mut z: [u8; 32] = [0; 32];
         if let COSEKeyType::EC_EC2(ec) = peer_cose_key.key {
             ecdh(private_key, &ec, &mut z).map_err(|_| WebauthnCError::OpenSSL)?;
@@ -434,7 +520,8 @@ trait PinUvPlatformInterface: Default {
 
     fn get_public_key(&self) -> COSEKey {
         let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1).unwrap();
-        let eckey = self.get_private_key();
+        // TODO: errors
+        let eckey = self.get_private_key().unwrap();
         // Extract the public x and y coords.
         let ecpub_points = eckey.public_key();
 
@@ -456,27 +543,14 @@ trait PinUvPlatformInterface: Default {
         }
     }
 
-    fn get_private_key(&self) -> &EcKey<Private>;
-    fn kdf(&self, z: &[u8]) -> Vec<u8>;
-
-    fn set_private_key(&mut self, private_key: EcKey<Private>);
-    fn reset_pin_uv_auth_token(&mut self);
-
     fn initialize(&mut self) {
         let private = regenerate().expect("generating key");
         self.set_private_key(private);
-        self.reset_pin_uv_auth_token();
-    }
-
-    const PIN_UV_PROTOCOL: u32;
-
-    fn get_pin_uv_protocol(&self) -> Option<u32> {
-        Some(Self::PIN_UV_PROTOCOL)
     }
 
     fn get_key_agreement_cmd(&self) -> ClientPinRequest {
         ClientPinRequest {
-            pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
+            pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::GetKeyAgreement,
             ..Default::default()
         }
@@ -484,7 +558,7 @@ trait PinUvPlatformInterface: Default {
 
     fn get_pin_token_cmd(&self, pin: &str, shared_secret: &[u8]) -> ClientPinRequest {
         ClientPinRequest {
-            pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
+            pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::GetPinToken,
             key_agreement: Some(self.get_public_key()),
             pin_hash_enc: Some(
@@ -498,7 +572,7 @@ trait PinUvPlatformInterface: Default {
         let new_pin_enc = self.encrypt(shared_secret, &padded_pin);
         let pin_uv_auth_param = Some(self.authenticate(shared_secret, new_pin_enc.as_slice()));
         ClientPinRequest {
-            pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
+            pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::SetPin,
             key_agreement: Some(self.get_public_key()),
             new_pin_enc: Some(new_pin_enc),
@@ -507,7 +581,12 @@ trait PinUvPlatformInterface: Default {
         }
     }
 
-    fn change_pin_cmd(&self, old_pin: &str, new_padded_pin: [u8; 64], shared_secret: &[u8]) -> ClientPinRequest {
+    fn change_pin_cmd(
+        &self,
+        old_pin: &str,
+        new_padded_pin: [u8; 64],
+        shared_secret: &[u8],
+    ) -> ClientPinRequest {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#changingExistingPin
         let pin_hash_enc = self.encrypt(shared_secret, &(compute_sha256(old_pin.as_bytes()))[..16]);
         let new_pin_enc = self.encrypt(shared_secret, &new_padded_pin);
@@ -515,10 +594,11 @@ trait PinUvPlatformInterface: Default {
         let mut pin_uv_auth_param = Vec::with_capacity(pin_hash_enc.len() + new_pin_enc.len());
         pin_uv_auth_param.extend_from_slice(new_pin_enc.as_slice());
         pin_uv_auth_param.extend_from_slice(pin_hash_enc.as_slice());
-        let pin_uv_auth_param = Some(self.authenticate(shared_secret, pin_uv_auth_param.as_slice()));
+        let pin_uv_auth_param =
+            Some(self.authenticate(shared_secret, pin_uv_auth_param.as_slice()));
 
         ClientPinRequest {
-            pin_uv_protocol: Some(Self::PIN_UV_PROTOCOL),
+            pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::ChangePin,
             key_agreement: Some(self.get_public_key()),
             pin_hash_enc: Some(pin_hash_enc),
@@ -531,7 +611,6 @@ trait PinUvPlatformInterface: Default {
 
 #[derive(Default)]
 struct PinUvPlatformInterfaceProtocolOne {
-    pin_uv_auth_token: [u8; 32],
     private_key: Option<EcKey<Private>>,
 }
 
@@ -569,7 +648,7 @@ fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, 
     Ok(pt)
 }
 
-impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
+impl PinUvPlatformInterfaceProtocolOne {
     fn kdf(&self, z: &[u8]) -> Vec<u8> {
         // Return SHA-256(Z)
         compute_sha256(z).to_vec()
@@ -600,28 +679,17 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolOne {
         signer.sign_to_vec().unwrap()
     }
 
-    fn reset_pin_uv_auth_token(&mut self) {}
-
     fn set_private_key(&mut self, private_key: EcKey<Private>) {
         self.private_key = Some(private_key)
     }
-
-    fn get_private_key(&self) -> &EcKey<Private> {
-        self.private_key
-            .as_ref()
-            .expect("private key not initialised")
-    }
-
-    const PIN_UV_PROTOCOL: u32 = 1;
 }
 
 #[derive(Default)]
 struct PinUvPlatformInterfaceProtocolTwo {
-    pin_uv_auth_token: [u8; 32],
     private_key: Option<EcKey<Private>>,
 }
 
-impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
+impl PinUvPlatformInterfaceProtocolTwo {
     fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key
         //    portion of the shared secret.)
@@ -677,12 +745,6 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         signer.sign_to_vec().unwrap()
     }
 
-    fn get_private_key(&self) -> &EcKey<Private> {
-        self.private_key
-            .as_ref()
-            .expect("private key not initialised")
-    }
-
     fn kdf(&self, z: &[u8]) -> Vec<u8> {
         // Return
         // HKDF-SHA-256(salt = 32 zero bytes, IKM = Z, L = 32, info = "CTAP2 HMAC key") ||
@@ -696,15 +758,9 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         o
     }
 
-    fn reset_pin_uv_auth_token(&mut self) {
-        rand_bytes(&mut self.pin_uv_auth_token).expect("rand_bytes");
-    }
-
     fn set_private_key(&mut self, private_key: EcKey<Private>) {
         self.private_key = Some(private_key);
     }
-
-    const PIN_UV_PROTOCOL: u32 = 2;
 }
 
 fn hkdf_sha_256(
@@ -823,7 +879,7 @@ mod tests {
             .cloned()
             .collect();
 
-        let mut t = PinUvPlatformInterfaceProtocolOne::default();
+        let mut t = PinUvPlatformInterface::One(Default::default());
         t.initialize();
 
         let new_pin_enc = t.encrypt(&shared_secret, &input);
@@ -879,7 +935,7 @@ mod tests {
         .unwrap();
         let ec_priv = ec::EcKey::from_private_components(&group, &ec_priv, &ec_pub).unwrap();
 
-        let mut t = PinUvPlatformInterfaceProtocolOne::default();
+        let mut t = PinUvPlatformInterface::One(Default::default());
         t.set_private_key(ec_priv);
 
         let shared_secret = t.encapsulate(dev_public_key).unwrap();
