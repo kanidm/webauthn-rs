@@ -61,7 +61,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         padded_pin[..pin.len()].copy_from_slice(pin.as_bytes());
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
+        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
         iface.initialize();
 
         let p = iface.get_key_agreement_cmd();
@@ -94,7 +94,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         padded_pin[..new_pin.len()].copy_from_slice(new_pin.as_bytes());
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
+        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
         iface.initialize();
 
         let p = iface.get_key_agreement_cmd();
@@ -216,7 +216,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             .ok_or(WebauthnCError::Cancelled)?;
 
         // TODO: select protocol wisely
-        let mut iface = PinUvPlatformInterfaceProtocolOne::default();
+        let mut iface = PinUvPlatformInterfaceProtocolTwo::default();
         iface.initialize();
 
         // 6.5.5.4: Obtaining the shared secret
@@ -649,7 +649,7 @@ impl PinUvPlatformInterface for PinUvPlatformInterfaceProtocolTwo {
         ciphertext: &[u8],
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key portion of the shared secret.)
-        let key = &key[..32];
+        let key = &key[32..];
 
         // 2. If demPlaintext is less than 16 bytes in length, return an error
         // THIS IS AN ERROR, should be demCiphertext
