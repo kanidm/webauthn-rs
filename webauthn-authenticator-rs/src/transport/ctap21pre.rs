@@ -101,6 +101,16 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         )
     }
 
+    /// Enables the Enterprise Attestation feature.
+    ///
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn>
+    pub fn enable_enterprise_attestation(&self) -> Result<(), WebauthnCError> {
+        if self.info.get_option("ep").is_none() {
+            return Err(WebauthnCError::NotSupported);
+        }
+        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
+    }
+
     // pub fn select_pin_protocol(&self) -> Option<Box<dyn PinUvPlatformInterface>> {
     //     self.info.pin_protocols.as_ref().and_then(|protocols| {
     //         for p in protocols.iter() {

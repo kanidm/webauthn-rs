@@ -1,8 +1,6 @@
 use serde::Serialize;
 use serde_cbor::Value;
 
-use crate::transport::ctap21pre::PinUvPlatformInterface;
-
 use self::CBORCommand;
 use super::*;
 
@@ -22,7 +20,7 @@ pub struct ConfigRequest {
 impl CBORCommand for ConfigRequest {
     const CMD: u8 = 0x0d;
     const HAS_PAYLOAD: bool = true;
-    // TODO
+    // TODO: for VendorPrototype only
     type Response = NoResponse;
 }
 
@@ -33,7 +31,7 @@ pub enum ConfigSubCommand {
     EnableEnterpriseAttestation,
     ToggleAlwaysUv,
     SetMinPinLength(SetMinPinLengthParams),
-    VendorPrototype,
+    // VendorPrototype,
 }
 
 #[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
@@ -52,7 +50,7 @@ impl From<&ConfigSubCommand> for u8 {
             EnableEnterpriseAttestation => 0x01,
             ToggleAlwaysUv => 0x02,
             SetMinPinLength(_) => 0x03,
-            VendorPrototype => 0xff,
+            // VendorPrototype => 0xff,
         }
     }
 }
@@ -65,7 +63,7 @@ impl From<ConfigSubCommand> for Option<BTreeMap<Value, Value>> {
             Unknown => None,
             EnableEnterpriseAttestation => None,
             ToggleAlwaysUv => None,
-            VendorPrototype => unimplemented!(),
+            // VendorPrototype => unimplemented!(),
         }
     }
 }
@@ -87,26 +85,6 @@ impl ConfigSubCommand {
 }
 
 impl ConfigRequest {
-    // pub(crate) fn new_with_auth(s: ConfigSubCommand, shared_secret: &[u8], iface: &PinUvPlatformInterface) -> Self {
-    //     let sub_command = (&s).into();
-    //     let sub_command_params: Option<BTreeMap<Value, Value>> = s.into();
-
-    //     let mut o = vec![0xff; 32];
-    //     o.push(Self::CMD);
-    //     o.push(sub_command);
-    //     sub_command_params.as_ref().and_then(|p| serde_cbor::to_vec(p).ok())
-    //         .map(|p| o.extend_from_slice(p.as_slice()));
-
-    //     let pin_uv_auth_param = Some(iface.authenticate(shared_secret, o.as_slice()));
-
-    //     Self {
-    //         sub_command,
-    //         sub_command_params,
-    //         pin_uv_protocol: iface.get_pin_uv_protocol(),
-    //         pin_uv_auth_param,
-    //     }
-    // }
-
     pub(crate) fn new(s: ConfigSubCommand, pin_uv_protocol: Option<u32>, pin_uv_auth_param: Option<Vec<u8>>) -> Self {
         let sub_command = (&s).into();
         let sub_command_params = s.into();
@@ -119,20 +97,6 @@ impl ConfigRequest {
         }
     }
 }
-
-// value for pinUvAuthParam to authenticate
-// "The platform sends the authenticatorConfig command with the following parameters:..."
-// impl From<&ConfigSubCommand> for Vec<u8> {
-//     fn from(c: &ConfigSubCommand) -> Self {
-//         let p: Option<BTreeMap<Value, Value>> = c.to_owned().into();
-//         let mut o = vec![0xff; 32];
-//         o.push(0x0d);
-//         o.push(c.into());
-//         p.and_then(|p| serde_cbor::to_vec(&p).ok())
-//             .map(|p| o.extend_from_slice(p.as_slice()));
-//         o
-//     }
-// }
 
 impl From<ConfigRequest> for BTreeMap<u32, Value> {
     fn from(value: ConfigRequest) -> Self {

@@ -57,6 +57,8 @@ pub enum Opt {
     FactoryReset,
     /// Toggles the "Always Require User Verification" feature.
     ToggleAlwaysUv,
+    /// Enables the "Enterprise Attestation" feature.
+    EnableEnterpriseAttestation,
     /// Sets policies for PINs.
     SetPinPolicy(SetPinPolicyOpt),
     /// Sets a PIN on a FIDO token which does not already have one.
@@ -128,6 +130,10 @@ fn main() {
 
         Opt::ToggleAlwaysUv => {
             authenticator.toggle_always_uv().expect("Error toggling UV");
+        }
+
+        Opt::EnableEnterpriseAttestation => {
+            authenticator.enable_enterprise_attestation().expect("Error enabling enterprise attestation");
         }
 
         Opt::SetPinPolicy(o) => {
