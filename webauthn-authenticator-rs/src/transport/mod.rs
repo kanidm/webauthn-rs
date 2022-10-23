@@ -8,7 +8,7 @@ use crate::ui::UiCallback;
 
 use base64urlsafedata::Base64UrlSafeData;
 use std::fmt;
-use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User, AuthenticatorTransport};
+use webauthn_rs_proto::{AuthenticatorTransport, PubKeyCredParams, RelyingParty, User};
 
 use crate::cbor::*;
 use crate::error::{CtapError, WebauthnCError};
@@ -100,7 +100,11 @@ pub trait Token: Sized + fmt::Debug {
 
         debug!(?tokinfo);
 
-        if tokinfo.versions.contains("FIDO_2_1_PRE") {
+        // TODO: Handle versions better
+        if tokinfo.versions.contains("FIDO_2_1_PRE")
+            || tokinfo.versions.contains("FIDO_2_0")
+            || tokinfo.versions.contains("FIDO_2_1")
+        {
             Ok(Selected::FIDO_2_1_PRE(Ctap2_1_pre {
                 tokinfo,
                 token: self,
@@ -117,7 +121,11 @@ pub trait Token: Sized + fmt::Debug {
 
         debug!(?info);
 
-        if info.versions.contains("FIDO_2_1_PRE") {
+        // TODO: Handle versions better
+        if info.versions.contains("FIDO_2_1_PRE")
+            || info.versions.contains("FIDO_2_0")
+            || info.versions.contains("FIDO_2_1")
+        {
             Ok(Ctap21PreAuthenticator::new(info, self, ui))
         } else {
             error!(?info.versions);

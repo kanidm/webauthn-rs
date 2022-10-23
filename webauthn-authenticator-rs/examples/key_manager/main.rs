@@ -25,12 +25,12 @@ pub struct ChangePinOpt {
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
+    /// Show information about the connected FIDO token.
+    Info,
+    /// Sets a PIN on a FIDO token which does not already have one.
     SetPin(SetPinOpt),
+    /// Changes a PIN on a FIDO token which already has a PIN set.
     ChangePin(ChangePinOpt),
-    // /// Parse and display the list of Fido2 devices from an MDS file.
-    // ListFido2(CommonOpt),
-    // /// Query and display metadata for a specific FIDO2 device by its AAGUID
-    // QueryAaguid(QueryOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -74,6 +74,11 @@ fn main() {
     let authenticator = select_transport();
 
     match opt.commands {
+        Opt::Info => {
+            let info = authenticator.get_info();
+            println!("{:?}", info);
+        }
+
         Opt::SetPin(o) => {
             authenticator
                 .set_new_pin(&o.new_pin)

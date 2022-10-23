@@ -44,6 +44,10 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         }
     }
 
+    pub fn get_info(&self) -> &GetInfoResponse {
+        &self.info
+    }
+
     // pub fn select_pin_protocol(&self) -> Option<Box<dyn PinUvPlatformInterface>> {
     //     self.info.pin_protocols.as_ref().and_then(|protocols| {
     //         for p in protocols.iter() {
