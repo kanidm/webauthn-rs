@@ -3,7 +3,7 @@ extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
 
-use clap::{ArgAction, Args, Parser, Subcommand};
+use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
 use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
 use webauthn_authenticator_rs::transport::*;
@@ -25,11 +25,21 @@ pub struct ChangePinOpt {
 }
 
 #[derive(Debug, Args)]
-pub struct SetMinPinLengthOpt {
+#[clap(group(
+    ArgGroup::new("policy")
+        .multiple(true)
+        .required(true)
+        .args(&["length", "rpids", "force-change"])))]
+pub struct SetPinPolicyOpt {
+    /// Sets the minimum PIN length, in Unicode codepoints.
     #[clap(short, long)]
     pub length: Option<u32>,
+
+    /// Sets the RPIDs which are authorised to use the `minPinLength` extension. May be specified many times.
     #[clap(short, long)]
     pub rpids: Option<Vec<String>>,
+
+    /// Invalidates the existing PIN, forcing it to be changed before the token can be used again.
     #[clap(long, action = ArgAction::SetTrue)]
     pub force_change: bool,
 }
@@ -47,7 +57,8 @@ pub enum Opt {
     FactoryReset,
     /// Toggles the "Always Require User Verification" feature.
     ToggleAlwaysUv,
-    SetMinPinLength(SetMinPinLengthOpt),
+    /// Sets policies for PINs.
+    SetPinPolicy(SetPinPolicyOpt),
     /// Sets a PIN on a FIDO token which does not already have one.
     SetPin(SetPinOpt),
     /// Changes a PIN on a FIDO token which already has a PIN set.
@@ -119,10 +130,7 @@ fn main() {
             authenticator.toggle_always_uv().expect("Error toggling UV");
         }
 
-        Opt::SetMinPinLength(o) => {
-            if !o.force_change && o.rpids == None && o.length == None {
-                panic!("Expected at least one option");
-            }
+        Opt::SetPinPolicy(o) => {
             authenticator
                 .set_min_pin_length(
                     o.length,
