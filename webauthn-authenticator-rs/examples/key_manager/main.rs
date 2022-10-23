@@ -3,7 +3,7 @@ extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
 
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand};
 
 use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
 use webauthn_authenticator_rs::transport::*;
@@ -24,6 +24,16 @@ pub struct ChangePinOpt {
     pub new_pin: String,
 }
 
+#[derive(Debug, Args)]
+pub struct SetMinPinLengthOpt {
+    #[clap(short, long)]
+    pub length: Option<u32>,
+    #[clap(short, long)]
+    pub rpids: Option<Vec<String>>,
+    #[clap(long, action = ArgAction::SetTrue)]
+    pub force_change: bool,
+}
+
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
@@ -35,6 +45,9 @@ pub enum Opt {
     /// plugged in, _may_ only work on _one_ transport (for multi-interface
     /// tokens), and is only _guaranteed_ to work over USB HID.
     FactoryReset,
+    /// Toggles the "Always Require User Verification" feature.
+    ToggleAlwaysUv,
+    SetMinPinLength(SetMinPinLengthOpt),
     /// Sets a PIN on a FIDO token which does not already have one.
     SetPin(SetPinOpt),
     /// Changes a PIN on a FIDO token which already has a PIN set.
@@ -94,10 +107,29 @@ fn main() {
             stdin().read_line(&mut buf).expect("Cannot read stdin");
 
             if buf == "yes\n" {
-                authenticator.factory_reset().expect("Error resetting token");
+                authenticator
+                    .factory_reset()
+                    .expect("Error resetting token");
             } else {
                 panic!("Unexpected response {:?}, exiting!", buf);
             }
+        }
+
+        Opt::ToggleAlwaysUv => {
+            authenticator.toggle_always_uv().expect("Error toggling UV");
+        }
+
+        Opt::SetMinPinLength(o) => {
+            if !o.force_change && o.rpids == None && o.length == None {
+                panic!("Expected at least one option");
+            }
+            authenticator
+                .set_min_pin_length(
+                    o.length,
+                    o.rpids.unwrap_or_default(),
+                    if o.force_change { Some(true) } else { None },
+                )
+                .expect("error setting policy");
         }
 
         Opt::SetPin(o) => {

@@ -1,8 +1,4 @@
-use std::str::FromStr;
-
-use serde::{Deserialize, Serialize};
-use serde_cbor::Value;
-use webauthn_rs_proto::AuthenticatorTransport;
+use serde::Serialize;
 
 use self::CBORCommand;
 use super::*;

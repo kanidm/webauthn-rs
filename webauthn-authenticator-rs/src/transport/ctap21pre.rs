@@ -1,4 +1,4 @@
-use std::{ops::Deref, fmt::Debug};
+use std::{fmt::Debug, ops::Deref};
 
 use crate::{
     cbor::*,
@@ -49,7 +49,56 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
     }
 
     pub fn factory_reset(&self) -> Result<(), WebauthnCError> {
-        self.token.transmit(ResetRequest {}, &self.ui_callback).map(|_| ())
+        self.token
+            .transmit(ResetRequest {}, &self.ui_callback)
+            .map(|_| ())
+    }
+
+    fn config(
+        &self,
+        sub_command: ConfigSubCommand,
+        bypass_always_uv: bool,
+    ) -> Result<(), WebauthnCError> {
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
+            sub_command.prf().as_slice(),
+            Permissions::AUTHENTICATOR_CONFIGURATION,
+            None,
+            bypass_always_uv,
+        )?;
+
+        // TODO: handle complex result type
+        self.token
+            .transmit(
+                ConfigRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
+                &self.ui_callback,
+            )
+            .map(|_| ())
+    }
+
+    /// Toggles the state of the "Always Require User Verification" feature.
+    /// 
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv>
+    pub fn toggle_always_uv(&self) -> Result<(), WebauthnCError> {
+        self.config(ConfigSubCommand::ToggleAlwaysUv, true)
+    }
+
+    /// Sets the minimum PIN length policy.
+    /// 
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength>
+    pub fn set_min_pin_length(
+        &self,
+        new_min_pin_length: Option<u32>,
+        min_pin_length_rpids: Vec<String>,
+        force_change_pin: Option<bool>,
+    ) -> Result<(), WebauthnCError> {
+        self.config(
+            ConfigSubCommand::SetMinPinLength(SetMinPinLengthParams {
+                new_min_pin_length,
+                min_pin_length_rpids,
+                force_change_pin,
+            }),
+            false,
+        )
     }
 
     // pub fn select_pin_protocol(&self) -> Option<Box<dyn PinUvPlatformInterface>> {
@@ -157,6 +206,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         client_data_hash: &[u8],
         permissions: Permissions,
         rp_id: Option<String>,
+        bypass_always_uv: bool,
     ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
         if permissions.is_empty() {
             error!("no permissions were requested");
@@ -198,9 +248,14 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         }
 
         if always_uv == Some(true) && uv != Some(true) && client_pin != Some(true) {
-            // TODO: this will need to change once we can enroll biometrics
-            error!("alwaysUv = true, but built-in user verification (biometrics) and PIN are both unconfigured. Set one (or both) of them before continuing.");
-            return Err(WebauthnCError::Security);
+            if bypass_always_uv {
+                trace!("Bypassing alwaysUv check (bypass_always_uv = true)");
+                return Ok((None, None));
+            } else {
+                // TODO: this will need to change once we can enroll biometrics
+                error!("alwaysUv = true, but built-in user verification (biometrics) and PIN are both unconfigured. Set one (or both) of them before continuing.");
+                return Err(WebauthnCError::Security);
+            }
         }
 
         // TODO: handle getPinUvAuthTokenUsingPinWithPermissions
@@ -255,8 +310,13 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         let p = match (client_pin, pin_uv_auth_token) {
             (Some(true), Some(true)) => {
                 // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
-                iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(&pin, shared_secret.as_slice(), permissions, rp_id)
-            },
+                iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(
+                    &pin,
+                    shared_secret.as_slice(),
+                    permissions,
+                    rp_id,
+                )
+            }
             _ => {
                 // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
                 iface.get_pin_token_cmd(&pin, shared_secret.as_slice())
@@ -302,6 +362,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             client_data_hash.as_slice(),
             Permissions::MAKE_CREDENTIAL,
             Some(options.rp.id.clone()),
+            false,
         )?;
 
         let mc = MakeCredentialRequest {
@@ -371,6 +432,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             client_data_hash.as_slice(),
             Permissions::GET_ASSERTION,
             Some(options.rp_id.clone()),
+            false,
         )?;
 
         let ga = GetAssertionRequest {
@@ -416,7 +478,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
     }
 }
 
-struct PinUvPlatformInterface {
+pub(crate) struct PinUvPlatformInterface {
     protocol: Box<dyn PinUvPlatformInterfaceProtocol>,
     /// A cached [COSEKey] representation of `private_key`.
     public_key: COSEKey,
@@ -427,7 +489,10 @@ struct PinUvPlatformInterface {
 impl Debug for PinUvPlatformInterface {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PinUvPlatformInterface")
-            .field("protocol.pin_uv_protocol", &self.protocol.get_pin_uv_protocol())
+            .field(
+                "protocol.pin_uv_protocol",
+                &self.protocol.get_pin_uv_protocol(),
+            )
             .finish()
     }
 }
@@ -533,7 +598,13 @@ impl PinUvPlatformInterface {
     }
 
     /// Generates a `getPinUvAuthTokenUsingPinWithPermissions` command.
-    fn get_pin_uv_auth_token_using_pin_with_permissions_cmd(&self, pin: &str, shared_secret: &[u8], permissions: Permissions, rp_id: Option<String>) -> ClientPinRequest {
+    fn get_pin_uv_auth_token_using_pin_with_permissions_cmd(
+        &self,
+        pin: &str,
+        shared_secret: &[u8],
+        permissions: Permissions,
+        rp_id: Option<String>,
+    ) -> ClientPinRequest {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
         ClientPinRequest {
             pin_uv_protocol: self.get_pin_uv_protocol(),
@@ -625,7 +696,7 @@ fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, 
     Ok(pt)
 }
 
-trait PinUvPlatformInterfaceProtocol {
+pub(crate) trait PinUvPlatformInterfaceProtocol {
     fn kdf(&self, z: &[u8]) -> Vec<u8>;
 
     /// Encrypts a `plaintext` to produce a ciphertext, which may be longer than
@@ -909,7 +980,9 @@ mod tests {
         let pin_auth = t.authenticate(&shared_secret, &new_pin_enc);
         assert_eq!(pin_auth[0..16], expected_pin_auth);
 
-        let decrypted_pin = t.decrypt(&shared_secret, expected_new_pin_enc.as_slice()).expect("decrypt error");
+        let decrypted_pin = t
+            .decrypt(&shared_secret, expected_new_pin_enc.as_slice())
+            .expect("decrypt error");
         assert_eq!(decrypted_pin, padded_pin.to_vec());
     }
 
