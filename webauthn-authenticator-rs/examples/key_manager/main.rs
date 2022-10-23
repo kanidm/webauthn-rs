@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate tracing;
 
+use std::io::{stdin, stdout, Write};
+
 use clap::{Args, Parser, Subcommand};
 
 use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
@@ -27,6 +29,12 @@ pub struct ChangePinOpt {
 pub enum Opt {
     /// Show information about the connected FIDO token.
     Info,
+    /// Resets the connected FIDO token to factory settings, deleting all keys.
+    ///
+    /// This command will only work for the first 10 seconds since the token was
+    /// plugged in, _may_ only work on _one_ transport (for multi-interface
+    /// tokens), and is only _guaranteed_ to work over USB HID.
+    FactoryReset,
     /// Sets a PIN on a FIDO token which does not already have one.
     SetPin(SetPinOpt),
     /// Changes a PIN on a FIDO token which already has a PIN set.
@@ -77,6 +85,19 @@ fn main() {
         Opt::Info => {
             let info = authenticator.get_info();
             println!("{:?}", info);
+        }
+
+        Opt::FactoryReset => {
+            println!("Resetting token to factory settings. Type 'yes' to continue.");
+            let mut buf = String::new();
+            stdout().flush().ok();
+            stdin().read_line(&mut buf).expect("Cannot read stdin");
+
+            if buf == "yes\n" {
+                authenticator.factory_reset().expect("Error resetting token");
+            } else {
+                panic!("Unexpected response {:?}, exiting!", buf);
+            }
         }
 
         Opt::SetPin(o) => {

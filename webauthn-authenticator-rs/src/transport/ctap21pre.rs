@@ -48,6 +48,10 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         &self.info
     }
 
+    pub fn factory_reset(&self) -> Result<(), WebauthnCError> {
+        self.token.transmit(ResetRequest {}, &self.ui_callback).map(|_| ())
+    }
+
     // pub fn select_pin_protocol(&self) -> Option<Box<dyn PinUvPlatformInterface>> {
     //     self.info.pin_protocols.as_ref().and_then(|protocols| {
     //         for p in protocols.iter() {
