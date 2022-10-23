@@ -152,7 +152,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         &self,
         client_data_hash: &[u8],
         permissions: Permissions,
-        rp_id: Option<&str>,
+        rp_id: Option<String>,
     ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
         if permissions.is_empty() {
             error!("no permissions were requested");
@@ -248,21 +248,16 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         trace!(?shared_secret);
         // todo!();
 
-        // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
-        let p = iface.get_pin_token_cmd(&pin, shared_secret.as_slice());
-
-        // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
-        /*
-        let p = ClientPinRequest {
-            pin_uv_protocol: Some(2),
-            sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions,
-            key_agreement: Some(iface.public_key.clone()),
-            pin_hash_enc: Some(iface.encrypt(shared_secret.as_slice(), &(compute_sha256(pin.as_bytes()))[..16])),
-            permissions: Permissions::MAKE_CREDENTIAL,
-            // need rpId?
-            ..Default::default()
+        let p = match (client_pin, pin_uv_auth_token) {
+            (Some(true), Some(true)) => {
+                // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
+                iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(&pin, shared_secret.as_slice(), permissions, rp_id)
+            },
+            _ => {
+                // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
+                iface.get_pin_token_cmd(&pin, shared_secret.as_slice())
+            }
         };
-        */
 
         let ret = self.token.transmit(p, &self.ui_callback)?;
         trace!(?ret);
@@ -302,7 +297,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
         let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::MAKE_CREDENTIAL,
-            Some(&options.rp.id),
+            Some(options.rp.id.clone()),
         )?;
 
         let mc = MakeCredentialRequest {
@@ -371,7 +366,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
         let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::GET_ASSERTION,
-            Some(&options.rp_id),
+            Some(options.rp_id.clone()),
         )?;
 
         let ga = GetAssertionRequest {
@@ -529,6 +524,22 @@ impl PinUvPlatformInterface {
             pin_hash_enc: Some(
                 self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
             ),
+            ..Default::default()
+        }
+    }
+
+    /// Generates a `getPinUvAuthTokenUsingPinWithPermissions` command.
+    fn get_pin_uv_auth_token_using_pin_with_permissions_cmd(&self, pin: &str, shared_secret: &[u8], permissions: Permissions, rp_id: Option<String>) -> ClientPinRequest {
+        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
+        ClientPinRequest {
+            pin_uv_protocol: self.get_pin_uv_protocol(),
+            sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions,
+            key_agreement: Some(self.public_key.clone()),
+            pin_hash_enc: Some(
+                self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
+            ),
+            permissions,
+            rp_id,
             ..Default::default()
         }
     }

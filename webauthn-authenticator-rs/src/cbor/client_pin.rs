@@ -39,7 +39,7 @@ pub enum ClientPinSubCommand {
     GetPinToken = 0x05,
     GetPinUvAuthTokenUsingUvWithPermissions = 0x06,
     GetUvRetries = 0x07,
-    GetPinUvAuthTokenUsingPinWithPermissions = 0x08,
+    GetPinUvAuthTokenUsingPinWithPermissions = 0x09,
 }
 
 bitflags! {
