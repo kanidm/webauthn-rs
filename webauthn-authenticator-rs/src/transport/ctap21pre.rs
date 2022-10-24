@@ -429,8 +429,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         trace!(?shared_secret);
         // todo!();
 
-        let p = match (uv, client_pin, pin_uv_auth_token) {
-            (Some(true), _, Some(true)) => {
+        let bio_enrollment = permissions.intersects(Permissions::BIO_ENROLLMENT);
+        let p = match (bio_enrollment, uv, client_pin, pin_uv_auth_token) {
+            (false, Some(true), _, Some(true)) => {
                 // 6.5.5.7.3. Getting pinUvAuthToken using getPinUvAuthTokenUsingUvWithPermissions (built-in user verification methods)
                 ClientPinRequest {
                     pin_uv_protocol: iface.get_pin_uv_protocol(),
@@ -441,7 +442,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
                     ..Default::default()
                 }
             }
-            (_, Some(true), Some(true)) => {
+            (_, _, Some(true), Some(true)) => {
                 // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
                 iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(
                     &pin,
