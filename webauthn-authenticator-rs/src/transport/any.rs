@@ -50,8 +50,9 @@ impl Transport for AnyTransport {
     }
 }
 
+#[allow(clippy::unimplemented)]
 impl Token for AnyToken {
-    #[allow(unused_variables, clippy::unimplemented)]
+    #[allow(unused_variables)]
     fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
@@ -66,7 +67,6 @@ impl Token for AnyToken {
         }
     }
 
-    #[allow(clippy::unimplemented)]
     fn init(&mut self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
@@ -77,7 +77,6 @@ impl Token for AnyToken {
         }
     }
 
-    #[allow(clippy::unimplemented)]
     fn close(&self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
@@ -88,7 +87,6 @@ impl Token for AnyToken {
         }
     }
     
-    #[allow(clippy::unimplemented)]
     fn get_transport(&self) -> AuthenticatorTransport {
         match self {
             AnyToken::Stub => unimplemented!(),
@@ -96,6 +94,17 @@ impl Token for AnyToken {
             AnyToken::Nfc(n) => n.get_transport(),
             #[cfg(feature = "usb")]
             AnyToken::Usb(u) => u.get_transport(),
+        }
+    }
+
+    #[allow(clippy::unimplemented)]
+    fn cancel(&self) -> Result<(), WebauthnCError> {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(n) => n.cancel(),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.cancel(),
         }
     }
 }

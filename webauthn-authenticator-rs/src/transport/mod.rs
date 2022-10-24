@@ -91,6 +91,9 @@ pub trait Token: Sized + fmt::Debug {
         C: CBORCommand,
         U: UiCallback;
 
+    /// Cancels a pending request.
+    fn cancel(&self) -> Result<(), WebauthnCError>;
+
     /// Initializes the [Token]
     fn init(&mut self) -> Result<(), WebauthnCError>;
 

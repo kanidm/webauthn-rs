@@ -47,6 +47,8 @@ pub struct SetPinPolicyOpt {
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
+    /// Request user presence on a connected FIDO token.
+    Selection,
     /// Show information about the connected FIDO token.
     Info,
     /// Resets the connected FIDO token to factory settings, deleting all keys.
@@ -112,6 +114,11 @@ fn main() {
     let authenticator = select_transport();
 
     match opt.commands {
+        Opt::Selection => {
+            let selection = authenticator.selection();
+            println!("{:?}", selection);
+        }
+
         Opt::Info => {
             let info = authenticator.get_info();
             println!("{:?}", info);

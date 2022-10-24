@@ -33,6 +33,7 @@ const TYPE_INIT: u8 = 0x80;
 const U2FHID_MSG: u8 = TYPE_INIT | 0x03;
 const U2FHID_INIT: u8 = TYPE_INIT | 0x06;
 const U2FHID_CBOR: u8 = TYPE_INIT | 0x10;
+const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11;
 const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b;
 const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f;
 const CAPABILITY_CBOR: u8 = 0x04;
@@ -236,5 +237,15 @@ impl Token for USBToken {
 
     fn get_transport(&self) -> AuthenticatorTransport {
         AuthenticatorTransport::Usb
+    }
+
+    fn cancel(&self) -> Result<(), WebauthnCError> {
+        let cmd = U2FHIDFrame {
+            cid: self.cid,
+            cmd: U2FHID_CANCEL,
+            len: 0,
+            data: vec![],
+        };
+        self.send_one(&cmd)
     }
 }

@@ -464,6 +464,11 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
 
         Ok((Some(iface), Some(pin_token)))
     }
+
+    /// Requests user presence on a token.
+    pub fn selection(&self) -> Result<(), WebauthnCError> {
+        self.token.transmit(SelectionRequest {}, &self.ui_callback).map(|_| ())
+    }
 }
 
 impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T, U> {

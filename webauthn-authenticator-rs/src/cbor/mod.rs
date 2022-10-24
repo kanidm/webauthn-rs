@@ -9,6 +9,7 @@ mod get_assertion;
 mod get_info;
 mod make_credential;
 mod reset;
+mod selection;
 
 pub use self::bio_enrollment::*;
 pub use self::client_pin::*;
@@ -17,6 +18,7 @@ pub use self::get_assertion::*;
 pub use self::get_info::*;
 pub use self::make_credential::*;
 pub use self::reset::*;
+pub use self::selection::*;
 use crate::error::WebauthnCError;
 use crate::transport::iso7816::ISO7816RequestAPDU;
 
