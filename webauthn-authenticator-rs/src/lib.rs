@@ -14,6 +14,9 @@
 #[macro_use]
 extern crate tracing;
 
+#[macro_use]
+extern crate num_derive;
+
 use crate::error::WebauthnCError;
 use url::Url;
 

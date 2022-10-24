@@ -59,6 +59,10 @@ pub enum Opt {
     ToggleAlwaysUv,
     /// Enables the "Enterprise Attestation" feature.
     EnableEnterpriseAttestation,
+    /// Gets information about biometric authentication on the device.
+    BioInfo,
+    /// Enrolls a fingerprint on the device.
+    EnrollFingerprint,
     /// Sets policies for PINs.
     SetPinPolicy(SetPinPolicyOpt),
     /// Sets a PIN on a FIDO token which does not already have one.
@@ -134,6 +138,15 @@ fn main() {
 
         Opt::EnableEnterpriseAttestation => {
             authenticator.enable_enterprise_attestation().expect("Error enabling enterprise attestation");
+        }
+
+        Opt::BioInfo => {
+            let i = authenticator.get_fingerprint_sensor_info().expect("fingerprint sensor info");
+            println!("Fingerprint sensor info: {:?}", i);
+        }
+
+        Opt::EnrollFingerprint => {
+            authenticator.enroll_fingerprint().expect("enrolling fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {

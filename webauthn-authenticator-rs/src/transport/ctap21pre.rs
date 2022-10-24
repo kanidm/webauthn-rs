@@ -76,14 +76,14 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
     }
 
     /// Toggles the state of the "Always Require User Verification" feature.
-    /// 
+    ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv>
     pub fn toggle_always_uv(&self) -> Result<(), WebauthnCError> {
         self.config(ConfigSubCommand::ToggleAlwaysUv, true)
     }
 
     /// Sets the minimum PIN length policy.
-    /// 
+    ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength>
     pub fn set_min_pin_length(
         &self,
@@ -109,6 +109,89 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             return Err(WebauthnCError::NotSupported);
         }
         self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
+    }
+
+    fn bio(
+        &self,
+        sub_command: BioSubCommand,
+    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
+            sub_command.prf().as_slice(),
+            Permissions::BIO_ENROLLMENT,
+            None,
+            false,
+        )?;
+
+        self.token.transmit(
+            BioEnrollmentRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
+            &self.ui_callback,
+        )
+    }
+
+    fn bio_with_session(
+        &self,
+        sub_command: BioSubCommand,
+        iface: Option<&PinUvPlatformInterface>,
+        pin_uv_auth_token: Option<&Vec<u8>>,
+    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
+        let client_data_hash = sub_command.prf();
+        
+        let (pin_uv_protocol, pin_uv_auth_param) = match (iface, pin_uv_auth_token) {
+            (Some(iface), Some(pin_uv_auth_token)) => {
+                let mut pin_uv_auth_param = iface
+                    .protocol
+                    .authenticate(pin_uv_auth_token, client_data_hash.as_slice());
+                pin_uv_auth_param.truncate(16);
+
+                (
+                    iface.protocol.get_pin_uv_protocol(),
+                    Some(pin_uv_auth_param),
+                )
+            }
+
+            _ => (None, None),
+        };
+
+        self.token.transmit(BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param), &self.ui_callback)
+    }
+
+    pub fn get_fingerprint_sensor_info(&self) -> Result<BioEnrollmentResponse, WebauthnCError> {
+        // TODO: handle CTAP_2_1_PRE version too
+        if self.info.get_option("bioEnroll").is_none() {
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        self.token.transmit(GET_MODALITY, &self.ui_callback)?;
+        self.token
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, &self.ui_callback)
+    }
+
+    pub fn enroll_fingerprint(&self) -> Result<(), WebauthnCError> {
+        // TODO: handle CTAP_2_1_PRE version too
+        if self.info.get_option("bioEnroll").is_none() {
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        // TODO
+        let timeout = 30_000;
+
+        let (iface, pin_uv_auth_token) =
+            self.get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)?;
+
+        let r = self.bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), iface.as_ref(), pin_uv_auth_token.as_ref())?;
+
+        println!("began enrollment: {:?}", r);
+        let id = r.template_id.unwrap();
+
+        // TODO: show feedback
+        let mut remaining_samples = r.remaining_samples.unwrap_or_default();
+        while remaining_samples > 0 {
+            let r = self.bio_with_session(BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout), iface.as_ref(), pin_uv_auth_token.as_ref())?;
+
+            remaining_samples = r.remaining_samples.unwrap_or_default();
+        }
+
+        Ok(())
     }
 
     // pub fn select_pin_protocol(&self) -> Option<Box<dyn PinUvPlatformInterface>> {
@@ -218,6 +301,32 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         rp_id: Option<String>,
         bypass_always_uv: bool,
     ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
+        let (iface, pin_token) =
+            self.get_pin_uv_auth_session(permissions, rp_id, bypass_always_uv)?;
+
+        Ok(match (iface, pin_token) {
+            (Some(iface), Some(pin_token)) => {
+                let mut pin_uv_auth_param = iface
+                    .protocol
+                    .authenticate(pin_token.as_slice(), client_data_hash);
+                pin_uv_auth_param.truncate(16);
+
+                (
+                    iface.protocol.get_pin_uv_protocol(),
+                    Some(pin_uv_auth_param),
+                )
+            }
+
+            _ => (None, None),
+        })
+    }
+
+    fn get_pin_uv_auth_session(
+        &self,
+        permissions: Permissions,
+        rp_id: Option<String>,
+        bypass_always_uv: bool,
+    ) -> Result<(Option<PinUvPlatformInterface>, Option<Vec<u8>>), WebauthnCError> {
         if permissions.is_empty() {
             error!("no permissions were requested");
             return Err(WebauthnCError::Internal);
@@ -342,15 +451,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             .decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
         trace!(?pin_token);
 
-        let mut pin_uv_auth_param = iface
-            .protocol
-            .authenticate(pin_token.as_slice(), client_data_hash);
-        pin_uv_auth_param.truncate(16);
-
-        Ok((
-            iface.protocol.get_pin_uv_protocol(),
-            Some(pin_uv_auth_param),
-        ))
+        Ok((Some(iface), Some(pin_token)))
     }
 }
 

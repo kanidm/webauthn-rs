@@ -2,6 +2,7 @@ use serde::Serialize;
 use serde_cbor::{ser::to_vec_packed, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod bio_enrollment;
 mod client_pin;
 mod config;
 mod get_assertion;
@@ -9,6 +10,7 @@ mod get_info;
 mod make_credential;
 mod reset;
 
+pub use self::bio_enrollment::*;
 pub use self::client_pin::*;
 pub use self::config::*;
 pub use self::get_assertion::*;
