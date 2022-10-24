@@ -9,11 +9,9 @@ use crate::ui::UiCallback;
 use async_trait::async_trait;
 use base64urlsafedata::Base64UrlSafeData;
 use futures::executor::block_on;
-use futures::future::{try_join_all, Fuse};
 use futures::stream::FuturesUnordered;
-use futures::{select, FutureExt, Stream, StreamExt};
+use futures::{select, FutureExt, StreamExt};
 use std::fmt;
-use std::ops::Deref;
 use std::sync::Mutex;
 use webauthn_rs_proto::{AuthenticatorTransport, PubKeyCredParams, RelyingParty, User};
 
@@ -54,22 +52,18 @@ pub trait Transport: Sized + Default + fmt::Debug + Send {
     /// Gets a list of all connected tokens for this [Transport].
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
 
-    /// Selects one token by requesting user interaction
-    ///
-    /// WIP: This is not yet finished, and doesn't handle threading.
-    async fn select_one_token<'a, U: UiCallback>(
+    fn connect_all<'a, U: UiCallback>(
         &mut self,
         ui: &'a U,
-    ) -> Result<Ctap21PreAuthenticator<'a, Self::Token, U>, WebauthnCError> {
-        let mut all_tokens = self.tokens()?;
-
-        let mut tasks: FuturesUnordered<_> = all_tokens
+    ) -> Result<Vec<Ctap21PreAuthenticator<'a, Self::Token, U>>, WebauthnCError> {
+        Ok(self
+            .tokens()?
             .drain(..)
-            .map(|mut token| async move {
-                if token.init().await.is_err() {
+            .filter_map(|mut token| {
+                if block_on(token.init()).is_err() {
                     return None;
                 }
-                let info = match token.transmit(GetInfoRequest {}, ui).await {
+                let info = match block_on(token.transmit(GetInfoRequest {}, ui)) {
                     Ok(info) => {
                         if !(info.versions.contains("FIDO_2_1_PRE")
                             || info.versions.contains("FIDO_2_0")
@@ -83,15 +77,55 @@ pub trait Transport: Sized + Default + fmt::Debug + Send {
                     Err(_) => return None,
                 };
 
-                trace!("Trying to selectionRequest");
-                // ARRRGGHHH this only works on FIDO_2_1.  Not 2.0, not 2.1PRE.
-                // So we need another strategy. I guess this means we need to be able to race EVERYTHING
-                if token.transmit(SelectionRequest {}, ui).await.is_ok() {
-                    Some((info, Mutex::new(token)))
-                } else {
-                    None
+                Some(Ctap21PreAuthenticator::new(info, token, ui))
+            })
+            .collect())
+    }
+
+    /// Selects one token by requesting user interaction
+    ///
+    /// WIP: This is not yet finished, and doesn't handle threading.
+    ///
+    /// This only works on CTAP 2.1 authenticators
+    async fn select_one_token<'a, U: UiCallback>(
+        &mut self,
+        ui: &'a U,
+    ) -> Result<Ctap21PreAuthenticator<'a, Self::Token, U>, WebauthnCError> {
+        let mut all_tokens = self.tokens()?;
+
+        let mut tasks: FuturesUnordered<_> = all_tokens
+            .drain(..)
+            .map(|mut token| {
+                async move {
+                    if token.init().await.is_err() {
+                        return None;
+                    }
+                    let info = match token.transmit(GetInfoRequest {}, ui).await {
+                        Ok(info) => {
+                            if !(info.versions.contains("FIDO_2_1_PRE")
+                                || info.versions.contains("FIDO_2_0")
+                                || info.versions.contains("FIDO_2_1"))
+                            {
+                                trace!("dropping unsupported token");
+                                return None;
+                            }
+                            info
+                        }
+                        Err(_) => return None,
+                    };
+
+                    trace!("Trying to selectionRequest");
+                    // ARRRGGHHH this only works on FIDO_2_1.  Not 2.0, not 2.1PRE.
+                    // So we need another strategy. I guess this means we need to be able to race EVERYTHING
+                    if token.transmit(SelectionRequest {}, ui).await.is_ok() {
+                        Some((info, Mutex::new(token)))
+                    } else {
+                        None
+                    }
                 }
-            }.fuse()).collect();
+                .fuse()
+            })
+            .collect();
 
         loop {
             select! {
@@ -172,7 +206,10 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
     }
 
     // TODO: implement better
-    fn auth<'a, U: UiCallback>(self, ui: &'a U) -> Result<Ctap21PreAuthenticator<'a, Self, U>, WebauthnCError> {
+    fn auth<'a, U: UiCallback>(
+        self,
+        ui: &'a U,
+    ) -> Result<Ctap21PreAuthenticator<'a, Self, U>, WebauthnCError> {
         let info = block_on(self.transmit(GetInfoRequest {}, ui))?;
 
         debug!(?info);
