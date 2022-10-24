@@ -10,6 +10,7 @@ use crate::{
 };
 
 use base64urlsafedata::Base64UrlSafeData;
+use futures::executor::block_on;
 use openssl::{
     bn,
     ec::{self, EcKey, EcKeyRef},
@@ -29,14 +30,14 @@ use webauthn_rs_proto::{
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs,
 };
 
-pub struct Ctap21PreAuthenticator<T: Token, U: UiCallback> {
+pub struct Ctap21PreAuthenticator<'a, T: Token, U: UiCallback> {
     info: GetInfoResponse,
     token: T,
-    ui_callback: U,
+    ui_callback: &'a U,
 }
 
-impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
-    pub fn new(info: GetInfoResponse, token: T, ui_callback: U) -> Self {
+impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
+    pub fn new(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
         Self {
             info,
             token,
@@ -48,13 +49,14 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         &self.info
     }
 
-    pub fn factory_reset(&self) -> Result<(), WebauthnCError> {
+    pub async fn factory_reset(&self) -> Result<(), WebauthnCError> {
         self.token
-            .transmit(ResetRequest {}, &self.ui_callback)
+            .transmit(ResetRequest {}, self.ui_callback)
+            .await
             .map(|_| ())
     }
 
-    fn config(
+    async fn config(
         &self,
         sub_command: ConfigSubCommand,
         bypass_always_uv: bool,
@@ -64,28 +66,29 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             Permissions::AUTHENTICATOR_CONFIGURATION,
             None,
             bypass_always_uv,
-        )?;
+        ).await?;
 
         // TODO: handle complex result type
         self.token
             .transmit(
                 ConfigRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
-                &self.ui_callback,
+                self.ui_callback,
             )
+            .await
             .map(|_| ())
     }
 
     /// Toggles the state of the "Always Require User Verification" feature.
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv>
-    pub fn toggle_always_uv(&self) -> Result<(), WebauthnCError> {
-        self.config(ConfigSubCommand::ToggleAlwaysUv, true)
+    pub async fn toggle_always_uv(&self) -> Result<(), WebauthnCError> {
+        self.config(ConfigSubCommand::ToggleAlwaysUv, true).await
     }
 
     /// Sets the minimum PIN length policy.
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength>
-    pub fn set_min_pin_length(
+    pub async fn set_min_pin_length(
         &self,
         new_min_pin_length: Option<u32>,
         min_pin_length_rpids: Vec<String>,
@@ -98,20 +101,20 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
                 force_change_pin,
             }),
             false,
-        )
+        ).await
     }
 
     /// Enables the Enterprise Attestation feature.
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn>
-    pub fn enable_enterprise_attestation(&self) -> Result<(), WebauthnCError> {
+    pub async fn enable_enterprise_attestation(&self) -> Result<(), WebauthnCError> {
         if self.info.get_option("ep").is_none() {
             return Err(WebauthnCError::NotSupported);
         }
-        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
+        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false).await
     }
 
-    fn bio(
+    async fn bio(
         &self,
         sub_command: BioSubCommand,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
@@ -120,15 +123,15 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             Permissions::BIO_ENROLLMENT,
             None,
             false,
-        )?;
+        ).await?;
 
         self.token.transmit(
             BioEnrollmentRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
-            &self.ui_callback,
-        )
+            self.ui_callback,
+        ).await
     }
 
-    fn bio_with_session(
+    async fn bio_with_session(
         &self,
         sub_command: BioSubCommand,
         iface: Option<&PinUvPlatformInterface>,
@@ -152,21 +155,21 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             _ => (None, None),
         };
 
-        self.token.transmit(BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param), &self.ui_callback)
+        self.token.transmit(BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param), self.ui_callback).await
     }
 
-    pub fn get_fingerprint_sensor_info(&self) -> Result<BioEnrollmentResponse, WebauthnCError> {
+    pub async fn get_fingerprint_sensor_info(&self) -> Result<BioEnrollmentResponse, WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if self.info.get_option("bioEnroll").is_none() {
             return Err(WebauthnCError::NotSupported);
         }
 
-        self.token.transmit(GET_MODALITY, &self.ui_callback)?;
+        self.token.transmit(GET_MODALITY, self.ui_callback).await?;
         self.token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, &self.ui_callback)
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback).await
     }
 
-    pub fn enroll_fingerprint(&self) -> Result<(), WebauthnCError> {
+    pub async fn enroll_fingerprint(&self) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if self.info.get_option("bioEnroll").is_none() {
             return Err(WebauthnCError::NotSupported);
@@ -176,9 +179,9 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         let timeout = 30_000;
 
         let (iface, pin_uv_auth_token) =
-            self.get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)?;
+            self.get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false).await?;
 
-        let r = self.bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), iface.as_ref(), pin_uv_auth_token.as_ref())?;
+        let r = self.bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), iface.as_ref(), pin_uv_auth_token.as_ref()).await?;
 
         println!("began enrollment: {:?}", r);
         let id = r.template_id.unwrap();
@@ -186,7 +189,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         // TODO: show feedback
         let mut remaining_samples = r.remaining_samples.unwrap_or_default();
         while remaining_samples > 0 {
-            let r = self.bio_with_session(BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout), iface.as_ref(), pin_uv_auth_token.as_ref())?;
+            let r = self.bio_with_session(BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout), iface.as_ref(), pin_uv_auth_token.as_ref()).await?;
 
             remaining_samples = r.remaining_samples.unwrap_or_default();
         }
@@ -217,7 +220,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         check_pin(pin, min_length)
     }
 
-    pub fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
+    pub async fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
         let pin = match self.validate_pin(pin) {
             CheckPinResult::Ok(p) => p,
             _ => return Err(WebauthnCError::InvalidPin),
@@ -230,7 +233,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             .ok_or(WebauthnCError::Unknown)?; // TODO
 
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, &self.ui_callback)?;
+        let ret = self.token.transmit(p, self.ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
@@ -240,12 +243,12 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         trace!(?shared_secret);
 
         let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice());
-        let ret = self.token.transmit(set_pin, &self.ui_callback)?;
+        let ret = self.token.transmit(set_pin, self.ui_callback).await?;
         trace!(?ret);
         Ok(())
     }
 
-    pub fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
+    pub async fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
         // TODO: we actually really only need this in normal form C
         let old_pin = match self.validate_pin(old_pin) {
             CheckPinResult::Ok(p) => p,
@@ -262,12 +265,12 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             .ok_or(WebauthnCError::Unknown)?; // TODO
 
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, &self.ui_callback)?;
+        let ret = self.token.transmit(p, self.ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
         let shared_secret = iface.encapsulate(key_agreement)?;
 
         let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret);
-        let ret = self.token.transmit(change_pin, &self.ui_callback)?;
+        let ret = self.token.transmit(change_pin, self.ui_callback).await?;
         trace!(?ret);
         Ok(())
     }
@@ -294,7 +297,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
     ///
     /// References:
     /// * <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken>
-    fn get_pin_uv_auth_token(
+    async fn get_pin_uv_auth_token(
         &self,
         client_data_hash: &[u8],
         permissions: Permissions,
@@ -302,7 +305,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         bypass_always_uv: bool,
     ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
         let (iface, pin_token) =
-            self.get_pin_uv_auth_session(permissions, rp_id, bypass_always_uv)?;
+            self.get_pin_uv_auth_session(permissions, rp_id, bypass_always_uv).await?;
 
         Ok(match (iface, pin_token) {
             (Some(iface), Some(pin_token)) => {
@@ -321,7 +324,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
         })
     }
 
-    fn get_pin_uv_auth_session(
+    async fn get_pin_uv_auth_session(
         &self,
         permissions: Permissions,
         rp_id: Option<String>,
@@ -392,7 +395,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
                     ..Default::default()
                 };
 
-                let ret = self.token.transmit(p, &self.ui_callback)?;
+                let ret = self.token.transmit(p, self.ui_callback).await?;
                 trace!(?ret);
 
                 // let p = ClientPinRequest {
@@ -416,7 +419,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
 
         // 6.5.5.4: Obtaining the shared secret
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, &self.ui_callback)?;
+        let ret = self.token.transmit(p, self.ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
@@ -453,7 +456,7 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
             }
         };
 
-        let ret = self.token.transmit(p, &self.ui_callback)?;
+        let ret = self.token.transmit(p, self.ui_callback).await?;
         trace!(?ret);
         let pin_token = ret.pin_uv_auth_token.unwrap();
         // Decrypt the pin_token
@@ -466,12 +469,12 @@ impl<T: Token, U: UiCallback> Ctap21PreAuthenticator<T, U> {
     }
 
     /// Requests user presence on a token.
-    pub fn selection(&self) -> Result<(), WebauthnCError> {
-        self.token.transmit(SelectionRequest {}, &self.ui_callback).map(|_| ())
+    pub async fn selection(&self) -> Result<(), WebauthnCError> {
+        self.token.transmit(SelectionRequest {}, self.ui_callback).await.map(|_| ())
     }
 }
 
-impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T, U> {
+impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<'a, T, U> {
     fn perform_register(
         &mut self,
         origin: Url,
@@ -485,12 +488,12 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
 
-        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
+        let (pin_uv_auth_proto, pin_uv_auth_param) = block_on(self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::MAKE_CREDENTIAL,
             Some(options.rp.id.clone()),
             false,
-        )?;
+        ))?;
 
         let mc = MakeCredentialRequest {
             client_data_hash,
@@ -505,7 +508,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             enterprise_attest: None,
         };
 
-        let ret = self.token.transmit(mc, &self.ui_callback)?;
+        let ret = block_on(self.token.transmit(mc, self.ui_callback))?;
         trace!(?ret);
 
         // The obvious thing to do here would be to pass the raw authenticator
@@ -555,12 +558,12 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
 
-        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
+        let (pin_uv_auth_proto, pin_uv_auth_param) = block_on(self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::GET_ASSERTION,
             Some(options.rp_id.clone()),
             false,
-        )?;
+        ))?;
 
         let ga = GetAssertionRequest {
             rp_id: options.rp_id,
@@ -572,7 +575,7 @@ impl<T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<T,
         };
 
         trace!(?ga);
-        let ret = self.token.transmit(ga, &self.ui_callback)?;
+        let ret = block_on(self.token.transmit(ga, self.ui_callback))?;
         trace!(?ret);
 
         let raw_id = ret

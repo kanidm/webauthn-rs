@@ -50,10 +50,11 @@ impl Transport for AnyTransport {
     }
 }
 
+#[async_trait]
 #[allow(clippy::unimplemented)]
 impl Token for AnyToken {
     #[allow(unused_variables)]
-    fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
         U: UiCallback,
@@ -61,19 +62,19 @@ impl Token for AnyToken {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => Token::transmit_raw(n, cmd, ui),
+            AnyToken::Nfc(n) => Token::transmit_raw(n, cmd, ui).await,
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => Token::transmit_raw(u, cmd, ui),
+            AnyToken::Usb(u) => Token::transmit_raw(u, cmd, ui).await,
         }
     }
 
-    fn init(&mut self) -> Result<(), WebauthnCError> {
+    async fn init(&mut self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => n.init(),
+            AnyToken::Nfc(n) => n.init().await,
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => u.init(),
+            AnyToken::Usb(u) => u.init().await,
         }
     }
 

@@ -45,6 +45,7 @@ unicode-normalization = "0.1.22"
 num-traits = "0.2"
 num-derive = "0.3"
 async-trait = "0.1.58"
+futures = "0.3.25"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }

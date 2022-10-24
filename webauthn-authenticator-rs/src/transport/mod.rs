@@ -8,11 +8,17 @@ use crate::ui::UiCallback;
 
 use async_trait::async_trait;
 use base64urlsafedata::Base64UrlSafeData;
+use futures::executor::block_on;
+use futures::future::{try_join_all, Fuse};
+use futures::stream::FuturesUnordered;
+use futures::{select, FutureExt, Stream, StreamExt};
 use std::fmt;
+use std::ops::Deref;
+use std::sync::Mutex;
 use webauthn_rs_proto::{AuthenticatorTransport, PubKeyCredParams, RelyingParty, User};
 
 use crate::cbor::*;
-use crate::error::{CtapError, WebauthnCError};
+use crate::error::WebauthnCError;
 
 use self::ctap21pre::Ctap21PreAuthenticator;
 
@@ -41,7 +47,7 @@ where
 /// If you don't care which transport your application uses, use [AnyTransport]
 /// to automatically use all available transports on the platform.
 #[async_trait]
-pub trait Transport: Sized + Default + fmt::Debug {
+pub trait Transport: Sized + Default + fmt::Debug + Send {
     /// The type of [Token] returned by this [Transport].
     type Token: Token;
 
@@ -49,42 +55,67 @@ pub trait Transport: Sized + Default + fmt::Debug {
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
 
     /// Selects one token by requesting user interaction
-    /// 
+    ///
     /// WIP: This is not yet finished, and doesn't handle threading.
-    async fn select_one_token<U: UiCallback + Sync>(&mut self, ui: &U) -> Result<Self::Token, WebauthnCError> {
+    async fn select_one_token<'a, U: UiCallback>(
+        &mut self,
+        ui: &'a U,
+    ) -> Result<Ctap21PreAuthenticator<'a, Self::Token, U>, WebauthnCError> {
         let mut all_tokens = self.tokens()?;
 
-        // TODO: threading / async
-        while let Some(mut token) = all_tokens.pop() {
-            if let Err(_) = token.init() {
-                continue;
-            }
-
-            if let Ok(info) = token.transmit(GetInfoRequest{}, ui) {
-                if !(info.versions.contains("FIDO_2_1_PRE")
-                || info.versions.contains("FIDO_2_0")
-                || info.versions.contains("FIDO_2_1")) {
-                    continue;
+        let mut tasks: FuturesUnordered<_> = all_tokens
+            .drain(..)
+            .map(|mut token| async move {
+                if token.init().await.is_err() {
+                    return None;
                 }
-            } else {
-                // comms error, skip it.
-                continue;
-            }
-            
-            if token.transmit(SelectionRequest {}, ui).is_ok() {
-                // Found the token to use
-                return Ok(token);
+                let info = match token.transmit(GetInfoRequest {}, ui).await {
+                    Ok(info) => {
+                        if !(info.versions.contains("FIDO_2_1_PRE")
+                            || info.versions.contains("FIDO_2_0")
+                            || info.versions.contains("FIDO_2_1"))
+                        {
+                            trace!("dropping unsupported token");
+                            return None;
+                        }
+                        info
+                    }
+                    Err(_) => return None,
+                };
+
+                trace!("Trying to selectionRequest");
+                // ARRRGGHHH this only works on FIDO_2_1.  Not 2.0, not 2.1PRE.
+                // So we need another strategy. I guess this means we need to be able to race EVERYTHING
+                if token.transmit(SelectionRequest {}, ui).await.is_ok() {
+                    Some((info, Mutex::new(token)))
+                } else {
+                    None
+                }
+            }.fuse()).collect();
+
+        loop {
+            select! {
+                res = tasks.select_next_some() => {
+                    if let Some((info, mutex)) = res {
+                        trace!(?info);
+                        match mutex.into_inner() {
+                            Ok(guard) => return Ok(Ctap21PreAuthenticator::new(info, guard, ui)),
+                            _ => (),
+                        }
+                    }
+                }
+                complete => {
+                    // No tokens available
+                    return Err(WebauthnCError::NoSelectedToken);
+                }
             }
         }
-
-        // Nothing picked
-        Err(WebauthnCError::NoSelectedToken)
     }
 }
 
 /// Represents a connection to a single CTAP token over a [Transport].
 #[async_trait]
-pub trait Token: Sized + fmt::Debug {
+pub trait Token: Sized + fmt::Debug + Sync + Send {
     /// Gets the transport layer used for communication with this token.
     fn get_transport(&self) -> AuthenticatorTransport;
 
@@ -95,7 +126,7 @@ pub trait Token: Sized + fmt::Debug {
         R: CBORResponse,
         U: UiCallback,
     {
-        let resp = self.transmit_raw(cmd, ui)?;
+        let resp = self.transmit_raw(cmd, ui).await?;
 
         R::try_from(resp.as_slice()).map_err(|_| {
             //error!("error: {:?}", e);
@@ -104,7 +135,7 @@ pub trait Token: Sized + fmt::Debug {
     }
 
     /// Transmits a command on the underlying transport.
-    /// 
+    ///
     /// Interfaces need to check for and return any transport-layer-specific
     /// error code [WebauthnCError::Ctap], but don't need to worry about
     /// deserialising CBOR.
@@ -117,11 +148,11 @@ pub trait Token: Sized + fmt::Debug {
     fn cancel(&self) -> Result<(), WebauthnCError>;
 
     /// Initializes the [Token]
-    fn init(&mut self) -> Result<(), WebauthnCError>;
+    async fn init(&mut self) -> Result<(), WebauthnCError>;
 
     /// Selects any available CTAP applet on the [Token]
     fn select_any<U: UiCallback>(self, ui: U) -> Result<Selected<Self>, WebauthnCError> {
-        let tokinfo = self.transmit(GetInfoRequest {}, &ui)?;
+        let tokinfo = block_on(self.transmit(GetInfoRequest {}, &ui))?;
 
         debug!(?tokinfo);
 
@@ -141,8 +172,8 @@ pub trait Token: Sized + fmt::Debug {
     }
 
     // TODO: implement better
-    fn auth<U: UiCallback>(self, ui: U) -> Result<Ctap21PreAuthenticator<Self, U>, WebauthnCError> {
-        let info = self.transmit(GetInfoRequest {}, &ui)?;
+    fn auth<'a, U: UiCallback>(self, ui: &'a U) -> Result<Ctap21PreAuthenticator<'a, Self, U>, WebauthnCError> {
+        let info = block_on(self.transmit(GetInfoRequest {}, ui))?;
 
         debug!(?info);
 

@@ -16,10 +16,13 @@ use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use crate::usb::responses::*;
 use async_trait::async_trait;
+use futures::executor::block_on;
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use webauthn_rs_proto::AuthenticatorTransport;
 use std::fmt;
+use std::ops::Deref;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -50,7 +53,7 @@ pub struct USBTransport {
 }
 
 pub struct USBToken {
-    device: HidDevice,
+    device: Mutex<HidDevice>,
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
@@ -101,7 +104,7 @@ impl Transport for USBTransport {
 impl USBToken {
     fn new(device: HidDevice) -> Self {
         USBToken {
-            device,
+            device: Mutex::new(device),
             cid: 0,
             supports_ctap1: false,
             supports_ctap2: false,
@@ -112,7 +115,8 @@ impl USBToken {
     fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {:02x?}", d);
-        self.device
+        let guard = self.device.lock().unwrap();
+        guard.deref()
             .write(&d)
             .map_err(|_| WebauthnCError::ApduTransmission)
             .map(|_| ())
@@ -131,7 +135,8 @@ impl USBToken {
     async fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
         let ret: HidReportBytes = async {
             let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
-            self.device
+            let guard = self.device.lock().unwrap();
+            guard.deref()
                 .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
                 .map_err(|_| WebauthnCError::ApduTransmission)?;
             Ok::<HidReportBytes, WebauthnCError>(ret)
@@ -197,7 +202,9 @@ impl Token for USBToken {
                 if c.status.is_ok() {
                     Ok(c.data)
                 } else {
-                    Err(WebauthnCError::Ctap(c.status))
+                    let e = WebauthnCError::Ctap(c.status);
+                    error!("Ctap error: {:?}", e);
+                    Err(e)
                 }
             },
             e => {
@@ -207,7 +214,7 @@ impl Token for USBToken {
         }
     }
 
-    fn init(&mut self) -> Result<(), WebauthnCError> {
+    async fn init(&mut self) -> Result<(), WebauthnCError> {
         // Setup a channel to communicate with the device (CTAPHID_INIT).
         let mut nonce: [u8; 8] = [0; 8];
         rand_bytes(&mut nonce).map_err(|_| WebauthnCError::OpenSSL)?;
@@ -219,7 +226,7 @@ impl Token for USBToken {
             data: nonce.to_vec(),
         })?;
 
-        match self.recv()? {
+        match self.recv().await? {
             Response::Init(i) => {
                 trace!(?i);
                 assert_eq!(&nonce, &i.nonce[..]);

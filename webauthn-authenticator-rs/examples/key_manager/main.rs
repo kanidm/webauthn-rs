@@ -5,6 +5,7 @@ use std::io::{stdin, stdout, Write};
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
+use futures::executor::block_on;
 use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
@@ -80,14 +81,11 @@ pub struct CliParser {
     pub commands: Opt,
 }
 
-fn select_transport() -> Ctap21PreAuthenticator<AnyToken, Cli> {
-    // TODO
-    let ui = Cli {};
-
+fn select_transport<'a>(ui: &'a Cli) -> Ctap21PreAuthenticator<'a, AnyToken, Cli> {
     let mut reader = AnyTransport::default();
     info!("Using reader: {:?}", reader);
 
-    return reader.select_one_token(ui).expect("selecting card");
+    block_on(reader.select_one_token(ui)).expect("selecting card")
 }
 
 fn main() {
@@ -95,11 +93,12 @@ fn main() {
     let opt = CliParser::parse();
     tracing_subscriber::fmt::init();
 
-    let authenticator = select_transport();
+    let ui = Cli {};
+    let authenticator = select_transport(&ui);
 
     match opt.commands {
         Opt::Selection => {
-            let selection = authenticator.selection();
+            let selection = block_on(authenticator.selection());
             println!("{:?}", selection);
         }
 
@@ -115,51 +114,46 @@ fn main() {
             stdin().read_line(&mut buf).expect("Cannot read stdin");
 
             if buf == "yes\n" {
-                authenticator
-                    .factory_reset()
-                    .expect("Error resetting token");
+                block_on(authenticator.factory_reset()).expect("Error resetting token");
             } else {
                 panic!("Unexpected response {:?}, exiting!", buf);
             }
         }
 
         Opt::ToggleAlwaysUv => {
-            authenticator.toggle_always_uv().expect("Error toggling UV");
+            block_on(authenticator.toggle_always_uv()).expect("Error toggling UV");
         }
 
         Opt::EnableEnterpriseAttestation => {
-            authenticator.enable_enterprise_attestation().expect("Error enabling enterprise attestation");
+            block_on(authenticator.enable_enterprise_attestation())
+                .expect("Error enabling enterprise attestation");
         }
 
         Opt::BioInfo => {
-            let i = authenticator.get_fingerprint_sensor_info().expect("fingerprint sensor info");
+            let i = block_on(authenticator.get_fingerprint_sensor_info())
+                .expect("fingerprint sensor info");
             println!("Fingerprint sensor info: {:?}", i);
         }
 
         Opt::EnrollFingerprint => {
-            authenticator.enroll_fingerprint().expect("enrolling fingerprint");
+            block_on(authenticator.enroll_fingerprint()).expect("enrolling fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {
-            authenticator
-                .set_min_pin_length(
-                    o.length,
-                    o.rpids.unwrap_or_default(),
-                    if o.force_change { Some(true) } else { None },
-                )
-                .expect("error setting policy");
+            block_on(authenticator.set_min_pin_length(
+                o.length,
+                o.rpids.unwrap_or_default(),
+                if o.force_change { Some(true) } else { None },
+            ))
+            .expect("error setting policy");
         }
 
         Opt::SetPin(o) => {
-            authenticator
-                .set_new_pin(&o.new_pin)
-                .expect("Error setting PIN");
+            block_on(authenticator.set_new_pin(&o.new_pin)).expect("Error setting PIN");
         }
 
         Opt::ChangePin(o) => {
-            authenticator
-                .change_pin(&o.old_pin, &o.new_pin)
-                .expect("Error changing PIN");
+            block_on(authenticator.change_pin(&o.old_pin, &o.new_pin)).expect("Error changing PIN");
         }
     }
 }
