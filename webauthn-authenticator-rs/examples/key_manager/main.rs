@@ -80,12 +80,6 @@ pub struct CliParser {
     pub commands: Opt,
 }
 
-fn access_card<T: Token, U: UiCallback>(card: T, ui: U) -> Ctap21PreAuthenticator<T, U> {
-    info!("Card detected ...");
-
-    card.auth(ui).expect("couldn't open card")
-}
-
 fn select_transport() -> Ctap21PreAuthenticator<AnyToken, Cli> {
     // TODO
     let ui = Cli {};
@@ -93,17 +87,7 @@ fn select_transport() -> Ctap21PreAuthenticator<AnyToken, Cli> {
     let mut reader = AnyTransport::default();
     info!("Using reader: {:?}", reader);
 
-    match reader.tokens() {
-        Ok(mut tokens) => {
-            while let Some(mut card) = tokens.pop() {
-                card.init().expect("couldn't init card");
-                return access_card(card, ui);
-            }
-        }
-        Err(e) => panic!("Error: {:?}", e),
-    }
-
-    panic!("no card");
+    return reader.select_one_token(ui).expect("selecting card");
 }
 
 fn main() {

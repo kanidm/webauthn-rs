@@ -2,6 +2,7 @@
 use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
+use async_trait::async_trait;
 use pcsc::*;
 use webauthn_rs_proto::AuthenticatorTransport;
 use std::ffi::CString;
@@ -140,6 +141,59 @@ impl Transport for NFCReader {
 
         r
     }
+
+    fn select_one_token<U: UiCallback>(&mut self, ui: U) -> Result<ctap21pre::Ctap21PreAuthenticator<Self::Token, U>, WebauthnCError> {
+        loop {
+            for read_state in &mut self.rdr_state {
+                read_state.sync_current_state();
+            }
+
+            if let Err(e) = self.ctx.get_status_change(None, &mut self.rdr_state) {
+                error!("Failed to detect card: {:?}", e);
+                return Err(WebauthnCError::Internal);
+            } else {
+                // Check every reader ...
+                for read_state in &self.rdr_state {
+                    trace!("rdr_state: {:?}", read_state.event_state());
+                    let state = read_state.event_state();
+                    if state.contains(State::PRESENT) {
+                        // Setup the card, and return it.
+                        let card_ref = self
+                            .ctx
+                            .connect(&self.rdr_id, ShareMode::Shared, Protocols::ANY)
+                            .expect("Failed to access NFC card");
+
+
+                        let mut card = NFCCard::new(card_ref);
+                        if card.init().is_err() {
+                            trace!("Card does not appear to be a CTAP token, skipping");
+                            continue;
+                        }
+
+                        if let Ok(info) = Token::transmit(&card, GetInfoRequest{}, &ui) {
+                            if !(info.versions.contains("FIDO_2_1_PRE")
+                            || info.versions.contains("FIDO_2_0")
+                            || info.versions.contains("FIDO_2_1")) {
+                                continue;
+                            }
+                        } else {
+                            // comms error, skip it.
+                            continue;
+                        }
+
+                        return card.auth(ui);
+                    } else if state.contains(State::EMPTY) {
+                        info!("Card removed");
+                    } else {
+                        warn!("Unknown state change -> {:?}", state);
+                    }
+                }
+            }
+        } // end loop.
+
+        // Nothing picked
+        Err(WebauthnCError::NoSelectedToken)
+    }
 }
 
 fn transmit(
@@ -245,8 +299,9 @@ impl NFCCard {
     }
 }
 
+#[async_trait]
 impl Token for NFCCard {
-    fn transmit_raw<C, U>(&self, cmd: C, _ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<C, U>(&self, cmd: C, _ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
         U: UiCallback,

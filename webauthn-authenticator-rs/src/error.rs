@@ -20,6 +20,7 @@ pub enum WebauthnCError {
     Cancelled,
     Ctap(CtapError),
     InvalidPin,
+    NoSelectedToken,
 }
 
 impl From<Error> for WebauthnCError {

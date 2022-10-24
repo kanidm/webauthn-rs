@@ -6,6 +6,7 @@ pub mod iso7816;
 pub use crate::transport::any::{AnyToken, AnyTransport};
 use crate::ui::UiCallback;
 
+use async_trait::async_trait;
 use base64urlsafedata::Base64UrlSafeData;
 use std::fmt;
 use webauthn_rs_proto::{AuthenticatorTransport, PubKeyCredParams, RelyingParty, User};
@@ -39,21 +40,56 @@ where
 ///
 /// If you don't care which transport your application uses, use [AnyTransport]
 /// to automatically use all available transports on the platform.
+#[async_trait]
 pub trait Transport: Sized + Default + fmt::Debug {
     /// The type of [Token] returned by this [Transport].
     type Token: Token;
 
     /// Gets a list of all connected tokens for this [Transport].
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
+
+    /// Selects one token by requesting user interaction
+    /// 
+    /// WIP: This is not yet finished, and doesn't handle threading.
+    async fn select_one_token<U: UiCallback + Sync>(&mut self, ui: &U) -> Result<Self::Token, WebauthnCError> {
+        let mut all_tokens = self.tokens()?;
+
+        // TODO: threading / async
+        while let Some(mut token) = all_tokens.pop() {
+            if let Err(_) = token.init() {
+                continue;
+            }
+
+            if let Ok(info) = token.transmit(GetInfoRequest{}, ui) {
+                if !(info.versions.contains("FIDO_2_1_PRE")
+                || info.versions.contains("FIDO_2_0")
+                || info.versions.contains("FIDO_2_1")) {
+                    continue;
+                }
+            } else {
+                // comms error, skip it.
+                continue;
+            }
+            
+            if token.transmit(SelectionRequest {}, ui).is_ok() {
+                // Found the token to use
+                return Ok(token);
+            }
+        }
+
+        // Nothing picked
+        Err(WebauthnCError::NoSelectedToken)
+    }
 }
 
 /// Represents a connection to a single CTAP token over a [Transport].
+#[async_trait]
 pub trait Token: Sized + fmt::Debug {
     /// Gets the transport layer used for communication with this token.
     fn get_transport(&self) -> AuthenticatorTransport;
 
     /// Transmit a CBOR message to a token, and deserialises the response.
-    fn transmit<'a, C, R, U>(&self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
+    async fn transmit<'a, C, R, U>(&self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse,
@@ -72,7 +108,7 @@ pub trait Token: Sized + fmt::Debug {
     /// Interfaces need to check for and return any transport-layer-specific
     /// error code [WebauthnCError::Ctap], but don't need to worry about
     /// deserialising CBOR.
-    fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
         U: UiCallback;

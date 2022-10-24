@@ -1,4 +1,4 @@
-pub trait UiCallback {
+pub trait UiCallback: Sync {
     /// Prompts the user to enter their PIN
     fn request_pin(&self) -> Option<String>;
 

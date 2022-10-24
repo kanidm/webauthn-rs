@@ -15,6 +15,7 @@ use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use crate::usb::responses::*;
+use async_trait::async_trait;
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use webauthn_rs_proto::AuthenticatorTransport;
@@ -127,12 +128,14 @@ impl USBToken {
     }
 
     /// Receives a single [U2FHIDFrame] from the device, without fragmentation.
-    fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
-        let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
-
-        self.device
-            .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
-            .map_err(|_| WebauthnCError::ApduTransmission)?;
+    async fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
+        let ret: HidReportBytes = async {
+            let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
+            self.device
+                .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
+                .map_err(|_| WebauthnCError::ApduTransmission)?;
+            Ok::<HidReportBytes, WebauthnCError>(ret)
+        }.await?;
 
         trace!("<<< {:02x?}", &ret);
         U2FHIDFrame::try_from(&ret)
@@ -140,15 +143,15 @@ impl USBToken {
 
     /// Recives a [Response] from the device, handling fragmented [U2FHIDFrame]
     /// responses if needed.
-    fn recv(&self) -> Result<Response, WebauthnCError> {
+    async fn recv(&self) -> Result<Response, WebauthnCError> {
         // Recieve first chunk
-        let mut f = self.recv_one()?;
+        let mut f = self.recv_one().await?;
         let mut s: usize = f.data.len();
         let t = usize::from(f.len);
 
         // Get more chunks, if needed
         while s < t {
-            let n = self.recv_one()?;
+            let n = self.recv_one().await?;
             s += n.data.len();
             f += n;
         }
@@ -156,8 +159,9 @@ impl USBToken {
     }
 }
 
+#[async_trait]
 impl Token for USBToken {
-    fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
         U: UiCallback,
@@ -173,7 +177,7 @@ impl Token for USBToken {
 
         // Get a response, checking for keep-alive
         let resp = loop {
-            let resp = self.recv()?;
+            let resp = self.recv().await?;
 
             if let Response::KeepAlive(r) = resp {
                 trace!("waiting for {:?}", r);

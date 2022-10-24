@@ -24,11 +24,11 @@ use crate::transport::iso7816::ISO7816RequestAPDU;
 
 const FRAG_MAX: usize = 0xF0;
 
-pub trait CBORResponse: Sized + std::fmt::Debug {
+pub trait CBORResponse: Sized + std::fmt::Debug + Send {
     fn try_from(i: &[u8]) -> Result<Self, WebauthnCError>;
 }
 
-pub trait CBORCommand: Serialize + Sized + std::fmt::Debug {
+pub trait CBORCommand: Serialize + Sized + std::fmt::Debug + Send {
     /// CTAP comand byte
     const CMD: u8;
 
