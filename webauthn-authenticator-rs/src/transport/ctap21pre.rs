@@ -469,6 +469,8 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
     }
 
     /// Requests user presence on a token.
+    /// 
+    /// This feature is only available in `FIDO_V2_1`.
     pub async fn selection(&self) -> Result<(), WebauthnCError> {
         self.token.transmit(SelectionRequest {}, self.ui_callback).await.map(|_| ())
     }

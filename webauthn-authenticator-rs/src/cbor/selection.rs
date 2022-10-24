@@ -3,7 +3,11 @@ use serde::Serialize;
 use self::CBORCommand;
 use super::*;
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorSelection
+/// Requests user interaction with an authenticator.
+///
+/// This feature **requires** FIDO v2.1. v2.1-PRE isn't good enough.
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorSelection>
 #[derive(Serialize, Debug, Clone)]
 pub struct SelectionRequest {}
 
