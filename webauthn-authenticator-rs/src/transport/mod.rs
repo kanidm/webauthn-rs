@@ -52,7 +52,7 @@ pub trait Token: Sized + fmt::Debug {
     /// Gets the transport layer used for communication with this token.
     fn get_transport(&self) -> AuthenticatorTransport;
 
-    /// Transmit a CBOR message to a token
+    /// Transmit a CBOR message to a token, and deserialises the response.
     fn transmit<'a, C, R, U>(&self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
@@ -67,25 +67,11 @@ pub trait Token: Sized + fmt::Debug {
         })
     }
 
-    /*
-    /// Transmits a CBOR command to a token, returning the deserialized response
-    /// and original response.
-    fn transmit_plus_raw<'a, C, R>(&self, cmd: C) -> Result<(R, Vec<u8>), WebauthnCError>
-    where
-        C: CBORCommand<Response = R>,
-        R: CBORResponse,
-    {
-        let resp = self.transmit_raw(cmd)?;
-
-        R::try_from(resp.as_slice())
-            .map_err(|_| {
-                //error!("error: {:?}", e);
-                WebauthnCError::Cbor
-            })
-            .map(|v| (v, resp))
-    }
-    */
-
+    /// Transmits a command on the underlying transport.
+    /// 
+    /// Interfaces need to check for and return any transport-layer-specific
+    /// error code [WebauthnCError::Ctap], but don't need to worry about
+    /// deserialising CBOR.
     fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
