@@ -145,6 +145,12 @@ pub enum WebauthnError {
     #[error("The attestation was parsed, but is not a format valid for CA chain validation")]
     AttestationNotVerifiable,
 
+    #[error("The attestation CA that was trusted limits the aaguids allowed, this device is not a member of that set")]
+    AttestationUntrustedAaguid,
+
+    #[error("The attestation CA that was trusted limits the aaguids allowed, but this device does not have an aaguid")]
+    AttestationFormatMissingAaguid,
+
     #[error(
         "The attestation was parsed, but is not trusted by one of the selected CA certificates"
     )]

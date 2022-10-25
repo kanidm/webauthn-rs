@@ -12,8 +12,9 @@ use webauthn_rs_proto::options::*;
 use base64urlsafedata::Base64UrlSafeData;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use openssl::hash::MessageDigest;
 use openssl::x509;
 use uuid::Uuid;
 
@@ -671,6 +672,7 @@ impl AuthenticationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialisableAttestationCa {
     pub(crate) ca: Base64UrlSafeData,
+    pub(crate) aaguids: BTreeSet<Uuid>,
 }
 
 /// A structure representing an Attestation CA and other options associated to this CA.
@@ -685,12 +687,17 @@ pub struct SerialisableAttestationCa {
 pub struct AttestationCa {
     /// The x509 root CA of the attestation chain that a security key will be attested to.
     pub ca: x509::X509,
+    /// If not empty, the set of acceptable AAGUIDS (Device Ids) that are allowed to be
+    /// attested as trusted by this CA. AAGUIDS that are not in this set, but signed by
+    /// this CA will NOT be trusted.
+    pub aaguids: BTreeSet<Uuid>,
 }
 #[allow(clippy::from_over_into)]
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {
             ca: Base64UrlSafeData(self.ca.to_der().expect("Invalid DER")),
+            aaguids: self.aaguids,
         }
     }
 }
@@ -701,15 +708,37 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
     fn try_from(data: SerialisableAttestationCa) -> Result<Self, Self::Error> {
         Ok(AttestationCa {
             ca: x509::X509::from_der(&data.ca.0).map_err(WebauthnError::OpenSSLError)?,
+            aaguids: data.aaguids,
         })
     }
 }
 
 impl AttestationCa {
+    /// Retrieve the Key Identifier for this Attestation Ca
+    pub fn get_kid(&self) -> Result<Vec<u8>, WebauthnError> {
+        self.ca
+            .digest(MessageDigest::sha256())
+            .map_err(WebauthnError::OpenSSLError)
+            .map(|bytes| bytes.to_vec())
+    }
+
+    /// Update the set of aaguids this Attestation CA allows. If an empty btreeset is provided then
+    /// this Attestation CA allows all Aaguids.
+    pub fn set_aaguids(&mut self, aaguids: BTreeSet<Uuid>) {
+        self.aaguids = aaguids;
+    }
+
+    /// Update the set of aaguids this Attestation CA allows by adding this AAGUID to the allowed
+    /// set.
+    pub fn insert_aaguid(&mut self, aaguid: Uuid) {
+        self.aaguids.insert(aaguid);
+    }
+
     /// Create a customised attestation CA from a DER public key.
     pub fn new_from_der(data: &[u8]) -> Result<Self, WebauthnError> {
         Ok(AttestationCa {
             ca: x509::X509::from_der(data).map_err(WebauthnError::OpenSSLError)?,
+            aaguids: BTreeSet::default(),
         })
     }
 
@@ -717,6 +746,7 @@ impl AttestationCa {
     pub fn apple_webauthn_root_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(APPLE_WEBAUTHN_ROOT_CA_PEM).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -724,6 +754,7 @@ impl AttestationCa {
     pub fn yubico_u2f_root_ca_serial_457200631() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -738,6 +769,7 @@ impl AttestationCa {
         AttestationCa {
             ca: x509::X509::from_pem(MICROSOFT_TPM_ROOT_CERTIFICATE_AUTHORITY_2014_PEM)
                 .expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -748,6 +780,7 @@ impl AttestationCa {
     pub fn nitrokey_fido2_root_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(NITROKEY_FIDO2_ROOT_CA_PEM).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -758,6 +791,7 @@ impl AttestationCa {
     pub fn nitrokey_u2f_root_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(NITROKEY_U2F_ROOT_CA_PEM).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -765,6 +799,7 @@ impl AttestationCa {
     pub fn android_root_ca_1() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_1).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -772,6 +807,7 @@ impl AttestationCa {
     pub fn android_root_ca_2() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_2).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -779,6 +815,7 @@ impl AttestationCa {
     pub fn android_root_ca_3() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_ROOT_CA_3).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -786,6 +823,7 @@ impl AttestationCa {
     pub fn android_software_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(ANDROID_SOFTWARE_ROOT_CA).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -793,6 +831,7 @@ impl AttestationCa {
     pub fn google_safetynet_ca() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 
@@ -801,15 +840,26 @@ impl AttestationCa {
     pub(crate) fn google_safetynet_ca_old() -> Self {
         AttestationCa {
             ca: x509::X509::from_pem(GOOGLE_SAFETYNET_CA_OLD).expect("Invalid DER"),
+            aaguids: BTreeSet::default(),
         }
     }
 }
 
 /// A list of AttestationCas and associated options.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct AttestationCaList {
-    /// The list
-    pub cas: Vec<AttestationCa>,
+    /// The set of CA's that we trust in this Operation
+    pub cas: BTreeMap<Base64UrlSafeData, AttestationCa>,
+}
+
+impl TryFrom<AttestationCa> for AttestationCaList {
+    type Error = WebauthnError;
+
+    fn try_from(att_ca: AttestationCa) -> Result<Self, Self::Error> {
+        let mut new = Self::default();
+        new.insert(att_ca)?;
+        Ok(new)
+    }
 }
 
 impl AttestationCaList {
@@ -818,51 +868,75 @@ impl AttestationCaList {
         self.cas.is_empty()
     }
 
+    /// Insert a new att_ca into this Attestation Ca List
+    pub fn insert(
+        &mut self,
+        att_ca: AttestationCa,
+    ) -> Result<Option<AttestationCa>, WebauthnError> {
+        // Get the key id (kid, digest).
+        let att_ca_dgst = att_ca.get_kid()?;
+        Ok(self.cas.insert(att_ca_dgst.into(), att_ca))
+    }
+
     /// This is a list of CA's who's manufactured authenticators are of the highest
     /// quality and guarantees for users and RP's. These are devices that not only
     /// are secure, but user friendly, consistent, and correct.
     pub fn strict() -> Self {
-        AttestationCaList {
-            cas: vec![AttestationCa::yubico_u2f_root_ca_serial_457200631()],
-        }
+        let mut new = Self::default();
+        new.insert(AttestationCa::yubico_u2f_root_ca_serial_457200631())
+            .expect("Must not fail");
+        new
     }
 
     /// Apple iOS/macOS and Android CAs
     pub fn apple_and_android() -> Self {
-        AttestationCaList {
-            cas: vec![
-                AttestationCa::apple_webauthn_root_ca(),
-                AttestationCa::android_root_ca_1(),
-                AttestationCa::android_root_ca_2(),
-                AttestationCa::android_root_ca_3(),
-                AttestationCa::google_safetynet_ca(),
-                AttestationCa::android_software_ca(),
-            ],
-        }
+        let mut new = Self::default();
+        new.insert(AttestationCa::apple_webauthn_root_ca())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_root_ca_1())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_root_ca_2())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_root_ca_3())
+            .expect("Must not fail");
+        new.insert(AttestationCa::google_safetynet_ca())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_software_ca())
+            .expect("Must not fail");
+        new
     }
 
     /// Apple iOS/macOS
     pub fn apple() -> Self {
-        AttestationCaList {
-            cas: vec![AttestationCa::apple_webauthn_root_ca()],
-        }
+        let mut new = Self::default();
+        new.insert(AttestationCa::apple_webauthn_root_ca())
+            .expect("Must not fail");
+        new
     }
 
     /// All CA's known to the Webauthn-RS project.
     pub fn all_known_cas() -> Self {
-        AttestationCaList {
-            cas: vec![
-                AttestationCa::apple_webauthn_root_ca(),
-                AttestationCa::yubico_u2f_root_ca_serial_457200631(),
-                AttestationCa::microsoft_tpm_root_certificate_authority_2014(),
-                AttestationCa::nitrokey_fido2_root_ca(),
-                AttestationCa::nitrokey_u2f_root_ca(),
-                AttestationCa::android_root_ca_1(),
-                AttestationCa::android_root_ca_2(),
-                AttestationCa::android_root_ca_3(),
-                AttestationCa::google_safetynet_ca(),
-                AttestationCa::android_software_ca(),
-            ],
-        }
+        let mut new = Self::default();
+        new.insert(AttestationCa::yubico_u2f_root_ca_serial_457200631())
+            .expect("Must not fail");
+        new.insert(AttestationCa::microsoft_tpm_root_certificate_authority_2014())
+            .expect("Must not fail");
+        new.insert(AttestationCa::nitrokey_fido2_root_ca())
+            .expect("Must not fail");
+        new.insert(AttestationCa::nitrokey_u2f_root_ca())
+            .expect("Must not fail");
+        new.insert(AttestationCa::apple_webauthn_root_ca())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_root_ca_1())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_root_ca_2())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_root_ca_3())
+            .expect("Must not fail");
+        new.insert(AttestationCa::google_safetynet_ca())
+            .expect("Must not fail");
+        new.insert(AttestationCa::android_software_ca())
+            .expect("Must not fail");
+        new
     }
 }

@@ -10,6 +10,7 @@ use serde_cbor::value::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
+use uuid::Uuid;
 
 use openssl::sha;
 
@@ -28,10 +29,7 @@ fn compute_sha256(data: &[u8]) -> [u8; 32] {
     hasher.finish()
 }
 
-// This is 0fb9bcbc-a0d4-4042-bbb0-559bc1631e28
-pub const AAGUID: [u8; 16] = [
-    15, 185, 188, 188, 160, 212, 64, 66, 187, 176, 85, 155, 193, 99, 30, 40,
-];
+pub const AAGUID: Uuid = uuid::uuid!("0fb9bcbc-a0d4-4042-bbb0-559bc1631e28");
 
 pub struct SoftToken {
     _ca_key: pkey::PKey<pkey::Private>,
@@ -498,11 +496,9 @@ impl AuthenticatorBackend for SoftToken {
         })?;
 
         // combine aaGuid, KeyHandle, CborPubKey into a AttestedCredentialData. (acd)
-        let aaguid: [u8; 16] = AAGUID;
-
-        // make a 00 aaguid
         let khlen_be_bytes = key_handle_len.to_be_bytes();
-        let acd_iter = aaguid
+        let acd_iter = AAGUID
+            .as_bytes()
             .iter()
             .chain(khlen_be_bytes.iter())
             .copied()
@@ -779,8 +775,9 @@ impl U2FToken for SoftToken {
 
 #[cfg(test)]
 mod tests {
-    use super::SoftToken;
+    use super::{SoftToken, AAGUID};
     use crate::prelude::{Url, WebauthnAuthenticator};
+    use std::collections::BTreeSet;
     use webauthn_rs_core::proto::{AttestationCa, AttestationCaList};
     use webauthn_rs_core::WebauthnCore as Webauthn;
     use webauthn_rs_proto::{
@@ -834,14 +831,16 @@ mod tests {
             })
             .expect("Failed to register");
 
+        let mut aaguids = BTreeSet::new();
+        aaguids.insert(AAGUID);
+        let att_ca_list: AttestationCaList = AttestationCa {
+            ca: ca_root,
+            aaguids,
+        }
+        .try_into()
+        .expect("Failed to build attestation ca list");
         let cred = wan
-            .register_credential(
-                &r,
-                &reg_state,
-                Some(&AttestationCaList {
-                    cas: vec![AttestationCa { ca: ca_root }],
-                }),
-            )
+            .register_credential(&r, &reg_state, Some(&att_ca_list))
             .unwrap();
 
         info!("Credential -> {:?}", cred);
