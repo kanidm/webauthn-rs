@@ -99,7 +99,7 @@ fn main() {
             Some(RequestAuthenticationExtensions {
                 appid: Some("example.app.id".to_string()),
                 uvm: None,
-                hmac_get_secret: None
+                hmac_get_secret: None,
             }),
         )
         .unwrap();

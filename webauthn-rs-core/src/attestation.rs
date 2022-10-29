@@ -1278,7 +1278,7 @@ pub fn verify_attestation_ca_chain<'a>(
             .map_err(WebauthnError::OpenSSLError)?;
     }
 
-    for ca_crt in ca_list.cas.iter() {
+    for ca_crt in ca_list.cas.values() {
         ca_store
             .add_cert(ca_crt.ca.clone())
             .map_err(WebauthnError::OpenSSLError)?;
@@ -1333,25 +1333,12 @@ pub fn verify_attestation_ca_chain<'a>(
     res.and_then(|dgst| {
         ca_list
             .cas
-            .iter()
-            .filter_map(|ca_crt| {
-                ca_crt
-                    .ca
-                    .digest(MessageDigest::sha256())
-                    .ok()
-                    .and_then(|ca_crt_dgst| {
-                        if ca_crt_dgst.as_ref() == dgst.as_ref() {
-                            Some(ca_crt)
-                        } else {
-                            None
-                        }
-                    })
-            })
-            .take(1)
-            .next()
-            .map(Some)
+            .get(dgst.as_ref())
             .ok_or_else(|| {
                 WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string())
             })
+            // We need to wrap in an extra Some here to indicate to the caller that we
+            // did use a CA compare to the Ok(None) case.
+            .map(Some)
     })
 }

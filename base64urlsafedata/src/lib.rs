@@ -16,8 +16,10 @@
 
 use serde::de::{Error, SeqAccess, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::fmt;
+use std::hash::Hash;
 
 static ALLOWED_DECODING_FORMATS: &[base64::Config] = &[
     base64::URL_SAFE_NO_PAD,
@@ -26,7 +28,7 @@ static ALLOWED_DECODING_FORMATS: &[base64::Config] = &[
     base64::STANDARD_NO_PAD,
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 /// A container for binary that should be base64 encoded in serialisation. In reverse
 /// when deserializing, will decode from many different types of base64 possible.
 pub struct Base64UrlSafeData(pub Vec<u8>);
@@ -38,6 +40,12 @@ impl fmt::Display for Base64UrlSafeData {
             "{}",
             base64::encode_config(&self, base64::URL_SAFE_NO_PAD)
         )
+    }
+}
+
+impl Borrow<[u8]> for Base64UrlSafeData {
+    fn borrow(&self) -> &[u8] {
+        self.0.as_slice()
     }
 }
 
