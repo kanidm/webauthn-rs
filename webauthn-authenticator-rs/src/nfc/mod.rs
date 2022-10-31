@@ -1,27 +1,23 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
 use crate::error::{CtapError, WebauthnCError};
-use crate::transport::ctap21pre::Ctap21PreAuthenticator;
 use crate::ui::UiCallback;
 
 use async_trait::async_trait;
 use futures::executor::block_on;
-use futures::stream::FuturesUnordered;
-use futures::{select, FutureExt, StreamExt};
 use pcsc::*;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt;
-use std::ops::{Deref, DerefMut};
-use std::sync::mpsc::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
+use std::ops::Deref;
+use std::sync::Mutex;
+use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 mod atr;
 mod tlv;
-mod worker;
+// mod worker;
 
 pub use self::atr::*;
-use self::worker::{PcscWorker, WorkerCmd, WorkerMsg};
+// use self::worker::{PcscWorker, WorkerCmd, WorkerMsg};
 use super::cbor::*;
 use crate::transport::iso7816::*;
 use crate::transport::*;
@@ -36,16 +32,19 @@ pub const APPLET_DF: [u8; 8] = [
 ];
 
 pub struct NFCReader {
-    receiver: Mutex<Receiver<WorkerMsg>>,
-    sender: Sender<WorkerCmd>,
-    worker: JoinHandle<()>,
-
+    ctx: Context,
+    // reader_names: Vec<CString>,
+    reader_states: Vec<(CString, State, Vec<u8>)>,
+    // receiver: Mutex<Receiver<WorkerMsg>>,
+    // sender: Sender<WorkerCmd>,
+    // worker: JoinHandle<()>,
     // todo: add lock?
 }
 
 pub struct NFCCard {
-    reader: fn(&[u8]) -> Vec<u8>,
-    reader_name: String,
+    // reader: fn(&[u8]) -> Vec<u8>,
+    card: Mutex<Card>,
+    reader_name: CString,
     pub atr: Atr,
 }
 
@@ -66,32 +65,96 @@ impl fmt::Debug for NFCCard {
 
 impl Default for NFCReader {
     fn default() -> Self {
-        let (receiver, sender, worker) = PcscWorker::new();
+        // let (receiver, sender, worker) = PcscWorker::new();
 
-        NFCReader {
-            receiver: Mutex::new(receiver),
-            sender,
-            worker,
-        }
+        // NFCReader {
+        //     receiver: Mutex::new(receiver),
+        //     sender,
+        //     worker,
+        // }
+
+        // TODO: consider error handling
+        NFCReader::new(Scope::User).unwrap()
     }
 }
 
-
 impl NFCReader {
+    fn new(scope: Scope) -> Result<Self, WebauthnCError> {
+        Ok(NFCReader {
+            ctx: Context::establish(scope).map_err(WebauthnCError::PcscError)?,
+            reader_states: vec![],
+        })
+    }
 
-    /*
-    /// Gets the state of all monitored readers.
-    fn get_reader_states(&self) -> Vec<ReaderState> {
-        self.reader_names
+    /// Copies [Self::reader_states] into a native structure.
+    fn get_native_reader_states(&self) -> Vec<ReaderState> {
+        self.reader_states
             .iter()
-            .map(|n| {
-                let mut s = ReaderState::new(n.clone(), State::UNAWARE);
-                s.sync_current_state();
-                s
-            })
+            .map(|(name, state, _)| ReaderState::new(name.clone(), *state))
             .collect()
     }
 
+    /// Replaces [Self::reader_states] with native values.
+    fn set_native_reader_states(&mut self, reader_states: Vec<ReaderState>) {
+        self.reader_states.clear();
+        for reader_state in reader_states {
+            self.reader_states.push((
+                reader_state.name().to_owned(),
+                reader_state.event_state(),
+                reader_state.atr().to_vec(),
+            ));
+        }
+    }
+
+    /// Updates the state of all readers.
+    fn update_reader_states(&mut self) -> Result<(), WebauthnCError> {
+        trace!("{} known reader(s), pruning ignored readers", self.reader_states.len());
+        // Remove all disconnected readers
+        let mut i = 0;
+        while i < self.reader_states.len() {
+            if self.reader_states[i].1.contains(State::IGNORE) {
+                self.reader_states.remove(i);
+            } else {
+                i += 1;
+            }
+        }
+        trace!("{} reader(s) remain after pruning", self.reader_states.len());
+
+        // Get a list of readers right now
+        let readers = self.ctx.list_readers_owned()?;
+        trace!("{} reader(s) currently connected: {:?}", readers.len(), readers);
+
+        // Add any new readers to the list
+        for reader_name in readers {
+            if self
+                .reader_states
+                .iter()
+                .find(|s| s.0 == reader_name)
+                .is_none()
+            {
+                // New reader
+                trace!("New reader: {:?}", reader_name);
+                self.reader_states
+                    .push((reader_name, State::UNAWARE, vec![]));
+            }
+        }
+
+        // Update all reader states
+        let mut native_states = self.get_native_reader_states();
+        if native_states.is_empty() {
+            trace!("No readers to update, not probing states");
+            return Ok(());
+        }
+        trace!("Updating all {} reader states", native_states.len());
+        self.ctx.get_status_change(Duration::from_millis(500), &mut native_states)?;
+
+        trace!("Updated reader states");
+        self.set_native_reader_states(native_states);
+
+        Ok(())
+    }
+
+    /*
     pub fn wait_for_card(&mut self) -> Result<NFCCard, WebauthnCError> {
         loop {
             for read_state in &mut self.rdr_state {
@@ -130,21 +193,19 @@ impl<'b> Transport<'b> for NFCReader {
     type Token = NFCCard;
 
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
-        let guard = self.receiver.lock().unwrap();
-        self.sender.send(WorkerCmd::ListReaders).unwrap();
+        // FIXME: this API doesn't work too well for NFC - you could have a
+        // reader which has no card in the field; and at which point you can
+        // do a SELECT and GetInfoRequest to see if it's for us.
+        //
+        // Maybe have the concept of an "empty port" to handle this better.
 
-        let reader_states = loop {
-            let r = guard.recv().unwrap();
-            if let WorkerMsg::ReaderList(l) = r {
-                break l;
-            }
-        };
-        // let mut reader_states = MutexedReaderStates::new(self.get_reader_states());
-        // reader_states.get_status_change(&self.ctx)?;
+        self.update_reader_states()?;
 
         // Check every reader ...
-        let r: Vec<NFCCard> = reader_states
-            .drain(..)
+        trace!("Checking all readers");
+        let r: Vec<NFCCard> = self
+            .reader_states
+            .iter()
             .filter(|(_, state, _)| state.contains(State::PRESENT))
             .filter_map(|(name, _, atr)| NFCCard::new(&self, name, atr).ok())
             .filter_map(|mut c| {
@@ -156,11 +217,26 @@ impl<'b> Transport<'b> for NFCReader {
         Ok(r)
     }
 
+    /*
     async fn select_one_token<'a, U: UiCallback>(
         &mut self,
         ui: &'a U,
-    ) -> Result<ctap21pre::Ctap21PreAuthenticator<'a, Self::Token, U>, WebauthnCError> {
-        todo!()
+    ) -> Result<Ctap21PreAuthenticator<'a, Self::Token, U>, WebauthnCError> {
+        // Select the first token from the list - there is no UI
+        let tokens = self.tokens()?.drain(..).filter_map(|c| {
+            async {
+                let info = c.transmit(GetInfoRequest {}, ui).await.ok()?;
+
+                Some((c, info))
+            }
+        });
+
+        match tokens.first() {
+            Some(t) => Ok(t),
+            None => Err(WebauthnCError::NoSelectedToken),
+        }
+
+        // todo!()
         // let mut reader_states: MutexedReaderStates =
         //     MutexedReaderStates::new(self.get_reader_states());
         // loop {
@@ -224,6 +300,7 @@ impl<'b> Transport<'b> for NFCReader {
         // // Nothing picked
         // Err(WebauthnCError::NoSelectedToken)
     }
+    */
 }
 
 /// Transmits a single ISO 7816-4 APDU to the card.
@@ -242,7 +319,7 @@ fn transmit(
 
     let rapdu = card.transmit(&req, &mut resp).map_err(|e| {
         error!("Failed to transmit APDU command to card: {}", e);
-        WebauthnCError::ApduTransmission
+        e
     })?;
 
     trace!("<<< {:02x?}", rapdu);
@@ -305,30 +382,37 @@ const DESELECT_APPLET: ISO7816RequestAPDU = ISO7816RequestAPDU {
 };
 
 impl<'a> NFCCard {
-    pub fn new(reader: &NFCReader, reader_name: String, atr: Vec<u8>) -> Result<NFCCard, WebauthnCError> {
+    pub fn new(
+        reader: &NFCReader,
+        reader_name: &CStr,
+        atr: &[u8],
+    ) -> Result<NFCCard, WebauthnCError> {
         trace!("ATR: {:02x?}", atr);
-        let atr = Atr::try_from(atr.as_slice()).expect("oops atr");
+        let atr = Atr::try_from(atr).expect("oops atr");
         trace!("Parsed: {:?}", &atr);
         // TODO: check that it's not a storage card
 
-        reader.sender.send(WorkerCmd::Connect(reader_name));
+        // reader.sender.send(WorkerCmd::Connect(reader_name));
 
         // TODO: error handler
-        let s= reader.sender.clone();
-        let transmit = move |apdu | {
-            let guard = reader.receiver.lock().unwrap();
-            s.send(WorkerCmd::Transmit(reader_name, apdu));
-            loop {
-                let r = guard.recv().unwrap();
-                if let WorkerMsg::Receive(_, apdu) = r {
-                    return apdu;
-                }
-            }
-        };
+        // let s = reader.sender.clone();
+        // let transmit = move |apdu| {
+        //     let guard = reader.receiver.lock().unwrap();
+        //     s.send(WorkerCmd::Transmit(reader_name, apdu));
+        //     loop {
+        //         let r = guard.recv().unwrap();
+        //         if let WorkerMsg::Receive(_, apdu) = r {
+        //             return apdu;
+        //         }
+        //     }
+        // };
+        let card = reader
+            .ctx
+            .connect(reader_name, ShareMode::Shared, Protocols::ANY)?;
 
         Ok(NFCCard {
-            reader: transmit,
-            reader_name,
+            card: Mutex::new(card),
+            reader_name: reader_name.to_owned(),
             atr,
         })
     }
@@ -336,6 +420,10 @@ impl<'a> NFCCard {
 
 #[async_trait]
 impl Token for NFCCard {
+    fn has_button(&self) -> bool {
+        false
+    }
+
     async fn transmit_raw<C, U>(&self, cmd: C, _ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         C: CBORCommand,
@@ -350,8 +438,8 @@ impl Token for NFCCard {
 
         //     resp = self.transmit(&NFCCTAP_GETRESPONSE, &ISO7816LengthForm::ExtendedOnly)?;
         // };
-        let guard = self.card_ref.lock().unwrap();
         let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
+        let guard = self.card.lock().unwrap();
         let resp = transmit_chunks(guard.deref(), &apdus)?;
         let mut data = resp.data;
         let err = CtapError::from(data.remove(0));
@@ -363,13 +451,12 @@ impl Token for NFCCard {
     }
 
     async fn init(&mut self) -> Result<(), WebauthnCError> {
-        let guard = self.card_ref.lock().unwrap();
+        let guard = self.card.lock().unwrap();
         let resp = transmit(
             guard.deref(),
             &select_by_df_name(&APPLET_DF),
             &ISO7816LengthForm::ExtendedOnly,
-        )
-        .expect("Failed to select CTAP2.1 applet");
+        )?;
 
         if !resp.is_ok() {
             error!("Error selecting applet: {:02x} {:02x}", resp.sw1, resp.sw2);
@@ -385,7 +472,7 @@ impl Token for NFCCard {
     }
 
     fn close(&self) -> Result<(), WebauthnCError> {
-        let guard = self.card_ref.lock().unwrap();
+        let guard = self.card.lock().unwrap();
         let resp = transmit(
             guard.deref(),
             &DESELECT_APPLET,

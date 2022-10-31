@@ -42,7 +42,7 @@ impl From<Error> for WebauthnCError {
     }
 }
 
-/// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#error-responses
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#error-responses>
 #[derive(Debug, PartialEq, Eq)]
 pub enum CtapError {
     /// Indicates successful response.

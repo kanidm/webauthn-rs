@@ -82,6 +82,7 @@ pub trait Transport<'b>: Sized + Default + fmt::Debug + Send {
             .collect())
     }
 
+    /*
     /// Selects one token by requesting user interaction
     ///
     /// WIP: This is not yet finished, and doesn't handle threading.
@@ -114,14 +115,20 @@ pub trait Transport<'b>: Sized + Default + fmt::Debug + Send {
                         Err(_) => return None,
                     };
 
+                    let auth = Ctap21PreAuthenticator::new(info, token, ui);
+
                     trace!("Trying to selectionRequest");
+                    auth.selection().await.ok()?;
+                    Some(auth)
+
                     // ARRRGGHHH this only works on FIDO_2_1.  Not 2.0, not 2.1PRE.
                     // So we need another strategy. I guess this means we need to be able to race EVERYTHING
-                    if token.transmit(SelectionRequest {}, ui).await.is_ok() {
-                        Some((info, Mutex::new(token)))
-                    } else {
-                        None
-                    }
+                    // if token.transmit(SelectionRequest {}, ui).await.is_ok() {
+                    //     Some((info, Mutex::new(token)))
+                    // } else {
+                    //     None
+                    // }
+                    // todo!()
                 }
                 .fuse()
             })
@@ -130,12 +137,9 @@ pub trait Transport<'b>: Sized + Default + fmt::Debug + Send {
         loop {
             select! {
                 res = tasks.select_next_some() => {
-                    if let Some((info, mutex)) = res {
-                        trace!(?info);
-                        match mutex.into_inner() {
-                            Ok(guard) => return Ok(Ctap21PreAuthenticator::new(info, guard, ui)),
-                            _ => (),
-                        }
+                    if let Some(auth) = res {
+                        trace!(?auth);
+                        return Ok(auth)
                     }
                 }
                 complete => {
@@ -145,11 +149,14 @@ pub trait Transport<'b>: Sized + Default + fmt::Debug + Send {
             }
         }
     }
+     */
 }
 
 /// Represents a connection to a single CTAP token over a [Transport].
 #[async_trait]
 pub trait Token: Sized + fmt::Debug + Sync + Send {
+    fn has_button(&self) -> bool { true }
+
     /// Gets the transport layer used for communication with this token.
     fn get_transport(&self) -> AuthenticatorTransport;
 

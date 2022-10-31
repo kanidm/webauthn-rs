@@ -4,10 +4,14 @@
 use std::{
     collections::BTreeMap,
     ffi::CString,
-    sync::mpsc::{Receiver, Sender, TryRecvError, RecvTimeoutError, channel}, time::Duration, thread::{self, JoinHandle},
+    sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender, TryRecvError},
+    thread::{self, JoinHandle},
+    time::Duration,
 };
 
-use pcsc::{Card, Context, Protocols, ReaderState, ShareMode, State, MAX_BUFFER_SIZE_EXTENDED, Scope};
+use pcsc::{
+    Card, Context, Protocols, ReaderState, Scope, ShareMode, State, MAX_BUFFER_SIZE_EXTENDED,
+};
 
 pub struct PcscWorker {
     ctx: Context,
@@ -98,7 +102,6 @@ impl PcscWorker {
                 // self.send(WorkerMsg::ReaderChange(name, state.event_state(), atr));
                 new_states.push((name, state.event_state(), atr));
             }
-
         }
         self.send(WorkerMsg::ReaderList(new_states));
 
@@ -134,10 +137,10 @@ impl PcscWorker {
             }
             Disconnect(reader) => {
                 self.connections.remove(&reader);
-            },
+            }
             ListReaders => {
                 self.get_reader_states();
-            },
+            }
         }
         Ok(())
     }

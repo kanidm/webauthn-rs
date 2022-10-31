@@ -5,7 +5,11 @@ use std::io::{stdin, stdout, Write};
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
 use futures::executor::block_on;
+use futures::stream::FuturesUnordered;
+use futures::{select, StreamExt};
+use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::transport::*;
+use webauthn_authenticator_rs::transport::ctap21pre::select_one_token;
 use webauthn_authenticator_rs::ui::Cli;
 
 #[derive(Debug, Args)]
@@ -97,10 +101,8 @@ fn main() {
 
     match opt.commands {
         Opt::Selection => {
-            // todo: handle multiple requests
-            assert_eq!(tokens.len(), 1);
-            let selection = block_on(authenticator.selection());
-            println!("{:?}", selection);
+            let token = block_on(select_one_token(tokens.iter()));
+            println!("selected token: {:?}", token);
         }
 
         Opt::Info => {

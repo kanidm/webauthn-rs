@@ -98,7 +98,6 @@ impl Token for AnyToken {
         }
     }
 
-    #[allow(clippy::unimplemented)]
     fn cancel(&self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
@@ -106,6 +105,16 @@ impl Token for AnyToken {
             AnyToken::Nfc(n) => n.cancel(),
             #[cfg(feature = "usb")]
             AnyToken::Usb(u) => u.cancel(),
+        }
+    }
+
+    fn has_button(&self) -> bool {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(n) => n.has_button(),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.has_button(),
         }
     }
 }

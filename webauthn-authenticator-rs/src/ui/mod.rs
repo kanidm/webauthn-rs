@@ -1,4 +1,6 @@
-pub trait UiCallback: Sync + Send {
+use std::fmt::Debug;
+
+pub trait UiCallback: Sync + Send + Debug {
     /// Prompts the user to enter their PIN
     fn request_pin(&self) -> Option<String>;
 
@@ -7,7 +9,7 @@ pub trait UiCallback: Sync + Send {
     fn request_touch(&self);
 }
 
-
+#[derive(Debug)]
 pub struct Cli {}
 
 impl UiCallback for Cli {

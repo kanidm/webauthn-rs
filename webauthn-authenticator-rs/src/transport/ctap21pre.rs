@@ -10,7 +10,7 @@ use crate::{
 };
 
 use base64urlsafedata::Base64UrlSafeData;
-use futures::executor::block_on;
+use futures::{executor::block_on, select, stream::FuturesUnordered, StreamExt};
 use openssl::{
     bn,
     ec::{self, EcKey, EcKeyRef},
@@ -30,6 +30,7 @@ use webauthn_rs_proto::{
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs,
 };
 
+#[derive(Debug)]
 pub struct Ctap21PreAuthenticator<'a, T: Token, U: UiCallback> {
     info: GetInfoResponse,
     token: T,
@@ -61,12 +62,14 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         sub_command: ConfigSubCommand,
         bypass_always_uv: bool,
     ) -> Result<(), WebauthnCError> {
-        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
-            sub_command.prf().as_slice(),
-            Permissions::AUTHENTICATOR_CONFIGURATION,
-            None,
-            bypass_always_uv,
-        ).await?;
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self
+            .get_pin_uv_auth_token(
+                sub_command.prf().as_slice(),
+                Permissions::AUTHENTICATOR_CONFIGURATION,
+                None,
+                bypass_always_uv,
+            )
+            .await?;
 
         // TODO: handle complex result type
         self.token
@@ -101,7 +104,8 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
                 force_change_pin,
             }),
             false,
-        ).await
+        )
+        .await
     }
 
     /// Enables the Enterprise Attestation feature.
@@ -111,24 +115,29 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         if self.info.get_option("ep").is_none() {
             return Err(WebauthnCError::NotSupported);
         }
-        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false).await
+        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
+            .await
     }
 
     async fn bio(
         &self,
         sub_command: BioSubCommand,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
-        let (pin_uv_auth_proto, pin_uv_auth_param) = self.get_pin_uv_auth_token(
-            sub_command.prf().as_slice(),
-            Permissions::BIO_ENROLLMENT,
-            None,
-            false,
-        ).await?;
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self
+            .get_pin_uv_auth_token(
+                sub_command.prf().as_slice(),
+                Permissions::BIO_ENROLLMENT,
+                None,
+                false,
+            )
+            .await?;
 
-        self.token.transmit(
-            BioEnrollmentRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
-            self.ui_callback,
-        ).await
+        self.token
+            .transmit(
+                BioEnrollmentRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
+                self.ui_callback,
+            )
+            .await
     }
 
     async fn bio_with_session(
@@ -138,7 +147,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         pin_uv_auth_token: Option<&Vec<u8>>,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
         let client_data_hash = sub_command.prf();
-        
+
         let (pin_uv_protocol, pin_uv_auth_param) = match (iface, pin_uv_auth_token) {
             (Some(iface), Some(pin_uv_auth_token)) => {
                 let mut pin_uv_auth_param = iface
@@ -155,10 +164,17 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
             _ => (None, None),
         };
 
-        self.token.transmit(BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param), self.ui_callback).await
+        self.token
+            .transmit(
+                BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param),
+                self.ui_callback,
+            )
+            .await
     }
 
-    pub async fn get_fingerprint_sensor_info(&self) -> Result<BioEnrollmentResponse, WebauthnCError> {
+    pub async fn get_fingerprint_sensor_info(
+        &self,
+    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if self.info.get_option("bioEnroll").is_none() {
             return Err(WebauthnCError::NotSupported);
@@ -166,7 +182,8 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
 
         self.token.transmit(GET_MODALITY, self.ui_callback).await?;
         self.token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback).await
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
+            .await
     }
 
     pub async fn enroll_fingerprint(&self) -> Result<(), WebauthnCError> {
@@ -178,10 +195,17 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         // TODO
         let timeout = 30_000;
 
-        let (iface, pin_uv_auth_token) =
-            self.get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false).await?;
+        let (iface, pin_uv_auth_token) = self
+            .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
+            .await?;
 
-        let r = self.bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), iface.as_ref(), pin_uv_auth_token.as_ref()).await?;
+        let r = self
+            .bio_with_session(
+                BioSubCommand::FingerprintEnrollBegin(timeout),
+                iface.as_ref(),
+                pin_uv_auth_token.as_ref(),
+            )
+            .await?;
 
         println!("began enrollment: {:?}", r);
         let id = r.template_id.unwrap();
@@ -189,7 +213,13 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         // TODO: show feedback
         let mut remaining_samples = r.remaining_samples.unwrap_or_default();
         while remaining_samples > 0 {
-            let r = self.bio_with_session(BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout), iface.as_ref(), pin_uv_auth_token.as_ref()).await?;
+            let r = self
+                .bio_with_session(
+                    BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout),
+                    iface.as_ref(),
+                    pin_uv_auth_token.as_ref(),
+                )
+                .await?;
 
             remaining_samples = r.remaining_samples.unwrap_or_default();
         }
@@ -304,8 +334,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         rp_id: Option<String>,
         bypass_always_uv: bool,
     ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
-        let (iface, pin_token) =
-            self.get_pin_uv_auth_session(permissions, rp_id, bypass_always_uv).await?;
+        let (iface, pin_token) = self
+            .get_pin_uv_auth_session(permissions, rp_id, bypass_always_uv)
+            .await?;
 
         Ok(match (iface, pin_token) {
             (Some(iface), Some(pin_token)) => {
@@ -429,14 +460,15 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         trace!(?shared_secret);
         // todo!();
 
-        let requires_pin = permissions.intersects(Permissions::BIO_ENROLLMENT | Permissions::AUTHENTICATOR_CONFIGURATION);
+        let requires_pin = permissions
+            .intersects(Permissions::BIO_ENROLLMENT | Permissions::AUTHENTICATOR_CONFIGURATION);
         let p = match (requires_pin, uv, client_pin, pin_uv_auth_token) {
             (false, Some(true), _, Some(true)) => {
                 // 6.5.5.7.3. Getting pinUvAuthToken using getPinUvAuthTokenUsingUvWithPermissions (built-in user verification methods)
                 ClientPinRequest {
                     pin_uv_protocol: iface.get_pin_uv_protocol(),
                     sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingUvWithPermissions,
-                    key_agreement:  Some(iface.public_key.clone()),
+                    key_agreement: Some(iface.public_key.clone()),
                     permissions,
                     rp_id,
                     ..Default::default()
@@ -470,11 +502,56 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
     }
 
     /// Requests user presence on a token.
-    /// 
-    /// This feature is only available in `FIDO_V2_1`.
+    ///
+    /// This feature is only available in `FIDO_V2_1`, and not available for NFC.
     pub async fn selection(&self) -> Result<(), WebauthnCError> {
-        self.token.transmit(SelectionRequest {}, self.ui_callback).await.map(|_| ())
+        if !self.token.has_button() {
+            // The token doesn't have a button on a transport level (ie: NFC),
+            // so immediately mark this as the "selected" token, even if it
+            // doesn't support FIDO v2.1.
+            trace!("Token has no button, implicitly treading as selected");
+            Ok(())
+        } else if !self.info.versions.contains("FIDO_2_1") {
+            trace!("Token does not support CTAP 2.1 selection command");
+            Err(WebauthnCError::NotSupported)
+        } else {
+            self.token
+                .transmit(SelectionRequest {}, self.ui_callback)
+                .await
+                .map(|_| ())
+        }
     }
+}
+
+/// Selects one [Token] from an [Iterator] of Tokens.
+/// 
+/// This only works on CTAP 2.1 authenticators, see caveats at [Ctap21PreAuthenticator::selection].
+pub async fn select_one_token<'a, T: Token + 'a, U: UiCallback + 'a>(
+    tokens: impl Iterator<Item = &'a Ctap21PreAuthenticator<'a, T, U>>,
+) -> Option<&'a Ctap21PreAuthenticator<'a, T, U>> {
+    let mut tasks: FuturesUnordered<_> = tokens
+        .map(|token| async move {
+            token.selection().await?;
+            Ok::<_, WebauthnCError>(token)
+        })
+        .collect();
+
+    let token = loop {
+        select! {
+            res = tasks.select_next_some() => {
+                if let Ok(token) = res {
+                    break Some(token);
+                }
+            }
+            complete => {
+                // No tokens available
+                break None;
+            }
+        }
+    };
+
+    tasks.clear();
+    token
 }
 
 impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap21PreAuthenticator<'a, T, U> {
