@@ -1,7 +1,7 @@
 use std::{fmt::Debug, ops::Deref};
 
 use crate::{
-    cbor::*,
+    ctap2::*,
     error::WebauthnCError,
     transport::Token,
     ui::UiCallback,

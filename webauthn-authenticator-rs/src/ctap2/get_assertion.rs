@@ -4,7 +4,7 @@ use serde_cbor::Value;
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{AllowCredentials, PublicKeyCredentialDescriptor, User};
 
-use crate::cbor::{value_to_bool, value_to_string, value_to_u32, value_to_vec_u8, CBORCommand};
+use super::{value_to_bool, value_to_string, value_to_u32, value_to_vec_u8, CBORCommand};
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]

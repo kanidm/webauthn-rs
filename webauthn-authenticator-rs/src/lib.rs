@@ -35,7 +35,7 @@ pub mod prelude {
     };
 }
 
-pub mod cbor;
+pub mod ctap2;
 pub mod error;
 pub mod softpasskey;
 pub mod softtoken;

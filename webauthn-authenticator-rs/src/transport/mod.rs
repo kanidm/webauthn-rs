@@ -15,7 +15,7 @@ use std::fmt;
 use std::sync::Mutex;
 use webauthn_rs_proto::{AuthenticatorTransport, PubKeyCredParams, RelyingParty, User};
 
-use crate::cbor::*;
+use crate::ctap2::*;
 use crate::error::WebauthnCError;
 
 use self::ctap21pre::Ctap21PreAuthenticator;

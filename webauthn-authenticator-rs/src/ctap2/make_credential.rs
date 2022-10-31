@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User};
 // use webauthn_rs_core::proto::{AttestationObject, Registration};
 
-use crate::cbor::{value_to_bool, value_to_string, CBORCommand};
+use super::{value_to_bool, value_to_string, CBORCommand};
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
@@ -183,7 +183,7 @@ crate::deserialize_cbor!(MakeCredentialResponse);
 mod test {
     use std::num::ParseIntError;
 
-    use crate::cbor::make_credential::*;
+    use super::*;
     use base64urlsafedata::Base64UrlSafeData;
     use serde_cbor::{from_slice, to_vec, Value};
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};

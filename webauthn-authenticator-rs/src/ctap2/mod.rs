@@ -211,7 +211,7 @@ impl CBORResponse for NoResponse {
 #[macro_export]
 macro_rules! deserialize_cbor {
     ($name:ident) => {
-        impl crate::cbor::CBORResponse for $name {
+        impl crate::ctap2::CBORResponse for $name {
             fn try_from(i: &[u8]) -> Result<Self, crate::error::WebauthnCError> {
                 if i.is_empty() {
                     TryFrom::try_from(BTreeMap::new()).map_err(|e| {

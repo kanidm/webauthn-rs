@@ -17,8 +17,7 @@ mod tlv;
 // mod worker;
 
 pub use self::atr::*;
-// use self::worker::{PcscWorker, WorkerCmd, WorkerMsg};
-use super::cbor::*;
+use super::ctap2::*;
 use crate::transport::iso7816::*;
 use crate::transport::*;
 
