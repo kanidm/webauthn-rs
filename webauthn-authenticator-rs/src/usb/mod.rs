@@ -16,7 +16,6 @@ use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use crate::usb::responses::*;
 use async_trait::async_trait;
-use futures::executor::block_on;
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use webauthn_rs_proto::AuthenticatorTransport;
@@ -83,7 +82,7 @@ impl Default for USBTransport {
     }
 }
 
-impl Transport for USBTransport {
+impl<'b> Transport<'b> for USBTransport {
     type Token = USBToken;
 
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {

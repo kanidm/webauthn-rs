@@ -45,9 +45,9 @@ where
 /// If you don't care which transport your application uses, use [AnyTransport]
 /// to automatically use all available transports on the platform.
 #[async_trait]
-pub trait Transport: Sized + Default + fmt::Debug + Send {
+pub trait Transport<'b>: Sized + Default + fmt::Debug + Send {
     /// The type of [Token] returned by this [Transport].
-    type Token: Token;
+    type Token: Token + 'b;
 
     /// Gets a list of all connected tokens for this [Transport].
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;

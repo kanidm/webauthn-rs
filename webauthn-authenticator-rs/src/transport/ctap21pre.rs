@@ -429,8 +429,8 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
         trace!(?shared_secret);
         // todo!();
 
-        let bio_enrollment = permissions.intersects(Permissions::BIO_ENROLLMENT);
-        let p = match (bio_enrollment, uv, client_pin, pin_uv_auth_token) {
+        let requires_pin = permissions.intersects(Permissions::BIO_ENROLLMENT | Permissions::AUTHENTICATOR_CONFIGURATION);
+        let p = match (requires_pin, uv, client_pin, pin_uv_auth_token) {
             (false, Some(true), _, Some(true)) => {
                 // 6.5.5.7.3. Getting pinUvAuthToken using getPinUvAuthTokenUsingUvWithPermissions (built-in user verification methods)
                 ClientPinRequest {

@@ -21,6 +21,15 @@ pub enum WebauthnCError {
     Ctap(CtapError),
     InvalidPin,
     NoSelectedToken,
+    #[cfg(feature = "nfc")]
+    PcscError(pcsc::Error),
+}
+
+#[cfg(feature = "nfc")]
+impl From<pcsc::Error> for WebauthnCError {
+    fn from(e: pcsc::Error) -> Self {
+        Self::PcscError(e)
+    }
 }
 
 impl From<Error> for WebauthnCError {

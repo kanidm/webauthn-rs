@@ -28,7 +28,7 @@ pub enum AnyToken {
     Usb(USBToken),
 }
 
-impl Transport for AnyTransport {
+impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]

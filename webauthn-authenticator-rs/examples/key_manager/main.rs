@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
@@ -6,11 +5,8 @@ use std::io::{stdin, stdout, Write};
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
 use futures::executor::block_on;
-use futures::FutureExt;
-use webauthn_authenticator_rs::cbor::GetInfoRequest;
-use webauthn_authenticator_rs::transport::ctap21pre::Ctap21PreAuthenticator;
 use webauthn_authenticator_rs::transport::*;
-use webauthn_authenticator_rs::ui::{Cli, UiCallback};
+use webauthn_authenticator_rs::ui::Cli;
 
 #[derive(Debug, Args)]
 pub struct SetPinOpt {
