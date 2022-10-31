@@ -1,17 +1,17 @@
 #[macro_use]
 extern crate tracing;
 
-#[cfg(feature = "nfc")]
+#[cfg(feature = "nfc_raw_transmit")]
 mod core;
 
-#[cfg(feature = "nfc")]
+#[cfg(feature = "nfc_raw_transmit")]
 fn main() {
     tracing_subscriber::fmt::init();
     core::main();
 }
 
-#[cfg(not(feature = "nfc"))]
+#[cfg(not(feature = "nfc_raw_transmit"))]
 fn main() {
     tracing_subscriber::fmt::init();
-    error!("This example requires the feature \"nfc\" to be enabled.");
+    error!("This example requires the feature \"nfc_raw_transmit\" to be enabled.");
 }

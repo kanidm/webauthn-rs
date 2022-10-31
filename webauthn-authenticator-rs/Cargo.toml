@@ -9,6 +9,7 @@ description = "Webauthn Authenticator Client Library"
 repository = "https://github.com/kanidm/webauthn-rs"
 
 [features]
+nfc_raw_transmit = ["nfc"]
 u2fhid = ["authenticator"]
 nfc = ["pcsc"]
 usb = ["hidapi"]

@@ -163,10 +163,7 @@ fn build_intermediate(
 
 impl SoftToken {
     pub fn new() -> Result<(Self, X509), WebauthnCError> {
-        let (ca_key, ca_cert) = build_ca().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let (ca_key, ca_cert) = build_ca()?;
 
         let ca = ca_cert.clone();
         /*
@@ -181,10 +178,7 @@ impl SoftToken {
         */
 
         let (intermediate_key, intermediate_cert) =
-            build_intermediate(&ca_key, &ca_cert).map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            build_intermediate(&ca_key, &ca_cert)?;
 
         /*
         // Disabled as older openssl versions can't provide this.
@@ -399,46 +393,24 @@ impl AuthenticatorBackend for SoftToken {
         // Generate a random credential id
         let mut key_handle: Vec<u8> = Vec::with_capacity(32);
         key_handle.resize_with(32, Default::default);
-        rand::rand_bytes(key_handle.as_mut_slice()).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        rand::rand_bytes(key_handle.as_mut_slice())?;
 
         // Create a new key.
-        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
 
-        let eckey = ec::EcKey::generate(&ecgroup).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let eckey = ec::EcKey::generate(&ecgroup)?;
 
         // Extract the public x and y coords.
         let ecpub_points = eckey.public_key();
 
-        let mut bnctx = bn::BigNumContext::new().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut bnctx = bn::BigNumContext::new()?;
 
-        let mut xbn = bn::BigNum::new().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut xbn = bn::BigNum::new()?;
 
-        let mut ybn = bn::BigNum::new().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut ybn = bn::BigNum::new()?;
 
         ecpub_points
-            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)
-            .map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
 
         let mut public_key_x = Vec::with_capacity(32);
         let mut public_key_y = Vec::with_capacity(32);
@@ -456,10 +428,7 @@ impl AuthenticatorBackend for SoftToken {
         y_fill.copy_from_slice(&ybnv);
 
         // Extract the DER cert for later
-        let ecpriv_der = eckey.private_key_to_der().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let ecpriv_der = eckey.private_key_to_der()?;
 
         // =====
 
@@ -527,20 +496,12 @@ impl AuthenticatorBackend for SoftToken {
 
         // Now setup to sign.
         // NOTE: for the token version we use the intermediate!
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &self.intermediate_key)
-            .map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &self.intermediate_key)?;
 
         // Do the signature
         let signature = signer
             .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())
-            .map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            .and_then(|_| signer.sign_to_vec())?;
 
         let mut attest_map = BTreeMap::new();
 
@@ -551,10 +512,7 @@ impl AuthenticatorBackend for SoftToken {
         let mut att_stmt_map = BTreeMap::new();
         att_stmt_map.insert(Value::Text("alg".to_string()), Value::Integer(-7));
 
-        let x509_bytes = Value::Bytes(self.intermediate_cert.to_der().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?);
+        let x509_bytes = Value::Bytes(self.intermediate_cert.to_der()?);
 
         att_stmt_map.insert(
             Value::Text("x5c".to_string()),
@@ -724,20 +682,11 @@ impl U2FToken for SoftToken {
 
         debug!("Using -> {:?}", key_handle);
 
-        let eckey = ec::EcKey::private_key_from_der(pkder.as_slice()).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let eckey = ec::EcKey::private_key_from_der(pkder.as_slice())?;
 
-        let pkey = pkey::PKey::from_ec_key(eckey).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let pkey = pkey::PKey::from_ec_key(eckey)?;
 
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey)?;
 
         // Increment the counter.
         self.counter += 1;
@@ -754,11 +703,7 @@ impl U2FToken for SoftToken {
 
         let signature = signer
             .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())
-            .map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            .and_then(|_| signer.sign_to_vec())?;
 
         Ok(U2FSignData {
             key_handle,

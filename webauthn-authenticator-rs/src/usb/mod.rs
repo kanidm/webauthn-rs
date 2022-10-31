@@ -219,7 +219,7 @@ impl Token for USBToken {
     async fn init(&mut self) -> Result<(), WebauthnCError> {
         // Setup a channel to communicate with the device (CTAPHID_INIT).
         let mut nonce: [u8; 8] = [0; 8];
-        rand_bytes(&mut nonce).map_err(|_| WebauthnCError::OpenSSL)?;
+        rand_bytes(&mut nonce)?;
 
         self.send(&U2FHIDFrame {
             cid: CID_BROADCAST,

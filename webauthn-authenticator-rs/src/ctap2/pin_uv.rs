@@ -46,41 +46,43 @@ impl Deref for PinUvPlatformInterface {
 
 impl PinUvPlatformInterface {
     /// Creates a [PinUvPlatformInterface] for a specific protocol, and generates a new private key.
-    pub fn new<T: PinUvPlatformInterfaceProtocol + Default + 'static>() -> Self {
-        let private_key = regenerate().expect("generating key");
+    pub(super) fn new<T: PinUvPlatformInterfaceProtocol + Default + 'static>(
+    ) -> Result<Self, WebauthnCError> {
+        let private_key = regenerate()?;
         Self::__new_with_private_key::<T>(private_key)
     }
 
     /// Creates a [PinUvPlatformInterface] for a specific protocol, with a given private key.
     ///
     /// This interface is only exposed for tests.
-    pub fn __new_with_private_key<T: PinUvPlatformInterfaceProtocol + Default + 'static>(
+    pub(super) fn __new_with_private_key<T: PinUvPlatformInterfaceProtocol + Default + 'static>(
         private_key: EcKey<Private>,
-    ) -> Self {
-        let public_key = get_public_key(&private_key);
-        Self {
+    ) -> Result<Self, WebauthnCError> {
+        let public_key = get_public_key(&private_key)?;
+        Ok(Self {
             protocol: Box::new(T::default()),
             public_key,
             private_key,
-        }
+        })
     }
 
     /// Creates a [PinUvPlatformInterface] given a list of supported protocols. The first supported
     /// protocol will be used.
     ///
     /// Returns `None` if no protocols are supported.
-    pub fn select_protocol(protocols: Option<&Vec<u32>>) -> Option<Self> {
-        protocols.and_then(|protocols| {
+    pub(super) fn select_protocol(protocols: Option<&Vec<u32>>) -> Result<Self, WebauthnCError> {
+        if let Some(protocols) = protocols {
             for p in protocols.iter() {
                 match p {
-                    1 => return Some(Self::new::<PinUvPlatformInterfaceProtocolOne>()),
-                    2 => return Some(Self::new::<PinUvPlatformInterfaceProtocolTwo>()),
+                    1 => return Self::new::<PinUvPlatformInterfaceProtocolOne>(),
+                    2 => return Self::new::<PinUvPlatformInterfaceProtocolTwo>(),
                     // Ignore unsupported protocols
                     _ => (),
                 }
             }
-            None
-        })
+        }
+
+        Err(WebauthnCError::NotSupported)
     }
 
     fn ecdh(&self, peer_cose_key: COSEKey) -> Result<Vec<u8>, WebauthnCError> {
@@ -94,10 +96,10 @@ impl PinUvPlatformInterface {
         // 3. Let Z be the 32-byte, big-endian encoding of the x-coordinate of the shared point.
         let mut z: [u8; 32] = [0; 32];
         if let COSEKeyType::EC_EC2(ec) = peer_cose_key.key {
-            ecdh(self.private_key.as_ref(), &ec, &mut z).map_err(|_| WebauthnCError::OpenSSL)?;
+            ecdh(self.private_key.as_ref(), &ec, &mut z)?;
         } else {
             error!("Unexpected peer key type: {:?}", peer_cose_key);
-            return Err(WebauthnCError::OpenSSL);
+            return Err(WebauthnCError::Internal);
         }
 
         // 4. Return kdf(Z).
@@ -242,7 +244,7 @@ fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, 
             ciphertext.len(),
             cipher.block_size()
         );
-        return Err(WebauthnCError::OpenSSL);
+        return Err(WebauthnCError::Internal);
     }
 
     let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
@@ -436,7 +438,7 @@ fn ecdh(
     //output.copy_from_slice(x.as_slice());
 
     // Both the low level and high level return same outputs.
-    let peer_key = PKey::from_ec_key(peer_key.into())?;
+    let peer_key = PKey::from_ec_key(peer_key.try_into()?)?;
     let pkey = PKey::from_ec_key(private_key.to_owned())?;
     let mut ctx = PkeyCtx::new(&pkey)?;
     ctx.derive_init()?;
@@ -457,27 +459,25 @@ fn regenerate() -> Result<EcKey<Private>, openssl::error::ErrorStack> {
 }
 
 /// Gets the public key for a private key as [COSEKey].
-fn get_public_key(private_key: &EcKeyRef<Private>) -> COSEKey {
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1).unwrap();
+fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, openssl::error::ErrorStack> {
+    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
     // Extract the public x and y coords.
     let ecpub_points = private_key.public_key();
 
-    let mut bnctx = bn::BigNumContext::new().unwrap();
-    let mut xbn = bn::BigNum::new().unwrap();
-    let mut ybn = bn::BigNum::new().unwrap();
+    let mut bnctx = bn::BigNumContext::new()?;
+    let mut xbn = bn::BigNum::new()?;
+    let mut ybn = bn::BigNum::new()?;
 
-    ecpub_points
-        .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)
-        .unwrap();
+    ecpub_points.affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
 
-    COSEKey {
+    Ok(COSEKey {
         type_: COSEAlgorithm::PinUvProtocol,
         key: COSEKeyType::EC_EC2(COSEEC2Key {
             curve: ECDSACurve::SECP256R1,
             x: xbn.to_vec().into(),
             y: ybn.to_vec().into(),
         }),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -530,7 +530,7 @@ mod tests {
         let mut padded_pin: [u8; 64] = [0; 64];
         padded_pin[..pin.len()].copy_from_slice(pin.as_bytes());
 
-        let t = PinUvPlatformInterface::new::<PinUvPlatformInterfaceProtocolOne>();
+        let t = PinUvPlatformInterface::new::<PinUvPlatformInterfaceProtocolOne>().unwrap();
 
         let new_pin_enc = t.encrypt(&shared_secret, &padded_pin);
         assert_eq!(new_pin_enc, expected_new_pin_enc);
@@ -592,7 +592,7 @@ mod tests {
 
         let t = PinUvPlatformInterface::__new_with_private_key::<PinUvPlatformInterfaceProtocolOne>(
             ec_priv,
-        );
+        ).unwrap();
 
         let shared_secret = t.encapsulate(dev_public_key).unwrap();
         assert_eq!(expected_secret, shared_secret);
@@ -671,7 +671,7 @@ mod tests {
     #[test]
     fn select() {
         let t = PinUvPlatformInterface::select_protocol(None);
-        assert!(t.is_none());
+        assert_eq!(Some(WebauthnCError::NotSupported), t.err());
 
         // Single supported protocol
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![1])).unwrap();
@@ -693,6 +693,6 @@ mod tests {
 
         // Unknown protocol
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![9999]));
-        assert!(t.is_none());
+        assert_eq!(Some(WebauthnCError::NotSupported), t.err());
     }
 }

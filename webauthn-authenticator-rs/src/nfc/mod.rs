@@ -341,6 +341,19 @@ impl<'a> NFCCard {
             atr,
         })
     }
+
+    #[cfg(feature = "nfc_raw_transmit")]
+    /// Transmits a single ISO 7816-4 APDU to the card.
+    /// 
+    /// This API is only intended for conformance testing.
+    pub fn transmit(
+        &self,
+        request: &ISO7816RequestAPDU,
+        form: &ISO7816LengthForm,
+    ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
+        let guard = self.card.lock().unwrap();
+        transmit(guard.deref(), request, form)
+    }
 }
 
 #[async_trait]

@@ -229,46 +229,24 @@ impl AuthenticatorBackend for SoftPasskey {
         // Generate a random credential id
         let mut key_handle: Vec<u8> = Vec::with_capacity(32);
         key_handle.resize_with(32, Default::default);
-        rand::rand_bytes(key_handle.as_mut_slice()).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        rand::rand_bytes(key_handle.as_mut_slice())?;
 
         // Create a new key.
-        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
 
-        let eckey = ec::EcKey::generate(&ecgroup).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let eckey = ec::EcKey::generate(&ecgroup)?;
 
         // Extract the public x and y coords.
         let ecpub_points = eckey.public_key();
 
-        let mut bnctx = bn::BigNumContext::new().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut bnctx = bn::BigNumContext::new()?;
 
-        let mut xbn = bn::BigNum::new().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut xbn = bn::BigNum::new()?;
 
-        let mut ybn = bn::BigNum::new().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut ybn = bn::BigNum::new()?;
 
         ecpub_points
-            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)
-            .map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
 
         let mut public_key_x = Vec::with_capacity(32);
         let mut public_key_y = Vec::with_capacity(32);
@@ -286,21 +264,12 @@ impl AuthenticatorBackend for SoftPasskey {
         y_fill.copy_from_slice(&ybnv);
 
         // Extract the DER cert for later
-        let ecpriv_der = eckey.private_key_to_der().map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let ecpriv_der = eckey.private_key_to_der()?;
 
         // Now setup to sign.
-        let pkey = pkey::PKey::from_ec_key(eckey).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let pkey = pkey::PKey::from_ec_key(eckey)?;
 
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey)?;
 
         // =====
 
@@ -371,11 +340,7 @@ impl AuthenticatorBackend for SoftPasskey {
         // Do the signature
         let signature = signer
             .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())
-            .map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            .and_then(|_| signer.sign_to_vec())?;
 
         let mut attest_map = BTreeMap::new();
 
@@ -560,20 +525,11 @@ impl U2FToken for SoftPasskey {
 
         debug!("Using -> {:?}", key_handle);
 
-        let eckey = ec::EcKey::private_key_from_der(pkder.as_slice()).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let eckey = ec::EcKey::private_key_from_der(pkder.as_slice())?;
 
-        let pkey = pkey::PKey::from_ec_key(eckey).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let pkey = pkey::PKey::from_ec_key(eckey)?;
 
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey).map_err(|e| {
-            error!("OpenSSL Error -> {:?}", e);
-            WebauthnCError::OpenSSL
-        })?;
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey)?;
 
         // Increment the counter.
         self.counter += 1;
@@ -590,11 +546,7 @@ impl U2FToken for SoftPasskey {
 
         let signature = signer
             .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())
-            .map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?;
+            .and_then(|_| signer.sign_to_vec())?;
 
         Ok(U2FSignData {
             key_handle,

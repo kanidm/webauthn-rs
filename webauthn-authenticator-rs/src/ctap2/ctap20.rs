@@ -124,8 +124,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let mut padded_pin: [u8; 64] = [0; 64];
         padded_pin[..pin.len()].copy_from_slice(pin.as_bytes());
 
-        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())
-            .ok_or(WebauthnCError::Unknown)?; // TODO
+        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
 
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, self.ui_callback).await?;
@@ -156,8 +155,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let mut padded_pin: [u8; 64] = [0; 64];
         padded_pin[..new_pin.len()].copy_from_slice(new_pin.as_bytes());
 
-        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())
-            .ok_or(WebauthnCError::Unknown)?; // TODO
+        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
 
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, self.ui_callback).await?;
@@ -288,14 +286,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
                 let ret = self.token.transmit(p, self.ui_callback).await?;
                 trace!(?ret);
 
-                // let p = ClientPinRequest {
-                //     pin_uv_protocol: Some(*protocol),
-                //     sub_command: ClientPinSubCommand::GetUvRetries,
-                //     ..Default::default()
-                // };
-
-                // let ret = self.token.transmit(p)?;
-                // trace!(?ret);
+                // TODO: handle lockouts
             }
         }
 
@@ -304,8 +295,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             .request_pin()
             .ok_or(WebauthnCError::Cancelled)?;
 
-        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())
-            .ok_or(WebauthnCError::Unknown)?; // TODO
+        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
 
         // 6.5.5.4: Obtaining the shared secret
         let p = iface.get_key_agreement_cmd();
@@ -317,7 +307,6 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         // returned in order to generate the platform key-agreement key and the shared secret.
         let shared_secret = iface.encapsulate(key_agreement)?;
         trace!(?shared_secret);
-        // todo!();
 
         let requires_pin = permissions
             .intersects(Permissions::BIO_ENROLLMENT | Permissions::AUTHENTICATOR_CONFIGURATION);

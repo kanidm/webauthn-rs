@@ -1,4 +1,4 @@
-use webauthn_authenticator_rs::cbor::*;
+use webauthn_authenticator_rs::ctap2::*;
 use webauthn_authenticator_rs::nfc::*;
 use webauthn_authenticator_rs::transport::iso7816::*;
 
@@ -220,8 +220,7 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
 
     for ne in 1..256 {
         req.ne = ne;
-        let resp = card
-            .transmit(&req, &ISO7816LengthForm::ShortOnly)
+        let resp = transmit(card, &req, &ISO7816LengthForm::ShortOnly)
             .expect("Failed to select applet");
 
         if !resp.is_success() {
@@ -338,6 +337,6 @@ pub(crate) fn main() {
     let mut reader = NFCReader::default();
     info!("Using reader: {:?}", reader);
 
-    let card = reader.wait_for_card().expect("Error getting card");
-    test_card(card);
+    // let card = reader.wait_for_card().expect("Error getting card");
+    // test_card(card);
 }

@@ -1,6 +1,6 @@
 use crate::transport::iso7816::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum WebauthnCError {
     Json,
     Cbor,
@@ -10,7 +10,7 @@ pub enum WebauthnCError {
     PlatformAuthenticator,
     Internal,
     ParseNOMFailure,
-    OpenSSL,
+    OpenSSL(String),
     ApduConstruction,
     ApduTransmission,
     InvalidAlgorithm,
@@ -39,6 +39,12 @@ impl From<Error> for WebauthnCError {
             Error::DataTooLong => WebauthnCError::MessageTooLarge,
             _ => WebauthnCError::Internal,
         }
+    }
+}
+
+impl From<openssl::error::ErrorStack> for WebauthnCError {
+    fn from(v: openssl::error::ErrorStack) -> Self {
+        Self::OpenSSL(v.to_string())
     }
 }
 

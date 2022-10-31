@@ -4,11 +4,11 @@
 use crate::attestation::{verify_attestation_ca_chain, AttestationFormat};
 use crate::constants::*;
 use crate::error::*;
+pub use crate::internals::AttestationObject;
 use std::fmt;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
-pub use crate::internals::AttestationObject;
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::de::DeserializeOwned;
@@ -139,18 +139,18 @@ pub struct COSEEC2Key {
     pub y: Base64UrlSafeData,
 }
 
-impl From<&COSEEC2Key> for ec::EcKey<pkey::Public> {
-    fn from(k: &COSEEC2Key) -> Self {
-        let group = ec::EcGroup::from_curve_name((&k.curve).into()).unwrap();
-        let mut ctx = bn::BigNumContext::new().unwrap();
-        let mut point = ec::EcPoint::new(&group).unwrap();
-        let x = bn::BigNum::from_slice(k.x.0.as_slice()).unwrap();
-        let y = bn::BigNum::from_slice(k.y.0.as_slice()).unwrap();
-        point
-            .set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)
-            .unwrap();
+impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
+    type Error = openssl::error::ErrorStack;
 
-        ec::EcKey::from_public_key(&group, &point).unwrap()
+    fn try_from(k: &COSEEC2Key) -> Result<Self, Self::Error> {
+        let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
+        let mut ctx = bn::BigNumContext::new()?;
+        let mut point = ec::EcPoint::new(&group)?;
+        let x = bn::BigNum::from_slice(k.x.0.as_slice())?;
+        let y = bn::BigNum::from_slice(k.y.0.as_slice())?;
+        point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
+
+        ec::EcKey::from_public_key(&group, &point)
     }
 }
 
