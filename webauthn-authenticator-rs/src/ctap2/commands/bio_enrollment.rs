@@ -5,7 +5,7 @@ use serde_cbor::Value;
 use self::CBORCommand;
 use super::*;
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getUserVerificationModality
+// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getUserVerificationModality>
 pub const GET_MODALITY: BioEnrollmentRequest = BioEnrollmentRequest {
     get_modality: true,
     modality: None,
@@ -16,7 +16,7 @@ pub const GET_MODALITY: BioEnrollmentRequest = BioEnrollmentRequest {
 
 };
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getFingerprintSensorInfo
+// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getFingerprintSensorInfo>
 pub const GET_FINGERPRINT_SENSOR_INFO: BioEnrollmentRequest = BioEnrollmentRequest {
     modality: Some(Modality::Fingerprint),
     sub_command: Some(0x07), // getFingerprintSensorInfo
@@ -26,7 +26,7 @@ pub const GET_FINGERPRINT_SENSOR_INFO: BioEnrollmentRequest = BioEnrollmentReque
     get_modality: false,
 };
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#cancelEnrollment
+// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#cancelEnrollment>
 pub const FINGERPRINT_CANCEL_CURRENT_ENROLLMENT: BioEnrollmentRequest = BioEnrollmentRequest {
     modality: Some(Modality::Fingerprint),
     sub_command: Some(0x03), // cancelCurrentEnrollment
@@ -36,7 +36,7 @@ pub const FINGERPRINT_CANCEL_CURRENT_ENROLLMENT: BioEnrollmentRequest = BioEnrol
     get_modality: false,
 };
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorBioEnrollment
+// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorBioEnrollment>
 #[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct BioEnrollmentRequest {

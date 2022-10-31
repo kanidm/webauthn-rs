@@ -52,6 +52,14 @@ impl GetInfoResponse {
             .and_then(|o| o.get(option))
             .map(|v| v.to_owned())
     }
+
+    pub fn supports_ctap21_biometrics(&self) -> bool {
+        self.get_option("bioEnroll").is_some()
+    }
+
+    pub fn supports_ctap21pre_biometrics(&self) -> bool {
+        self.get_option("userVerificationMgmtPreview").is_some()
+    }
 }
 
 impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {

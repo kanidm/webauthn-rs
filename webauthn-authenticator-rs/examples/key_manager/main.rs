@@ -5,11 +5,8 @@ use std::io::{stdin, stdout, Write};
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
 use futures::executor::block_on;
-use futures::stream::FuturesUnordered;
-use futures::{select, StreamExt};
-use webauthn_authenticator_rs::prelude::WebauthnCError;
+use webauthn_authenticator_rs::ctap2::{select_one_token, CtapAuthenticator};
 use webauthn_authenticator_rs::transport::*;
-use webauthn_authenticator_rs::transport::ctap21pre::select_one_token;
 use webauthn_authenticator_rs::ui::Cli;
 
 #[derive(Debug, Args)]
@@ -90,7 +87,7 @@ fn main() {
 
     let ui = Cli {};
     let mut transport = AnyTransport::default();
-    let tokens = transport.connect_all(&ui).expect("connect_all");
+    let mut tokens = transport.connect_all(&ui).expect("connect_all");
 
     if tokens.is_empty() {
         println!("No tokens available!");
@@ -138,14 +135,29 @@ fn main() {
 
         Opt::BioInfo => {
             for token in &tokens {
-                let i = block_on(token.get_fingerprint_sensor_info());
-                println!("Fingerprint sensor info: {:?}", i);
+                if let CtapAuthenticator::Fido21(t) = token {
+                    let i = block_on(t.get_fingerprint_sensor_info());
+                    println!("Fingerprint sensor info: {:?}", i);
+                } else {
+                    println!("Authenticator does not support biometrics")
+                }
             }
         }
 
         Opt::EnrollFingerprint => {
-            assert_eq!(tokens.len(), 1);
-            block_on(authenticator.enroll_fingerprint()).expect("enrolling fingerprint");
+            let tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| {
+                    if let CtapAuthenticator::Fido21(t) = t {
+                        if t.get_info().supports_ctap21_biometrics() {
+                            return Some(t);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            assert_eq!(tokens.len(), 1, "Expected exactly 1 CTAP2.1 authenticator supporting biometrics");
+            block_on(tokens[0].enroll_fingerprint()).expect("enrolling fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {
