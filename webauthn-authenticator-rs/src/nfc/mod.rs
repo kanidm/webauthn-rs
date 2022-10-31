@@ -32,16 +32,10 @@ pub const APPLET_DF: [u8; 8] = [
 
 pub struct NFCReader {
     ctx: Context,
-    // reader_names: Vec<CString>,
     reader_states: Vec<(CString, State, Vec<u8>)>,
-    // receiver: Mutex<Receiver<WorkerMsg>>,
-    // sender: Sender<WorkerCmd>,
-    // worker: JoinHandle<()>,
-    // todo: add lock?
 }
 
 pub struct NFCCard {
-    // reader: fn(&[u8]) -> Vec<u8>,
     card: Mutex<Card>,
     reader_name: CString,
     pub atr: Atr,
@@ -155,8 +149,14 @@ impl NFCReader {
             return Ok(());
         }
         trace!("Updating all {} reader states", native_states.len());
-        self.ctx
-            .get_status_change(Duration::from_millis(500), &mut native_states)?;
+        let r = self.ctx
+            .get_status_change(Duration::from_millis(500), &mut native_states);
+
+        if let Err(e) = r {
+            if e != pcsc::Error::Timeout {
+                r?;
+            }
+        }
 
         trace!("Updated reader states");
         self.set_native_reader_states(native_states);
@@ -164,38 +164,23 @@ impl NFCReader {
         Ok(())
     }
 
-    /*
     pub fn wait_for_card(&mut self) -> Result<NFCCard, WebauthnCError> {
         loop {
-            for read_state in &mut self.rdr_state {
-                read_state.sync_current_state();
-            }
-
-            if let Err(e) = self.ctx.get_status_change(None, &mut self.rdr_state) {
-                error!("Failed to detect card: {:?}", e);
-                return Err(WebauthnCError::Internal);
-            } else {
-                // Check every reader ...
-                for read_state in &self.rdr_state {
-                    trace!("rdr_state: {:?}", read_state.event_state());
-                    let state = read_state.event_state();
-                    if state.contains(State::PRESENT) {
-                        // Setup the card, and return it.
-                        let card_ref = self
-                            .ctx
-                            .connect(&self.rdr_id, ShareMode::Shared, Protocols::ANY)
-                            .expect("Failed to access NFC card");
-                        return Ok(NFCCard::new(card_ref));
-                    } else if state.contains(State::EMPTY) {
-                        info!("Card removed");
-                    } else {
-                        warn!("Unknown state change -> {:?}", state);
+            self.update_reader_states()?;
+            // Check every reader ...
+            for read_state in &self.reader_states {
+                trace!("rdr_state: {:?}", read_state);
+                let (name, state, atr) = read_state;
+                if state.contains(State::PRESENT) {
+                    let card = NFCCard::new(&self, name, atr);
+                    match card {
+                        Ok(c) => return Ok(c),
+                        Err(e) => error!("Error accessing card: {:?}", e),
                     }
                 }
             }
         } // end loop.
     }
-    */
 }
 
 #[async_trait]
