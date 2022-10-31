@@ -107,7 +107,10 @@ impl NFCReader {
 
     /// Updates the state of all readers.
     fn update_reader_states(&mut self) -> Result<(), WebauthnCError> {
-        trace!("{} known reader(s), pruning ignored readers", self.reader_states.len());
+        trace!(
+            "{} known reader(s), pruning ignored readers",
+            self.reader_states.len()
+        );
         // Remove all disconnected readers
         let mut i = 0;
         while i < self.reader_states.len() {
@@ -117,11 +120,18 @@ impl NFCReader {
                 i += 1;
             }
         }
-        trace!("{} reader(s) remain after pruning", self.reader_states.len());
+        trace!(
+            "{} reader(s) remain after pruning",
+            self.reader_states.len()
+        );
 
         // Get a list of readers right now
         let readers = self.ctx.list_readers_owned()?;
-        trace!("{} reader(s) currently connected: {:?}", readers.len(), readers);
+        trace!(
+            "{} reader(s) currently connected: {:?}",
+            readers.len(),
+            readers
+        );
 
         // Add any new readers to the list
         for reader_name in readers {
@@ -145,7 +155,8 @@ impl NFCReader {
             return Ok(());
         }
         trace!("Updating all {} reader states", native_states.len());
-        self.ctx.get_status_change(Duration::from_millis(500), &mut native_states)?;
+        self.ctx
+            .get_status_change(Duration::from_millis(500), &mut native_states)?;
 
         trace!("Updated reader states");
         self.set_native_reader_states(native_states);

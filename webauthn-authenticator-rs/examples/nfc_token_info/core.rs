@@ -1,11 +1,11 @@
 use futures::executor::block_on;
 // use webauthn_authenticator_rs::nfc::*;
-use webauthn_authenticator_rs::{transport::*, ui::Cli, ctap2::CtapAuthenticator};
+use webauthn_authenticator_rs::{ctap2::CtapAuthenticator, transport::*, ui::Cli};
 
 fn access_card<T: Token>(card: T) {
     info!("Card detected ...");
 
-    let auth = block_on(CtapAuthenticator::new(card, &Cli{}));
+    let auth = block_on(CtapAuthenticator::new(card, &Cli {}));
 
     match auth {
         Some(x) => {

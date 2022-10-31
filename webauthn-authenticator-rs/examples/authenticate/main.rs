@@ -2,7 +2,6 @@
 extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
-use std::ops::Deref;
 
 use futures::executor::block_on;
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
@@ -73,7 +72,7 @@ fn select_provider<'a>(ui: &'a Cli) -> Box<dyn AuthenticatorBackend + 'a> {
                 } else {
                     let p = providers.remove((v as usize) - 1);
                     println!("Using {}...", p.0);
-                    return p.1(&ui);
+                    return p.1(ui);
                 }
             }
             Err(_) => println!("Input was not a number"),
@@ -121,6 +120,7 @@ fn main() {
     let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
     trace!(?cred);
+
     loop {
         let (chal, auth_state) = wan
             .generate_challenge_authenticate(

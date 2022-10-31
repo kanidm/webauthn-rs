@@ -5,7 +5,7 @@ use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 use super::{
     commands::{
         BioEnrollmentRequest, BioEnrollmentResponse, BioSubCommand, GetInfoResponse, Permissions,
-        SelectionRequest, GET_MODALITY, GET_FINGERPRINT_SENSOR_INFO,
+        SelectionRequest, GET_FINGERPRINT_SENSOR_INFO, GET_MODALITY,
     },
     pin_uv::PinUvPlatformInterface,
     Ctap20Authenticator,
@@ -30,7 +30,6 @@ impl<'a, T: Token, U: UiCallback> DerefMut for Ctap21Authenticator<'a, T, U> {
         &mut self.authenticator
     }
 }
-
 
 impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     pub(super) fn new(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {

@@ -1,5 +1,5 @@
 //! All [Response] frame types, used by FIDO tokens over USB HID.
-use crate::error::{WebauthnCError, CtapError};
+use crate::error::{CtapError, WebauthnCError};
 use crate::transport::iso7816::ISO7816ResponseAPDU;
 use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;

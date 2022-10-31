@@ -226,9 +226,9 @@ impl PinUvPlatformInterface {
 fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Vec<u8> {
     let cipher = symm::Cipher::aes_256_cbc();
     let mut ct = vec![0; plaintext.len() + cipher.block_size()];
-    let mut c = symm::Crypter::new(cipher, symm::Mode::Encrypt, &key, iv).unwrap();
+    let mut c = symm::Crypter::new(cipher, symm::Mode::Encrypt, key, iv).unwrap();
     c.pad(false);
-    let l = c.update(&plaintext, &mut ct).unwrap();
+    let l = c.update(plaintext, &mut ct).unwrap();
     let l = l + c.finalize(&mut ct[l..]).unwrap();
     ct.truncate(l);
     ct
@@ -246,9 +246,9 @@ fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, 
     }
 
     let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
-    let mut c = symm::Crypter::new(cipher, symm::Mode::Decrypt, &key, iv).unwrap();
+    let mut c = symm::Crypter::new(cipher, symm::Mode::Decrypt, key, iv).unwrap();
     c.pad(false);
-    let l = c.update(&ciphertext, &mut pt).unwrap();
+    let l = c.update(ciphertext, &mut pt).unwrap();
     let l = l + c.finalize(&mut pt[l..]).unwrap();
     pt.truncate(l);
     Ok(pt)
@@ -304,9 +304,9 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
         // Return the first 16 bytes of the result of computing HMAC-SHA-256
         // with the given key and message.
-        let key = PKey::hmac(&key).unwrap();
+        let key = PKey::hmac(key).unwrap();
         let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key).unwrap();
-        signer.update(&message).unwrap();
+        signer.update(message).unwrap();
         let mut o = signer.sign_to_vec().unwrap();
         o.truncate(16);
         o
@@ -372,7 +372,7 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
 
         // 2. Return the result of computing HMAC-SHA-256 on key and message.
         let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key).unwrap();
-        signer.update(&message).unwrap();
+        signer.update(message).unwrap();
         signer.sign_to_vec().unwrap()
     }
 

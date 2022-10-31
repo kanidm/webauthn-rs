@@ -87,7 +87,7 @@ impl Token for AnyToken {
             AnyToken::Usb(u) => u.close(),
         }
     }
-    
+
     fn get_transport(&self) -> AuthenticatorTransport {
         match self {
             AnyToken::Stub => unimplemented!(),

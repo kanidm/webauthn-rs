@@ -209,6 +209,8 @@ mod tests {
         // Successfully setting the pin returns an empty result
         assert_eq!(
             ClientPinResponse::default(),
-            <ClientPinResponse as CBORResponse>::try_from(&[]).expect("deserialising empty response"));
+            <ClientPinResponse as CBORResponse>::try_from(&[])
+                .expect("deserialising empty response")
+        );
     }
 }

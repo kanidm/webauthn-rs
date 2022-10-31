@@ -1,4 +1,4 @@
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
 
 use crate::{
     ctap2::{commands::*, pin_uv::*},
@@ -10,13 +10,13 @@ use crate::{
 };
 
 use base64urlsafedata::Base64UrlSafeData;
-use futures::{executor::block_on, select, stream::FuturesUnordered, StreamExt};
+use futures::{executor::block_on, StreamExt};
 
 use url::Url;
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
-    AuthenticatorAttestationResponseRaw, COSEAlgorithm, PublicKeyCredential,
-    RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs,
+    AuthenticatorAttestationResponseRaw, PublicKeyCredential, RegisterPublicKeyCredential,
+    RegistrationExtensionsClientOutputs,
 };
 
 #[derive(Debug)]
@@ -129,7 +129,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, self.ui_callback).await?;
-        let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
+        let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
         // The platform calls encapsulate with the public key that the authenticator
@@ -161,7 +161,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, self.ui_callback).await?;
-        let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
+        let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         let shared_secret = iface.encapsulate(key_agreement)?;
 
         let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret);
@@ -238,8 +238,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let make_cred_uv_not_required = self.info.get_option("makeCredUvNotRqd");
         let pin_uv_auth_token = self.info.get_option("pinUvAuthToken");
         let uv = self.info.get_option("uv");
-        let bio_enroll = self.info.get_option("bioEnroll");
-        let bio_enroll_preview = self.info.get_option("userVerificationMgmtPreview");
+        let _bio_enroll = self.info.get_option("bioEnroll");
+        let _bio_enroll_preview = self.info.get_option("userVerificationMgmtPreview");
 
         if client_pin != Some(true) && always_uv != Some(true) {
             trace!("Skipping PIN and UV auth because they are disabled");
@@ -310,7 +310,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         // 6.5.5.4: Obtaining the shared secret
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, self.ui_callback).await?;
-        let key_agreement = ret.key_agreement.ok_or_else(|| WebauthnCError::Internal)?;
+        let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
         // The platform calls encapsulate with the public key that the authenticator
@@ -345,8 +345,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         trace!(?ret);
         let pin_token = ret.pin_uv_auth_token.unwrap();
         // Decrypt the pin_token
-        let pin_token = iface
-            .decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
+        let pin_token = iface.decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
         trace!(?pin_token);
 
         Ok((Some(iface), Some(pin_token)))
@@ -358,7 +357,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
         &mut self,
         origin: Url,
         options: webauthn_rs_proto::PublicKeyCredentialCreationOptions,
-        timeout_ms: u32,
+        _timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::RegisterPublicKeyCredential, crate::prelude::WebauthnCError>
     {
         let client_data = creation_to_clientdata(origin, options.challenge.clone());
@@ -407,7 +406,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
         let cred_id = vec![];
         let id = String::new();
 
-        let type_ = ret.fmt.clone().ok_or(WebauthnCError::InvalidAlgorithm)?;
+        let type_ = ret.fmt.ok_or(WebauthnCError::InvalidAlgorithm)?;
 
         Ok(RegisterPublicKeyCredential {
             id,
@@ -428,7 +427,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
         &mut self,
         origin: Url,
         options: webauthn_rs_proto::PublicKeyCredentialRequestOptions,
-        timeout_ms: u32,
+        _timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::PublicKeyCredential, crate::prelude::WebauthnCError> {
         trace!("trying to authenticate...");
         let client_data = get_to_clientdata(origin, options.challenge.clone());

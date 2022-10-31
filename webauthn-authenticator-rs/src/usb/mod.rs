@@ -18,12 +18,12 @@ use crate::usb::responses::*;
 use async_trait::async_trait;
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
-use webauthn_rs_proto::AuthenticatorTransport;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
+use webauthn_rs_proto::AuthenticatorTransport;
 
 // u2f_hid.h
 const FIDO_USAGE_PAGE: u16 = 0xf1d0;
@@ -115,7 +115,8 @@ impl USBToken {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {:02x?}", d);
         let guard = self.device.lock().unwrap();
-        guard.deref()
+        guard
+            .deref()
             .write(&d)
             .map_err(|_| WebauthnCError::ApduTransmission)
             .map(|_| ())
@@ -135,11 +136,13 @@ impl USBToken {
         let ret: HidReportBytes = async {
             let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
             let guard = self.device.lock().unwrap();
-            guard.deref()
+            guard
+                .deref()
                 .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
                 .map_err(|_| WebauthnCError::ApduTransmission)?;
             Ok::<HidReportBytes, WebauthnCError>(ret)
-        }.await?;
+        }
+        .await?;
 
         trace!("<<< {:02x?}", &ret);
         U2FHIDFrame::try_from(&ret)
@@ -205,7 +208,7 @@ impl Token for USBToken {
                     error!("Ctap error: {:?}", e);
                     Err(e)
                 }
-            },
+            }
             e => {
                 error!("Unhandled response type: {:?}", e);
                 Err(WebauthnCError::Cbor)

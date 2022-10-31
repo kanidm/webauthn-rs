@@ -13,7 +13,6 @@ pub const GET_MODALITY: BioEnrollmentRequest = BioEnrollmentRequest {
     sub_command_params: None,
     pin_uv_protocol: None,
     pin_uv_auth_param: None,
-
 };
 
 // <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getFingerprintSensorInfo>
@@ -118,7 +117,10 @@ pub enum BioSubCommand {
     #[default]
     Unknown,
     FingerprintEnrollBegin(/* timeout in milliseconds */ u32),
-    FingerprintEnrollCaptureNextSample(/* id */ Vec<u8>, /* timeout in milliseconds */ u32),
+    FingerprintEnrollCaptureNextSample(
+        /* id */ Vec<u8>,
+        /* timeout in milliseconds */ u32,
+    ),
     FingerprintEnumerateEnrollments,
     FingerprintSetFriendlyName(TemplateInfo),
     FingerprintRemoveEnrollment(/* id */ Vec<u8>),
@@ -144,18 +146,19 @@ impl From<BioSubCommand> for Option<BTreeMap<Value, Value>> {
         use BioSubCommand::*;
         match c {
             Unknown => None,
-            FingerprintEnrollBegin(timeout) => Some(BTreeMap::from([
-                (Value::Integer(0x03), Value::Integer(timeout.into())),
-            ])),
+            FingerprintEnrollBegin(timeout) => Some(BTreeMap::from([(
+                Value::Integer(0x03),
+                Value::Integer(timeout.into()),
+            )])),
             FingerprintEnrollCaptureNextSample(id, timeout) => Some(BTreeMap::from([
                 (Value::Integer(0x01), Value::Bytes(id)),
                 (Value::Integer(0x03), Value::Integer(timeout.into())),
             ])),
             FingerprintEnumerateEnrollments => None,
             FingerprintSetFriendlyName(t) => t.try_into().ok(),
-            FingerprintRemoveEnrollment(id) => Some(BTreeMap::from([
-                (Value::Integer(0x01), Value::Bytes(id)),
-            ])),
+            FingerprintRemoveEnrollment(id) => {
+                Some(BTreeMap::from([(Value::Integer(0x01), Value::Bytes(id))]))
+            }
         }
     }
 }
@@ -163,21 +166,29 @@ impl From<BioSubCommand> for Option<BTreeMap<Value, Value>> {
 impl BioSubCommand {
     pub fn prf(&self) -> Vec<u8> {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#prfValues
-        let (modality, subcommand ) = self.into();
+        let (modality, subcommand) = self.into();
         let sub_command_params: Option<BTreeMap<Value, Value>> = self.to_owned().into();
 
         let mut o = Vec::new();
         o.push(modality.to_u8().expect("Could not coerce modality into u8"));
         o.push(subcommand);
-        sub_command_params.as_ref().and_then(|p| serde_cbor::to_vec(p).ok())
-            .map(|p| o.extend_from_slice(p.as_slice()));
+        if let Some(p) = sub_command_params
+            .as_ref()
+            .and_then(|p| serde_cbor::to_vec(p).ok())
+        {
+            o.extend_from_slice(p.as_slice())
+        }
 
         o
     }
 }
 
 impl BioEnrollmentRequest {
-    pub(crate) fn new(s: BioSubCommand, pin_uv_protocol: Option<u32>, pin_uv_auth_param: Option<Vec<u8>>) -> Self {
+    pub(crate) fn new(
+        s: BioSubCommand,
+        pin_uv_protocol: Option<u32>,
+        pin_uv_auth_param: Option<Vec<u8>>,
+    ) -> Self {
         let (modality, sub_command) = (&s).into();
         let sub_command_params = s.into();
 
@@ -241,11 +252,11 @@ impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
             modality: raw
                 .remove(&0x01)
                 .and_then(|v| value_to_u32(&v, "0x01"))
-                .and_then(|v| Modality::from_u32(v)),
+                .and_then(Modality::from_u32),
             fingerprint_kind: raw
                 .remove(&0x02)
                 .and_then(|v| value_to_u32(&v, "0x02"))
-                .and_then(|v| FingerprintKind::from_u32(v)),
+                .and_then(FingerprintKind::from_u32),
             max_capture_samples_required_for_enroll: raw
                 .remove(&0x03)
                 .and_then(|v| value_to_u32(&v, "0x03")),
@@ -253,21 +264,26 @@ impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
             last_enroll_sample_status: raw
                 .remove(&0x05)
                 .and_then(|v| value_to_u32(&v, "0x05"))
-                .and_then(|v| EnrollSampleStatus::from_u32(v)),
+                .and_then(EnrollSampleStatus::from_u32),
             remaining_samples: raw.remove(&0x06).and_then(|v| value_to_u32(&v, "0x06")),
-            template_infos: raw.remove(&0x07).and_then(|v| {
-                if let Value::Array(v) = v {
-                    let mut infos = vec![];
-                    for i in v {
-                        if let Value::Map(i) = i {
-                            TemplateInfo::try_from(i).ok().map(|i| infos.push(i));
+            template_infos: raw
+                .remove(&0x07)
+                .and_then(|v| {
+                    if let Value::Array(v) = v {
+                        let mut infos = vec![];
+                        for i in v {
+                            if let Value::Map(i) = i {
+                                if let Ok(i) = TemplateInfo::try_from(i) {
+                                    infos.push(i)
+                                }
+                            }
                         }
+                        Some(infos)
+                    } else {
+                        None
                     }
-                    Some(infos)
-                } else {
-                    None
-                }
-            }).unwrap_or_default(),
+                })
+                .unwrap_or_default(),
             max_template_friendly_name: raw.remove(&0x08).and_then(|v| value_to_u32(&v, "0x08")),
         })
     }

@@ -5,13 +5,13 @@ mod pin_uv;
 
 use std::ops::{Deref, DerefMut};
 
-use futures::{select, StreamExt};
 use futures::stream::FuturesUnordered;
+use futures::{select, StreamExt};
 
-use crate::AuthenticatorBackend;
 use crate::error::WebauthnCError;
 use crate::transport::Token;
 use crate::ui::UiCallback;
+use crate::AuthenticatorBackend;
 
 use self::commands::GetInfoRequest;
 pub use self::commands::{CBORCommand, CBORResponse};

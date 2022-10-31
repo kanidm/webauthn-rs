@@ -72,7 +72,7 @@ impl From<GetAssertionRequest> for BTreeMap<u32, Value> {
                             if let Some(transports) = &a.transports {
                                 let transports: Vec<Value> = transports
                                     .iter()
-                                    .filter_map(|t| {
+                                    .filter_map(|_t| {
                                         None // TODO
                                     })
                                     .collect();
@@ -129,12 +129,10 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
                         .and_then(|v| value_to_string(v, "0x01.type"));
 
                     id.and_then(|id| {
-                        type_.map(|type_| {
-                            PublicKeyCredentialDescriptor {
-                                type_,
-                                id,
-                                transports: None,
-                            }
+                        type_.map(|type_| PublicKeyCredentialDescriptor {
+                            type_,
+                            id,
+                            transports: None,
                         })
                     })
                 } else {

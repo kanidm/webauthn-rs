@@ -156,7 +156,11 @@ fn main() {
                     None
                 })
                 .collect();
-            assert_eq!(tokens.len(), 1, "Expected exactly 1 CTAP2.1 authenticator supporting biometrics");
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+            );
             block_on(tokens[0].enroll_fingerprint()).expect("enrolling fingerprint");
         }
 

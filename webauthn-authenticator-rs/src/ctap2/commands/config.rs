@@ -77,15 +77,23 @@ impl ConfigSubCommand {
         let mut o = vec![0xff; 32];
         o.push(ConfigRequest::CMD);
         o.push(sub_command);
-        sub_command_params.as_ref().and_then(|p| serde_cbor::to_vec(p).ok())
-            .map(|p| o.extend_from_slice(p.as_slice()));
+        if let Some(p) = sub_command_params
+            .as_ref()
+            .and_then(|p| serde_cbor::to_vec(p).ok())
+        {
+            o.extend_from_slice(p.as_slice())
+        }
 
         o
     }
 }
 
 impl ConfigRequest {
-    pub(crate) fn new(s: ConfigSubCommand, pin_uv_protocol: Option<u32>, pin_uv_auth_param: Option<Vec<u8>>) -> Self {
+    pub(crate) fn new(
+        s: ConfigSubCommand,
+        pin_uv_protocol: Option<u32>,
+        pin_uv_auth_param: Option<Vec<u8>>,
+    ) -> Self {
         let sub_command = (&s).into();
         let sub_command_params = s.into();
 
@@ -108,7 +116,7 @@ impl From<ConfigRequest> for BTreeMap<u32, Value> {
         } = value;
 
         let mut keys = BTreeMap::new();
-        keys.insert(0x01, Value::Integer(u8::from(sub_command).into()));
+        keys.insert(0x01, Value::Integer(sub_command.into()));
 
         if let Some(v) = sub_command_params {
             keys.insert(0x02, Value::Map(v));
@@ -118,7 +126,7 @@ impl From<ConfigRequest> for BTreeMap<u32, Value> {
             keys.insert(0x03, Value::Integer(v.to_owned().into()));
         }
         if let Some(v) = pin_uv_auth_param {
-            keys.insert(0x04, Value::Bytes(v.to_owned()));
+            keys.insert(0x04, Value::Bytes(v));
         }
 
         keys
