@@ -31,7 +31,7 @@ fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend +
         Err(e) => panic!("Error: {:?}", e),
     }
 
-    panic!("no card");
+    panic!("No tokens available!");
 }
 
 fn select_provider<'a>(ui: &'a Cli) -> Box<dyn AuthenticatorBackend + 'a> {
@@ -83,9 +83,7 @@ fn select_provider<'a>(ui: &'a Cli) -> Box<dyn AuthenticatorBackend + 'a> {
 
 fn main() {
     tracing_subscriber::fmt::init();
-    // TODO
     let ui = Cli {};
-
     let mut u = select_provider(&ui);
 
     // WARNING: don't use this as an example of how to use the library!
