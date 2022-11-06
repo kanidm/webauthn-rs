@@ -21,7 +21,6 @@ pub use self::{ctap20::Ctap20Authenticator, ctap21::Ctap21Authenticator};
 pub enum CtapAuthenticator<'a, T: Token, U: UiCallback> {
     Fido20(Ctap20Authenticator<'a, T, U>),
     Fido21(Ctap21Authenticator<'a, T, U>),
-    // TODO: others
 }
 
 const FIDO_2_0: &str = "FIDO_2_0";
@@ -29,18 +28,22 @@ const FIDO_2_1: &str = "FIDO_2_1";
 const FIDO_2_1_PRE: &str = "FIDO_2_1_PRE";
 
 impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
+    /// Initialises the token, and gets a reference to the highest supported FIDO version.
+    ///
+    /// Returns `None` if we don't support any version of CTAP which the token supports.
     pub async fn new(mut token: T, ui_callback: &'a U) -> Option<CtapAuthenticator<'a, T, U>> {
         token.init().await.ok()?;
         let info = token.transmit(GetInfoRequest {}, ui_callback).await.ok()?;
 
-        // TODO: others
         if info.versions.contains(FIDO_2_1) {
             Some(Self::Fido21(Ctap21Authenticator::new(
                 info,
                 token,
                 ui_callback,
             )))
-        } else if info.versions.contains(FIDO_2_0) {
+        } else if info.versions.contains(FIDO_2_0) || info.versions.contains(FIDO_2_1_PRE) {
+            // TODO: Implement FIDO 2.1-PRE properly (prototype authenticatorBioEnrollment, prototype authenticatorCredentialManagement)
+            // 2.1-PRE intentionally falls back to v2.0, because 2.1-PRE doesn't support all v2.1 commands.
             Some(Self::Fido20(Ctap20Authenticator::new(
                 info,
                 token,
@@ -51,6 +54,9 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         }
     }
 
+    /// Gets a reference to a CTAP 2.1 compatible interface, if the token supports it.
+    ///
+    /// Otherwise, returns `None`.
     pub fn ctap21(&self) -> Option<&Ctap21Authenticator<'a, T, U>> {
         match self {
             Self::Fido21(a) => Some(a),
@@ -59,6 +65,9 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
     }
 }
 
+/// Gets a reference to a CTAP 2.0 compatible interface.
+///
+/// All CTAP2 tokens support these base commands.
 impl<'a, T: Token, U: UiCallback> Deref for CtapAuthenticator<'a, T, U> {
     type Target = Ctap20Authenticator<'a, T, U>;
 
@@ -71,6 +80,9 @@ impl<'a, T: Token, U: UiCallback> Deref for CtapAuthenticator<'a, T, U> {
     }
 }
 
+/// Gets a mutable reference to a CTAP 2.0 compatible interface.
+///
+/// All CTAP2 tokens support these base commands.
 impl<'a, T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'a, T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         use CtapAuthenticator::*;

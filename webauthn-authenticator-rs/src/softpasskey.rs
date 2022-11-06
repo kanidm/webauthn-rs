@@ -245,8 +245,7 @@ impl AuthenticatorBackend for SoftPasskey {
 
         let mut ybn = bn::BigNum::new()?;
 
-        ecpub_points
-            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
+        ecpub_points.affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
 
         let mut public_key_x = Vec::with_capacity(32);
         let mut public_key_y = Vec::with_capacity(32);

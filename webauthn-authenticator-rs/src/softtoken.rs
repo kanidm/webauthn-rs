@@ -177,8 +177,7 @@ impl SoftToken {
         );
         */
 
-        let (intermediate_key, intermediate_cert) =
-            build_intermediate(&ca_key, &ca_cert)?;
+        let (intermediate_key, intermediate_cert) = build_intermediate(&ca_key, &ca_cert)?;
 
         /*
         // Disabled as older openssl versions can't provide this.
@@ -409,8 +408,7 @@ impl AuthenticatorBackend for SoftToken {
 
         let mut ybn = bn::BigNum::new()?;
 
-        ecpub_points
-            .affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
+        ecpub_points.affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
 
         let mut public_key_x = Vec::with_capacity(32);
         let mut public_key_y = Vec::with_capacity(32);

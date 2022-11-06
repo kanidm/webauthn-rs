@@ -21,9 +21,9 @@ use super::ctap2::*;
 use crate::transport::iso7816::*;
 use crate::transport::*;
 
-/// Version string for a token which supports CTAP v1 / U2F
+/// Version string for a token which supports CTAP v1 / U2F (`U2F_V2`)
 pub const APPLET_U2F_V2: [u8; 6] = [0x55, 0x32, 0x46, 0x5f, 0x56, 0x32];
-/// Version string for a token which only supports CTAP v2
+/// Version string for a token which only supports CTAP v2 (`FIDO_2_0`)
 pub const APPLET_FIDO_2_0: [u8; 8] = [0x46, 0x49, 0x44, 0x4f, 0x5f, 0x32, 0x5f, 0x30];
 /// ISO 7816 FIDO applet name
 pub const APPLET_DF: [u8; 8] = [
@@ -149,7 +149,8 @@ impl NFCReader {
             return Ok(());
         }
         trace!("Updating all {} reader states", native_states.len());
-        let r = self.ctx
+        let r = self
+            .ctx
             .get_status_change(Duration::from_millis(500), &mut native_states);
 
         if let Err(e) = r {
@@ -329,7 +330,7 @@ impl<'a> NFCCard {
 
     #[cfg(feature = "nfc_raw_transmit")]
     /// Transmits a single ISO 7816-4 APDU to the card.
-    /// 
+    ///
     /// This API is only intended for conformance testing.
     pub fn transmit(
         &self,
@@ -386,7 +387,7 @@ impl Token for NFCCard {
             return Err(WebauthnCError::NotSupported);
         }
 
-        if resp.data != APPLET_U2F_V2 {
+        if resp.data != APPLET_U2F_V2 && resp.data != APPLET_FIDO_2_0 {
             error!("Unsupported applet: {:02x?}", &resp.data);
             return Err(WebauthnCError::NotSupported);
         }
@@ -400,8 +401,7 @@ impl Token for NFCCard {
             guard.deref(),
             &DESELECT_APPLET,
             &ISO7816LengthForm::ShortOnly,
-        )
-        .expect("Failed to deselect CTAP2.1 applet");
+        )?;
 
         if !resp.is_ok() {
             Err(WebauthnCError::ApduTransmission)

@@ -5,12 +5,12 @@ use crate::{
     error::WebauthnCError,
     transport::Token,
     ui::UiCallback,
-    util::{check_pin, compute_sha256, creation_to_clientdata, get_to_clientdata, CheckPinResult},
+    util::{check_pin, compute_sha256, creation_to_clientdata, get_to_clientdata},
     AuthenticatorBackend,
 };
 
 use base64urlsafedata::Base64UrlSafeData;
-use futures::{executor::block_on, StreamExt};
+use futures::executor::block_on;
 
 use url::Url;
 use webauthn_rs_proto::{
@@ -110,16 +110,13 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
     /// Checks whether a provided PIN follows the rules defined by the
     /// authenticator. This does not share the PIN with the authenticator.
-    pub fn validate_pin(&self, pin: &str) -> CheckPinResult {
+    pub fn validate_pin(&self, pin: &str) -> Result<String, WebauthnCError> {
         let min_length = self.info.min_pin_length.unwrap_or(4);
         check_pin(pin, min_length)
     }
 
     pub async fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
-        let pin = match self.validate_pin(pin) {
-            CheckPinResult::Ok(p) => p,
-            _ => return Err(WebauthnCError::InvalidPin),
-        };
+        let pin = self.validate_pin(pin)?;
 
         let mut padded_pin: [u8; 64] = [0; 64];
         padded_pin[..pin.len()].copy_from_slice(pin.as_bytes());
@@ -144,14 +141,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
     pub async fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
         // TODO: we actually really only need this in normal form C
-        let old_pin = match self.validate_pin(old_pin) {
-            CheckPinResult::Ok(p) => p,
-            _ => return Err(WebauthnCError::InvalidPin),
-        };
-        let new_pin = match self.validate_pin(new_pin) {
-            CheckPinResult::Ok(p) => p,
-            _ => return Err(WebauthnCError::InvalidPin),
-        };
+        let old_pin = self.validate_pin(old_pin)?;
+        let new_pin = self.validate_pin(new_pin)?;
         let mut padded_pin: [u8; 64] = [0; 64];
         padded_pin[..new_pin.len()].copy_from_slice(new_pin.as_bytes());
 

@@ -590,9 +590,11 @@ mod tests {
         .unwrap();
         let ec_priv = ec::EcKey::from_private_components(&group, &ec_priv, &ec_pub).unwrap();
 
-        let t = PinUvPlatformInterface::__new_with_private_key::<PinUvPlatformInterfaceProtocolOne>(
-            ec_priv,
-        ).unwrap();
+        let t =
+            PinUvPlatformInterface::__new_with_private_key::<PinUvPlatformInterfaceProtocolOne>(
+                ec_priv,
+            )
+            .unwrap();
 
         let shared_secret = t.encapsulate(dev_public_key).unwrap();
         assert_eq!(expected_secret, shared_secret);

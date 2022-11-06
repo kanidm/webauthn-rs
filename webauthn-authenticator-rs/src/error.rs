@@ -1,4 +1,4 @@
-use crate::transport::iso7816::Error;
+use crate::{transport::iso7816::Error};
 
 #[derive(Debug, PartialEq)]
 pub enum WebauthnCError {
@@ -19,7 +19,12 @@ pub enum WebauthnCError {
     MessageTooShort,
     Cancelled,
     Ctap(CtapError),
-    InvalidPin,
+    /// The PIN was too short.
+    PinTooShort,
+    /// The PIN was too long.
+    PinTooLong,
+    /// The PIN contained a null byte (`\0`).
+    PinContainsNull,
     NoSelectedToken,
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),

@@ -1,5 +1,5 @@
 use futures::executor::block_on;
-use webauthn_authenticator_rs::ctap2::{*, commands::*};
+use webauthn_authenticator_rs::ctap2::{commands::*, *};
 use webauthn_authenticator_rs::nfc::*;
 use webauthn_authenticator_rs::transport::iso7816::*;
 
@@ -221,7 +221,8 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
 
     for ne in 1..256 {
         req.ne = ne;
-        let resp = card.transmit(&req, &ISO7816LengthForm::ShortOnly)
+        let resp = card
+            .transmit(&req, &ISO7816LengthForm::ShortOnly)
             .expect("Failed to select applet");
 
         if !resp.is_success() {
