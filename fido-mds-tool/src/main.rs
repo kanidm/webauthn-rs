@@ -40,6 +40,8 @@ pub struct QueryOpt {
 #[derive(Debug, Subcommand)]
 #[clap(about = "Fido Metadata Service parsing tool")]
 pub enum Opt {
+    /// Parse and display the list of U2F devices from an MDS file.
+    ListU2f(CommonOpt),
     /// Parse and display the list of Fido2 devices from an MDS file.
     ListFido2(CommonOpt),
     /// Query and display metadata for a specific FIDO2 device by its AAGUID
@@ -49,6 +51,7 @@ pub enum Opt {
 impl Opt {
     fn debug(&self) -> bool {
         match self {
+            Opt::ListU2f(CommonOpt { debug, .. }) |
             Opt::ListFido2(CommonOpt { debug, .. }) => *debug,
             Opt::QueryAaguid(QueryOpt {
                 common: CommonOpt { debug, .. },
@@ -91,6 +94,29 @@ fn main() {
         .init();
 
     match opt.commands {
+        Opt::ListU2f(CommonOpt { debug: _, path }) => {
+            trace!("{:?}", path);
+
+            let s = match fs::read_to_string(path) {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!(?e);
+                    return;
+                }
+            };
+
+            match FidoMds::from_str(&s) {
+                Ok(mds) => {
+                    debug!("{} fido metadata avaliable", mds.u2f.len());
+                    for fd in mds.u2f.values() {
+                        eprintln!("{}", fd);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(?e);
+                }
+            }
+        }
         Opt::ListFido2(CommonOpt { debug: _, path }) => {
             trace!("{:?}", path);
 
