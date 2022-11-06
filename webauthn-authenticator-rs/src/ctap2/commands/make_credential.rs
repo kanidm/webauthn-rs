@@ -171,7 +171,7 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialResponse {
             fmt: raw.remove(&0x01).and_then(|v| value_to_string(v, "0x01")),
             auth_data: raw.remove(&0x02),
             att_stmt: raw.remove(&0x03),
-            epp_att: raw.remove(&0x04).and_then(|v| value_to_bool(v, "0x04")),
+            epp_att: raw.remove(&0x04).and_then(|v| value_to_bool(&v, "0x04")),
             large_blob_key: raw.remove(&0x05),
         })
     }

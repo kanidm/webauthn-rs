@@ -541,10 +541,10 @@ mod tests {
 
         let t = PinUvPlatformInterface::new::<PinUvPlatformInterfaceProtocolOne>().unwrap();
 
-        let new_pin_enc = t.encrypt(&shared_secret, &padded_pin);
+        let new_pin_enc = t.encrypt(&shared_secret, &padded_pin).unwrap();
         assert_eq!(new_pin_enc, expected_new_pin_enc);
 
-        let pin_auth = t.authenticate(&shared_secret, &new_pin_enc);
+        let pin_auth = t.authenticate(&shared_secret, &new_pin_enc).unwrap();
         assert_eq!(pin_auth[0..16], expected_pin_auth);
 
         let decrypted_pin = t
@@ -621,7 +621,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(expected, t.get_pin_token_cmd("1234", &shared_secret));
+        assert_eq!(expected, t.get_pin_token_cmd("1234", &shared_secret).unwrap());
 
         // Set PIN
         // https://github.com/Yubico/python-fido2/blob/8c00d0494501028135fd13adbe8c56a8d8b7e437/tests/test_ctap2.py#L307
@@ -645,7 +645,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(expected, t.set_pin_cmd(padded_pin, &shared_secret));
+        assert_eq!(expected, t.set_pin_cmd(padded_pin, &shared_secret).unwrap());
 
         // Change PIN
         // https://github.com/Yubico/python-fido2/blob/8c00d0494501028135fd13adbe8c56a8d8b7e437/tests/test_ctap2.py#L325
@@ -675,7 +675,7 @@ mod tests {
 
         assert_eq!(
             expected,
-            t.change_pin_cmd("1234", new_padded_pin, &shared_secret)
+            t.change_pin_cmd("1234", new_padded_pin, &shared_secret).unwrap()
         );
     }
 

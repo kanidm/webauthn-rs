@@ -171,9 +171,9 @@ fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {
 }
 
 /// Converts a [Value::Bool] into [Option<bool>]. Returns `None` for other [Value] types.
-fn value_to_bool(v: Value, loc: &str) -> Option<bool> {
+fn value_to_bool(v: &Value, loc: &str) -> Option<bool> {
     if let Value::Bool(b) = v {
-        Some(b)
+        Some(*b)
     } else {
         error!("Invalid type for {}: {:?}", loc, v);
         None

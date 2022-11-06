@@ -143,7 +143,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
             signature: raw.remove(&0x03).and_then(|v| value_to_vec_u8(v, "0x03")),
             user: None, // TODO 0x04
             number_of_credentials: raw.remove(&0x05).and_then(|v| value_to_u32(&v, "0x05")),
-            user_selected: raw.remove(&0x06).and_then(|v| value_to_bool(v, "0x06")),
+            user_selected: raw.remove(&0x06).and_then(|v| value_to_bool(&v, "0x06")),
             large_blob_key: raw.remove(&0x07).and_then(|v| value_to_vec_u8(v, "0x07")),
         })
     }

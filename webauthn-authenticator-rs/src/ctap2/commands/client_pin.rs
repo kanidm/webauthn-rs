@@ -165,7 +165,7 @@ impl TryFrom<BTreeMap<u32, Value>> for ClientPinResponse {
                 }),
             pin_uv_auth_token: raw.remove(&0x02).and_then(|v| value_to_vec_u8(v, "0x02")),
             pin_retries: raw.remove(&0x03).and_then(|v| value_to_u32(&v, "0x03")),
-            power_cycle_state: raw.remove(&0x04).and_then(|v| value_to_bool(v, "0x04")),
+            power_cycle_state: raw.remove(&0x04).and_then(|v| value_to_bool(&v, "0x04")),
             uv_retries: raw.remove(&0x05).and_then(|v| value_to_u32(&v, "0x05")),
         })
     }
