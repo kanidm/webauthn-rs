@@ -51,8 +51,9 @@ pub enum Opt {
 impl Opt {
     fn debug(&self) -> bool {
         match self {
-            Opt::ListU2f(CommonOpt { debug, .. }) |
-            Opt::ListFido2(CommonOpt { debug, .. }) => *debug,
+            Opt::ListU2f(CommonOpt { debug, .. }) | Opt::ListFido2(CommonOpt { debug, .. }) => {
+                *debug
+            }
             Opt::QueryAaguid(QueryOpt {
                 common: CommonOpt { debug, .. },
                 ..
