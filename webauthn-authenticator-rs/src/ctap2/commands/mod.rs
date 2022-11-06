@@ -216,12 +216,12 @@ macro_rules! deserialize_cbor {
                 if i.is_empty() {
                     TryFrom::try_from(BTreeMap::new()).map_err(|e| {
                         error!("Tried to deserialise empty input, got error: {:?}", e);
-                        crate::error::WebauthnCError::Cbor
+                        $crate::error::WebauthnCError::Cbor
                     })
                 } else {
                     serde_cbor::from_slice(&i).map_err(|e| {
                         error!("deserialise: {:?}", e);
-                        crate::error::WebauthnCError::Cbor
+                        $crate::error::WebauthnCError::Cbor
                     })
                 }
             }

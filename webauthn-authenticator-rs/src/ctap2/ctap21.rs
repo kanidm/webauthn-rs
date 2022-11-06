@@ -1,11 +1,14 @@
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    time::Duration,
+};
 
 use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 
 use super::{
     commands::{
-        BioEnrollmentRequest, BioEnrollmentResponse, BioSubCommand, GetInfoResponse, Permissions,
-        SelectionRequest, GET_FINGERPRINT_SENSOR_INFO, GET_MODALITY,
+        BioEnrollmentRequest, BioEnrollmentResponse, BioSubCommand, GetInfoResponse, Modality,
+        Permissions, SelectionRequest, GET_FINGERPRINT_SENSOR_INFO, GET_MODALITY,
     },
     pin_uv::PinUvPlatformInterface,
     Ctap20Authenticator,
@@ -54,6 +57,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         }
     }
 
+    /*
     async fn bio(
         &self,
         sub_command: BioSubCommand,
@@ -74,7 +78,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             )
             .await
     }
+    */
 
+    /// Send a [BioSubCommand] using a provided `pin_uv_auth_token` session.
     async fn bio_with_session(
         &self,
         sub_command: BioSubCommand,
@@ -86,7 +92,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         let (pin_uv_protocol, pin_uv_auth_param) = match (iface, pin_uv_auth_token) {
             (Some(iface), Some(pin_uv_auth_token)) => {
                 let mut pin_uv_auth_param =
-                    iface.authenticate(pin_uv_auth_token, client_data_hash.as_slice());
+                    iface.authenticate(pin_uv_auth_token, client_data_hash.as_slice())?;
                 pin_uv_auth_param.truncate(16);
 
                 (iface.get_pin_uv_protocol(), Some(pin_uv_auth_param))
@@ -103,6 +109,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             .await
     }
 
+    /// Gets information about the token's fingerprint sensor.
+    ///
+    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
     pub async fn get_fingerprint_sensor_info(
         &self,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
@@ -111,20 +120,29 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             return Err(WebauthnCError::NotSupported);
         }
 
-        self.token.transmit(GET_MODALITY, self.ui_callback).await?;
+        let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
+        if r.modality != Some(Modality::Fingerprint) {
+            return Err(WebauthnCError::NotSupported);
+        }
         self.token
             .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
             .await
     }
 
-    pub async fn enroll_fingerprint(&self) -> Result<(), WebauthnCError> {
+    /// Enrolls a fingerprint with the token.
+    ///
+    /// This generally takes multiple user interactions (touches or swipes) of the sensor.
+    ///
+    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
+    pub async fn enroll_fingerprint(&self, timeout: Duration) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if !self.info.supports_ctap21_biometrics() {
             return Err(WebauthnCError::NotSupported);
         }
-
-        // TODO
-        let timeout = 30_000;
+        let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
+        if r.modality != Some(Modality::Fingerprint) {
+            return Err(WebauthnCError::NotSupported);
+        }
 
         let (iface, pin_uv_auth_token) = self
             .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
@@ -138,11 +156,13 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             )
             .await?;
 
-        println!("began enrollment: {:?}", r);
-        let id = r.template_id.unwrap();
+        trace!("began enrollment: {:?}", r);
+        let id = r.template_id.ok_or(WebauthnCError::MissingRequiredField)?;
 
         // TODO: show feedback
-        let mut remaining_samples = r.remaining_samples.unwrap_or_default();
+        let mut remaining_samples = r
+            .remaining_samples
+            .ok_or(WebauthnCError::MissingRequiredField)?;
         while remaining_samples > 0 {
             let r = self
                 .bio_with_session(
@@ -152,7 +172,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
                 )
                 .await?;
 
-            remaining_samples = r.remaining_samples.unwrap_or_default();
+            remaining_samples = r
+                .remaining_samples
+                .ok_or(WebauthnCError::MissingRequiredField)?;
         }
 
         Ok(())

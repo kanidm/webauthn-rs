@@ -103,7 +103,7 @@ impl PinUvPlatformInterface {
         }
 
         // 4. Return kdf(Z).
-        Ok(self.kdf(&z))
+        self.kdf(&z)
     }
 
     /// Generates an encapsulation for the authenticator's public key and returns the shared secret.
@@ -125,16 +125,20 @@ impl PinUvPlatformInterface {
     }
 
     /// Generates a `getPinToken` command.
-    pub fn get_pin_token_cmd(&self, pin: &str, shared_secret: &[u8]) -> ClientPinRequest {
-        ClientPinRequest {
+    pub fn get_pin_token_cmd(
+        &self,
+        pin: &str,
+        shared_secret: &[u8],
+    ) -> Result<ClientPinRequest, WebauthnCError> {
+        Ok(ClientPinRequest {
             pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::GetPinToken,
             key_agreement: Some(self.public_key.clone()),
             pin_hash_enc: Some(
-                self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
+                self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16])?,
             ),
             ..Default::default()
-        }
+        })
     }
 
     /// Generates a `getPinUvAuthTokenUsingUvWithPermission` command.
@@ -164,33 +168,37 @@ impl PinUvPlatformInterface {
         shared_secret: &[u8],
         permissions: Permissions,
         rp_id: Option<String>,
-    ) -> ClientPinRequest {
+    ) -> Result<ClientPinRequest, WebauthnCError> {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
-        ClientPinRequest {
+        Ok(ClientPinRequest {
             pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions,
             key_agreement: Some(self.public_key.clone()),
             pin_hash_enc: Some(
-                self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16]),
+                self.encrypt(shared_secret, &(compute_sha256(pin.as_bytes()))[..16])?,
             ),
             permissions,
             rp_id,
             ..Default::default()
-        }
+        })
     }
 
     /// Generates a `setPin` command.
-    pub fn set_pin_cmd(&self, padded_pin: [u8; 64], shared_secret: &[u8]) -> ClientPinRequest {
-        let new_pin_enc = self.encrypt(shared_secret, &padded_pin);
-        let pin_uv_auth_param = Some(self.authenticate(shared_secret, new_pin_enc.as_slice()));
-        ClientPinRequest {
+    pub fn set_pin_cmd(
+        &self,
+        padded_pin: [u8; 64],
+        shared_secret: &[u8],
+    ) -> Result<ClientPinRequest, WebauthnCError> {
+        let new_pin_enc = self.encrypt(shared_secret, &padded_pin)?;
+        let pin_uv_auth_param = Some(self.authenticate(shared_secret, new_pin_enc.as_slice())?);
+        Ok(ClientPinRequest {
             pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::SetPin,
             key_agreement: Some(self.public_key.clone()),
             new_pin_enc: Some(new_pin_enc),
             pin_uv_auth_param,
             ..Default::default()
-        }
+        })
     }
 
     /// Generates a `changePin` command.
@@ -199,18 +207,19 @@ impl PinUvPlatformInterface {
         old_pin: &str,
         new_padded_pin: [u8; 64],
         shared_secret: &[u8],
-    ) -> ClientPinRequest {
+    ) -> Result<ClientPinRequest, WebauthnCError> {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#changingExistingPin
-        let pin_hash_enc = self.encrypt(shared_secret, &(compute_sha256(old_pin.as_bytes()))[..16]);
-        let new_pin_enc = self.encrypt(shared_secret, &new_padded_pin);
+        let pin_hash_enc =
+            self.encrypt(shared_secret, &(compute_sha256(old_pin.as_bytes()))[..16])?;
+        let new_pin_enc = self.encrypt(shared_secret, &new_padded_pin)?;
 
         let mut pin_uv_auth_param = Vec::with_capacity(pin_hash_enc.len() + new_pin_enc.len());
         pin_uv_auth_param.extend_from_slice(new_pin_enc.as_slice());
         pin_uv_auth_param.extend_from_slice(pin_hash_enc.as_slice());
         let pin_uv_auth_param =
-            Some(self.authenticate(shared_secret, pin_uv_auth_param.as_slice()));
+            Some(self.authenticate(shared_secret, pin_uv_auth_param.as_slice())?);
 
-        ClientPinRequest {
+        Ok(ClientPinRequest {
             pin_uv_protocol: self.get_pin_uv_protocol(),
             sub_command: ClientPinSubCommand::ChangePin,
             key_agreement: Some(self.public_key.clone()),
@@ -218,22 +227,22 @@ impl PinUvPlatformInterface {
             new_pin_enc: Some(new_pin_enc),
             pin_uv_auth_param,
             ..Default::default()
-        }
+        })
     }
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.
 ///
 /// `plaintext.len()` must be a multiple of the cipher's blocksize.
-fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Vec<u8> {
+fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
     let cipher = symm::Cipher::aes_256_cbc();
     let mut ct = vec![0; plaintext.len() + cipher.block_size()];
-    let mut c = symm::Crypter::new(cipher, symm::Mode::Encrypt, key, iv).unwrap();
+    let mut c = symm::Crypter::new(cipher, symm::Mode::Encrypt, key, iv)?;
     c.pad(false);
-    let l = c.update(plaintext, &mut ct).unwrap();
-    let l = l + c.finalize(&mut ct[l..]).unwrap();
+    let l = c.update(plaintext, &mut ct)?;
+    let l = l + c.finalize(&mut ct[l..])?;
     ct.truncate(l);
-    ct
+    Ok(ct)
 }
 
 fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
@@ -248,21 +257,21 @@ fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, 
     }
 
     let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
-    let mut c = symm::Crypter::new(cipher, symm::Mode::Decrypt, key, iv).unwrap();
+    let mut c = symm::Crypter::new(cipher, symm::Mode::Decrypt, key, iv)?;
     c.pad(false);
-    let l = c.update(ciphertext, &mut pt).unwrap();
-    let l = l + c.finalize(&mut pt[l..]).unwrap();
+    let l = c.update(ciphertext, &mut pt)?;
+    let l = l + c.finalize(&mut pt[l..])?;
     pt.truncate(l);
     Ok(pt)
 }
 
 pub trait PinUvPlatformInterfaceProtocol {
-    fn kdf(&self, z: &[u8]) -> Vec<u8>;
+    fn kdf(&self, z: &[u8]) -> Result<Vec<u8>, WebauthnCError>;
 
     /// Encrypts a `plaintext` to produce a ciphertext, which may be longer than
     /// the `plaintext`. The `plaintext` is restricted to being a multiple of
     /// the AES block size (16 bytes) in length.
-    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8>;
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError>;
 
     /// Decrypts a `ciphertext` and returns the plaintext.
     fn decrypt(
@@ -272,7 +281,7 @@ pub trait PinUvPlatformInterfaceProtocol {
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError>;
 
     /// Computes a MAC of the given `message`.
-    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8>;
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError>;
 
     /// Gets the numeric identifier for this [PinUvPlatformInterfaceProtocol].
     fn get_pin_uv_protocol(&self) -> Option<u32>;
@@ -282,12 +291,12 @@ pub trait PinUvPlatformInterfaceProtocol {
 pub struct PinUvPlatformInterfaceProtocolOne {}
 
 impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
-    fn kdf(&self, z: &[u8]) -> Vec<u8> {
+    fn kdf(&self, z: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return SHA-256(Z)
-        compute_sha256(z).to_vec()
+        Ok(compute_sha256(z).to_vec())
     }
 
-    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return the AES-256-CBC encryption of demPlaintext using an all-zero IV.
         // (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
         encrypt(key, None, dem_plaintext)
@@ -303,15 +312,15 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
         decrypt(key, None, ciphertext)
     }
 
-    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return the first 16 bytes of the result of computing HMAC-SHA-256
         // with the given key and message.
-        let key = PKey::hmac(key).unwrap();
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key).unwrap();
-        signer.update(message).unwrap();
-        let mut o = signer.sign_to_vec().unwrap();
+        let key = PKey::hmac(key)?;
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key)?;
+        signer.update(message)?;
+        let mut o = signer.sign_to_vec()?;
         o.truncate(16);
-        o
+        Ok(o)
     }
 
     fn get_pin_uv_protocol(&self) -> Option<u32> {
@@ -323,25 +332,25 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
 pub struct PinUvPlatformInterfaceProtocolTwo {}
 
 impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
-    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Vec<u8> {
+    fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key
         //    portion of the shared secret.)
         let key = &key[32..];
 
         // 2. Let iv be a 16-byte, random bytestring.
         let mut iv: [u8; 16] = [0; 16];
-        rand_bytes(&mut iv).expect("encrypt::iv");
+        rand_bytes(&mut iv)?;
 
         // 3. Let ct be the AES-256-CBC encryption of demPlaintext using key and
         //    iv. (No padding is performed as the size of demPlaintext is
         //    required to be a multiple of the AES block length.)
-        let ct = encrypt(key, Some(iv.as_slice()), dem_plaintext);
+        let ct = encrypt(key, Some(iv.as_slice()), dem_plaintext)?;
 
         // 4. Return iv || ct.
         let mut o = iv.to_vec();
         o.extend_from_slice(ct.as_slice());
 
-        o
+        Ok(o)
     }
 
     fn decrypt(
@@ -366,29 +375,29 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         decrypt(key, Some(iv), ct)
     }
 
-    fn authenticate(&self, key: &[u8], message: &[u8]) -> Vec<u8> {
+    fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // 1. If key is longer than 32 bytes, discard the excess.
         //    (This selects the HMAC-key portion of the shared secret. When key is the
         //    pinUvAuthToken, it is exactly 32 bytes long and thus this step has no effect.)
-        let key = PKey::hmac(&key[..32]).unwrap();
+        let key = PKey::hmac(&key[..32])?;
 
         // 2. Return the result of computing HMAC-SHA-256 on key and message.
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key).unwrap();
-        signer.update(message).unwrap();
-        signer.sign_to_vec().unwrap()
+        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key)?;
+        signer.update(message)?;
+        Ok(signer.sign_to_vec()?)
     }
 
-    fn kdf(&self, z: &[u8]) -> Vec<u8> {
+    fn kdf(&self, z: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return
         // HKDF-SHA-256(salt = 32 zero bytes, IKM = Z, L = 32, info = "CTAP2 HMAC key") ||
         // HKDF-SHA-256(salt = 32 zero bytes, IKM = Z, L = 32, info = "CTAP2 AES key")
         // (see [RFC5869] for the definition of HKDF).
         let mut o: Vec<u8> = vec![0; 64];
         let zero: [u8; 32] = [0; 32];
-        hkdf_sha_256(&zero, z, b"CTAP2 HMAC key", &mut o[0..32]).expect("hkdf_sha_256");
-        hkdf_sha_256(&zero, z, b"CTAP2 AES key", &mut o[32..64]).expect("hkdf_sha_256");
+        hkdf_sha_256(&zero, z, b"CTAP2 HMAC key", &mut o[0..32])?;
+        hkdf_sha_256(&zero, z, b"CTAP2 AES key", &mut o[32..64])?;
 
-        o
+        Ok(o)
     }
 
     fn get_pin_uv_protocol(&self) -> Option<u32> {

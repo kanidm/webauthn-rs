@@ -1,6 +1,7 @@
 extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
+use std::time::Duration;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
@@ -161,7 +162,8 @@ fn main() {
                 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
-            block_on(tokens[0].enroll_fingerprint()).expect("enrolling fingerprint");
+            block_on(tokens[0].enroll_fingerprint(Duration::from_secs(30)))
+                .expect("enrolling fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {

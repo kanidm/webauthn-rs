@@ -133,7 +133,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let shared_secret = iface.encapsulate(key_agreement)?;
         trace!(?shared_secret);
 
-        let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice());
+        let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice())?;
         let ret = self.token.transmit(set_pin, self.ui_callback).await?;
         trace!(?ret);
         Ok(())
@@ -153,7 +153,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         let shared_secret = iface.encapsulate(key_agreement)?;
 
-        let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret);
+        let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret)?;
         let ret = self.token.transmit(change_pin, self.ui_callback).await?;
         trace!(?ret);
         Ok(())
@@ -195,7 +195,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         Ok(match (iface, pin_token) {
             (Some(iface), Some(pin_token)) => {
                 let mut pin_uv_auth_param =
-                    iface.authenticate(pin_token.as_slice(), client_data_hash);
+                    iface.authenticate(pin_token.as_slice(), client_data_hash)?;
                 pin_uv_auth_param.truncate(16);
 
                 (iface.get_pin_uv_protocol(), Some(pin_uv_auth_param))
@@ -313,17 +313,19 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
                     shared_secret.as_slice(),
                     permissions,
                     rp_id,
-                )
+                )?
             }
             _ => {
                 // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
-                iface.get_pin_token_cmd(&pin, shared_secret.as_slice())
+                iface.get_pin_token_cmd(&pin, shared_secret.as_slice())?
             }
         };
 
         let ret = self.token.transmit(p, self.ui_callback).await?;
         trace!(?ret);
-        let pin_token = ret.pin_uv_auth_token.unwrap();
+        let pin_token = ret
+            .pin_uv_auth_token
+            .ok_or(WebauthnCError::MissingRequiredField)?;
         // Decrypt the pin_token
         let pin_token = iface.decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
         trace!(?pin_token);

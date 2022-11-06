@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
@@ -116,11 +118,8 @@ pub enum FingerprintKind {
 pub enum BioSubCommand {
     #[default]
     Unknown,
-    FingerprintEnrollBegin(/* timeout in milliseconds */ u32),
-    FingerprintEnrollCaptureNextSample(
-        /* id */ Vec<u8>,
-        /* timeout in milliseconds */ u32,
-    ),
+    FingerprintEnrollBegin(/* timeout in milliseconds */ Duration),
+    FingerprintEnrollCaptureNextSample(/* id */ Vec<u8>, /* timeout */ Duration),
     FingerprintEnumerateEnrollments,
     FingerprintSetFriendlyName(TemplateInfo),
     FingerprintRemoveEnrollment(/* id */ Vec<u8>),
@@ -148,11 +147,14 @@ impl From<BioSubCommand> for Option<BTreeMap<Value, Value>> {
             Unknown => None,
             FingerprintEnrollBegin(timeout) => Some(BTreeMap::from([(
                 Value::Integer(0x03),
-                Value::Integer(timeout.into()),
+                Value::Integer(timeout.as_millis() as i128),
             )])),
             FingerprintEnrollCaptureNextSample(id, timeout) => Some(BTreeMap::from([
                 (Value::Integer(0x01), Value::Bytes(id)),
-                (Value::Integer(0x03), Value::Integer(timeout.into())),
+                (
+                    Value::Integer(0x03),
+                    Value::Integer(timeout.as_millis() as i128),
+                ),
             ])),
             FingerprintEnumerateEnrollments => None,
             FingerprintSetFriendlyName(t) => t.try_into().ok(),

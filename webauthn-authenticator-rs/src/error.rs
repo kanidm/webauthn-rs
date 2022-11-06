@@ -1,6 +1,6 @@
-use crate::{transport::iso7816::Error};
+use crate::transport::iso7816::Error;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum WebauthnCError {
     Json,
     Cbor,
@@ -26,6 +26,9 @@ pub enum WebauthnCError {
     /// The PIN contained a null byte (`\0`).
     PinContainsNull,
     NoSelectedToken,
+    /// The authenticator did not provide a required field. This may indicate a bug in this library, or the
+    /// authenticator.
+    MissingRequiredField,
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),
 }
