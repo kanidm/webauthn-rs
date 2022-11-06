@@ -29,6 +29,8 @@ pub enum WebauthnCError {
     /// The authenticator did not provide a required field. This may indicate a bug in this library, or the
     /// authenticator.
     MissingRequiredField,
+    /// The provided `friendly_name` was too long.
+    FriendlyNameTooLong,
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),
 }

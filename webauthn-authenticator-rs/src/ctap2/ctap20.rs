@@ -264,28 +264,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         // TODO: handle cancels, timeouts
         // TODO: handle lockouts
 
-        // Get pin retries
         trace!("supported pin protocols = {:?}", self.info.pin_protocols);
-        if let Some(protocols) = &self.info.pin_protocols {
-            for protocol in protocols {
-                let p = ClientPinRequest {
-                    pin_uv_protocol: Some(*protocol),
-                    sub_command: ClientPinSubCommand::GetPinRetries,
-                    ..Default::default()
-                };
-
-                let ret = self.token.transmit(p, self.ui_callback).await?;
-                trace!(?ret);
-
-                // TODO: handle lockouts
-            }
-        }
-
-        let pin = self
-            .ui_callback
-            .request_pin()
-            .ok_or(WebauthnCError::Cancelled)?;
-
         let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
 
         // 6.5.5.4: Obtaining the shared secret
@@ -308,6 +287,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             }
             (_, _, Some(true), Some(true)) => {
                 // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
+                let pin = self.request_pin(iface.get_pin_uv_protocol()).await?;
                 iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(
                     &pin,
                     shared_secret.as_slice(),
@@ -317,6 +297,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             }
             _ => {
                 // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
+                let pin = self.request_pin(iface.get_pin_uv_protocol()).await?;
                 iface.get_pin_token_cmd(&pin, shared_secret.as_slice())?
             }
         };
@@ -331,6 +312,24 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         trace!(?pin_token);
 
         Ok((Some(iface), Some(pin_token)))
+    }
+
+    async fn request_pin(&self, pin_uv_protocol: Option<u32>) -> Result<String, WebauthnCError> {
+        let p = ClientPinRequest {
+            pin_uv_protocol,
+            sub_command: ClientPinSubCommand::GetPinRetries,
+            ..Default::default()
+        };
+
+        let ret = self.token.transmit(p, self.ui_callback).await?;
+        trace!(?ret);
+
+        // TODO: handle lockouts
+
+        self
+            .ui_callback
+            .request_pin()
+            .ok_or(WebauthnCError::Cancelled)
     }
 }
 

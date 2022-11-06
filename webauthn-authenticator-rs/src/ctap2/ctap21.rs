@@ -3,7 +3,11 @@ use std::{
     time::Duration,
 };
 
-use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
+use unicode_normalization::UnicodeNormalization;
+
+use crate::{
+    ctap2::commands::TemplateInfo, error::WebauthnCError, transport::Token, ui::UiCallback,
+};
 
 use super::{
     commands::{
@@ -57,7 +61,6 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         }
     }
 
-    /*
     async fn bio(
         &self,
         sub_command: BioSubCommand,
@@ -78,7 +81,6 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             )
             .await
     }
-    */
 
     /// Send a [BioSubCommand] using a provided `pin_uv_auth_token` session.
     async fn bio_with_session(
@@ -134,7 +136,11 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     /// This generally takes multiple user interactions (touches or swipes) of the sensor.
     ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
-    pub async fn enroll_fingerprint(&self, timeout: Duration) -> Result<(), WebauthnCError> {
+    pub async fn enroll_fingerprint(
+        &self,
+        timeout: Duration,
+        friendly_name: Option<String>,
+    ) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if !self.info.supports_ctap21_biometrics() {
             return Err(WebauthnCError::NotSupported);
@@ -142,6 +148,19 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
         if r.modality != Some(Modality::Fingerprint) {
             return Err(WebauthnCError::NotSupported);
+        }
+
+        let r = self
+            .token
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
+            .await?;
+
+        // Normalise into Normal Form C
+        let friendly_name = friendly_name.map(|n| n.nfc().collect::<String>());
+        if let Some(n) = friendly_name.as_ref() {
+            if n.as_bytes().len() > r.get_max_template_friendly_name() {
+                return Err(WebauthnCError::FriendlyNameTooLong);
+            }
         }
 
         let (iface, pin_uv_auth_token) = self
@@ -177,6 +196,37 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
                 .ok_or(WebauthnCError::MissingRequiredField)?;
         }
 
+        // Now it's enrolled, give it a name.
+        if friendly_name.is_some() {
+            self.bio_with_session(
+                BioSubCommand::FingerprintSetFriendlyName(TemplateInfo { id, friendly_name }),
+                iface.as_ref(),
+                pin_uv_auth_token.as_ref(),
+            )
+            .await?;
+        }
+
         Ok(())
+    }
+
+    /// Lists all enrolled fingerprints in the device.
+    ///
+    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
+    pub async fn list_fingerprints(&self) -> Result<Vec<TemplateInfo>, WebauthnCError> {
+        // TODO: handle CTAP_2_1_PRE version too
+        if !self.info.supports_ctap21_biometrics() {
+            return Err(WebauthnCError::NotSupported);
+        }
+        let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
+        if r.modality != Some(Modality::Fingerprint) {
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        // works without authentication if alwaysUv = false?
+        let templates = self
+            .bio(BioSubCommand::FingerprintEnumerateEnrollments)
+            .await?;
+
+        Ok(templates.template_infos)
     }
 }

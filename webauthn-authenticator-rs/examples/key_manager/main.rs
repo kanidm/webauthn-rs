@@ -45,6 +45,13 @@ pub struct SetPinPolicyOpt {
     pub force_change: bool,
 }
 
+#[derive(Debug, Args)]
+pub struct EnrollFingerprintOpt {
+    /// A human readable friendly name for the finger (eg: 'left index')
+    #[clap(short, long)]
+    pub friendly_name: Option<String>,
+}
+
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
@@ -65,7 +72,9 @@ pub enum Opt {
     /// Gets information about biometric authentication on the device.
     BioInfo,
     /// Enrolls a fingerprint on the device.
-    EnrollFingerprint,
+    EnrollFingerprint(EnrollFingerprintOpt),
+    /// Lists all enrolled fingerprints on the device.
+    ListFingerprints,
     /// Sets policies for PINs.
     SetPinPolicy(SetPinPolicyOpt),
     /// Sets a PIN on a FIDO token which does not already have one.
@@ -145,7 +154,7 @@ fn main() {
             }
         }
 
-        Opt::EnrollFingerprint => {
+        Opt::EnrollFingerprint(o) => {
             let tokens: Vec<_> = tokens
                 .drain(..)
                 .filter_map(|t| {
@@ -162,8 +171,34 @@ fn main() {
                 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
-            block_on(tokens[0].enroll_fingerprint(Duration::from_secs(30)))
+            block_on(tokens[0].enroll_fingerprint(Duration::from_secs(30), o.friendly_name))
                 .expect("enrolling fingerprint");
+        }
+
+        Opt::ListFingerprints => {
+            let tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| {
+                    if let CtapAuthenticator::Fido21(t) = t {
+                        if t.get_info().supports_ctap21_biometrics() {
+                            return Some(t);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+            );
+            let fingerprints = block_on(tokens[0].list_fingerprints())
+                .expect("listing fingerprints");
+
+            println!("{} enrolled fingerprint(s):", fingerprints.len());
+            for t in fingerprints {
+                println!("* ID: {:02x?}, Name: {:?}", t.id, t.friendly_name.unwrap_or_default());
+            }
         }
 
         Opt::SetPinPolicy(o) => {

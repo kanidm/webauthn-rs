@@ -7,6 +7,11 @@ use serde_cbor::Value;
 use self::CBORCommand;
 use super::*;
 
+/// Default maximum fingerprint friendly name length, in bytes.
+///
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setFriendlyName>
+const DEFAULT_MAX_FRIENDLY_NAME: usize = 64;
+
 // <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getUserVerificationModality>
 pub const GET_MODALITY: BioEnrollmentRequest = BioEnrollmentRequest {
     get_modality: true,
@@ -68,7 +73,7 @@ pub struct BioEnrollmentResponse {
     pub last_enroll_sample_status: Option<EnrollSampleStatus>,
     pub remaining_samples: Option<u32>,
     pub template_infos: Vec<TemplateInfo>,
-    pub max_template_friendly_name: Option<u32>,
+    pub max_template_friendly_name: Option<usize>,
 }
 
 #[derive(Deserialize, Debug, Default, PartialEq, Eq, Clone)]
@@ -246,6 +251,16 @@ impl From<BioEnrollmentRequest> for BTreeMap<u32, Value> {
     }
 }
 
+impl BioEnrollmentResponse {
+    /// Gets the maximum template friendly name size in bytes, or the default
+    /// if none is provided.
+    /// 
+    /// This value is only valid as a response to [GET_FINGERPRINT_SENSOR_INFO].
+    pub fn get_max_template_friendly_name(&self) -> usize {
+        self.max_template_friendly_name.unwrap_or(DEFAULT_MAX_FRIENDLY_NAME)
+    }
+}
+
 impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
@@ -286,7 +301,10 @@ impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
                     }
                 })
                 .unwrap_or_default(),
-            max_template_friendly_name: raw.remove(&0x08).and_then(|v| value_to_u32(&v, "0x08")),
+            max_template_friendly_name: raw
+                .remove(&0x08)
+                .and_then(|v| value_to_u32(&v, "0x08"))
+                .map(|v| v as usize),
         })
     }
 }
