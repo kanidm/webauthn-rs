@@ -158,12 +158,14 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     ///
     /// This generally takes multiple user interactions (touches or swipes) of the sensor.
     ///
+    /// If enrollment is successful, returns the fingerprint ID.
+    ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
     pub async fn enroll_fingerprint(
         &self,
         timeout: Duration,
         friendly_name: Option<String>,
-    ) -> Result<(), WebauthnCError> {
+    ) -> Result<Vec<u8>, WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         self.check_fingerprint_support().await?;
         let friendly_name = match friendly_name {
@@ -209,14 +211,17 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         // Now it's enrolled, give it a name.
         if friendly_name.is_some() {
             self.bio_with_session(
-                BioSubCommand::FingerprintSetFriendlyName(TemplateInfo { id, friendly_name }),
+                BioSubCommand::FingerprintSetFriendlyName(TemplateInfo {
+                    id: id.clone(),
+                    friendly_name,
+                }),
                 iface.as_ref(),
                 pin_uv_auth_token.as_ref(),
             )
             .await?;
         }
 
-        Ok(())
+        Ok(id)
     }
 
     /// Lists all enrolled fingerprints in the device.
@@ -258,6 +263,29 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
 
         self.bio(BioSubCommand::FingerprintRemoveEnrollment(id))
             .await?;
+
+        Ok(())
+    }
+
+    /// Removes multiple enrolled fingerprints.
+    ///
+    /// **Warning:** this is not an atomic operation. If any command fails,
+    /// further processing will stop, and the request may be incomplete.
+    ///
+    /// Call [Self::list_fingerprints] to check what was actually done.
+    pub async fn remove_fingerprints(&self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError> {
+        let (iface, pin_uv_auth_token) = self
+            .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
+            .await?;
+
+        for id in ids {
+            self.bio_with_session(
+                BioSubCommand::FingerprintRemoveEnrollment(id),
+                iface.as_ref(),
+                pin_uv_auth_token.as_ref(),
+            )
+            .await?;
+        }
 
         Ok(())
     }

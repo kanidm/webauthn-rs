@@ -66,8 +66,8 @@ pub struct RenameFingerprintOpt {
 #[derive(Debug, Args)]
 pub struct RemoveFingerprintOpt {
     /// The template ID
-    #[clap()]
-    pub id: String,
+    #[clap(min_values(1), required(true))]
+    pub id: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -208,8 +208,10 @@ fn main() {
                 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
-            block_on(tokens[0].enroll_fingerprint(Duration::from_secs(30), o.friendly_name))
-                .expect("enrolling fingerprint");
+            let id =
+                block_on(tokens[0].enroll_fingerprint(Duration::from_secs(30), o.friendly_name))
+                    .expect("enrolling fingerprint");
+            println!("Enrolled fingerpint {}", base16_encode(id));
         }
 
         Opt::ListFingerprints => {
@@ -286,9 +288,11 @@ fn main() {
                 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
-
-            block_on(tokens[0].remove_fingerprint(base16_decode(&o.id).expect("decoding ID")))
-                .expect("removing fingerprint");
+            let ids: Vec<Vec<u8>> =
+                o.id.iter()
+                    .map(|i| base16_decode(i).expect("decoding ID"))
+                    .collect();
+            block_on(tokens[0].remove_fingerprints(ids)).expect("removing fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {
