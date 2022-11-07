@@ -22,7 +22,7 @@ pub const MAX_SIZE: usize = INITIAL_FRAGMENT_SIZE + (0x80 * FRAGMENT_SIZE);
 
 /// U2F HID request frame type.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct U2FHIDFrame {
+pub struct U2FHIDFrame {
     /// Channel identifier
     pub cid: u32,
     /// Command identifier or sequence number
@@ -55,7 +55,7 @@ const EMPTY_FRAME: U2FHIDFrame = U2FHIDFrame {
 
 /// Iterator type for fragmenting a long [U2FHIDFrame] into smaller pieces that
 /// fit within the USB HID MTU.
-pub(crate) struct U2FHIDFrameIterator<'a> {
+pub struct U2FHIDFrameIterator<'a> {
     /// The frame to fragment.
     f: &'a U2FHIDFrame,
     /// The current position within the frame we're up to.
@@ -195,10 +195,10 @@ impl<'a> Sum<&'a U2FHIDFrame> for U2FHIDFrame {
     }
 }
 
-/// Serialises a [U2FHIDFrame] to bytes to be sent via a USB HID report.
-///
-/// This does not fragment packets: see [U2FHIDFrameIterator].
 impl From<&U2FHIDFrame> for HidSendReportBytes {
+    /// Serialises a [U2FHIDFrame] to bytes to be sent via a USB HID report.
+    ///
+    /// This does not fragment packets: see [U2FHIDFrameIterator].
     fn from(f: &U2FHIDFrame) -> HidSendReportBytes {
         let mut o: HidSendReportBytes = [0; HID_RPT_SEND_SIZE];
 

@@ -16,7 +16,7 @@ pub struct ClientPinRequest {
     /// Action being requested
     pub sub_command: ClientPinSubCommand,
     pub key_agreement: Option<COSEKey>,
-    /// OUtput of calling "Authenticate" on some context specific to [Self::sub_comand]
+    /// OUtput of calling "Authenticate" on some context specific to [Self::sub_command]
     pub pin_uv_auth_param: Option<Vec<u8>>,
     /// An encrypted PIN
     pub new_pin_enc: Option<Vec<u8>>,

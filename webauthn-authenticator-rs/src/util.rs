@@ -40,8 +40,7 @@ pub fn get_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> Collected
 /// is at least `min_length` Unicode codepoints, less than 64 bytes when encoded
 /// as UTF-8, and does not contain any null bytes (`\0`).
 ///
-/// If the PIN is valid,
-/// [returns the PIN in Unicode Normal Form C][CheckPinResult::Ok].
+/// If the PIN is valid, returns the PIN in Unicode Normal Form C.
 pub fn check_pin(pin: &str, min_length: usize) -> Result<String, WebauthnCError> {
     // Normalize the PIN in Normal Form C
     let pin = pin.nfc().collect::<String>();

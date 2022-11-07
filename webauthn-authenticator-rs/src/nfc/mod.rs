@@ -62,7 +62,11 @@ impl NFCReader {
     /// Example:
     ///
     /// ```rust
-    /// let reader = NFCReader::new(Scope::User).expect("PC/SC not available");
+    /// use pcsc::Scope;
+    /// use webauthn_authenticator_rs::nfc::NFCReader;
+    /// 
+    /// let reader = NFCReader::new(Scope::User);
+    /// // TODO: Handle errors
     /// ```
     pub fn new(scope: Scope) -> Result<Self, WebauthnCError> {
         Ok(NFCReader {

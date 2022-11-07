@@ -96,7 +96,7 @@ fn main() {
     tracing_subscriber::fmt::init();
 
     let ui = Cli {};
-    let mut transport = AnyTransport::default();
+    let mut transport = AnyTransport::new().unwrap();
     let mut tokens = transport.connect_all(&ui).expect("connect_all");
 
     if tokens.is_empty() {

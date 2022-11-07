@@ -13,7 +13,7 @@ pub struct ConfigRequest {
     sub_command_params: Option<BTreeMap<Value, Value>>,
     /// PIN / UV protocol version chosen by the platform
     pin_uv_protocol: Option<u32>,
-    /// Output of calling "Authenticate" on some context specific to [Self::sub_comand]
+    /// Output of calling "Authenticate" on some context specific to [Self::sub_command]
     pin_uv_auth_param: Option<Vec<u8>>,
 }
 

@@ -9,8 +9,7 @@ pub enum Error {
     /// [`ISO7816RequestAPDU.to_bytes()`]: `ne` was too long for the given
     /// length form.
     NeTooLong,
-    /// [`push_length_value()`]: The given value cannot be represented in short
-    /// form.
+    /// The given value cannot be represented in short form.
     IntegerOverflow,
     /// [`ISO7816ResponseAPDU.from_bytes()`]: response was less than 2 bytes.
     ResponseTooShort,

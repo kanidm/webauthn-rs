@@ -12,9 +12,9 @@ use crate::usb::*;
 #[derive(Debug)]
 pub struct AnyTransport {
     #[cfg(feature = "nfc")]
-    nfc: NFCReader,
+    pub nfc: NFCReader,
     #[cfg(feature = "usb")]
-    usb: USBTransport,
+    pub usb: USBTransport,
 }
 
 /// [AnyToken] abstracts calls to NFC and USB security tokens.
@@ -26,6 +26,20 @@ pub enum AnyToken {
     Nfc(NFCCard),
     #[cfg(feature = "usb")]
     Usb(USBToken),
+}
+
+impl AnyTransport {
+    /// Creates connections to all available transports.
+    /// 
+    /// For NFC, uses `Scope::User`.
+    pub fn new() -> Result<Self, WebauthnCError> {
+        Ok(AnyTransport {
+            #[cfg(feature = "nfc")]
+            nfc: NFCReader::new(pcsc::Scope::User)?,
+            #[cfg(feature = "usb")]
+            usb: USBTransport::new()?,
+        })
+    }
 }
 
 impl<'b> Transport<'b> for AnyTransport {

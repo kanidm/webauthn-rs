@@ -1,5 +1,4 @@
 use futures::executor::block_on;
-// use webauthn_authenticator_rs::nfc::*;
 use webauthn_authenticator_rs::{ctap2::CtapAuthenticator, transport::*, ui::Cli};
 
 fn access_card<T: Token>(card: T) {
@@ -16,8 +15,7 @@ fn access_card<T: Token>(card: T) {
 }
 
 pub(crate) fn event_loop() {
-    let mut reader = AnyTransport::default();
-    // let mut reader = NFCReader::default();
+    let mut reader = AnyTransport::new().unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.tokens() {
