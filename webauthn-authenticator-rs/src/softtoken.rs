@@ -22,10 +22,7 @@ use webauthn_rs_proto::{
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
 
-// This is 0fb9bcbc-a0d4-4042-bbb0-559bc1631e28
-pub const AAGUID: [u8; 16] = [
-    15, 185, 188, 188, 160, 212, 64, 66, 187, 176, 85, 155, 193, 99, 30, 40,
-];
+pub const AAGUID: Uuid = uuid::uuid!("0fb9bcbc-a0d4-4042-bbb0-559bc1631e28");
 
 pub struct SoftToken {
     _ca_key: pkey::PKey<pkey::Private>,
