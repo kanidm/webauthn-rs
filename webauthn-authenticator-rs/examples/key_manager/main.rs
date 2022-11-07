@@ -192,12 +192,16 @@ fn main() {
                 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
-            let fingerprints = block_on(tokens[0].list_fingerprints())
-                .expect("listing fingerprints");
+            let fingerprints =
+                block_on(tokens[0].list_fingerprints()).expect("listing fingerprints");
 
             println!("{} enrolled fingerprint(s):", fingerprints.len());
             for t in fingerprints {
-                println!("* ID: {:02x?}, Name: {:?}", t.id, t.friendly_name.unwrap_or_default());
+                println!(
+                    "* ID: {:02x?}, Name: {:?}",
+                    t.id,
+                    t.friendly_name.unwrap_or_default()
+                );
             }
         }
 

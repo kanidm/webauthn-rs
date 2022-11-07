@@ -254,10 +254,11 @@ impl From<BioEnrollmentRequest> for BTreeMap<u32, Value> {
 impl BioEnrollmentResponse {
     /// Gets the maximum template friendly name size in bytes, or the default
     /// if none is provided.
-    /// 
+    ///
     /// This value is only valid as a response to [GET_FINGERPRINT_SENSOR_INFO].
     pub fn get_max_template_friendly_name(&self) -> usize {
-        self.max_template_friendly_name.unwrap_or(DEFAULT_MAX_FRIENDLY_NAME)
+        self.max_template_friendly_name
+            .unwrap_or(DEFAULT_MAX_FRIENDLY_NAME)
     }
 }
 

@@ -326,8 +326,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
         // TODO: handle lockouts
 
-        self
-            .ui_callback
+        self.ui_callback
             .request_pin()
             .ok_or(WebauthnCError::Cancelled)
     }

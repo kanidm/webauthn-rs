@@ -621,7 +621,10 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(expected, t.get_pin_token_cmd("1234", &shared_secret).unwrap());
+        assert_eq!(
+            expected,
+            t.get_pin_token_cmd("1234", &shared_secret).unwrap()
+        );
 
         // Set PIN
         // https://github.com/Yubico/python-fido2/blob/8c00d0494501028135fd13adbe8c56a8d8b7e437/tests/test_ctap2.py#L307
@@ -675,7 +678,8 @@ mod tests {
 
         assert_eq!(
             expected,
-            t.change_pin_cmd("1234", new_padded_pin, &shared_secret).unwrap()
+            t.change_pin_cmd("1234", new_padded_pin, &shared_secret)
+                .unwrap()
         );
     }
 
