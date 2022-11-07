@@ -772,6 +772,12 @@ pub struct U2F {
     pub time_of_last_status_change: String,
 }
 
+impl fmt::Display for U2F {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.description)
+    }
+}
+
 /// A metadata statement describing a FIDO2 device.
 #[derive(Debug, Clone)]
 pub struct FIDO2 {

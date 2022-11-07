@@ -3841,4 +3841,58 @@ mod tests {
             &Url::parse("ios:bundle-id:com.foo.baz").unwrap(),
         ));
     }
+
+    #[test]
+    fn test_ledger_nano_x_u2f() {
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"E73tUSJKqzEd6E0_1-iQbSy7nnLM59wYvSDu65Gcb_c\"").unwrap();
+
+        let response = r#"{
+            "id": "1fZsU3N7oYqOP58A1WB_EW87Y2s_PtOM0JvdcO8GioLjy2ZeNOeB6y0_ySZgJgVbwBjcWsHwHznF_6KLo9EiZg",
+            "rawId": "1fZsU3N7oYqOP58A1WB_EW87Y2s_PtOM0JvdcO8GioLjy2ZeNOeB6y0_ySZgJgVbwBjcWsHwHznF_6KLo9EiZg",
+            "response": {
+              "attestationObject": "o2NmbXRoZmlkby11MmZnYXR0U3RtdKJjc2lnWEcwRQIhANC92HP6FxX2NV3eebqJz7NJJ7q40o13P5GDxFgjUYZsAiApz69y5Lf8IX6IT5I5_pSomulGnPjjs2Z_n7Ls9_d1fWN4NWOBWQFhMIIBXTCCAQOgAwIBAgIBIzAKBggqhkjOPQQDAjAnMSUwIwYDVQQDDBxMZWRnZXIgRklETyBBdHRlc3RhdGlvbiBDQSAxMB4XDTE5MDUyNTEzNTIyNloXDTI5MDUxMjEzNTIyNlowMDEuMCwGA1UEAwwlTGVkZ2VyIE5hbm8tWCBVMkYgQXR0ZXN0YXRpb24gQmF0Y2ggMTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABF5su70Gpi4brvdzBS3VEV5FzL_yRwAxWEtpjGwSYtUGXEINbIoJehZq3LtO_sY_Jj9NeRJjnTkFlLMILMWeu72jFzAVMBMGCysGAQQBguUcAgEBBAQDAgVgMAoGCCqGSM49BAMCA0gAMEUCIFUeasUnqEGyK7S3G0EUDLjz1Ii09LYVt3_kGrIwb2HfAiEA2BNAy-sja8kuxATaW0Xq27wQtyVpfoJNMKppBkNA-YhoYXV0aERhdGFYxGq5u_Dfmhb5Hbszu7Ey-vnRfHgsSCbG7HDs7ljZfvUqQQAAAAAAAAAAAAAAAAAAAAAAAAAAAEDV9mxTc3uhio4_nwDVYH8Rbztjaz8-04zQm91w7waKguPLZl4054HrLT_JJmAmBVvAGNxawfAfOcX_oouj0SJmpQECAyYgASFYID6H90VtMkO2tLVvl0nDKzQQAdwPEXw-ibGEgIqKbZKRIlggS9ToDyhAkN0v_8whSgvUeijfFPHvsIAdTRl4sCTcxQA",
+              "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJFNzN0VVNKS3F6RWQ2RTBfMS1pUWJTeTdubkxNNTl3WXZTRHU2NUdjYl9jIiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0",
+              "transports": null
+            },
+            "type": "public-key",
+            "extensions": {
+              "appid": null,
+              "cred_blob": null,
+              "cred_props": null
+            }
+        }"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = Webauthn::new_unsafe_experts_only(
+            "webauthn.firstyear.id.au",
+            "webauthn.firstyear.id.au",
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
+            None,
+            None,
+            None,
+        );
+
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!("{:?}", rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Preferred,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256],
+            None,
+            true,
+            &RequestRegistrationExtensions::default(),
+            true,
+        );
+        dbg!(&result);
+        assert!(result.is_ok());
+
+        trace!("{:#?}", result);
+    }
 }
