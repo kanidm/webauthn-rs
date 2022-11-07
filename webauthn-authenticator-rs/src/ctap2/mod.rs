@@ -20,27 +20,32 @@
 //! * lock-outs aren't handled; this will just use up all your PIN and UV
 //!   retries without warning, **potentially locking you out**.
 //!
+//!   This also doesn't fall-back to PIN auth if UV (fingerprint) auth is locked
+//!   out.
+//!
 //! * multiple authenticators doesn't work particularly well, and connecting
 //!   devices while an action is in progress doesn't work
 //!
-//! * Bluetooth Low Energy and Hybrid Authenticators (aka "caBLE") are not
-//!   supported
+//! * [Bluetooth Low Energy][ble] and Hybrid Authenticators (aka "caBLE") are
+//!   not supported
 //!
 //! * cancellations and timeouts
 //!
 //! * session management (re-using `pin_uv_auth_token`)
 //!
-//! * U2F compatibility and fall-back
+//! * [U2F compatibility and fall-back][u2f]
+//!
+//! * [secured state][secure]
 //!
 //! Many CTAP2 features are unsupported:
 //!
-//! * discoverable credentials (`authenticatorCredentialManagement`)
+//! * [discoverable credentials] (`authenticatorCredentialManagement`)
 //!
-//! * large blobs (`authenticatorLargeBlobs`)
+//! * [large blobs] (`authenticatorLargeBlobs`)
 //!
-//! * enterprise attestation
+//! * [enterprise attestation]
 //!
-//! * request extensions
+//! * [request extensions]
 //!
 //! * CTAP v2.1-PRE fallback (for "preview" biometric support)
 //!
@@ -52,20 +57,39 @@
 //!   [authentication][Ctap20Authenticator::perform_auth] with a
 //!   [CLI interface][crate::ui::Cli]
 //!
-//! * NFC (via PC/SC) and USB HID authenticators
+//! * [NFC][crate::nfc] and [USB HID][crate::usb] authenticators
 //!
-//! * CTAP 2.1 and NFC authenticator selection
+//! * CTAP 2.1 and NFC [authenticator selection][select_one_token]
 //!
-//! * Fingerprint (biometric) authentication, [enrollment][Ctap21Authenticator::enroll_fingerprint], and management (CTAP 2.1 only)
+//! * Fingerprint (biometric) authentication,
+//!   [enrollment][Ctap21Authenticator::enroll_fingerprint], and management
+//!   (CTAP 2.1 only)
 //!
-//! * [Setting][Ctap20Authenticator::set_new_pin] and [changing][Ctap20Authenticator::change_pin] device PINs
+//! * [Setting][Ctap20Authenticator::set_new_pin] and
+//!   [changing][Ctap20Authenticator::change_pin] device PINs
 //!
-//! * PIN/UV Auth [Protocol One] and [Protocol Two]
+//! * PIN/UV Auth [Protocol One] and [Protocol Two], [getPinToken],
+//!   [getPinUvAuthTokenUsingPinWithPermissions], and
+//!   [getPinUvAuthTokenUsingUvWithPermissions]
 //!
 //! * [Factory-resetting authenticators][Ctap20Authenticator::factory_reset]
 //!
+//! * configuring [user verification][Ctap20Authenticator::toggle_always_uv]
+//!   and [minimum PIN length][Ctap20Authenticator::set_min_pin_length]
+//!   requirements
+//!
+//! [ble]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#ble
+//! [discoverable credentials]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorCredentialManagement
+//! [enterprise attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enable-enterprise-attestation
+//! [getPinToken]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinToken
+//! [getPinUvAuthTokenUsingPinWithPermissions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
+//! [getPinUvAuthTokenUsingUvWithPermissions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingUvWithPermissions
+//! [large blobs]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorLargeBlobs
 //! [Protocol One]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#pinProto1
 //! [Protocol Two]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#pinProto2
+//! [request extensions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-defined-extensions
+//! [u2f]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#u2f-interoperability
+//! [secure]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-secure-interaction
 
 // TODO: `commands` may become private in future.
 pub mod commands;

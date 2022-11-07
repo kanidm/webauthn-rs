@@ -1,4 +1,6 @@
-//! Transport abstraction layer for communication with FIDO tokens.
+//! Low-level transport abstraction layer for communication with FIDO tokens.
+//!
+//! See [crate::ctap2] for a higher-level abstraction over this API.
 mod any;
 pub mod iso7816;
 
