@@ -121,8 +121,8 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
                             if let Some(transports) = &a.transports {
                                 let transports: Vec<Value> = transports
                                     .iter()
-                                    .filter_map(|_t| {
-                                        None // TODO
+                                    .map(|t| {
+                                        Value::Text(t.to_string())
                                     })
                                     .collect();
 

@@ -21,7 +21,7 @@ const FRAGMENT_SIZE: usize = HID_RPT_SIZE - 5;
 pub const MAX_SIZE: usize = INITIAL_FRAGMENT_SIZE + (0x80 * FRAGMENT_SIZE);
 
 /// U2F HID request frame type.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct U2FHIDFrame {
     /// Channel identifier
     pub cid: u32,

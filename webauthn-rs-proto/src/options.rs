@@ -130,12 +130,36 @@ pub enum AuthenticatorTransport {
 }
 
 impl FromStr for AuthenticatorTransport {
-    type Err = serde_json::Error;
+    type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Convert the input value to a JSON string, and then use serde:json's
-        // deserialization
-        let s = serde_json::ser::to_string(s)?;
-        serde_json::from_str(&s)
+        use AuthenticatorTransport::*;
+
+        // "internal" is longest (8 chars)
+        if s.len() > 8 {
+            return Err(());
+        }
+
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "usb" => Usb,
+            "nfc" => Nfc,
+            "ble" => Ble,
+            "internal" => Internal,
+            "test" => Test,
+            &_ => return Err(()),
+        })
+    }
+}
+
+impl ToString for AuthenticatorTransport {
+    fn to_string(&self) -> String {
+        use AuthenticatorTransport::*;
+        match self {
+            Usb => "usb",
+            Nfc => "nfc",
+            Ble => "ble",
+            Internal => "internal",
+            Test => "test",
+        }.to_string()
     }
 }
 
@@ -267,6 +291,7 @@ mod test {
 
         for (s, t) in cases {
             assert_eq!(t, AuthenticatorTransport::from_str(s).expect("unknown authenticatorTransport"));
+            assert_eq!(s, AuthenticatorTransport::to_string(&t));
         }
 
         assert!(AuthenticatorTransport::from_str("fake fake").is_err());
