@@ -3,10 +3,8 @@ use crate::error::WebauthnError;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
 use serde::Deserialize;
-// use serde_cbor::Value;
 
 use std::borrow::Borrow;
-// use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::ops::Deref;
 
