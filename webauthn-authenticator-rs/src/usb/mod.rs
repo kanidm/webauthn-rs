@@ -115,9 +115,7 @@ impl USBToken {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {:02x?}", d);
         let guard = self.device.lock()?;
-        guard
-            .deref()
-            .write(&d)?;
+        guard.deref().write(&d)?;
         Ok(())
     }
 
@@ -135,9 +133,7 @@ impl USBToken {
         let ret: HidReportBytes = async {
             let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
             let guard = self.device.lock()?;
-            guard
-                .deref()
-                .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)?;
+            guard.deref().read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)?;
             Ok::<HidReportBytes, WebauthnCError>(ret)
         }
         .await?;

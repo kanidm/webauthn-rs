@@ -30,7 +30,7 @@ pub enum AnyToken {
 
 impl AnyTransport {
     /// Creates connections to all available transports.
-    /// 
+    ///
     /// For NFC, uses `Scope::User`.
     pub fn new() -> Result<Self, WebauthnCError> {
         Ok(AnyTransport {

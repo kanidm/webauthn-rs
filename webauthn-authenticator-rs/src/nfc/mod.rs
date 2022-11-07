@@ -64,7 +64,7 @@ impl NFCReader {
     /// ```rust
     /// use pcsc::Scope;
     /// use webauthn_authenticator_rs::nfc::NFCReader;
-    /// 
+    ///
     /// let reader = NFCReader::new(Scope::User);
     /// // TODO: Handle errors
     /// ```

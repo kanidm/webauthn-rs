@@ -183,7 +183,8 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             .remaining_samples
             .ok_or(WebauthnCError::MissingRequiredField)?;
         while remaining_samples > 0 {
-            self.ui_callback.fingerprint_enrollment_feedback(remaining_samples, r.last_enroll_sample_status);
+            self.ui_callback
+                .fingerprint_enrollment_feedback(remaining_samples, r.last_enroll_sample_status);
 
             r = self
                 .bio_with_session(
