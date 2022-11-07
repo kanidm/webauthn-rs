@@ -20,11 +20,14 @@ impl CBORCommand for GetInfoRequest {
 #[derive(Deserialize, Debug)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct GetInfoResponse {
+    /// All CTAP protocol versions which the token supports.
     pub versions: BTreeSet<String>,
+    /// All protocol extensions which the token supports.
     pub extensions: Option<Vec<String>>,
     pub aaguid: Vec<u8>,
     pub options: Option<BTreeMap<String, bool>>,
     pub max_msg_size: Option<u32>,
+    /// All PIN/UV auth protocols which the token supports.
     pub pin_protocols: Option<Vec<u32>>,
     pub max_cred_count_in_list: Option<u32>,
     pub max_cred_id_len: Option<u32>,
@@ -53,10 +56,14 @@ impl GetInfoResponse {
             .map(|v| v.to_owned())
     }
 
+    /// Returns `true` if the authenticator supports CTAP 2.1 biometrics
+    /// commands.
     pub fn supports_ctap21_biometrics(&self) -> bool {
         self.get_option("bioEnroll").is_some()
     }
 
+    /// Returns `true` if the authenticator supports CTAP 2.1-PRE biometrics
+    /// commands.
     pub fn supports_ctap21pre_biometrics(&self) -> bool {
         self.get_option("userVerificationMgmtPreview").is_some()
     }

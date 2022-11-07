@@ -19,6 +19,7 @@ use webauthn_rs_proto::{
     RegistrationExtensionsClientOutputs,
 };
 
+/// CTAP 2.0 protocol implementation.
 #[derive(Debug)]
 pub struct Ctap20Authenticator<'a, T: Token, U: UiCallback> {
     pub(super) info: GetInfoResponse,
@@ -35,10 +36,14 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         }
     }
 
+    /// Gets cached information about the authenticator.
+    ///
+    /// This does not transmit to the token.
     pub fn get_info(&self) -> &GetInfoResponse {
         &self.info
     }
 
+    /// Perform a factory reset of the token, deleting all data.
     pub async fn factory_reset(&self) -> Result<(), WebauthnCError> {
         self.token
             .transmit(ResetRequest {}, self.ui_callback)
@@ -115,6 +120,9 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         check_pin(pin, min_length)
     }
 
+    /// Sets a PIN on a device which does not already have one.
+    ///
+    /// To change a PIN, use [`change_pin()`][Self::change_pin].
     pub async fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
         let pin = self.validate_pin(pin)?;
 
@@ -139,6 +147,9 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         Ok(())
     }
 
+    /// Changes a PIN on a device.
+    ///
+    /// To set a PIN for the first time, use [`set_new_pin()`][Self::set_new_pin].
     pub async fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
         // TODO: we actually really only need this in normal form C
         let old_pin = self.validate_pin(old_pin)?;

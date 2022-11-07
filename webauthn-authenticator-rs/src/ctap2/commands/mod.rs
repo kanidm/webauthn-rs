@@ -1,3 +1,4 @@
+//! CTAP 2 commands.
 use serde::Serialize;
 use serde_cbor::{ser::to_vec_packed, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,10 +25,16 @@ use crate::transport::iso7816::ISO7816RequestAPDU;
 
 const FRAG_MAX: usize = 0xF0;
 
+/// Common trait for all CBOR responses.
+///
+/// Ths handles some of the response deserialization process.
 pub trait CBORResponse: Sized + std::fmt::Debug + Send {
     fn try_from(i: &[u8]) -> Result<Self, WebauthnCError>;
 }
 
+/// Common trait for all CBOR commands.
+///
+/// This handles some of the command serialization process.
 pub trait CBORCommand: Serialize + Sized + std::fmt::Debug + Send {
     /// CTAP comand byte
     const CMD: u8;
@@ -38,6 +45,7 @@ pub trait CBORCommand: Serialize + Sized + std::fmt::Debug + Send {
     /// If false, then the command has no payload.
     const HAS_PAYLOAD: bool = true;
 
+    /// The response type associated with this command.
     type Response: CBORResponse;
 
     /// Converts a CTAP v2 command into a binary form.
@@ -199,8 +207,10 @@ fn value_to_string(v: Value, loc: &str) -> Option<String> {
     }
 }
 
+/// Type for commands which have no response data.
 #[derive(Debug)]
 pub struct NoResponse {}
+
 impl CBORResponse for NoResponse {
     fn try_from(_raw: &[u8]) -> Result<Self, WebauthnCError> {
         Ok(Self {})

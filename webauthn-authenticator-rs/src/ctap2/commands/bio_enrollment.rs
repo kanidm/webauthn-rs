@@ -12,7 +12,9 @@ use super::*;
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setFriendlyName>
 const DEFAULT_MAX_FRIENDLY_NAME: usize = 64;
 
-// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getUserVerificationModality>
+/// Command to get the supported biometric modality for the authenticator.
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getUserVerificationModality>
 pub const GET_MODALITY: BioEnrollmentRequest = BioEnrollmentRequest {
     get_modality: true,
     modality: None,
@@ -22,7 +24,9 @@ pub const GET_MODALITY: BioEnrollmentRequest = BioEnrollmentRequest {
     pin_uv_auth_param: None,
 };
 
-// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getFingerprintSensorInfo>
+/// Command to get information about the authenticator's fingerprint sensor.
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getFingerprintSensorInfo>
 pub const GET_FINGERPRINT_SENSOR_INFO: BioEnrollmentRequest = BioEnrollmentRequest {
     modality: Some(Modality::Fingerprint),
     sub_command: Some(0x07), // getFingerprintSensorInfo
@@ -32,7 +36,9 @@ pub const GET_FINGERPRINT_SENSOR_INFO: BioEnrollmentRequest = BioEnrollmentReque
     get_modality: false,
 };
 
-// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#cancelEnrollment>
+/// Command to cancel an in-progress fingerprint enrollment.
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#cancelEnrollment>
 pub const FINGERPRINT_CANCEL_CURRENT_ENROLLMENT: BioEnrollmentRequest = BioEnrollmentRequest {
     modality: Some(Modality::Fingerprint),
     sub_command: Some(0x03), // cancelCurrentEnrollment
@@ -42,7 +48,16 @@ pub const FINGERPRINT_CANCEL_CURRENT_ENROLLMENT: BioEnrollmentRequest = BioEnrol
     get_modality: false,
 };
 
-// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorBioEnrollment>
+/// `authenticatorBioEnrollment` request type.
+///
+/// See:
+///
+/// * [BioSubCommand] for dynamically-constructed commands
+/// * [GET_MODALITY]
+/// * [GET_FINGERPRINT_SENSOR_INFO]
+/// * [FINGERPRINT_CANCEL_CURRENT_ENROLLMENT]
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorBioEnrollment>
 #[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct BioEnrollmentRequest {
@@ -54,6 +69,9 @@ pub struct BioEnrollmentRequest {
     pin_uv_protocol: Option<u32>,
     /// Output of calling "Authenticate" on some context specific to [Self::sub_command]
     pin_uv_auth_param: Option<Vec<u8>>,
+    /// Gets the supported bio modality for the authenticator.
+    ///
+    /// See [GET_MODALITY].
     get_modality: bool,
 }
 
@@ -62,23 +80,71 @@ impl CBORCommand for BioEnrollmentRequest {
     type Response = BioEnrollmentResponse;
 }
 
+/// `authenticatorBioEnrollment` response type.
+///
+/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorBioEnrollment>
 #[derive(Deserialize, Debug, Default, PartialEq, Eq)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct BioEnrollmentResponse {
+    /// Biometric authentication modality supported by the authenticator.
+    ///
+    /// Returned in response to a [GET_MODALITY] request.
     pub modality: Option<Modality>,
+
+    /// The kind of fingerprint sensor used on the device.
+    ///
+    /// Returned in response to a [GET_FINGERPRINT_SENSOR_INFO] request.
     pub fingerprint_kind: Option<FingerprintKind>,
+
+    /// The maximum number of good fingerprint samples required for enrollment.
+    ///
+    /// Returned in response to a [GET_FINGERPRINT_SENSOR_INFO] request.
     pub max_capture_samples_required_for_enroll: Option<u32>,
+
+    /// The identifier for the fingerprint being enrolled.
+    ///
+    /// Returned in response to a [BioSubCommand::FingerprintEnrollBegin]
+    /// request.
     pub template_id: Option<Vec<u8>>,
+
+    /// The state of the last collected fingerprint sample.
+    ///
+    /// Returned in response to a [BioSubCommand::FingerprintEnrollBegin] or
+    /// [BioSubCommand::FingerprintEnrollCaptureNextSample] request.
     pub last_enroll_sample_status: Option<EnrollSampleStatus>,
+
+    /// The number of good fingerprint samples required to complete enrollment.
+    ///
+    /// Returned in response to a [BioSubCommand::FingerprintEnrollBegin] or
+    /// [BioSubCommand::FingerprintEnrollCaptureNextSample] request.
     pub remaining_samples: Option<u32>,
+
+    /// A list of all enrolled fingerprints on the device.
+    ///
+    /// Returned in response to a
+    /// [BioSubCommand::FingerprintEnumerateEnrollments] request.
     pub template_infos: Vec<TemplateInfo>,
+
+    /// The maximum length for a [TemplateInfo::friendly_name] used on the
+    /// device.
+    ///
+    /// Returned in response to a [GET_FINGERPRINT_SENSOR_INFO] request.
+    ///
+    /// Prefer using the
+    /// [get_max_template_friendly_name()][Self::get_max_template_friendly_name]
+    /// method instead of this field, which also provides a default value if
+    /// this is missing.
     pub max_template_friendly_name: Option<usize>,
 }
 
+/// Metadata about a stored fingerprint.
 #[derive(Deserialize, Debug, Default, PartialEq, Eq, Clone)]
 #[serde(try_from = "BTreeMap<Value, Value>")]
 pub struct TemplateInfo {
+    /// The `template_id` of the fingerprint.
     pub id: Vec<u8>,
+
+    /// A human-readable name for the fingerprint.
     pub friendly_name: Option<String>,
 }
 
@@ -103,29 +169,76 @@ pub enum EnrollSampleStatus {
     NoUserPresenceTransition = 0x0e,
 }
 
+/// Modality for biometric authentication.
+///
+/// Returned in [BioEnrollmentResponse::modality] in response to a
+/// [GET_MODALITY] request.
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Clone, Default)]
 #[repr(u8)]
 pub enum Modality {
+    /// Unsupported modality.
     #[default]
     Unknown = 0x00,
+
+    /// Fingerprint authentication.
     Fingerprint = 0x01,
 }
 
+/// The type of fingerprint sensor on the device.
 #[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Clone)]
 #[repr(u8)]
 pub enum FingerprintKind {
+    /// A fingerprint sensor which requires placing the finger straight down
+    /// on the sensor.
     Touch = 0x01,
+
+    /// A fingerprint sensor which requires swiping the finger across the
+    /// sensor.
     Swipe = 0x02,
 }
 
+/// Wrapper for biometric command types, which can be passed to
+/// [BioEnrollmentRequest::new].
+///
+/// Static commands are declared as constants of this module, see:
+///
+/// * [GET_MODALITY]
+/// * [GET_FINGERPRINT_SENSOR_INFO]
+/// * [FINGERPRINT_CANCEL_CURRENT_ENROLLMENT]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum BioSubCommand {
     #[default]
     Unknown,
+
+    /// Begins enrollment of a new fingerprint on the device:
+    ///
+    /// * [Duration]: time-out for the operation.
+    ///
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enrollingFingerprint>
     FingerprintEnrollBegin(/* timeout in milliseconds */ Duration),
+
+    /// Captures another sample of a fingerprint while enrollment is in
+    /// progress:
+    ///
+    /// * [Vec<u8>]: `template_id` of the partially-enrolled fingerprint.
+    /// * [Duration]: time-out for the operation.
+    ///
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enrollingFingerprint>
     FingerprintEnrollCaptureNextSample(/* id */ Vec<u8>, /* timeout */ Duration),
+
+    /// Lists all enrolled fingerprints.
+    ///
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enumerateEnrollments>
     FingerprintEnumerateEnrollments,
+
+    /// Renames or sets the friendly name of an enrolled fingerprint.
+    ///
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setFriendlyName>
     FingerprintSetFriendlyName(TemplateInfo),
+
+    /// Removes an enrolled fingerprint.
+    ///
+    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#removeEnrollment>
     FingerprintRemoveEnrollment(/* id */ Vec<u8>),
 }
 
@@ -190,7 +303,8 @@ impl BioSubCommand {
 }
 
 impl BioEnrollmentRequest {
-    pub(crate) fn new(
+    /// Creates a new [BioEnrollmentRequest] from the given [BioSubCommand].
+    pub fn new(
         s: BioSubCommand,
         pin_uv_protocol: Option<u32>,
         pin_uv_auth_param: Option<Vec<u8>>,

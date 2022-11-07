@@ -1,3 +1,73 @@
+//! This package provides a [CTAP 2.0][Ctap20Authenticator] and
+//! [CTAP 2.1][Ctap21Authenticator] protocol implementation on top of [Token],
+//! allowing you to interface with FIDO authenticators.
+//!
+//! The main interface for this package is [CtapAuthenticator].
+//!
+//! ## Warning
+//!
+//! This is "alpha" quality code: it still a work in progress, and missing core
+//! functionality. There are edge cases that can cause you to be locked out of
+//! your authenticator.
+//!
+//! **The API is not final, and subject to change without warning.**
+//!
+//! ## Known issues
+//!
+//! There are many limitations with this implementation, which are intended to
+//! be addressed in the future:
+//!
+//! * lock-outs aren't handled; this will just use up all your PIN and UV
+//!   retries without warning, **potentially locking you out**.
+//!
+//! * multiple authenticators doesn't work particularly well, and connecting
+//!   devices while an action is in progress doesn't work
+//!
+//! * Bluetooth Low Energy and Hybrid Authenticators (aka "caBLE") are not
+//!   supported
+//!
+//! * cancellations and timeouts
+//!
+//! * session management (re-using `pin_uv_auth_token`)
+//!
+//! * U2F compatibility and fall-back
+//!
+//! Many CTAP2 features are unsupported:
+//!
+//! * discoverable credentials (`authenticatorCredentialManagement`)
+//!
+//! * large blobs (`authenticatorLargeBlobs`)
+//!
+//! * enterprise attestation
+//!
+//! * request extensions
+//!
+//! * CTAP v2.1-PRE fallback (for "preview" biometric support)
+//!
+//! ## Features
+//!
+//! There's a bunch of stuff that *does* work:
+//!
+//! * Basic [registration][Ctap20Authenticator::perform_register] and
+//!   [authentication][Ctap20Authenticator::perform_auth] with a
+//!   [CLI interface][crate::ui::Cli]
+//!
+//! * NFC (via PC/SC) and USB HID authenticators
+//!
+//! * CTAP 2.1 and NFC authenticator selection
+//!
+//! * Fingerprint (biometric) authentication, [enrollment][Ctap21Authenticator::enroll_fingerprint], and management (CTAP 2.1 only)
+//!
+//! * [Setting][Ctap20Authenticator::set_new_pin] and [changing][Ctap20Authenticator::change_pin] device PINs
+//!
+//! * PIN/UV Auth [Protocol One] and [Protocol Two]
+//!
+//! * [Factory-resetting authenticators][Ctap20Authenticator::factory_reset]
+//!
+//! [Protocol One]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#pinProto1
+//! [Protocol Two]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#pinProto2
+
+// TODO: `commands` may become private in future.
 pub mod commands;
 mod ctap20;
 mod ctap21;
@@ -18,9 +88,14 @@ use self::commands::GetInfoRequest;
 pub use self::commands::{CBORCommand, CBORResponse};
 pub use self::{ctap20::Ctap20Authenticator, ctap21::Ctap21Authenticator};
 
+/// Abstraction for different versions of the CTAP2 protocol.
+///
+/// All tokens can [Deref] into [Ctap20Authenticator].
 #[derive(Debug)]
 pub enum CtapAuthenticator<'a, T: Token, U: UiCallback> {
+    /// Interface for tokens supporting CTAP 2.0
     Fido20(Ctap20Authenticator<'a, T, U>),
+    /// Interface for tokens supporting CTAP 2.1
     Fido21(Ctap21Authenticator<'a, T, U>),
 }
 
@@ -55,7 +130,9 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         }
     }
 
-    /// Gets a reference to a CTAP 2.1 compatible interface, if the token supports it.
+    /// Gets a reference to a
+    /// [CTAP 2.1 compatible interface][Ctap21Authenticator], if the token
+    /// supports it.
     ///
     /// Otherwise, returns `None`.
     pub fn ctap21(&self) -> Option<&Ctap21Authenticator<'a, T, U>> {
@@ -66,7 +143,7 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
     }
 }
 
-/// Gets a reference to a CTAP 2.0 compatible interface.
+/// Gets a reference to a [CTAP 2.0 compatible interface][Ctap20Authenticator].
 ///
 /// All CTAP2 tokens support these base commands.
 impl<'a, T: Token, U: UiCallback> Deref for CtapAuthenticator<'a, T, U> {
@@ -81,7 +158,8 @@ impl<'a, T: Token, U: UiCallback> Deref for CtapAuthenticator<'a, T, U> {
     }
 }
 
-/// Gets a mutable reference to a CTAP 2.0 compatible interface.
+/// Gets a mutable reference to a
+/// [CTAP 2.0 compatible interface][Ctap20Authenticator].
 ///
 /// All CTAP2 tokens support these base commands.
 impl<'a, T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'a, T, U> {
@@ -94,6 +172,7 @@ impl<'a, T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'a, T, U> {
     }
 }
 
+/// Wrapper for [Ctap20Authenticator]'s implementation of [AuthenticatorBackend].
 impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for CtapAuthenticator<'a, T, U> {
     fn perform_register(
         &mut self,

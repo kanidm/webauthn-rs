@@ -35,7 +35,10 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     }
 }
 
-/// Represents a connection to a single CTAP token over a [Transport].
+/// Represents a connection to a single FIDO token over a [Transport].
+///
+/// This is a low level interface to FIDO tokens, passing raw messages.
+/// [crate::ctap2] provides a higher level abstraction.
 #[async_trait]
 pub trait Token: Sized + fmt::Debug + Sync + Send {
     fn has_button(&self) -> bool {

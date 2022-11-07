@@ -18,12 +18,17 @@ use super::{
     Ctap20Authenticator,
 };
 
+/// CTAP 2.1 protocol implementation.
+///
+/// This contains only CTAP 2.1-specific functionality. All CTAP 2.0
+/// functionality is avaliable via a [Deref] to [Ctap20Authenticator].
 #[derive(Debug)]
 pub struct Ctap21Authenticator<'a, T: Token, U: UiCallback> {
     authenticator: Ctap20Authenticator<'a, T, U>,
 }
 
-/// For backwards compatibility, pretend to be a CTAP 2.0 authenticator.
+/// For backwards compatibility, pretend to be a
+/// [CTAP 2.0 authenticator][Ctap20Authenticator].
 impl<'a, T: Token, U: UiCallback> Deref for Ctap21Authenticator<'a, T, U> {
     type Target = Ctap20Authenticator<'a, T, U>;
 
