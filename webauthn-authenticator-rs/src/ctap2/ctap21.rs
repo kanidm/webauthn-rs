@@ -178,7 +178,6 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         trace!("began enrollment: {:?}", r);
         let id = r.template_id.ok_or(WebauthnCError::MissingRequiredField)?;
 
-        // TODO: show feedback
         let mut remaining_samples = r
             .remaining_samples
             .ok_or(WebauthnCError::MissingRequiredField)?;
