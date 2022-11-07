@@ -111,12 +111,8 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             .await
     }
 
-    /// Gets information about the token's fingerprint sensor.
-    ///
-    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
-    pub async fn get_fingerprint_sensor_info(
-        &self,
-    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
+    /// Checks that the device supports fingerprints.
+    async fn check_fingerprint_support(&self) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if !self.info.supports_ctap21_biometrics() {
             return Err(WebauthnCError::NotSupported);
@@ -126,6 +122,33 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         if r.modality != Some(Modality::Fingerprint) {
             return Err(WebauthnCError::NotSupported);
         }
+
+        Ok(())
+    }
+
+    /// Checks that a given `friendly_name` complies with authenticator limits, and returns the value in Unicode Normal Form C.
+    async fn check_friendly_name(&self, friendly_name: String) -> Result<String, WebauthnCError> {
+        let r = self
+            .token
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
+            .await?;
+
+        // Normalise into Normal Form C
+        let friendly_name = friendly_name.nfc().collect::<String>();
+        if friendly_name.as_bytes().len() > r.get_max_template_friendly_name() {
+            return Err(WebauthnCError::FriendlyNameTooLong);
+        }
+
+        Ok(friendly_name)
+    }
+
+    /// Gets information about the token's fingerprint sensor.
+    ///
+    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
+    pub async fn get_fingerprint_sensor_info(
+        &self,
+    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
+        self.check_fingerprint_support().await?;
         self.token
             .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
             .await
@@ -142,26 +165,11 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         friendly_name: Option<String>,
     ) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
-        if !self.info.supports_ctap21_biometrics() {
-            return Err(WebauthnCError::NotSupported);
-        }
-        let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
-        if r.modality != Some(Modality::Fingerprint) {
-            return Err(WebauthnCError::NotSupported);
-        }
-
-        let r = self
-            .token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
-            .await?;
-
-        // Normalise into Normal Form C
-        let friendly_name = friendly_name.map(|n| n.nfc().collect::<String>());
-        if let Some(n) = friendly_name.as_ref() {
-            if n.as_bytes().len() > r.get_max_template_friendly_name() {
-                return Err(WebauthnCError::FriendlyNameTooLong);
-            }
-        }
+        self.check_fingerprint_support().await?;
+        let friendly_name = match friendly_name {
+            Some(n) => Some(self.check_friendly_name(n).await?),
+            None => None,
+        };
 
         let (iface, pin_uv_auth_token) = self
             .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
@@ -216,13 +224,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
     pub async fn list_fingerprints(&self) -> Result<Vec<TemplateInfo>, WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
-        if !self.info.supports_ctap21_biometrics() {
-            return Err(WebauthnCError::NotSupported);
-        }
-        let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
-        if r.modality != Some(Modality::Fingerprint) {
-            return Err(WebauthnCError::NotSupported);
-        }
+        self.check_fingerprint_support().await?;
 
         // works without authentication if alwaysUv = false?
         let templates = self
@@ -230,5 +232,33 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             .await?;
 
         Ok(templates.template_infos)
+    }
+
+    /// Renames an enrolled fingerprint.
+    pub async fn rename_fingerprint(
+        &self,
+        id: Vec<u8>,
+        friendly_name: String,
+    ) -> Result<(), WebauthnCError> {
+        // TODO: handle CTAP_2_1_PRE version too
+        self.check_fingerprint_support().await?;
+        let friendly_name = Some(self.check_friendly_name(friendly_name).await?);
+        self.bio(BioSubCommand::FingerprintSetFriendlyName(TemplateInfo {
+            id,
+            friendly_name,
+        }))
+        .await?;
+        Ok(())
+    }
+
+    /// Removes an enrolled fingerprint.
+    pub async fn remove_fingerprint(&self, id: Vec<u8>) -> Result<(), WebauthnCError> {
+        // TODO: handle CTAP_2_1_PRE version too
+        self.check_fingerprint_support().await?;
+
+        self.bio(BioSubCommand::FingerprintRemoveEnrollment(id))
+            .await?;
+
+        Ok(())
     }
 }

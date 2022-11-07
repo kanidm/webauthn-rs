@@ -47,9 +47,27 @@ pub struct SetPinPolicyOpt {
 
 #[derive(Debug, Args)]
 pub struct EnrollFingerprintOpt {
-    /// A human readable friendly name for the finger (eg: 'left index')
-    #[clap(short, long)]
+    /// A human-readable name for the finger (eg: 'left thumb')
+    #[clap()]
     pub friendly_name: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct RenameFingerprintOpt {
+    /// The template ID
+    #[clap()]
+    pub id: String,
+
+    /// A human-readable name for the finger (eg: 'left thumb')
+    #[clap()]
+    pub friendly_name: String,
+}
+
+#[derive(Debug, Args)]
+pub struct RemoveFingerprintOpt {
+    /// The template ID
+    #[clap()]
+    pub id: String,
 }
 
 #[derive(Debug, Subcommand)]
@@ -75,6 +93,10 @@ pub enum Opt {
     EnrollFingerprint(EnrollFingerprintOpt),
     /// Lists all enrolled fingerprints on the device.
     ListFingerprints,
+    /// Renames an enrolled fingerprint.
+    RenameFingerprint(RenameFingerprintOpt),
+    /// Removes an enrolled fingerprint.
+    RemoveFingerprint(RemoveFingerprintOpt),
     /// Sets policies for PINs.
     SetPinPolicy(SetPinPolicyOpt),
     /// Sets a PIN on a FIDO token which does not already have one.
@@ -84,10 +106,25 @@ pub enum Opt {
 }
 
 #[derive(Debug, clap::Parser)]
-#[clap(about = "Fido Metadata Service parsing tool")]
+#[clap(about = "FIDO key management tool")]
 pub struct CliParser {
     #[clap(subcommand)]
     pub commands: Opt,
+}
+
+pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
+    i.into_iter().map(|c| format!("{:02X}", c)).collect()
+}
+
+pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
+    if s.len() % 2 != 0 {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
+        .collect::<Result<Vec<_>, _>>()
+        .ok()
 }
 
 fn main() {
@@ -198,11 +235,60 @@ fn main() {
             println!("{} enrolled fingerprint(s):", fingerprints.len());
             for t in fingerprints {
                 println!(
-                    "* ID: {:02x?}, Name: {:?}",
-                    t.id,
+                    "* ID: {}, Name: {:?}",
+                    base16_encode(t.id),
                     t.friendly_name.unwrap_or_default()
                 );
             }
+        }
+
+        Opt::RenameFingerprint(o) => {
+            let tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| {
+                    if let CtapAuthenticator::Fido21(t) = t {
+                        if t.get_info().supports_ctap21_biometrics() {
+                            return Some(t);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+            );
+
+            block_on(
+                tokens[0].rename_fingerprint(
+                    base16_decode(&o.id).expect("decoding ID"),
+                    o.friendly_name,
+                ),
+            )
+            .expect("renaming fingerprint");
+        }
+
+        Opt::RemoveFingerprint(o) => {
+            let tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| {
+                    if let CtapAuthenticator::Fido21(t) = t {
+                        if t.get_info().supports_ctap21_biometrics() {
+                            return Some(t);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+            );
+
+            block_on(tokens[0].remove_fingerprint(base16_decode(&o.id).expect("decoding ID")))
+                .expect("removing fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {
