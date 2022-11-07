@@ -74,11 +74,11 @@ impl fmt::Debug for USBToken {
     }
 }
 
-impl Default for USBTransport {
-    fn default() -> Self {
-        Self {
-            api: HidApi::new().expect("Error initializing USB HID API"),
-        }
+impl USBTransport {
+    pub fn new() -> Result<Self, WebauthnCError> {
+        Ok(Self {
+            api: HidApi::new()?,
+        })
     }
 }
 
@@ -114,12 +114,11 @@ impl USBToken {
     fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {:02x?}", d);
-        let guard = self.device.lock().unwrap();
+        let guard = self.device.lock()?;
         guard
             .deref()
-            .write(&d)
-            .map_err(|_| WebauthnCError::ApduTransmission)
-            .map(|_| ())
+            .write(&d)?;
+        Ok(())
     }
 
     /// Sends a [U2FHIDFrame] to the device, fragmenting the message to fit
@@ -135,11 +134,10 @@ impl USBToken {
     async fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
         let ret: HidReportBytes = async {
             let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
-            let guard = self.device.lock().unwrap();
+            let guard = self.device.lock()?;
             guard
                 .deref()
-                .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)
-                .map_err(|_| WebauthnCError::ApduTransmission)?;
+                .read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)?;
             Ok::<HidReportBytes, WebauthnCError>(ret)
         }
         .await?;

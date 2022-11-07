@@ -1,3 +1,5 @@
+use std::sync::PoisonError;
+
 use crate::transport::iso7816::Error;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,12 +35,29 @@ pub enum WebauthnCError {
     FriendlyNameTooLong,
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),
+    #[cfg(feature = "usb")]
+    HidError(String),
+    /// See [PoisonError]; generally indicates that a method holding a prior lock on the mutex failed.
+    PoisonedMutex,
 }
 
 #[cfg(feature = "nfc")]
 impl From<pcsc::Error> for WebauthnCError {
     fn from(e: pcsc::Error) -> Self {
         Self::PcscError(e)
+    }
+}
+
+#[cfg(feature = "usb")]
+impl From<hidapi::HidError> for WebauthnCError {
+    fn from(e: hidapi::HidError) -> Self {
+        Self::HidError(e.to_string())
+    }
+}
+
+impl<T> From<PoisonError<T>> for WebauthnCError {
+    fn from(_: PoisonError<T>) -> Self {
+        Self::PoisonedMutex
     }
 }
 

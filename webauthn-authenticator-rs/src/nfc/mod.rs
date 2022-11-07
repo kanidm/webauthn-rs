@@ -56,23 +56,15 @@ impl fmt::Debug for NFCCard {
     }
 }
 
-impl Default for NFCReader {
-    fn default() -> Self {
-        // let (receiver, sender, worker) = PcscWorker::new();
-
-        // NFCReader {
-        //     receiver: Mutex::new(receiver),
-        //     sender,
-        //     worker,
-        // }
-
-        // TODO: consider error handling
-        NFCReader::new(Scope::User).unwrap()
-    }
-}
-
 impl NFCReader {
-    fn new(scope: Scope) -> Result<Self, WebauthnCError> {
+    /// Creates a new [NFCReader] instance in a given [Scope].
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// let reader = NFCReader::new(Scope::User).expect("PC/SC not available");
+    /// ```
+    pub fn new(scope: Scope) -> Result<Self, WebauthnCError> {
         Ok(NFCReader {
             ctx: Context::establish(scope).map_err(WebauthnCError::PcscError)?,
             reader_states: vec![],
@@ -129,12 +121,7 @@ impl NFCReader {
 
         // Add any new readers to the list
         for reader_name in readers {
-            if self
-                .reader_states
-                .iter()
-                .find(|s| s.0 == reader_name)
-                .is_none()
-            {
+            if !self.reader_states.iter().any(|s| s.0 == reader_name) {
                 // New reader
                 trace!("New reader: {:?}", reader_name);
                 self.reader_states
@@ -173,7 +160,7 @@ impl NFCReader {
                 trace!("rdr_state: {:?}", read_state);
                 let (name, state, atr) = read_state;
                 if state.contains(State::PRESENT) {
-                    let card = NFCCard::new(&self, name, atr);
+                    let card = NFCCard::new(self, name, atr);
                     match card {
                         Ok(c) => return Ok(c),
                         Err(e) => error!("Error accessing card: {:?}", e),
@@ -203,7 +190,7 @@ impl<'b> Transport<'b> for NFCReader {
             .reader_states
             .iter()
             .filter(|(_, state, _)| state.contains(State::PRESENT))
-            .filter_map(|(name, _, atr)| NFCCard::new(&self, name, atr).ok())
+            .filter_map(|(name, _, atr)| NFCCard::new(self, name, atr).ok())
             .filter_map(|mut c| {
                 block_on(c.init()).ok()?;
                 Some(c)
@@ -292,7 +279,7 @@ const DESELECT_APPLET: ISO7816RequestAPDU = ISO7816RequestAPDU {
     ne: 256,
 };
 
-impl<'a> NFCCard {
+impl NFCCard {
     pub fn new(
         reader: &NFCReader,
         reader_name: &CStr,
@@ -363,7 +350,7 @@ impl Token for NFCCard {
         //     resp = self.transmit(&NFCCTAP_GETRESPONSE, &ISO7816LengthForm::ExtendedOnly)?;
         // };
         let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
-        let guard = self.card.lock().unwrap();
+        let guard = self.card.lock()?;
         let resp = transmit_chunks(guard.deref(), &apdus)?;
         let mut data = resp.data;
         let err = CtapError::from(data.remove(0));
@@ -375,7 +362,7 @@ impl Token for NFCCard {
     }
 
     async fn init(&mut self) -> Result<(), WebauthnCError> {
-        let guard = self.card.lock().unwrap();
+        let guard = self.card.lock()?;
         let resp = transmit(
             guard.deref(),
             &select_by_df_name(&APPLET_DF),
@@ -396,7 +383,7 @@ impl Token for NFCCard {
     }
 
     fn close(&self) -> Result<(), WebauthnCError> {
-        let guard = self.card.lock().unwrap();
+        let guard = self.card.lock()?;
         let resp = transmit(
             guard.deref(),
             &DESELECT_APPLET,

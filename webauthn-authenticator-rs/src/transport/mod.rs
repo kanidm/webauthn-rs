@@ -16,7 +16,7 @@ use crate::{ctap2::*, error::WebauthnCError, ui::UiCallback};
 /// If you don't care which transport your application uses, use [AnyTransport]
 /// to automatically use all available transports on the platform.
 #[async_trait]
-pub trait Transport<'b>: Sized + Default + fmt::Debug + Send {
+pub trait Transport<'b>: Sized + fmt::Debug + Send {
     /// The type of [Token] returned by this [Transport].
     type Token: Token + 'b;
 

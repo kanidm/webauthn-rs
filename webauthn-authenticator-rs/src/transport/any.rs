@@ -9,7 +9,7 @@ use crate::usb::*;
 ///
 /// If you don't care which transport is used for tokens, prefer to use
 /// [AnyTransport] for the best experience.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AnyTransport {
     #[cfg(feature = "nfc")]
     nfc: NFCReader,
