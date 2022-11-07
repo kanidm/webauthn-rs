@@ -19,8 +19,6 @@ pub struct ConfigRequest {
 
 impl CBORCommand for ConfigRequest {
     const CMD: u8 = 0x0d;
-    const HAS_PAYLOAD: bool = true;
-    // TODO: for VendorPrototype only
     type Response = NoResponse;
 }
 

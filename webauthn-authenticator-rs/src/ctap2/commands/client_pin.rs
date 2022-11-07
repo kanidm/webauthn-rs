@@ -56,7 +56,6 @@ bitflags! {
 
 impl CBORCommand for ClientPinRequest {
     const CMD: u8 = 0x06;
-    const HAS_PAYLOAD: bool = true;
     type Response = ClientPinResponse;
 }
 

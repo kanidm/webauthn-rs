@@ -59,7 +59,6 @@ pub struct BioEnrollmentRequest {
 
 impl CBORCommand for BioEnrollmentRequest {
     const CMD: u8 = 0x09;
-    const HAS_PAYLOAD: bool = true;
     type Response = BioEnrollmentResponse;
 }
 

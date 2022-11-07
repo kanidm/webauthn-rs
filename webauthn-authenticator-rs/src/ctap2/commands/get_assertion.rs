@@ -1,10 +1,12 @@
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
-use std::collections::BTreeMap;
-use webauthn_rs_proto::{AllowCredentials, PublicKeyCredentialDescriptor, User};
+use std::{collections::BTreeMap, str::FromStr};
+use webauthn_rs_proto::{AllowCredentials, AuthenticatorTransport, PublicKeyCredentialDescriptor};
 
-use super::{value_to_bool, value_to_string, value_to_u32, value_to_vec_u8, CBORCommand};
+use super::{
+    value_to_bool, value_to_set_string, value_to_string, value_to_u32, value_to_vec_u8, CBORCommand,
+};
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
@@ -12,7 +14,7 @@ pub struct GetAssertionRequest {
     pub rp_id: String,
     pub client_data_hash: Vec<u8>,
     pub allow_list: Vec<AllowCredentials>,
-    // extensions:
+    // TODO: extensions
     pub options: Option<BTreeMap<String, bool>>,
     pub pin_uv_auth_param: Option<Vec<u8>>,
     pub pin_uv_auth_proto: Option<u32>,
@@ -30,10 +32,11 @@ pub struct GetAssertionResponse {
     pub credential: Option<PublicKeyCredentialDescriptor>,
     pub auth_data: Option<Vec<u8>>,
     pub signature: Option<Vec<u8>>,
-    pub user: Option<User>,
+    // TODO: pub user: Option<User>,
     pub number_of_credentials: Option<u32>,
     pub user_selected: Option<bool>,
     pub large_blob_key: Option<Vec<u8>>,
+    // TODO: extensions
 }
 
 impl From<GetAssertionRequest> for BTreeMap<u32, Value> {
@@ -72,9 +75,7 @@ impl From<GetAssertionRequest> for BTreeMap<u32, Value> {
                             if let Some(transports) = &a.transports {
                                 let transports: Vec<Value> = transports
                                     .iter()
-                                    .filter_map(|_t| {
-                                        None // TODO
-                                    })
+                                    .map(|t| Value::Text(t.to_string()))
                                     .collect();
 
                                 if !transports.is_empty() {
@@ -128,11 +129,19 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
                         .remove(&Value::Text("type".to_string()))
                         .and_then(|v| value_to_string(v, "0x01.type"));
 
+                    let transports: Option<Vec<AuthenticatorTransport>> = v
+                        .remove(&Value::Text("transports".to_string()))
+                        .and_then(|v| value_to_set_string(v, "0x01.transports"))
+                        .map(|v| {
+                            v.iter()
+                                .filter_map(|t| AuthenticatorTransport::from_str(t).ok())
+                                .collect()
+                        });
                     id.and_then(|id| {
                         type_.map(|type_| PublicKeyCredentialDescriptor {
                             type_,
                             id,
-                            transports: None,
+                            transports,
                         })
                     })
                 } else {
@@ -141,7 +150,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
             }),
             auth_data: raw.remove(&0x02).and_then(|v| value_to_vec_u8(v, "0x02")),
             signature: raw.remove(&0x03).and_then(|v| value_to_vec_u8(v, "0x03")),
-            user: None, // TODO 0x04
+            // TODO: user: None, (0x04)
             number_of_credentials: raw.remove(&0x05).and_then(|v| value_to_u32(&v, "0x05")),
             user_selected: raw.remove(&0x06).and_then(|v| value_to_bool(&v, "0x06")),
             large_blob_key: raw.remove(&0x07).and_then(|v| value_to_vec_u8(v, "0x07")),
@@ -150,3 +159,8 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
 }
 
 crate::deserialize_cbor!(GetAssertionResponse);
+
+#[cfg(test)]
+mod tests {
+    // TODO
+}

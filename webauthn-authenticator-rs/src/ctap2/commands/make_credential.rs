@@ -14,7 +14,7 @@ pub struct MakeCredentialRequest {
     pub user: User,
     pub pub_key_cred_params: Vec<PubKeyCredParams>,
     pub exclude_list: Vec<PublicKeyCredentialDescriptor>,
-    // extensions:
+    // TODO: extensions
     pub options: Option<BTreeMap<String, bool>>,
     pub pin_uv_auth_param: Option<Vec<u8>>,
     pub pin_uv_auth_proto: Option<u32>,
@@ -23,7 +23,6 @@ pub struct MakeCredentialRequest {
 
 impl CBORCommand for MakeCredentialRequest {
     const CMD: u8 = 0x01;
-    // type Response = AttestationObject<Registration>;
     type Response = MakeCredentialResponse;
 }
 
@@ -36,17 +35,8 @@ pub struct MakeCredentialResponse {
     pub att_stmt: Option<Value>,
     pub epp_att: Option<bool>,
     pub large_blob_key: Option<Value>,
+    // TODO: extensions
 }
-
-// impl CBORResponse for AttestationObject<Registration> {
-//     fn try_from(i: &[u8]) -> Result<Self, WebauthnCError> {
-//         TryFrom::<&[u8]>::try_from(i).map_err(|e| {
-//             // TODO: propagate this properly
-//             error!("WebauthnError: {:?}", e);
-//             WebauthnCError::Internal
-//         })
-//     }
-// }
 
 impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
     fn from(value: MakeCredentialRequest) -> Self {
