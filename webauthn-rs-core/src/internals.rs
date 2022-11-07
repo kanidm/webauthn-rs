@@ -397,45 +397,11 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) fmt: &'a str,
-    pub(crate) auth_data: &'a [u8],
     pub(crate) att_stmt: serde_cbor::Value,
+    pub(crate) auth_data: &'a [u8],
     pub(crate) ep_att: Option<bool>,
     pub(crate) large_blob_key: Option<&'a [u8]>,
 }
-
-/*
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", try_from = "BTreeMap<u32, serde_cbor::Value>")]
-#[allow(dead_code)]
-pub(crate) struct AttestationObjectInner {
-    pub(crate) fmt: String,
-    pub(crate) auth_data: Vec<u8>,
-    pub(crate) att_stmt: serde_cbor::Value,
-    pub(crate) ep_att: Option<serde_cbor::Value>, // Option<bool>,
-    pub(crate) large_blob_key: Option<Vec<u8>>,
-}
-
-impl TryFrom<BTreeMap<u32, serde_cbor::Value>> for AttestationObjectInner {
-    type Error = WebauthnError;
-
-    fn try_from(mut raw: BTreeMap<u32, serde_cbor::Value>) -> Result<Self, Self::Error> {
-        trace!(?raw);
-        Ok(Self {
-            fmt: raw.remove(&0x01).and_then(|v| if let Value::Text(v) = v {
-                Some(v)
-            } else { None }).unwrap(),
-            auth_data: raw.remove(&0x02).and_then(|v| if let Value::Bytes(v) = v {
-                Some(v) } else { None}
-            ).unwrap(),
-            att_stmt: raw.remove(&0x03).unwrap(),
-            ep_att: raw.remove(&0x04),
-            large_blob_key: raw.remove(&0x05).and_then(|v| if let Value::Bytes(v) = v {
-                Some(v) } else { None }
-            ),
-        })
-    }
-}
-*/
 
 /// Attestation Object
 #[derive(Debug)]
@@ -464,8 +430,7 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
 
         let aoi: AttestationObjectInner =
             serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
-        trace!(?aoi, "AOI done");
-        let auth_data_bytes: &[u8] = aoi.auth_data; // .as_slice();
+        let auth_data_bytes: &[u8] = aoi.auth_data;
         let auth_data = AuthenticatorData::try_from(auth_data_bytes)?;
 
         // Yay! Now we can assemble a reasonably sane structure.
@@ -509,9 +474,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
         let ccdj = serde_json::from_slice(aarr.client_data_json.as_ref())
             .map_err(WebauthnError::ParseJSONFailure)?;
 
-        trace!(?ccdj, "correctedClientDataJson");
         let ao = AttestationObject::try_from(aarr.attestation_object.as_ref())?;
-        trace!("attestationObject");
 
         Ok(AuthenticatorAttestationResponse {
             attestation_object: ao,
