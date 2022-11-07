@@ -16,6 +16,7 @@ use crate::AuthenticatorBackend;
 use self::commands::GetInfoRequest;
 pub use self::commands::{CBORCommand, CBORResponse};
 pub use self::{ctap20::Ctap20Authenticator, ctap21::Ctap21Authenticator};
+pub use self::commands::EnrollSampleStatus;
 
 #[derive(Debug)]
 pub enum CtapAuthenticator<'a, T: Token, U: UiCallback> {

@@ -167,7 +167,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
             .await?;
 
-        let r = self
+        let mut r = self
             .bio_with_session(
                 BioSubCommand::FingerprintEnrollBegin(timeout),
                 iface.as_ref(),
@@ -183,7 +183,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             .remaining_samples
             .ok_or(WebauthnCError::MissingRequiredField)?;
         while remaining_samples > 0 {
-            let r = self
+            self.ui_callback.fingerprint_enrollment_feedback(remaining_samples, r.last_enroll_sample_status);
+
+            r = self
                 .bio_with_session(
                     BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout),
                     iface.as_ref(),
