@@ -38,7 +38,7 @@ impl fmt::Display for Base64UrlSafeData {
         write!(
             f,
             "{}",
-            base64::encode_config(&self, base64::URL_SAFE_NO_PAD)
+            base64::encode_config(self, base64::URL_SAFE_NO_PAD)
         )
     }
 }
@@ -137,7 +137,7 @@ impl Serialize for Base64UrlSafeData {
     where
         S: Serializer,
     {
-        let encoded = base64::encode_config(&self, base64::URL_SAFE_NO_PAD);
+        let encoded = base64::encode_config(self, base64::URL_SAFE_NO_PAD);
         serializer.serialize_str(&encoded)
     }
 }
