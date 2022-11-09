@@ -123,10 +123,11 @@ pub enum AuthenticatorTransport {
     Ble,
     /// <https://www.w3.org/TR/webauthn/#dom-authenticatortransport-internal>
     Internal,
+    /// Hybrid transport, formerly caBLE. Part of the level 3 draft specification.
+    /// <https://w3c.github.io/webauthn/#dom-authenticatortransport-hybrid>
+    Hybrid,
     /// Test transport; used for Windows 10.
     Test,
-    // ///
-    // Hybrid
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
