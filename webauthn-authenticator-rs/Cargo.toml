@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-authenticator-rs"
-version = "0.4.7"
+version = "0.4.8"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 license = "MPL-2.0"
@@ -21,7 +21,7 @@ all-features = true
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
-webauthn-rs-proto = { version = "0.4.7", path = "../webauthn-rs-proto" }
+webauthn-rs-proto = { version = "0.4.8", path = "../webauthn-rs-proto" }
 
 tracing = "0.1"
 url = "2"
