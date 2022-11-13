@@ -30,6 +30,8 @@ fn transport_to_native(transport: &AuthenticatorTransport) -> u32 {
         AuthenticatorTransport::Nfc => WEBAUTHN_CTAP_TRANSPORT_NFC,
         AuthenticatorTransport::Test => WEBAUTHN_CTAP_TRANSPORT_TEST,
         AuthenticatorTransport::Usb => WEBAUTHN_CTAP_TRANSPORT_USB,
+        // This transport has not platform equivalent on windows, mask to 0.
+        AuthenticatorTransport::Hybrid => 0,
     }
 }
 
