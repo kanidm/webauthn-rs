@@ -116,8 +116,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// Checks whether a provided PIN follows the rules defined by the
     /// authenticator. This does not share the PIN with the authenticator.
     pub fn validate_pin(&self, pin: &str) -> Result<String, WebauthnCError> {
-        let min_length = self.info.min_pin_length.unwrap_or(4);
-        check_pin(pin, min_length)
+        check_pin(pin, self.info.get_min_pin_length())
     }
 
     /// Sets a PIN on a device which does not already have one.

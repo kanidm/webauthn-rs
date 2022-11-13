@@ -8,6 +8,9 @@ use super::{
     value_to_bool, value_to_set_string, value_to_string, value_to_u32, value_to_vec_u8, CBORCommand,
 };
 
+/// `authenticatorGetAssertion` request type.
+/// 
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetAssertion>
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct GetAssertionRequest {
@@ -25,6 +28,9 @@ impl CBORCommand for GetAssertionRequest {
     type Response = GetAssertionResponse;
 }
 
+/// `authenticatorGetAssertion` response type.
+/// 
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorgetassertion-response-structure>
 // Note: this needs to have the same names as AttestationObjectInner
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", try_from = "BTreeMap<u32, Value>")]

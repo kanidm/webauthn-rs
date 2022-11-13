@@ -6,18 +6,33 @@ use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, Relying
 
 use super::{value_to_bool, value_to_string, CBORCommand};
 
+/// `authenticatorMakeCredential` request type.
+/// 
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorMakeCredential>
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct MakeCredentialRequest {
+    /// Hash of the ClientData binding specified by the host.
     pub client_data_hash: Vec<u8>,
+    /// Describes the relying party which the new credential will be associated
+    /// with.
     pub rp: RelyingParty,
+    /// Describes the user account to which the new credential will be
+    /// associated with by the [RelyingParty].
     pub user: User,
+    /// List of supported algorithms for credential generation.
     pub pub_key_cred_params: Vec<PubKeyCredParams>,
+    /// List of existing credentials which the [RelyingParty] has for this
+    /// [User]. This prevents re-enrollment of the same authenticator.
     pub exclude_list: Vec<PublicKeyCredentialDescriptor>,
     // TODO: extensions
+    /// Parameters to influence operation.
     pub options: Option<BTreeMap<String, bool>>,
+    /// Result of calling `authenticate(pin_uv_auth_token, client_data_hash)`.
     pub pin_uv_auth_param: Option<Vec<u8>>,
+    /// PIN/UV protocol version chosen by the platform.
     pub pin_uv_auth_proto: Option<u32>,
+    /// Enterprise attestation support.  **Not yet implemented**.
     pub enterprise_attest: Option<u32>,
 }
 
@@ -26,14 +41,26 @@ impl CBORCommand for MakeCredentialRequest {
     type Response = MakeCredentialResponse;
 }
 
+/// `authenticatorMakeCredential` response type.
+/// 
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatormakecredential-response-structure>
 // Note: this needs to have the same names as AttestationObjectInner
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase", try_from = "BTreeMap<u32, Value>")]
 pub struct MakeCredentialResponse {
+    /// The attestation statement format identifier.
     pub fmt: Option<String>,
+    /// The authenticator data object.
     pub auth_data: Option<Value>,
+    /// The attestation statement.
     pub att_stmt: Option<Value>,
+    /// Indicates whether an enterprise attestation was returned for this
+    /// credential.
     pub epp_att: Option<bool>,
+    /// Contains the `largeBlobKey` for the credential, if requested with the
+    /// `largeBlobKey` extension.
+    /// 
+    /// **Not yet supported.**
     pub large_blob_key: Option<Value>,
     // TODO: extensions
 }

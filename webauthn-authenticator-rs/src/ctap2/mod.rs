@@ -7,12 +7,14 @@
 //! ## Warning
 //!
 //! This is "alpha" quality code: it still a work in progress, and missing core
-//! functionality. There are edge cases that can cause you to be locked out of
-//! your authenticator.
+//! functionality.
+//! 
+//! **There are edge cases that which cause you to be locked out of your
+//! authenticator.**
 //!
 //! **The API is not final, and subject to change without warning.**
 //!
-//! ## Known issues
+//! ### Known issues
 //!
 //! There are many limitations with this implementation, which are intended to
 //! be addressed in the future:
@@ -51,8 +53,6 @@
 //!
 //! ## Features
 //!
-//! There's a bunch of stuff that *does* work:
-//!
 //! * Basic [registration][Ctap20Authenticator::perform_register] and
 //!   [authentication][Ctap20Authenticator::perform_auth] with a
 //!   [CLI interface][crate::ui::Cli]
@@ -78,6 +78,17 @@
 //!   and [minimum PIN length][Ctap20Authenticator::set_min_pin_length]
 //!   requirements
 //!
+//! ## Examples
+//! 
+//! Find these in the `examples` directory of `webauthn-authenticator-rs`'
+//! source code:
+//! 
+//! * `key_manager` will connect to a key, pull hardware information, and let
+//!   you reconfigure the key (reset, PIN, fingerprints, etc.)
+//! 
+//! * `authenticate` works with any [AuthenticatorBackend], including
+//!   [CtapAuthenticator].
+//! 
 //! [ble]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#ble
 //! [discoverable credentials]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorCredentialManagement
 //! [enterprise attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enable-enterprise-attestation

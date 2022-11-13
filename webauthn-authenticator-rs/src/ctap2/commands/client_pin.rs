@@ -7,7 +7,14 @@ use webauthn_rs_proto::COSEAlgorithm;
 use self::CBORCommand;
 use super::*;
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authnrClientPin-cmd-dfn
+/// `authenticatorclientPin` request type.
+///
+/// See:
+///
+/// * [ClientPinSubCommand] for command types
+/// * `crate::ctap2::pin_uv` constructs this command
+///
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authnrClientPin-cmd-dfn>
 #[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct ClientPinRequest {
@@ -15,19 +22,29 @@ pub struct ClientPinRequest {
     pub pin_uv_protocol: Option<u32>,
     /// Action being requested
     pub sub_command: ClientPinSubCommand,
+    /// The platform-agreement key
     pub key_agreement: Option<COSEKey>,
-    /// OUtput of calling "Authenticate" on some context specific to [Self::sub_command]
+    /// Output of calling "Authenticate" on some context specific to
+    /// [sub_command][Self::sub_command]
     pub pin_uv_auth_param: Option<Vec<u8>>,
     /// An encrypted PIN
     pub new_pin_enc: Option<Vec<u8>>,
     /// An encrypted proof-of-knowledge of a PIN
     pub pin_hash_enc: Option<Vec<u8>>,
-    /// Permissions bitfield, omitted if 0.
+    /// Permissions bitfield for
+    /// [GetPinUvAuthTokenUsingUvWithPermissions][ClientPinSubCommand::GetPinUvAuthTokenUsingUvWithPermissions]
+    /// and
+    /// [GetPinUvAuthTokenUsingPinWithPermissions][ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions].
+    ///
+    /// Field is omitted if `0`.
     pub permissions: Permissions,
     /// The RP ID to assign as the permissions RP ID
     pub rp_id: Option<String>,
 }
 
+/// [ClientPinRequest::sub_command] type code
+///
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authnrClientPin-cmd-dfn>
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[repr(u32)]
 pub enum ClientPinSubCommand {
@@ -43,6 +60,12 @@ pub enum ClientPinSubCommand {
 }
 
 bitflags! {
+    /// Permissions bitfield for
+    /// [GetPinUvAuthTokenUsingUvWithPermissions][ClientPinSubCommand::GetPinUvAuthTokenUsingUvWithPermissions]
+    /// and
+    /// [GetPinUvAuthTokenUsingPinWithPermissions][ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions].
+    /// 
+    /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken>
     #[derive(Default)]
     pub struct Permissions: u8 {
         const MAKE_CREDENTIAL = 0x01;
@@ -59,17 +82,26 @@ impl CBORCommand for ClientPinRequest {
     type Response = ClientPinResponse;
 }
 
+/// `authenticatorClientPin` response type.
 #[derive(Deserialize, Debug, Default, PartialEq, Eq)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct ClientPinResponse {
+    /// The result of the authenticator calling `getPublicKey`, which can be
+    /// used to encapsulate encrypted payloads between the authenticator and
+    /// platform.
     pub key_agreement: Option<COSEKey>,
+    /// The `pinUvAuthToken`, encrypted with the shared secret.
     pub pin_uv_auth_token: Option<Vec<u8>>,
+    /// Number of PIN attempts remaining until lock-out.
     pub pin_retries: Option<u32>,
+    /// If present and `true`, the authenticator requires a power cycle before
+    /// any future pin operation.
+    /// 
+    /// Only included in response to [ClientPinSubCommand::GetPinRetries].
     pub power_cycle_state: Option<bool>,
+    /// Number of UV attempts remaining until lock-out.
     pub uv_retries: Option<u32>,
 }
-
-// fn serialize_struct_as_map( breaks length- it's always indefinite :(
 
 impl From<ClientPinRequest> for BTreeMap<u32, Value> {
     fn from(value: ClientPinRequest) -> Self {

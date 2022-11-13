@@ -7,7 +7,11 @@ use webauthn_rs_proto::AuthenticatorTransport;
 use self::CBORCommand;
 use super::*;
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authenticatorGetInfo
+/// `authenticatorGetInfo` request type.
+/// 
+/// This request type has no fields.
+/// 
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetInfo>
 #[derive(Serialize, Debug, Clone)]
 pub struct GetInfoRequest {}
 
@@ -17,6 +21,9 @@ impl CBORCommand for GetInfoRequest {
     type Response = GetInfoResponse;
 }
 
+/// `authenticatorGetInfo` response type.
+/// 
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetInfo>
 #[derive(Deserialize, Debug)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct GetInfoResponse {
@@ -24,19 +31,38 @@ pub struct GetInfoResponse {
     pub versions: BTreeSet<String>,
     /// All protocol extensions which the token supports.
     pub extensions: Option<Vec<String>>,
+    /// The claimed AAGUID.
     pub aaguid: Vec<u8>,
+    /// List of supported options.
     pub options: Option<BTreeMap<String, bool>>,
+    /// Maximum message size supported by the authenticator.
     pub max_msg_size: Option<u32>,
     /// All PIN/UV auth protocols which the token supports.
     pub pin_protocols: Option<Vec<u32>>,
     pub max_cred_count_in_list: Option<u32>,
     pub max_cred_id_len: Option<u32>,
+    /// List of supported transports as strings.
+    /// 
+    /// Use [get_transports][Self::get_transports] to get a list of
+    /// [AuthenticatorTransport].
     pub transports: Option<Vec<String>>,
+    /// List of supported algorithms for credential generation.
     pub algorithms: Option<Value>,
+    /// Current minimum PIN length, in Unicode code points.
+    /// 
+    /// Use [get_min_pin_length][Self::get_min_pin_length] to get a default
+    /// value for when this is not present.
     pub min_pin_length: Option<usize>,
 }
 
 impl GetInfoResponse {
+    /// Current minimum PIN length, in Unicode code points.
+    /// 
+    /// If this is not present, defaults to 4.
+    pub fn get_min_pin_length(&self) -> usize {
+        self.min_pin_length.unwrap_or(4)
+    }
+
     /// Gets all supported transports for this authenticator which match known
     /// [AuthenticatorTransport] values. Unknown values are silently discarded.
     pub fn get_transports(&self) -> Option<Vec<AuthenticatorTransport>> {

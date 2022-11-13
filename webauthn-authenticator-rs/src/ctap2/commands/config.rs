@@ -4,7 +4,14 @@ use serde_cbor::Value;
 use self::CBORCommand;
 use super::*;
 
-// https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#authnrClientPin-cmd-dfn
+/// `authenticatorConfig` request type.
+/// 
+/// See [ConfigSubCommand] and [ConfigRequest::new] for details on how to
+/// construct a new [ConfigRequest].
+/// 
+/// This has no response type.
+///
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorConfig>
 #[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(into = "BTreeMap<u32, Value>")]
 pub struct ConfigRequest {
@@ -22,21 +29,39 @@ impl CBORCommand for ConfigRequest {
     type Response = NoResponse;
 }
 
+/// Subcommands for [ConfigRequest].
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum ConfigSubCommand {
     #[default]
     Unknown,
+    /// Enables the [enterprise attestation] feature.
+    /// 
+    /// [enterprise attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enable-enterprise-attestation
     EnableEnterpriseAttestation,
+    /// Toggles the [always require user verification] feature.
+    /// 
+    /// [always require user verification]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv
     ToggleAlwaysUv,
+    /// Sets a [minimum PIN length] policy.
+    /// 
+    /// See [SetMinPinLengthParams] for further details.
+    /// 
+    /// [minimum PIN length]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength
     SetMinPinLength(SetMinPinLengthParams),
     // VendorPrototype,
 }
 
+/// Parameters for setting minimum PIN length in a [ConfigRequest].
 #[derive(Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(into = "BTreeMap<Value, Value>")]
 pub struct SetMinPinLengthParams {
+    /// Minimum PIN length, in Unicode code points.
     pub new_min_pin_length: Option<u32>,
+    /// Relying Party IDs which are allowed to request this information via the
+    /// `minPinLength` extension.
     pub min_pin_length_rpids: Vec<String>,
+    /// If set to `true`, invalidates the authenticator's existing PIN, and
+    /// forces the PIN to be changed before it can be used again.
     pub force_change_pin: Option<bool>,
 }
 
@@ -87,7 +112,7 @@ impl ConfigSubCommand {
 }
 
 impl ConfigRequest {
-    pub(crate) fn new(
+    pub fn new(
         s: ConfigSubCommand,
         pin_uv_protocol: Option<u32>,
         pin_uv_auth_param: Option<Vec<u8>>,
