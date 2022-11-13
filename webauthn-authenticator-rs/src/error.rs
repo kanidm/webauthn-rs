@@ -10,7 +10,7 @@ pub enum WebauthnCError {
     PlatformAuthenticator,
     Internal,
     ParseNOMFailure,
-    OpenSSL,
+    OpenSSL(String),
     ApduConstruction,
     ApduTransmission,
     InvalidAlgorithm,
@@ -26,5 +26,11 @@ impl From<Error> for WebauthnCError {
             Error::DataTooLong => WebauthnCError::MessageTooLarge,
             _ => WebauthnCError::Internal,
         }
+    }
+}
+
+impl From<openssl::error::ErrorStack> for WebauthnCError {
+    fn from(v: openssl::error::ErrorStack) -> Self {
+        Self::OpenSSL(v.to_string())
     }
 }
