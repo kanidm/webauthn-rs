@@ -16,7 +16,7 @@ insecure-rs1 = []
 default = []
 
 [dependencies]
-base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
+base64urlsafedata = { version = "0.1.2", path = "../base64urlsafedata" }
 webauthn-rs-proto = { version = "0.4.8", path = "../webauthn-rs-proto" }
 serde = { version = "1", features = ["derive"] }
 serde_cbor = { version = "0.12.0-dev", package = "serde_cbor_2" }
