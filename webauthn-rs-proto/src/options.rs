@@ -146,6 +146,7 @@ impl FromStr for AuthenticatorTransport {
             "ble" => Ble,
             "internal" => Internal,
             "test" => Test,
+            "hybrid" => Hybrid,
             &_ => return Err(()),
         })
     }
@@ -160,6 +161,7 @@ impl ToString for AuthenticatorTransport {
             Ble => "ble",
             Internal => "internal",
             Test => "test",
+            Hybrid => "hybrid",
         }.to_string()
     }
 }
@@ -282,12 +284,13 @@ mod test {
 
     #[test]
     fn test_authenticator_transports() {
-        let cases: [(&str, AuthenticatorTransport); 5] = [
+        let cases: [(&str, AuthenticatorTransport); 6] = [
             ("ble", AuthenticatorTransport::Ble),
             ("internal", AuthenticatorTransport::Internal),
             ("nfc", AuthenticatorTransport::Nfc),
             ("usb", AuthenticatorTransport::Usb),
             ("test", AuthenticatorTransport::Test),
+            ("hybrid", AuthenticatorTransport::Hybrid),
         ];
 
         for (s, t) in cases {
