@@ -35,7 +35,7 @@ pub enum COSEAlgorithm {
     /// used by validators, but can exist in some windows hello tpm's
     INSECURE_RS1 = -65535,
     /// Identifies this key as the protocol used for [PIN/UV Auth Protocol One](https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#pinProto1)
-    /// 
+    ///
     /// This reports as algorithm `-25`, but it is a lie. Don't include this in any algorithm lists.
     PinUvProtocol,
 }
