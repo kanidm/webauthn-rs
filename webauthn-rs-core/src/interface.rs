@@ -4,6 +4,7 @@
 use crate::attestation::{verify_attestation_ca_chain, AttestationFormat};
 use crate::constants::*;
 use crate::error::*;
+pub use crate::internals::AttestationObject;
 use std::fmt;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
@@ -15,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 use openssl::hash::MessageDigest;
-use openssl::x509;
+use openssl::{bn, ec, nid, pkey, x509};
 use uuid::Uuid;
 
 /// Representation of an AAGUID
@@ -113,6 +114,17 @@ impl ECDSACurve {
     }
 }
 
+impl From<&ECDSACurve> for nid::Nid {
+    fn from(c: &ECDSACurve) -> Self {
+        use ECDSACurve::*;
+        match c {
+            SECP256R1 => nid::Nid::X9_62_PRIME256V1,
+            SECP384R1 => nid::Nid::SECP384R1,
+            SECP521R1 => nid::Nid::SECP521R1,
+        }
+    }
+}
+
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
@@ -125,6 +137,21 @@ pub struct COSEEC2Key {
     pub x: Base64UrlSafeData,
     /// The key's public Y coordinate.
     pub y: Base64UrlSafeData,
+}
+
+impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
+    type Error = openssl::error::ErrorStack;
+
+    fn try_from(k: &COSEEC2Key) -> Result<Self, Self::Error> {
+        let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
+        let mut ctx = bn::BigNumContext::new()?;
+        let mut point = ec::EcPoint::new(&group)?;
+        let x = bn::BigNum::from_slice(k.x.0.as_slice())?;
+        let y = bn::BigNum::from_slice(k.y.0.as_slice())?;
+        point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
+
+        ec::EcKey::from_public_key(&group, &point)
+    }
 }
 
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential

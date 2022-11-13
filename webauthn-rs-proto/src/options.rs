@@ -3,7 +3,7 @@
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, str::FromStr};
 
 /// A credential ID type. At the moment this is a vector of bytes, but
 /// it could also be a future change for this to be base64 string instead.
@@ -111,7 +111,7 @@ pub enum AttestationConveyancePreference {
 }
 
 /// <https://www.w3.org/TR/webauthn/#enumdef-authenticatortransport>
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 #[allow(unused)]
 pub enum AuthenticatorTransport {
@@ -128,6 +128,42 @@ pub enum AuthenticatorTransport {
     Hybrid,
     /// Test transport; used for Windows 10.
     Test,
+}
+
+impl FromStr for AuthenticatorTransport {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use AuthenticatorTransport::*;
+
+        // "internal" is longest (8 chars)
+        if s.len() > 8 {
+            return Err(());
+        }
+
+        Ok(match s.to_ascii_lowercase().as_str() {
+            "usb" => Usb,
+            "nfc" => Nfc,
+            "ble" => Ble,
+            "internal" => Internal,
+            "test" => Test,
+            "hybrid" => Hybrid,
+            &_ => return Err(()),
+        })
+    }
+}
+
+impl ToString for AuthenticatorTransport {
+    fn to_string(&self) -> String {
+        use AuthenticatorTransport::*;
+        match self {
+            Usb => "usb",
+            Nfc => "nfc",
+            Ble => "ble",
+            Internal => "internal",
+            Test => "test",
+            Hybrid => "hybrid",
+        }.to_string()
+    }
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
@@ -237,4 +273,31 @@ pub struct TokenBinding {
     pub status: String,
     /// id
     pub id: Option<String>,
+}
+
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use crate::AuthenticatorTransport;
+
+    #[test]
+    fn test_authenticator_transports() {
+        let cases: [(&str, AuthenticatorTransport); 6] = [
+            ("ble", AuthenticatorTransport::Ble),
+            ("internal", AuthenticatorTransport::Internal),
+            ("nfc", AuthenticatorTransport::Nfc),
+            ("usb", AuthenticatorTransport::Usb),
+            ("test", AuthenticatorTransport::Test),
+            ("hybrid", AuthenticatorTransport::Hybrid),
+        ];
+
+        for (s, t) in cases {
+            assert_eq!(t, AuthenticatorTransport::from_str(s).expect("unknown authenticatorTransport"));
+            assert_eq!(s, AuthenticatorTransport::to_string(&t));
+        }
+
+        assert!(AuthenticatorTransport::from_str("fake fake").is_err());
+    }
 }
