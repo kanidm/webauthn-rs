@@ -1,4 +1,4 @@
-use futures::executor::block_on;
+use pcsc::Scope;
 use webauthn_authenticator_rs::ctap2::{commands::*, *};
 use webauthn_authenticator_rs::nfc::*;
 use webauthn_authenticator_rs::transport::iso7816::*;
@@ -336,7 +336,7 @@ fn test_card(card: NFCCard) {
 }
 
 pub(crate) fn main() {
-    let mut reader = NFCReader::default();
+    let mut reader = NFCReader::new(Scope::User).expect("Failed to establish PC/SC context");
     info!("Using reader: {:?}", reader);
 
     let card = reader.wait_for_card().expect("Error getting card");
