@@ -161,8 +161,9 @@ fn main() {
             let mut buf = String::new();
             stdout().flush().ok();
             stdin().read_line(&mut buf).expect("Cannot read stdin");
+            buf = buf.trim_end().to_ascii_lowercase();
 
-            if buf == "yes\n" {
+            if buf == "yes" {
                 block_on(authenticator.factory_reset()).expect("Error resetting token");
             } else {
                 panic!("Unexpected response {:?}, exiting!", buf);
