@@ -148,7 +148,7 @@ impl AuthenticatorBackend for U2FHid {
                 id: options.user.id.0,
                 name: Some(options.user.name),
                 display_name: Some(options.user.display_name),
-                icon: None
+                icon: None,
             },
             pub_cred_params,
             exclude_list: vec![],
@@ -355,7 +355,7 @@ mod tests {
         let wan = Webauthn::new_unsafe_experts_only(
             "https://localhost:8080/auth",
             "localhost",
-            &url::Url::parse("https://localhost:8080").unwrap(),
+            vec![url::Url::parse("https://localhost:8080").unwrap()],
             None,
             None,
             None,
