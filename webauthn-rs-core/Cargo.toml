@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs-core"
-version = "0.4.8"
+version = "0.4.9"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Cryptographic Operation Handling"
