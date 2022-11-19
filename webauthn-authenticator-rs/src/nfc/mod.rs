@@ -14,7 +14,6 @@ use webauthn_rs_proto::AuthenticatorTransport;
 
 mod atr;
 mod tlv;
-// mod worker;
 
 pub use self::atr::*;
 use super::ctap2::*;
@@ -30,11 +29,13 @@ pub const APPLET_DF: [u8; 8] = [
     /* RID */ 0xA0, 0x00, 0x00, 0x06, 0x47, /* PIX */ 0x2F, 0x00, 0x01,
 ];
 
+/// Wrapper for PC/SC context
 pub struct NFCReader {
     ctx: Context,
     reader_states: Vec<(CString, State, Vec<u8>)>,
 }
 
+// Connection to a single NFC card
 pub struct NFCCard {
     card: Mutex<Card>,
     reader_name: CString,
@@ -365,6 +366,14 @@ impl Token for NFCCard {
         Ok(data)
     }
 
+    /// Initialises the connected FIDO token.
+    /// 
+    /// ## Platform-specific issues
+    /// 
+    /// ### Windows
+    /// 
+    /// This may fail with "permission denied" on Windows 10 build 1903 or
+    /// later, unless the program is run as Administrator.
     async fn init(&mut self) -> Result<(), WebauthnCError> {
         let guard = self.card.lock()?;
         let resp = transmit(
