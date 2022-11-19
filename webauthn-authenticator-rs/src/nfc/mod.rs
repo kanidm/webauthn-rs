@@ -318,7 +318,7 @@ impl NFCCard {
         request: &ISO7816RequestAPDU,
         form: &ISO7816LengthForm,
     ) -> Result<ISO7816ResponseAPDU, WebauthnCError> {
-        let guard = self.card.lock().unwrap();
+        let guard = self.card.lock()?;
         transmit(guard.deref(), request, form)
     }
 }
