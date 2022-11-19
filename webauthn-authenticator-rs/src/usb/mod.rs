@@ -88,11 +88,11 @@ impl<'b> Transport<'b> for USBTransport {
     /// Gets a list of attached USB HID FIDO tokens.
     ///
     /// Any un-openable devices will be silently ignored.
-    /// 
+    ///
     /// If `hidapi` fails to detect HID devices of *any* kind, this will return
     /// [WebauthnCError::NoHidDevices]. This normally indicates a permission
     /// issue.
-    /// 
+    ///
     /// ## Platform-specific issues
     ///
     /// ### Linux

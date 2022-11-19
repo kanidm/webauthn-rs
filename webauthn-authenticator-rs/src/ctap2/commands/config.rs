@@ -5,10 +5,10 @@ use self::CBORCommand;
 use super::*;
 
 /// `authenticatorConfig` request type.
-/// 
+///
 /// See [ConfigSubCommand] and [ConfigRequest::new] for details on how to
 /// construct a new [ConfigRequest].
-/// 
+///
 /// This has no response type.
 ///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorConfig>
@@ -35,17 +35,17 @@ pub enum ConfigSubCommand {
     #[default]
     Unknown,
     /// Enables the [enterprise attestation] feature.
-    /// 
+    ///
     /// [enterprise attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enable-enterprise-attestation
     EnableEnterpriseAttestation,
     /// Toggles the [always require user verification] feature.
-    /// 
+    ///
     /// [always require user verification]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv
     ToggleAlwaysUv,
     /// Sets a [minimum PIN length] policy.
-    /// 
+    ///
     /// See [SetMinPinLengthParams] for further details.
-    /// 
+    ///
     /// [minimum PIN length]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength
     SetMinPinLength(SetMinPinLengthParams),
     // VendorPrototype,

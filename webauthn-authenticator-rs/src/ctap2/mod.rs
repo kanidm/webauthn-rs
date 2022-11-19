@@ -90,17 +90,17 @@
 //!   [CtapAuthenticator].
 //!
 //! ## Device-specific issues
-//! 
+//!
 //! * [Some YubiKey USB tokens][yubi] provide a USB CCID (smartcard) interface,
 //!   in addition to a USB HID FIDO interface, which will be detected as an
 //!   "NFC reader".
-//! 
+//!
 //!   This only provides access to the PIV, OATH or OpenPGP applets, not FIDO.
-//! 
+//!
 //!   Use [USBTransport][crate::usb::USBTransport] for these tokens.
 //!
 //! ## Platform-specific issues
-//! 
+//!
 //! ### Linux
 //!
 //! * NFC support requires [PC/SC Lite], and a PC/SC initiator (driver) for your

@@ -8,9 +8,9 @@ use self::CBORCommand;
 use super::*;
 
 /// `authenticatorGetInfo` request type.
-/// 
+///
 /// This request type has no fields.
-/// 
+///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetInfo>
 #[derive(Serialize, Debug, Clone)]
 pub struct GetInfoRequest {}
@@ -22,7 +22,7 @@ impl CBORCommand for GetInfoRequest {
 }
 
 /// `authenticatorGetInfo` response type.
-/// 
+///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetInfo>
 #[derive(Deserialize, Debug)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
@@ -42,14 +42,14 @@ pub struct GetInfoResponse {
     pub max_cred_count_in_list: Option<u32>,
     pub max_cred_id_len: Option<u32>,
     /// List of supported transports as strings.
-    /// 
+    ///
     /// Use [get_transports][Self::get_transports] to get a list of
     /// [AuthenticatorTransport].
     pub transports: Option<Vec<String>>,
     /// List of supported algorithms for credential generation.
     pub algorithms: Option<Value>,
     /// Current minimum PIN length, in Unicode code points.
-    /// 
+    ///
     /// Use [get_min_pin_length][Self::get_min_pin_length] to get a default
     /// value for when this is not present.
     pub min_pin_length: Option<usize>,
@@ -57,7 +57,7 @@ pub struct GetInfoResponse {
 
 impl GetInfoResponse {
     /// Current minimum PIN length, in Unicode code points.
-    /// 
+    ///
     /// If this is not present, defaults to 4.
     pub fn get_min_pin_length(&self) -> usize {
         self.min_pin_length.unwrap_or(4)

@@ -6,7 +6,7 @@ use super::*;
 /// `authenticatorSelection` request type.
 ///
 /// This feature **requires** FIDO v2.1. v2.1-PRE isn't good enough.
-/// 
+///
 /// This has no parameters or response type.
 ///
 /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorSelection>

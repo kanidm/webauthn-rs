@@ -9,7 +9,7 @@ use super::{
 };
 
 /// `authenticatorGetAssertion` request type.
-/// 
+///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetAssertion>
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
@@ -29,7 +29,7 @@ impl CBORCommand for GetAssertionRequest {
 }
 
 /// `authenticatorGetAssertion` response type.
-/// 
+///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorgetassertion-response-structure>
 // Note: this needs to have the same names as AttestationObjectInner
 #[derive(Deserialize, Serialize, Debug, Clone)]

@@ -367,11 +367,11 @@ impl Token for NFCCard {
     }
 
     /// Initialises the connected FIDO token.
-    /// 
+    ///
     /// ## Platform-specific issues
-    /// 
+    ///
     /// ### Windows
-    /// 
+    ///
     /// This may fail with "permission denied" on Windows 10 build 1903 or
     /// later, unless the program is run as Administrator.
     async fn init(&mut self) -> Result<(), WebauthnCError> {

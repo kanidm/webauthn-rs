@@ -64,7 +64,7 @@ bitflags! {
     /// [GetPinUvAuthTokenUsingUvWithPermissions][ClientPinSubCommand::GetPinUvAuthTokenUsingUvWithPermissions]
     /// and
     /// [GetPinUvAuthTokenUsingPinWithPermissions][ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions].
-    /// 
+    ///
     /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken>
     #[derive(Default)]
     pub struct Permissions: u8 {
@@ -96,7 +96,7 @@ pub struct ClientPinResponse {
     pub pin_retries: Option<u32>,
     /// If present and `true`, the authenticator requires a power cycle before
     /// any future pin operation.
-    /// 
+    ///
     /// Only included in response to [ClientPinSubCommand::GetPinRetries].
     pub power_cycle_state: Option<bool>,
     /// Number of UV attempts remaining until lock-out.

@@ -42,9 +42,9 @@ pub enum WebauthnCError {
     NoHidDevices,
     /// HID devices were detected, but none of them reported usage page
     /// information, which is required to find FIDO-compatible authenticators.
-    /// 
+    ///
     /// This indicates that `hidapi` was built with [a broken backend][libusb].
-    /// 
+    ///
     /// [libusb]: https://github.com/ruabmbua/hidapi-rs/issues/94
     BrokenHidApi,
     /// See [PoisonError]; generally indicates that a method holding a prior lock on the mutex failed.
