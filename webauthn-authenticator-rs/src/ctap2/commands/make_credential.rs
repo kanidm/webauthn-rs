@@ -2,12 +2,11 @@ use serde::{Deserialize, Serialize};
 use serde_cbor::{value::to_value, Value};
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User};
-// use webauthn_rs_core::proto::{AttestationObject, Registration};
 
 use super::{value_to_bool, value_to_string, CBORCommand};
 
 /// `authenticatorMakeCredential` request type.
-/// 
+///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorMakeCredential>
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>")]
@@ -42,10 +41,10 @@ impl CBORCommand for MakeCredentialRequest {
 }
 
 /// `authenticatorMakeCredential` response type.
-/// 
+///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatormakecredential-response-structure>
 // Note: this needs to have the same names as AttestationObjectInner
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", try_from = "BTreeMap<u32, Value>")]
 pub struct MakeCredentialResponse {
     /// The attestation statement format identifier.
@@ -59,7 +58,7 @@ pub struct MakeCredentialResponse {
     pub epp_att: Option<bool>,
     /// Contains the `largeBlobKey` for the credential, if requested with the
     /// `largeBlobKey` extension.
-    /// 
+    ///
     /// **Not yet supported.**
     pub large_blob_key: Option<Value>,
     // TODO: extensions
@@ -83,8 +82,9 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 
         keys.insert(0x01, Value::Bytes(client_data_hash));
 
-        let rp_value = to_value(rp).expect("Unable to encode rp");
-        keys.insert(0x2, rp_value);
+        if let Ok(rp_value) = to_value(rp) {
+            keys.insert(0x2, rp_value);
+        }
 
         // Because of how webauthn-rs is made, we build this in a way that optimises for text, not
         // to ctap.
@@ -107,15 +107,9 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
         // info!("{:?}", user_value);
         keys.insert(0x3, user_value);
 
-        // let ps = Value::Array(pub_key_cred_params.iter().map(|p| {
-        //     let mut m = BTreeMap::new();
-        //     m.insert(Value::Text("type".to_string()), Value::Text(p.type_.clone()));
-        //     m.insert(Value::Text("alg".to_string()), Value::Integer(p.alg as i128));
-        //     Value::Map(m)
-        // }).collect());
-
-        let ps = to_value(pub_key_cred_params).expect("Unable to encode pub_key_cred_params");
-        keys.insert(0x4, ps);
+        if let Ok(ps) = to_value(pub_key_cred_params) {
+            keys.insert(0x4, ps);
+        }
 
         if !exclude_list.is_empty() {
             keys.insert(
@@ -196,30 +190,18 @@ crate::deserialize_cbor!(MakeCredentialResponse);
 
 #[cfg(test)]
 mod test {
-    use std::num::ParseIntError;
+    use crate::ctap2::CBORResponse;
 
     use super::*;
     use base64urlsafedata::Base64UrlSafeData;
     use serde_cbor::{from_slice, to_vec, Value};
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
-    pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
-        (0..s.len())
-            .step_by(2)
-            .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-            .collect()
-    }
-
     #[test]
-    fn make_credential() {
-        let _ = tracing_subscriber::fmt().try_init();
-
-        // dropped 01 at start
-        let b = "A8015820687134968222EC17202E42505F8ED2B16AE22F16BB05B88C25DB9E602645F14102A262696469746573742E63746170646E616D6569746573742E6374617003A362696458202B6689BB18F4169F069FBCDF50CB6EA3C60A861B9A7B63946983E0B577B78C70646E616D6571746573746374617040637461702E636F6D6B646973706C61794E616D65695465737420437461700483A263616C672664747970656A7075626C69632D6B6579A263616C6739010064747970656A7075626C69632D6B6579A263616C67382464747970656A7075626C69632D6B657906A16B686D61632D736563726574F507A162726BF50850FC43AAA411D948CC6C37068B8DA1D5080901";
-        let b = decode_hex(b).expect("bad");
-        info!("canonical thhing = {:?}", b);
-        let _v: Value = from_slice(&b[..]).expect("also bad");
-        /* Ok(Map({
+    fn sample_make_credential_request() {
+        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#example-1a030b94
+        /*
+        {
         Integer(1): Bytes([104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106, 226, 47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65]),
         Integer(2): Map({Text("id"): Text("test.ctap"), Text("name"): Text("test.ctap")}),
         Integer(3): Map({Text("id"): Bytes([43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80, 203, 110, 163, 198, 10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140, 112]),
@@ -231,18 +213,190 @@ mod test {
         Integer(6): Map({Text("hmac-secret"): Bool(true)}),
         Integer(7): Map({Text("rk"): Bool(true)}),
         Integer(8): Bytes([252, 67, 170, 164, 17, 217, 72, 204, 108, 55, 6, 139, 141, 161, 213, 8]),
-        Integer(9): Integer(1)}))
+        Integer(9): Integer(1),
+        }
+         */
+        let expected = vec![
+            1, //
+            // Extensions not yet supported
+            // 168,
+            167, //
+            // ClientDataHash
+            1, 88, 32, 104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106,
+            226, 47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65, //
+            // RelyingParty
+            2, 162, 98, 105, 100, 105, 116, 101, 115, 116, 46, 99, 116, 97, 112, 100, 110, 97, 109,
+            101, 105, 116, 101, 115, 116, 46, 99, 116, 97, 112, //
+            // User
+            3, 163, 98, 105, 100, 88, 32, 43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80,
+            203, 110, 163, 198, 10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140,
+            112, 100, 110, 97, 109, 101, 113, 116, 101, 115, 116, 99, 116, 97, 112, 64, 99, 116,
+            97, 112, 46, 99, 111, 109, 107, 100, 105, 115, 112, 108, 97, 121, 78, 97, 109, 101,
+            105, 84, 101, 115, 116, 32, 67, 116, 97, 112, //
+            // PubKeyCredParams
+            4, 131, 162, 99, 97, 108, 103, 38, 100, 116, 121, 112, 101, 106, 112, 117, 98, 108, 105,
+            99, 45, 107, 101, 121, 162, 99, 97, 108, 103, 57, 1, 0, 100, 116, 121, 112, 101, 106,
+            112, 117, 98, 108, 105, 99, 45, 107, 101, 121, 162, 99, 97, 108, 103, 56, 36, 100, 116,
+            121, 112, 101, 106, 112, 117, 98, 108, 105, 99, 45, 107, 101, 121,
+            // Extensions not yet supported
+            // 6, 161, 107, 104, 109, 97, 99, 45, 115, 101, 99, 114, 101, 116, 245,
+            // Options
+            7, 161, 98, 114, 107, 245, //
+            // pin_uv_auth_param
+            8, 80, 252, 67, 170, 164, 17, 217, 72, 204, 108, 55, 6, 139, 141, 161, 213, 8,
+            // pin_uv_auth_proto
+            9, 1,
+        ];
 
-        will send = Ok(Map({
-        Integer(1): Bytes([148, 145, 139, 124, 8, 224, 156, 143, 91, 32, 250, 54, 89, 205, 14, 229, 185, 87, 249, 200, 63, 52, 60, 28, 179, 209, 104, 241, 133, 181, 28, 208]),
-        Integer(2): Map({Text("id"): Text("localhost"), Text("name"): Text("https://localhost:8080/auth")}),
-        Integer(3): Map({Text("id"): Bytes([158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238]),
-            Text("name"): Text("william"), Text("displayName"): Text("william")}),
-        Integer(4): Array([
-            Map({Text("alg"): Integer(-7), Text("type"): Text("public-key")}),
-            Map({Text("alg"): Integer(-257), Text("type"): Text("public-key")})])}))
-        */
-        // let map: BTreeMap<Value, Value> = BTreeMap::new();
+        let req = MakeCredentialRequest {
+            client_data_hash: vec![
+                104, 113, 52, 150, 130, 34, 236, 23, 32, 46, 66, 80, 95, 142, 210, 177, 106, 226,
+                47, 22, 187, 5, 184, 140, 37, 219, 158, 96, 38, 69, 241, 65,
+            ],
+            rp: RelyingParty {
+                name: "test.ctap".to_owned(),
+                id: "test.ctap".to_owned(),
+            },
+            user: User {
+                id: Base64UrlSafeData(vec![
+                    43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80, 203, 110, 163, 198,
+                    10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140, 112,
+                ]),
+                name: "testctap@ctap.com".to_owned(),
+                display_name: "Test Ctap".to_owned(),
+            },
+            pub_key_cred_params: vec![
+                PubKeyCredParams {
+                    type_: "public-key".to_owned(),
+                    alg: -7,
+                },
+                PubKeyCredParams {
+                    type_: "public-key".to_owned(),
+                    alg: -257,
+                },
+                PubKeyCredParams {
+                    type_: "public-key".to_owned(),
+                    alg: -37,
+                },
+            ],
+            exclude_list: vec![],
+            options: Some(BTreeMap::from([("rk".to_owned(), true)])),
+            pin_uv_auth_param: Some(vec![
+                252, 67, 170, 164, 17, 217, 72, 204, 108, 55, 6, 139, 141, 161, 213, 8,
+            ]),
+            pin_uv_auth_proto: Some(1),
+            enterprise_attest: None,
+        };
+
+        assert_eq!(expected, req.cbor().expect("encode error"));
+
+        let r = vec![
+            163, 1, 102, 112, 97, 99, 107, 101, 100, 2, 89, 0, 162, 0, 33, 245, 252, 11, 133, 205,
+            34, 230, 6, 35, 188, 215, 209, 202, 72, 148, 137, 9, 36, 155, 71, 118, 235, 81, 81, 84,
+            229, 123, 102, 174, 18, 197, 0, 0, 0, 85, 248, 160, 17, 243, 140, 10, 77, 21, 128, 6,
+            23, 17, 31, 158, 220, 125, 0, 16, 244, 213, 123, 35, 221, 12, 183, 133, 104, 12, 218,
+            167, 247, 228, 79, 96, 165, 1, 2, 3, 38, 32, 1, 33, 88, 32, 223, 1, 125, 11, 40, 103,
+            149, 190, 161, 83, 209, 102, 160, 161, 91, 79, 107, 103, 163, 175, 74, 16, 30, 16, 232,
+            73, 111, 61, 211, 197, 209, 169, 34, 88, 32, 148, 178, 37, 81, 230, 50, 93, 119, 51,
+            196, 27, 178, 245, 166, 66, 173, 238, 65, 124, 151, 224, 144, 97, 151, 181, 176, 205,
+            139, 141, 108, 107, 167, 161, 107, 104, 109, 97, 99, 45, 115, 101, 99, 114, 101, 116,
+            245, 3, 163, 99, 97, 108, 103, 38, 99, 115, 105, 103, 88, 71, 48, 69, 2, 32, 124, 202,
+            197, 122, 30, 67, 223, 36, 176, 132, 126, 235, 241, 25, 210, 141, 205, 197, 4, 143,
+            125, 205, 142, 221, 121, 231, 151, 33, 196, 27, 207, 45, 2, 33, 0, 216, 158, 199, 91,
+            146, 206, 143, 249, 228, 111, 231, 248, 200, 121, 149, 105, 74, 99, 229, 183, 138, 184,
+            92, 71, 185, 218, 28, 88, 10, 142, 200, 58, 99, 120, 53, 99, 129, 89, 1, 151, 48, 130,
+            1, 147, 48, 130, 1, 56, 160, 3, 2, 1, 2, 2, 9, 0, 133, 155, 114, 108, 178, 75, 76, 41,
+            48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 2, 48, 71, 49, 11, 48, 9, 6, 3, 85, 4, 6, 19,
+            2, 85, 83, 49, 20, 48, 18, 6, 3, 85, 4, 10, 12, 11, 89, 117, 98, 105, 99, 111, 32, 84,
+            101, 115, 116, 49, 34, 48, 32, 6, 3, 85, 4, 11, 12, 25, 65, 117, 116, 104, 101, 110,
+            116, 105, 99, 97, 116, 111, 114, 32, 65, 116, 116, 101, 115, 116, 97, 116, 105, 111,
+            110, 48, 30, 23, 13, 49, 54, 49, 50, 48, 52, 49, 49, 53, 53, 48, 48, 90, 23, 13, 50,
+            54, 49, 50, 48, 50, 49, 49, 53, 53, 48, 48, 90, 48, 71, 49, 11, 48, 9, 6, 3, 85, 4, 6,
+            19, 2, 85, 83, 49, 20, 48, 18, 6, 3, 85, 4, 10, 12, 11, 89, 117, 98, 105, 99, 111, 32,
+            84, 101, 115, 116, 49, 34, 48, 32, 6, 3, 85, 4, 11, 12, 25, 65, 117, 116, 104, 101,
+            110, 116, 105, 99, 97, 116, 111, 114, 32, 65, 116, 116, 101, 115, 116, 97, 116, 105,
+            111, 110, 48, 89, 48, 19, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 8, 42, 134, 72, 206, 61,
+            3, 1, 7, 3, 66, 0, 4, 173, 17, 235, 14, 136, 82, 229, 58, 213, 223, 237, 134, 180, 30,
+            97, 52, 161, 142, 196, 225, 175, 143, 34, 26, 60, 125, 110, 99, 108, 128, 234, 19, 195,
+            213, 4, 255, 46, 118, 33, 27, 180, 69, 37, 177, 150, 196, 76, 180, 132, 153, 121, 207,
+            111, 137, 110, 205, 43, 184, 96, 222, 27, 244, 55, 107, 163, 13, 48, 11, 48, 9, 6, 3,
+            85, 29, 19, 4, 2, 48, 0, 48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 2, 3, 73, 0, 48, 70,
+            2, 33, 0, 233, 163, 159, 27, 3, 25, 117, 37, 247, 55, 62, 16, 206, 119, 231, 128, 33,
+            115, 27, 148, 208, 192, 63, 63, 218, 31, 210, 45, 179, 208, 48, 231, 2, 33, 0, 196,
+            250, 236, 52, 69, 168, 32, 207, 67, 18, 156, 219, 0, 170, 190, 253, 154, 226, 216, 116,
+            249, 197, 211, 67, 203, 47, 17, 61, 162, 55, 35, 243,
+        ];
+        let a = <MakeCredentialResponse as CBORResponse>::try_from(r.as_slice())
+            .expect("Failed to decode message");
+        info!(?r);
+
+        assert_eq!(
+            a,
+            MakeCredentialResponse {
+                fmt: Some("packed".to_owned()),
+                auth_data: Some(Value::Bytes(vec![
+                    0, 33, 245, 252, 11, 133, 205, 34, 230, 6, 35, 188, 215, 209, 202, 72, 148,
+                    137, 9, 36, 155, 71, 118, 235, 81, 81, 84, 229, 123, 102, 174, 18, 197, 0, 0,
+                    0, 85, 248, 160, 17, 243, 140, 10, 77, 21, 128, 6, 23, 17, 31, 158, 220, 125,
+                    0, 16, 244, 213, 123, 35, 221, 12, 183, 133, 104, 12, 218, 167, 247, 228, 79,
+                    96, 165, 1, 2, 3, 38, 32, 1, 33, 88, 32, 223, 1, 125, 11, 40, 103, 149, 190,
+                    161, 83, 209, 102, 160, 161, 91, 79, 107, 103, 163, 175, 74, 16, 30, 16, 232,
+                    73, 111, 61, 211, 197, 209, 169, 34, 88, 32, 148, 178, 37, 81, 230, 50, 93,
+                    119, 51, 196, 27, 178, 245, 166, 66, 173, 238, 65, 124, 151, 224, 144, 97, 151,
+                    181, 176, 205, 139, 141, 108, 107, 167, 161, 107, 104, 109, 97, 99, 45, 115,
+                    101, 99, 114, 101, 116, 245
+                ])),
+                att_stmt: Some(Value::Map(BTreeMap::from([
+                    (Value::Text("alg".to_owned()), Value::Integer(-7)),
+                    (
+                        Value::Text("sig".to_owned()),
+                        Value::Bytes(vec![
+                            48, 69, 2, 32, 124, 202, 197, 122, 30, 67, 223, 36, 176, 132, 126, 235,
+                            241, 25, 210, 141, 205, 197, 4, 143, 125, 205, 142, 221, 121, 231, 151,
+                            33, 196, 27, 207, 45, 2, 33, 0, 216, 158, 199, 91, 146, 206, 143, 249,
+                            228, 111, 231, 248, 200, 121, 149, 105, 74, 99, 229, 183, 138, 184, 92,
+                            71, 185, 218, 28, 88, 10, 142, 200, 58
+                        ])
+                    ),
+                    (
+                        Value::Text("x5c".to_owned()),
+                        Value::Array(vec![Value::Bytes(vec![
+                            48, 130, 1, 147, 48, 130, 1, 56, 160, 3, 2, 1, 2, 2, 9, 0, 133, 155,
+                            114, 108, 178, 75, 76, 41, 48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 2,
+                            48, 71, 49, 11, 48, 9, 6, 3, 85, 4, 6, 19, 2, 85, 83, 49, 20, 48, 18,
+                            6, 3, 85, 4, 10, 12, 11, 89, 117, 98, 105, 99, 111, 32, 84, 101, 115,
+                            116, 49, 34, 48, 32, 6, 3, 85, 4, 11, 12, 25, 65, 117, 116, 104, 101,
+                            110, 116, 105, 99, 97, 116, 111, 114, 32, 65, 116, 116, 101, 115, 116,
+                            97, 116, 105, 111, 110, 48, 30, 23, 13, 49, 54, 49, 50, 48, 52, 49, 49,
+                            53, 53, 48, 48, 90, 23, 13, 50, 54, 49, 50, 48, 50, 49, 49, 53, 53, 48,
+                            48, 90, 48, 71, 49, 11, 48, 9, 6, 3, 85, 4, 6, 19, 2, 85, 83, 49, 20,
+                            48, 18, 6, 3, 85, 4, 10, 12, 11, 89, 117, 98, 105, 99, 111, 32, 84,
+                            101, 115, 116, 49, 34, 48, 32, 6, 3, 85, 4, 11, 12, 25, 65, 117, 116,
+                            104, 101, 110, 116, 105, 99, 97, 116, 111, 114, 32, 65, 116, 116, 101,
+                            115, 116, 97, 116, 105, 111, 110, 48, 89, 48, 19, 6, 7, 42, 134, 72,
+                            206, 61, 2, 1, 6, 8, 42, 134, 72, 206, 61, 3, 1, 7, 3, 66, 0, 4, 173,
+                            17, 235, 14, 136, 82, 229, 58, 213, 223, 237, 134, 180, 30, 97, 52,
+                            161, 142, 196, 225, 175, 143, 34, 26, 60, 125, 110, 99, 108, 128, 234,
+                            19, 195, 213, 4, 255, 46, 118, 33, 27, 180, 69, 37, 177, 150, 196, 76,
+                            180, 132, 153, 121, 207, 111, 137, 110, 205, 43, 184, 96, 222, 27, 244,
+                            55, 107, 163, 13, 48, 11, 48, 9, 6, 3, 85, 29, 19, 4, 2, 48, 0, 48, 10,
+                            6, 8, 42, 134, 72, 206, 61, 4, 3, 2, 3, 73, 0, 48, 70, 2, 33, 0, 233,
+                            163, 159, 27, 3, 25, 117, 37, 247, 55, 62, 16, 206, 119, 231, 128, 33,
+                            115, 27, 148, 208, 192, 63, 63, 218, 31, 210, 45, 179, 208, 48, 231, 2,
+                            33, 0, 196, 250, 236, 52, 69, 168, 32, 207, 67, 18, 156, 219, 0, 170,
+                            190, 253, 154, 226, 216, 116, 249, 197, 211, 67, 203, 47, 17, 61, 162,
+                            55, 35, 243
+                        ])])
+                    )
+                ]))),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn make_credential() {
+        let _ = tracing_subscriber::fmt().try_init();
 
         // clientDataHash 0x01
         // rp 0x02

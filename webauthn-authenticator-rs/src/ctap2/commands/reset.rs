@@ -18,3 +18,42 @@ impl CBORCommand for ResetRequest {
     const HAS_PAYLOAD: bool = false;
     type Response = NoResponse;
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transport::iso7816::ISO7816LengthForm;
+
+    #[test]
+    fn reset_request() {
+        let req = ResetRequest {};
+        let short = vec![0x80, 0x10, 0, 0, 1, 0x7, 0];
+        let ext = vec![0x80, 0x10, 0, 0, 0, 0, 1, 0x7, 0, 0];
+
+        let a = req.to_short_apdus().unwrap();
+        assert_eq!(1, a.len());
+        assert_eq!(short, a[0].to_bytes(&ISO7816LengthForm::ShortOnly).unwrap());
+        assert_eq!(short, a[0].to_bytes(&ISO7816LengthForm::Extended).unwrap());
+
+        assert_eq!(
+            ext,
+            req.to_extended_apdu()
+                .unwrap()
+                .to_bytes(&ISO7816LengthForm::Extended)
+                .unwrap()
+        );
+        assert_eq!(
+            ext,
+            req.to_extended_apdu()
+                .unwrap()
+                .to_bytes(&ISO7816LengthForm::ExtendedOnly)
+                .unwrap()
+        );
+        assert!(req
+            .to_extended_apdu()
+            .unwrap()
+            .to_bytes(&ISO7816LengthForm::ShortOnly)
+            .is_err());
+    }
+}
