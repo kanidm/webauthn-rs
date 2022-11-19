@@ -291,24 +291,13 @@ impl NFCCard {
         atr: &[u8],
     ) -> Result<NFCCard, WebauthnCError> {
         trace!("ATR: {:02x?}", atr);
-        let atr = Atr::try_from(atr).expect("oops atr");
+        let atr = Atr::try_from(atr)?;
         trace!("Parsed: {:?}", &atr);
-        // TODO: check that it's not a storage card
 
-        // reader.sender.send(WorkerCmd::Connect(reader_name));
+        if atr.storage_card {
+            return Err(WebauthnCError::StorageCard);
+        }
 
-        // TODO: error handler
-        // let s = reader.sender.clone();
-        // let transmit = move |apdu| {
-        //     let guard = reader.receiver.lock().unwrap();
-        //     s.send(WorkerCmd::Transmit(reader_name, apdu));
-        //     loop {
-        //         let r = guard.recv().unwrap();
-        //         if let WorkerMsg::Receive(_, apdu) = r {
-        //             return apdu;
-        //         }
-        //     }
-        // };
         let card = reader
             .ctx
             .connect(reader_name, ShareMode::Shared, Protocols::ANY)?;

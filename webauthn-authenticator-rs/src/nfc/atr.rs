@@ -1,6 +1,8 @@
 //! ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
 use pcsc::*;
 
+use crate::WebauthnCError;
+
 use super::tlv::*;
 
 /// ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
@@ -102,12 +104,12 @@ fn checksum(i: &[u8]) -> bool {
 }
 
 impl TryFrom<&[u8]> for Atr {
-    type Error = &'static str;
+    type Error = WebauthnCError;
 
     /// Attempts to parse an ATR from a `&[u8]`.
     fn try_from(atr: &[u8]) -> Result<Self, Self::Error> {
         if atr.len() < 2 {
-            return Err("ATR must be at least 2 bytes");
+            return Err(WebauthnCError::MessageTooShort);
         }
 
         let mut nibbles = Vec::with_capacity(MAX_ATR_SIZE);
@@ -120,7 +122,7 @@ impl TryFrom<&[u8]> for Atr {
             || atr[2] & 0x80 != 0x00) // there is more than one protocol
         && !checksum(atr)
         {
-            return Err("ATR checksum incorrect");
+            return Err(WebauthnCError::Checksum);
         }
 
         let mut i: usize = 1;
@@ -150,7 +152,7 @@ impl TryFrom<&[u8]> for Atr {
         let mut extended_lc = None;
         let mut card_issuers_data = None;
         if i + t1_len > atr.len() {
-            return Err("T1 length > ATR length");
+            return Err(WebauthnCError::MessageTooShort);
         }
         let t1 = &atr[i..i + t1_len];
 
@@ -357,6 +359,6 @@ mod tests {
     fn error_cases() {
         let i1 = [0x3b];
         let a1 = Atr::try_from(&i1[..]);
-        assert!(a1.is_err());
+        assert_eq!(a1, Err(WebauthnCError::MessageTooShort));
     }
 }

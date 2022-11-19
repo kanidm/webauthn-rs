@@ -49,6 +49,10 @@ pub enum WebauthnCError {
     BrokenHidApi,
     /// See [PoisonError]; generally indicates that a method holding a prior lock on the mutex failed.
     PoisonedMutex,
+    /// The checksum of the value was incorrect.
+    Checksum,
+    /// The card reported as a PC/SC storage card, rather than a smart card.
+    StorageCard,
 }
 
 #[cfg(feature = "nfc")]
