@@ -35,8 +35,18 @@ pub enum WebauthnCError {
     FriendlyNameTooLong,
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),
-    #[cfg(feature = "usb")]
+    /// Error returned by `hidapi`.
     HidError(String),
+    /// No HID devices were detected **at all**. This may indicate a permissions
+    /// issue.
+    NoHidDevices,
+    /// HID devices were detected, but none of them reported usage page
+    /// information, which is required to find FIDO-compatible authenticators.
+    /// 
+    /// This indicates that `hidapi` was built with [a broken backend][libusb].
+    /// 
+    /// [libusb]: https://github.com/ruabmbua/hidapi-rs/issues/94
+    BrokenHidApi,
     /// See [PoisonError]; generally indicates that a method holding a prior lock on the mutex failed.
     PoisonedMutex,
 }

@@ -85,8 +85,37 @@ impl USBTransport {
 impl<'b> Transport<'b> for USBTransport {
     type Token = USBToken;
 
+    /// Gets a list of attached USB HID FIDO tokens.
+    ///
+    /// Any un-openable devices will be silently ignored.
+    /// 
+    /// If `hidapi` fails to detect HID devices of *any* kind, this will return
+    /// [WebauthnCError::NoHidDevices]. This normally indicates a permission
+    /// issue.
+    /// 
+    /// ## Platform-specific issues
+    ///
+    /// ### Linux
+    ///
+    /// systemd (udev) v252 and later [automatically tag USB HID FIDO tokens][1]
+    /// and set permissions based on the `f1d0` usage page, which should work
+    /// with any FIDO-compliant token.
+    ///
+    /// Previously, most distributions used a fixed list of device IDs, which
+    /// can be a problem for new or esoteric tokens.
+    ///
+    /// This will **only** work correctly with `hidapi`'s `hidraw` backend. The
+    /// `libusb` backend does not provide access to the HID usage page
+    /// descriptor, and this will return [WebauthnCError::BrokenHidApi].
+    ///
+    /// [1]: https://github.com/systemd/systemd/issues/11996
+    ///
+    /// ### Windows
+    ///
+    /// On Windows 10 build 1903 or later, this will not return any devices
+    /// unless the program is run as Administrator.
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
-        Ok(self
+        let tokens: Vec<Self::Token> = self
             .api
             .device_list()
             .filter(|d| d.usage_page() == FIDO_USAGE_PAGE && d.usage() == FIDO_USAGE_U2FHID)
@@ -94,9 +123,24 @@ impl<'b> Transport<'b> for USBTransport {
                 trace!(?d);
                 d
             })
-            .map(|d| d.open_device(&self.api).expect("Could not open device"))
+            .filter_map(|d| d.open_device(&self.api).ok())
             .map(USBToken::new)
-            .collect())
+            .collect();
+
+        if tokens.is_empty() {
+            let devices: Vec<&hidapi::DeviceInfo> = self.api.device_list().collect();
+            if devices.is_empty() {
+                return Err(WebauthnCError::NoHidDevices);
+            } else if devices
+                .iter()
+                .all(|d| d.usage_page() == 0 && d.usage() == 0)
+            {
+                // https://github.com/ruabmbua/hidapi-rs/issues/94
+                return Err(WebauthnCError::BrokenHidApi);
+            }
+        }
+
+        Ok(tokens)
     }
 }
 
