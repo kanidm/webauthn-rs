@@ -12,8 +12,26 @@ which performas a cryptographic authentication.
 
 This library aims to provide useful functions and frameworks allowing you to
 integrate webauthn into Rust web servers. This means the library implements the
-Relying Party component of the FIDO2 workflow. We provide template and
+Relying Party component of the Webauthn/FIDO2 workflow. We provide template and
 example javascript and wasm bindings to demonstrate the browser interactions required.
+
+Code of Conduct
+---------------
+
+See our [code of conduct]
+
+[code of conduct]: https://github.com/kanidm/kanidm/blob/master/CODE_OF_CONDUCT.md
+
+Blockchain Support Policy
+-------------------------
+
+This project does not and will not support any blockchain related use cases. We will not accept issues
+from organisations (or employees thereof) whose primary business is blockchain, cryptocurrency, NFTs
+or so-called “Web 3.0 technology”. This statement does not affect the rights and responsibilities
+granted under the project’s open source license(s).
+
+If you have further questions about the scope of this statement and whether it impacts you, please
+email webauthn at firstyear.id.au
 
 Documentation
 -------------
@@ -62,17 +80,9 @@ an issue so that we can resolve the issue!
 Known BROKEN Keys/Harwdare
 --------------------------
 
-### Broken
-
 * Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates,
   and ignores requested algorithms. Not resolved.
 * Windows Hello with Older TPMs - Often use RSA-SHA1 signatures over attestation which may allow credential compromise/falsification.
-
-### Fixed
-
-* Windows 10 / Windows 11 + Firefox 98 - When aaguid is meant
-  to be 16 bytes of 0, it emits a single 0 byte. This should be resolved as of 2022-04-17
-* BUG in Safari, NOT Apple Passkeys (was: passkeys do not identify themself as a transferable credential, and should be considered to be floating.)
 
 Standards Compliance
 --------------------
