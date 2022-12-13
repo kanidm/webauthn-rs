@@ -20,7 +20,7 @@ Code of Conduct
 
 See our [code of conduct]
 
-[code of conduct]: https://github.com/kanidm/kanidm/blob/master/CODE_OF_CONDUCT.md
+[code of conduct]: https://github.com/kanidm/webauthn-rs/blob/master/CODE_OF_CONDUCT.md
 
 Blockchain Support Policy
 -------------------------
