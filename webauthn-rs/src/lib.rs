@@ -763,9 +763,9 @@ impl Webauthn {
         let allow_backup_eligible_upgrade = false;
 
         let policy = if self.user_presence_only_security_keys {
-            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
+            UserVerificationPolicy::Discouraged_DO_NOT_USE
         } else {
-            Some(UserVerificationPolicy::Preferred)
+            UserVerificationPolicy::Preferred
         };
 
         self.core
