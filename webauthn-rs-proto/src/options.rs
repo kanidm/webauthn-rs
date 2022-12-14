@@ -162,7 +162,8 @@ impl ToString for AuthenticatorTransport {
             Internal => "internal",
             Test => "test",
             Hybrid => "hybrid",
-        }.to_string()
+        }
+        .to_string()
     }
 }
 
@@ -275,7 +276,6 @@ pub struct TokenBinding {
     pub id: Option<String>,
 }
 
-
 #[cfg(test)]
 mod test {
     use std::str::FromStr;
@@ -294,7 +294,10 @@ mod test {
         ];
 
         for (s, t) in cases {
-            assert_eq!(t, AuthenticatorTransport::from_str(s).expect("unknown authenticatorTransport"));
+            assert_eq!(
+                t,
+                AuthenticatorTransport::from_str(s).expect("unknown authenticatorTransport")
+            );
             assert_eq!(s, AuthenticatorTransport::to_string(&t));
         }
 

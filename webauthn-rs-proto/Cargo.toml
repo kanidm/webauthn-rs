@@ -1,6 +1,6 @@
 [package]
 name = "webauthn-rs-proto"
-version = "0.4.9"
+version = "0.5.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn Specification Bindings"
