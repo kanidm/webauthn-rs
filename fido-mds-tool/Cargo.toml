@@ -1,6 +1,6 @@
 [package]
 name = "fido-mds-tool"
-version = "0.4.8"
+version = "0.5.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Fido Metadata Service parsing tool"
@@ -11,7 +11,7 @@ categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
 
 [dependencies]
-fido-mds = { version = "0.4.6", path = "../fido-mds" }
+fido-mds = { version = "0.5.0-dev", path = "../fido-mds" }
 
 clap = { version = "^3.2", features = ["derive", "env"] }
 

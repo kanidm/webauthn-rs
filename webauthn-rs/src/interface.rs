@@ -43,9 +43,15 @@ pub struct PasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A Passkey for a user.
+/// A Passkey for a user. A passkey is a term that covers all possible authenticators that may exist.
+/// These could be roaming credentials such as Apple's Account back passkeys, they could be a users
+/// Yubikey, a Windows Hello TPM, or even a password manager softtoken.
 ///
-/// These can be safely serialised and deserialised from a database for use.
+/// Passkeys *may* opportunistically have some properties such as discoverability (residence). This
+/// is not a guarantee since enforcing residence on devices like yubikeys that have limited storage
+/// and no administration of resident keys may break the device.
+///
+/// These can be safely serialised and deserialised from a database for persistance.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Passkey {
     pub(crate) cred: Credential,
@@ -66,7 +72,7 @@ impl Passkey {
     ///
     /// To determine if this is required, you can inspect the result of
     /// `authentication_result.needs_update()`. Counter intuitively, most passkeys
-    /// will never need their properties updated! This is because passkeys lack an
+    /// will never need their properties updated! This is because many passkeys lack an
     /// internal device activation counter (due to their synchronisation), and the
     /// backup-state flags are rarely if ever changed.
     ///
@@ -163,7 +169,9 @@ pub struct PasswordlessKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A passwordless key for a user
+/// A passwordless key for a user. This is a specialisation of [Passkey] as you can
+/// limit the make and models of authenticators that a user may register. Additionally
+/// these keys will always enforce userverification.
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,7 +283,9 @@ pub struct SecurityKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A Security Key for a user.
+/// A Security Key for a user. These are the legacy "second factor" method of security tokens.
+///
+/// You should avoid this type in favour of [Passkey] or [PasswordlessKey]
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -391,7 +401,16 @@ pub struct DeviceKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A device key belonging to a user
+/// A device key belonging to a user. These are a specialisation of [PasswordlessKey] where
+/// the devices in use can be attested. In addition this type enforces keys to be resident on the
+/// authenticator.
+///
+/// Since most authenticators have very limited key residence support, this should only be used in
+/// tightly controlled enterprise environments where you have strict access over the makes and models
+/// of keys in use.
+///
+/// Key residence is *not* a security property. The general reason for the usage of key residence is
+/// to allow the device to identify the user in addition to authenticating them.
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -491,7 +510,11 @@ pub struct DiscoverableAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A key that can be used in discoverable workflows.
+/// A key that can be used in discoverable workflows. Within this library [Passkey]s may be
+/// discoverable on an opportunistic bases, and [DeviceKey]s will always be discoverable.
+///
+/// Generally this is used as part of conditional ui which allows autofill of discovered
+/// credentials in username fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "preview-features")]
 pub struct DiscoverableKey {
