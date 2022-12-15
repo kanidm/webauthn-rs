@@ -762,7 +762,7 @@ impl Webauthn {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let allow_backup_eligible_upgrade = false;
 
-        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+        let policy = if self.user_presence_only_security_keys {
             UserVerificationPolicy::Discouraged_DO_NOT_USE
         } else {
             UserVerificationPolicy::Preferred
