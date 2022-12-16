@@ -53,5 +53,6 @@ jobs:
           triplet: x64-windows-static-md
 
       - run: cargo build --release ${{ matrix.features }}
+      - run: cargo fmt --check
       - run: cargo clippy --all-targets ${{ matrix.features }}
       - run: cargo test --all ${{ matrix.features }}
