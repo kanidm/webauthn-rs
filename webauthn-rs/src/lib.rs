@@ -470,7 +470,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [PasskeyRegistration]. The details of the Authenticator
+    /// and the server provides its paired [PasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
