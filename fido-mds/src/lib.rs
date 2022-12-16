@@ -1130,7 +1130,9 @@ impl From<RawFidoMds> for FidoMds {
                 FidoDevice::FIDO2(dev) => {
                     let dev = rc::Rc::new(dev);
                     assert!(fido2.insert(dev.aaguid, dev.clone()).is_none());
-                    assert!(fido2_description.insert(dev.description.clone(), dev).is_none());
+                    assert!(fido2_description
+                        .insert(dev.description.clone(), dev)
+                        .is_none());
                 }
             });
 
@@ -1138,7 +1140,7 @@ impl From<RawFidoMds> for FidoMds {
             fido2,
             fido2_description,
             uaf,
-            u2f
+            u2f,
         }
     }
 }
