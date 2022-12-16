@@ -1090,8 +1090,14 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
 /// The set of parsed and validated FIDO Metadata
 #[derive(Debug, Clone)]
 pub struct FidoMds {
-    /// The set of FIDO2 device metadata that exists within the Metadata Statement.
-    pub fido2: BTreeMap<Uuid, FIDO2>,
+    /// The set of FIDO2 device metadata that exists within the Metadata Statement, indexed by their
+    /// aaguid / uuid.
+    pub fido2: BTreeMap<Uuid, rc::Rc<FIDO2>>,
+
+    /// The set of FIDO2 device metadata that exists within the Metadata Statement, indexed by their
+    /// descriptions.
+    pub fido2_description: BTreeMap<String, rc::Rc<FIDO2>>,
+
     /// The set of (legacy) UAF device metadata that exists within the Metadata Statement.
     pub uaf: BTreeMap<String, UAF>,
     /// The set of (legacy) U2f device metadata that exists within the Metadata Statement.
@@ -1101,6 +1107,7 @@ pub struct FidoMds {
 impl From<RawFidoMds> for FidoMds {
     fn from(rawmds: RawFidoMds) -> Self {
         let mut fido2 = BTreeMap::new();
+        let mut fido2_description = BTreeMap::new();
         let mut uaf = BTreeMap::new();
         let mut u2f = BTreeMap::new();
 
@@ -1110,22 +1117,29 @@ impl From<RawFidoMds> for FidoMds {
             .filter_map(|device| device.try_into().ok())
             .for_each(|fd| match fd {
                 FidoDevice::Uaf(dev) => {
-                    uaf.insert(dev.aaid.clone(), dev);
+                    assert!(uaf.insert(dev.aaid.clone(), dev).is_none());
                 }
                 FidoDevice::U2F(dev) => {
                     let akis = dev.attestation_certificate_key_identifiers.clone();
                     let dev = rc::Rc::new(dev);
 
                     akis.into_iter().for_each(|aki| {
-                        u2f.insert(aki, dev.clone());
+                        assert!(u2f.insert(aki, dev.clone()).is_none());
                     })
                 }
                 FidoDevice::FIDO2(dev) => {
-                    fido2.insert(dev.aaguid, dev);
+                    let dev = rc::Rc::new(dev);
+                    assert!(fido2.insert(dev.aaguid, dev.clone()).is_none());
+                    assert!(fido2_description.insert(dev.description.clone(), dev).is_none());
                 }
             });
 
-        FidoMds { fido2, uaf, u2f }
+        FidoMds {
+            fido2,
+            fido2_description,
+            uaf,
+            u2f
+        }
     }
 }
 
