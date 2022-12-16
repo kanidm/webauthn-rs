@@ -57,13 +57,11 @@ pub enum Opt {
 impl Opt {
     fn debug(&self) -> bool {
         match self {
-            Opt::ListU2f(CommonOpt { debug, .. }) | 
-            Opt::ListFido2{
+            Opt::ListU2f(CommonOpt { debug, .. })
+            | Opt::ListFido2 {
                 common: CommonOpt { debug, .. },
                 ..
-            } => {
-                *debug
-            }
+            } => *debug,
             Opt::QueryAaguid(QueryOpt {
                 common: CommonOpt { debug, .. },
                 ..
@@ -128,7 +126,7 @@ fn main() {
                 }
             }
         }
-        Opt::ListFido2 { 
+        Opt::ListFido2 {
             common: CommonOpt { debug: _, path },
             extra_details,
         } => {
@@ -166,9 +164,7 @@ fn main() {
                                 }
                                 println!("");
                             }
-
                         }
-
                     }
                 }
                 Err(e) => {
