@@ -429,17 +429,6 @@ impl Webauthn {
     ///         None, // No other credentials are registered yet.
     ///     )
     ///     .expect("Failed to start registration.");
-    ///
-    /// // Only allow credentials from manufacturers that are trusted and part of the webauthn-rs
-    /// // strict "high quality" list.
-    /// let (ccr, skr) = webauthn
-    ///     .start_passkey_registration(
-    ///         Uuid::new_v4(),
-    ///         "claire",
-    ///         "Claire",
-    ///         None, // No other credentials are registered yet.
-    ///     )
-    ///     .expect("Failed to start registration.");
     /// ```
     pub fn start_passkey_registration(
         &self,
@@ -481,7 +470,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [PasskeyRegistration]. The details of the Authenticator
+    /// and the server provides its paired [PasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
