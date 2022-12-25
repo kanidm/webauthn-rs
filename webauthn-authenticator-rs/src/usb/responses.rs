@@ -1,5 +1,5 @@
 //! All [Response] frame types, used by FIDO tokens over USB HID.
-use crate::error::WebauthnCError;
+use crate::error::{CtapError, WebauthnCError};
 use crate::transport::iso7816::ISO7816ResponseAPDU;
 use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;
@@ -61,7 +61,7 @@ impl TryFrom<&[u8]> for InitResponse {
 #[derive(Debug, PartialEq, Eq)]
 pub struct CBORResponse {
     /// Status code
-    pub status: u8,
+    pub status: CtapError,
     /// Data payload
     pub data: Vec<u8>,
 }
@@ -73,9 +73,37 @@ impl TryFrom<&[u8]> for CBORResponse {
             return Err(WebauthnCError::MessageTooShort);
         }
         Ok(Self {
-            status: d[0],
+            status: d[0].into(),
             data: d[1..].to_vec(),
         })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum KeepAliveStatus {
+    Processing,
+    UserPresenceNeeded,
+    Unknown(u8),
+}
+
+impl From<u8> for KeepAliveStatus {
+    fn from(v: u8) -> Self {
+        use KeepAliveStatus::*;
+        match v {
+            1 => Processing,
+            2 => UserPresenceNeeded,
+            v => Unknown(v),
+        }
+    }
+}
+
+impl From<&[u8]> for KeepAliveStatus {
+    fn from(d: &[u8]) -> Self {
+        if !d.is_empty() {
+            Self::from(d[0])
+        } else {
+            Self::Unknown(0)
+        }
     }
 }
 
@@ -129,6 +157,7 @@ pub enum Response {
     Msg(ISO7816ResponseAPDU),
     Cbor(CBORResponse),
     Error(U2FError),
+    KeepAlive(KeepAliveStatus),
     Unknown,
 }
 
@@ -149,8 +178,16 @@ impl TryFrom<&U2FHIDFrame> for Response {
             U2FHID_INIT => InitResponse::try_from(b).map(Response::Init)?,
             U2FHID_MSG => ISO7816ResponseAPDU::try_from(b).map(Response::Msg)?,
             U2FHID_CBOR => CBORResponse::try_from(b).map(Response::Cbor)?,
+            U2FHID_KEEPALIVE => Response::KeepAlive(KeepAliveStatus::from(b)),
             U2FHID_ERROR => Response::Error(U2FError::from(b)),
-            _ => Response::Unknown,
+            _ => {
+                error!(
+                    "unknown USB HID command: 0x{:02x} (0x{:02x})",
+                    f.cmd,
+                    f.cmd ^ TYPE_INIT
+                );
+                Response::Unknown
+            }
         })
     }
 }
@@ -159,6 +196,7 @@ impl TryFrom<&U2FHIDFrame> for Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ctap2::commands::GetInfoResponse;
 
     #[test]
     fn init() {

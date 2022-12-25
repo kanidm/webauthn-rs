@@ -9,12 +9,12 @@ use crate::usb::*;
 ///
 /// If you don't care which transport is used for tokens, prefer to use
 /// [AnyTransport] for the best experience.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AnyTransport {
     #[cfg(feature = "nfc")]
-    nfc: NFCReader,
+    pub nfc: NFCReader,
     #[cfg(feature = "usb")]
-    usb: USBTransport,
+    pub usb: USBTransport,
 }
 
 /// [AnyToken] abstracts calls to NFC and USB security tokens.
@@ -28,7 +28,21 @@ pub enum AnyToken {
     Usb(USBToken),
 }
 
-impl Transport for AnyTransport {
+impl AnyTransport {
+    /// Creates connections to all available transports.
+    ///
+    /// For NFC, uses `Scope::User`.
+    pub fn new() -> Result<Self, WebauthnCError> {
+        Ok(AnyTransport {
+            #[cfg(feature = "nfc")]
+            nfc: NFCReader::new(pcsc::Scope::User)?,
+            #[cfg(feature = "usb")]
+            usb: USBTransport::new()?,
+        })
+    }
+}
+
+impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]
@@ -50,34 +64,34 @@ impl Transport for AnyTransport {
     }
 }
 
+#[async_trait]
+#[allow(clippy::unimplemented)]
 impl Token for AnyToken {
-    #[allow(unused_variables, clippy::unimplemented)]
-    fn transmit<C, R>(&self, cmd: C) -> Result<R, WebauthnCError>
+    #[allow(unused_variables)]
+    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand<Response = R>,
-        R: CBORResponse,
+        C: CBORCommand,
+        U: UiCallback,
     {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => Token::transmit(n, cmd),
+            AnyToken::Nfc(n) => Token::transmit_raw(n, cmd, ui).await,
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => Token::transmit(u, cmd),
+            AnyToken::Usb(u) => Token::transmit_raw(u, cmd, ui).await,
         }
     }
 
-    #[allow(clippy::unimplemented)]
-    fn init(&mut self) -> Result<(), WebauthnCError> {
+    async fn init(&mut self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => n.init(),
+            AnyToken::Nfc(n) => n.init().await,
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => u.init(),
+            AnyToken::Usb(u) => u.init().await,
         }
     }
 
-    #[allow(clippy::unimplemented)]
     fn close(&self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
@@ -85,6 +99,36 @@ impl Token for AnyToken {
             AnyToken::Nfc(n) => n.close(),
             #[cfg(feature = "usb")]
             AnyToken::Usb(u) => u.close(),
+        }
+    }
+
+    fn get_transport(&self) -> AuthenticatorTransport {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(n) => n.get_transport(),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.get_transport(),
+        }
+    }
+
+    fn cancel(&self) -> Result<(), WebauthnCError> {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(n) => n.cancel(),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.cancel(),
+        }
+    }
+
+    fn has_button(&self) -> bool {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(n) => n.has_button(),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.has_button(),
         }
     }
 }

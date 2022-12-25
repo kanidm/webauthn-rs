@@ -1,31 +1,26 @@
-// use webauthn_authenticator_rs::nfc::*;
-use webauthn_authenticator_rs::transport::*;
+use futures::executor::block_on;
+use webauthn_authenticator_rs::{ctap2::CtapAuthenticator, transport::*, ui::Cli};
 
 fn access_card<T: Token>(card: T) {
     info!("Card detected ...");
 
-    match card.select_any() {
-        Ok(Selected::FIDO_2_1_PRE(mut token)) => {
-            info!("Using token {:?}", token);
+    let auth = block_on(CtapAuthenticator::new(card, &Cli {}));
 
-            token.hack_make_cred().unwrap();
-            token.deselect_applet().unwrap();
+    match auth {
+        Some(x) => {
+            info!("Using token: {:?}", x);
         }
-        _ => {
-            unimplemented!();
-        }
+        None => unimplemented!(),
     }
 }
 
 pub(crate) fn event_loop() {
-    let mut reader = AnyTransport::default();
-    // let mut reader = NFCReader::default();
+    let mut reader = AnyTransport::new().unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.tokens() {
         Ok(mut tokens) => {
-            while let Some(mut card) = tokens.pop() {
-                card.init().expect("couldn't init card");
+            while let Some(card) = tokens.pop() {
                 access_card(card);
             }
         }

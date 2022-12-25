@@ -9,8 +9,7 @@ pub enum Error {
     /// [`ISO7816RequestAPDU.to_bytes()`]: `ne` was too long for the given
     /// length form.
     NeTooLong,
-    /// [`push_length_value()`]: The given value cannot be represented in short
-    /// form.
+    /// The given value cannot be represented in short form.
     IntegerOverflow,
     /// [`ISO7816ResponseAPDU.from_bytes()`]: response was less than 2 bytes.
     ResponseTooShort,
@@ -282,6 +281,15 @@ pub const EMPTY_RESPONSE: ISO7816ResponseAPDU = ISO7816ResponseAPDU {
     data: vec![],
     sw1: 0,
     sw2: 0,
+};
+
+pub const NFCCTAP_GETRESPONSE: ISO7816RequestAPDU = ISO7816RequestAPDU {
+    cla: 0x80,
+    ins: 0x11, // NFCCTAP_GETRESPONSE
+    p1: 0,
+    p2: 0,
+    data: vec![],
+    ne: 65536,
 };
 
 #[cfg(test)]

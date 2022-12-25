@@ -3,24 +3,50 @@ extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
 
+use futures::executor::block_on;
+use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
 use webauthn_authenticator_rs::prelude::Url;
 use webauthn_authenticator_rs::softtoken::SoftToken;
+use webauthn_authenticator_rs::transport::*;
+use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::AuthenticatorBackend;
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
 
-fn select_provider() -> Box<dyn AuthenticatorBackend> {
-    let mut providers: Vec<(&str, fn() -> Box<dyn AuthenticatorBackend>)> = Vec::new();
+fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend + 'a {
+    let mut reader = AnyTransport::new().unwrap();
+    info!("Using reader: {:?}", reader);
 
-    providers.push(("SoftToken", || Box::new(SoftToken::new().unwrap().0)));
+    match reader.tokens() {
+        Ok(mut tokens) => {
+            while let Some(card) = tokens.pop() {
+                let auth = block_on(CtapAuthenticator::new(card, ui));
+
+                match auth {
+                    Some(auth) => return auth,
+                    None => (),
+                }
+            }
+        }
+        Err(e) => panic!("Error: {:?}", e),
+    }
+
+    panic!("No tokens available!");
+}
+
+fn select_provider<'a>(ui: &'a Cli) -> Box<dyn AuthenticatorBackend + 'a> {
+    let mut providers: Vec<(&str, fn(&'a Cli) -> Box<dyn AuthenticatorBackend>)> = Vec::new();
+
+    providers.push(("SoftToken", |_| Box::new(SoftToken::new().unwrap().0)));
+    providers.push(("CTAP", |ui| Box::new(select_transport(ui))));
 
     #[cfg(feature = "u2fhid")]
-    providers.push(("Mozilla", || {
+    providers.push(("Mozilla", |_| {
         Box::new(webauthn_authenticator_rs::u2fhid::U2FHid::default())
     }));
 
     #[cfg(feature = "win10")]
-    providers.push(("Windows 10", || {
+    providers.push(("Windows 10", |_| {
         Box::new(webauthn_authenticator_rs::win10::Win10::default())
     }));
 
@@ -46,7 +72,7 @@ fn select_provider() -> Box<dyn AuthenticatorBackend> {
                 } else {
                     let p = providers.remove((v as usize) - 1);
                     println!("Using {}...", p.0);
-                    return p.1();
+                    return p.1(ui);
                 }
             }
             Err(_) => println!("Input was not a number"),
@@ -57,8 +83,8 @@ fn select_provider() -> Box<dyn AuthenticatorBackend> {
 
 fn main() {
     tracing_subscriber::fmt::init();
-
-    let mut u = select_provider();
+    let ui = Cli {};
+    let mut u = select_provider(&ui);
 
     // WARNING: don't use this as an example of how to use the library!
     let wan = Webauthn::new_unsafe_experts_only(
@@ -93,33 +119,40 @@ fn main() {
 
     trace!(?cred);
 
-    let (chal, auth_state) = wan
-        .generate_challenge_authenticate(
-            vec![cred],
-            Some(RequestAuthenticationExtensions {
-                appid: Some("example.app.id".to_string()),
-                uvm: None,
-                hmac_get_secret: None,
-            }),
-        )
-        .unwrap();
+    loop {
+        let (chal, auth_state) = wan
+            .generate_challenge_authenticate(
+                vec![cred.clone()],
+                Some(RequestAuthenticationExtensions {
+                    appid: Some("example.app.id".to_string()),
+                    uvm: None,
+                    hmac_get_secret: None,
+                }),
+            )
+            .unwrap();
 
-    let r = u
-        .perform_auth(
-            Url::parse("https://localhost:8080").unwrap(),
-            chal.public_key,
-            60_000,
-        )
-        .map_err(|e| {
-            error!("Error -> {:x?}", e);
-            e
-        })
-        .expect("Failed to auth");
-    trace!(?r);
+        let r = u
+            .perform_auth(
+                Url::parse("https://localhost:8080").unwrap(),
+                chal.public_key,
+                60_000,
+            )
+            .map_err(|e| {
+                error!("Error -> {:x?}", e);
+                e
+            });
+        trace!(?r);
 
-    let auth_res = wan
-        .authenticate_credential(&r, &auth_state)
-        .expect("webauth authentication denied");
+        if let Ok(r) = r {
+            let auth_res = wan
+                .authenticate_credential(&r, &auth_state)
+                .expect("webauth authentication denied");
 
-    info!("auth_res -> {:x?}", auth_res);
+            info!("auth_res -> {:x?}", auth_res);
+        }
+        let mut buf = String::new();
+        println!("Press ENTER to try again, or Ctrl-C to abort");
+        stdout().flush().ok();
+        stdin().read_line(&mut buf).expect("Cannot read stdin");
+    }
 }

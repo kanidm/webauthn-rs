@@ -14,6 +14,9 @@
 #[macro_use]
 extern crate tracing;
 
+#[macro_use]
+extern crate num_derive;
+
 use crate::error::WebauthnCError;
 use url::Url;
 
@@ -32,11 +35,12 @@ pub mod prelude {
     };
 }
 
-pub mod cbor;
+pub mod ctap2;
 pub mod error;
 pub mod softpasskey;
 pub mod softtoken;
 pub mod transport;
+pub mod ui;
 mod util;
 
 #[cfg(feature = "nfc")]
