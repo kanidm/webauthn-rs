@@ -43,7 +43,13 @@ pub enum Opt {
     /// Parse and display the list of U2F devices from an MDS file.
     ListU2f(CommonOpt),
     /// Parse and display the list of Fido2 devices from an MDS file.
-    ListFido2(CommonOpt),
+    ListFido2 {
+        #[clap(flatten)]
+        common: CommonOpt,
+        /// Show extra details about devices.
+        #[clap(short = 'x', long = "extra")]
+        extra_details: bool,
+    },
     /// Query and display metadata for a specific FIDO2 device by its AAGUID
     QueryAaguid(QueryOpt),
 }
@@ -51,9 +57,11 @@ pub enum Opt {
 impl Opt {
     fn debug(&self) -> bool {
         match self {
-            Opt::ListU2f(CommonOpt { debug, .. }) | Opt::ListFido2(CommonOpt { debug, .. }) => {
-                *debug
-            }
+            Opt::ListU2f(CommonOpt { debug, .. })
+            | Opt::ListFido2 {
+                common: CommonOpt { debug, .. },
+                ..
+            } => *debug,
             Opt::QueryAaguid(QueryOpt {
                 common: CommonOpt { debug, .. },
                 ..
@@ -118,7 +126,10 @@ fn main() {
                 }
             }
         }
-        Opt::ListFido2(CommonOpt { debug: _, path }) => {
+        Opt::ListFido2 {
+            common: CommonOpt { debug: _, path },
+            extra_details,
+        } => {
             trace!("{:?}", path);
 
             let s = match fs::read_to_string(path) {
@@ -132,8 +143,28 @@ fn main() {
             match FidoMds::from_str(&s) {
                 Ok(mds) => {
                     debug!("{} fido metadata avaliable", mds.fido2.len());
-                    for fd in mds.fido2.values() {
+                    for fd in mds.fido2_description.values() {
                         eprintln!("{}", fd);
+                        if extra_details {
+                            println!("  authentication_algorithms:");
+                            for alg in fd.authentication_algorithms.iter() {
+                                println!("    * {}", alg);
+                            }
+
+                            println!("  user_verification_details:");
+                            for uvm_or in fd.user_verification_details.iter() {
+                                let mut first = true;
+                                print!("    *");
+                                for uvm_and in uvm_or.iter() {
+                                    if !first {
+                                        print!(" AND");
+                                    }
+                                    first = false;
+                                    print!(" {}", uvm_and);
+                                }
+                                println!("");
+                            }
+                        }
                     }
                 }
                 Err(e) => {

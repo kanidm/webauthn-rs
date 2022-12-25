@@ -1,6 +1,6 @@
 [package]
 name = "fido-mds"
-version = "0.4.8"
+version = "0.5.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Fido Metadata Service parser"

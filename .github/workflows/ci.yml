@@ -32,7 +32,7 @@ jobs:
     name: Build and Test
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust_version }}
@@ -53,5 +53,6 @@ jobs:
           triplet: x64-windows-static-md
 
       - run: cargo build --release ${{ matrix.features }}
+      - run: cargo fmt --check
       - run: cargo clippy --all-targets ${{ matrix.features }}
       - run: cargo test --all ${{ matrix.features }}

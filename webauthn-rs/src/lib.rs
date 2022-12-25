@@ -13,7 +13,8 @@
 //!
 //! # Getting started
 //!
-//! In the simplest case where you just want a password replacement, you should use our passkey flow.
+//! In the simplest case where you just want to replace passwords with strong self contained multifactor
+//! authentication, you should use our passkey flow.
 //!
 //! ```
 //! use webauthn_rs::prelude::*;
@@ -40,13 +41,18 @@
 //! After this point you then need to use `finish_passkey_registration`, followed by
 //! `start_passkey_authentication` and `finish_passkey_authentication`
 //!
-//! No other authentication factors are needed!
+//! No other authentication factors are needed! A passkey combines inbuilt user verification (pin, biometrics, etc)
+//! with a hardware cryptographic authenticator.
 //!
 //! # Tutorial
 //!
-//! A tutorial on how to use this library is on the project github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
+//! Tutorials and examples on how to use this library in your website project is on the project github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
 //!
 //! # Features
+//!
+//! This library supports some optional features that you may wish to use. These are all
+//! disabled by default as they have risks associated that you need to be aware of as an
+//! authentication provider.
 //!
 //! ## Allow Serialising Registration and Authentication State
 //!
@@ -55,23 +61,20 @@
 //! challenge is stored in the associated registration or authentication state types. This value
 //! *MUST* be persisted on the server. If you store this in a cookie or some other form of client
 //! side stored value, the client can replay a previous authentication state and signature without
-//! possession of, or interaction with the authenticator, bypassing pretty much all of the guarantees
+//! possession of, or interaction with the authenticator, bypassing pretty much all of the security guarantees
 //! of webauthn. Because of this risk by default these states are *not* allowed to be serialised
 //! which prevents them from accidentally being placed into a cookie.
 //!
 //! However there are some *safe* cases of serialising these values. This includes serialising to
 //! a database, or using a cookie "memory store" where the client side cookie is a key into a server-side
-//! map or similar. Both of these prevent the replay attack threat.
+//! map or similar. Any of these prevent the replay attack threat.
 //!
 //! An alternate but "less good" method to mitigate replay attacks is to associate a very short
 //! expiry window to the cookie if you need full client side state, but this may still allow some
-//! forms of real time replay attacks to occur.
+//! forms of real time replay attacks to occur. We do not recommend this.
 //!
 //! Enabling the feature `danger-allow-state-serialisation` allows you to re-enable serialisation
 //! of these types, provided you accept and understand the handling risks associated.
-//!
-//! This library supports some optional features that you may wish to use. These are all
-//! disabled by default as they have risks associated.
 //!
 //! ## Allow Insecure RSA_SHA1
 //!
@@ -82,9 +85,12 @@
 //! trust the integrity of the authenticator.
 //!
 //! For the broadest compatibility, and if you do not use attestation (such as passkey only users)
-//! you may choose to use RSA SHA1 signed credentials with `danger-insecure-rs1` as this has no impact
-//! on your system security. For users who use attestation, you should NOT enable this feature as it
-//! undermines attestation.
+//! then you do not need to enable this feature since attestation is not requested.
+//!
+//! If you require attestation of authenticators,
+//! you may choose to use RSA SHA1 attestation signed credentials with `danger-insecure-rs1`.
+//!
+//! If in doubt, do not enable this feature.
 //!
 //! ## Credential Internals and Type Changes
 //!
@@ -94,6 +100,10 @@
 //! an alternate serialisation or storage mechanism. In these cases you can access the underlying
 //! [Credential] type via Into and From by enabling the feature `danger-credential-internals`. The
 //! [Credential] type is exposed via the [prelude] when this feature is enabled.
+//!
+//! However, you should be aware that manipulating the internals of a [Credential] may affect the usage
+//! of that [Credential] in certain use cases. You should be careful when enabling this feature that
+//! you do not change [Credential] values.
 //!
 //! ## User-Presence only SecurityKeys
 //!
@@ -110,6 +120,7 @@
 //! unreliable and not verified correctly. In these cases you MUST communicate to the user that
 //! the UV *may* occur on registration and then will not occur again, and that is *by design*.
 //!
+//! If in doubt, do not enable this feature.
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
@@ -166,6 +177,7 @@ pub struct WebauthnBuilder<'a> {
     allow_subdomains: bool,
     allow_any_port: bool,
     algorithms: Vec<COSEAlgorithm>,
+    user_presence_only_security_keys: bool,
 }
 
 impl<'a> WebauthnBuilder<'a> {
@@ -220,6 +232,7 @@ impl<'a> WebauthnBuilder<'a> {
                 allow_subdomains: false,
                 allow_any_port: false,
                 algorithms: COSEAlgorithm::secure_algs(),
+                user_presence_only_security_keys: false,
             })
         } else {
             error!("rp_id is not an effective_domain of rp_origin");
@@ -262,6 +275,16 @@ impl<'a> WebauthnBuilder<'a> {
         self
     }
 
+    /// Enable security keys to only require user presence, rather than enforcing
+    /// their user-verification state.
+    ///
+    /// *requires feature danger-user-presence-only-security-keys*
+    #[cfg(feature = "danger-user-presence-only-security-keys")]
+    pub fn danger_set_user_presence_only_security_keys(mut self, enable: bool) -> Self {
+        self.user_presence_only_security_keys = enable;
+        self
+    }
+
     /// Complete the construction of the [Webauthn] instance. If an invalid configuration setting
     /// is found, an Error may be returned.
     ///
@@ -289,6 +312,7 @@ impl<'a> WebauthnBuilder<'a> {
                 Some(self.allow_any_port),
             ),
             algorithms: self.algorithms,
+            user_presence_only_security_keys: self.user_presence_only_security_keys,
         })
     }
 }
@@ -332,6 +356,7 @@ impl<'a> WebauthnBuilder<'a> {
 pub struct Webauthn {
     core: WebauthnCore,
     algorithms: Vec<COSEAlgorithm>,
+    user_presence_only_security_keys: bool,
 }
 
 impl Webauthn {
@@ -404,17 +429,6 @@ impl Webauthn {
     ///         None, // No other credentials are registered yet.
     ///     )
     ///     .expect("Failed to start registration.");
-    ///
-    /// // Only allow credentials from manufacturers that are trusted and part of the webauthn-rs
-    /// // strict "high quality" list.
-    /// let (ccr, skr) = webauthn
-    ///     .start_passkey_registration(
-    ///         Uuid::new_v4(),
-    ///         "claire",
-    ///         "Claire",
-    ///         None, // No other credentials are registered yet.
-    ///     )
-    ///     .expect("Failed to start registration.");
     /// ```
     pub fn start_passkey_registration(
         &self,
@@ -456,7 +470,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [PasskeyRegistration]. The details of the Authenticator
+    /// and the server provides its paired [PasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
@@ -658,7 +672,7 @@ impl Webauthn {
         let extensions = None;
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
-        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+        let policy = if self.user_presence_only_security_keys {
             Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
         } else {
             Some(UserVerificationPolicy::Preferred)
@@ -737,7 +751,7 @@ impl Webauthn {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let allow_backup_eligible_upgrade = false;
 
-        let policy = if cfg!(feature = "danger-user-presence-only-security-keys") {
+        let policy = if self.user_presence_only_security_keys {
             UserVerificationPolicy::Discouraged_DO_NOT_USE
         } else {
             UserVerificationPolicy::Preferred

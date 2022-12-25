@@ -5,10 +5,10 @@ use gloo::console;
 use yew::prelude::*;
 
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
+use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response};
+use web_sys::{Request, RequestInit, RequestMode, Response, AbortController};
 
 use webauthn_rs_demo_shared::*;
 
@@ -31,6 +31,7 @@ enum ConduiTestState {
 #[derive(Debug)]
 pub struct ConduiTest {
     state: ConduiTestState,
+    abort_controller: AbortController,
 }
 
 #[derive(Debug)]
@@ -60,8 +61,10 @@ impl Component for ConduiTest {
 
     fn create(_ctx: &Context<Self>) -> Self {
         console::log!(format!("create").as_str());
+
         ConduiTest {
             state: ConduiTestState::Init,
+            abort_controller: AbortController::new().expect("Failed to build abort controller"),
         }
     }
 
@@ -93,6 +96,9 @@ impl Component for ConduiTest {
                     return false;
                 }
 
+                // End any dangly bits.
+                self.abort_controller.abort();
+
                 console::log!(format!("username   -> {:?}", username).as_str());
                 ctx.link().send_future(async {
                     match Self::register_begin(username).await {
@@ -103,6 +109,10 @@ impl Component for ConduiTest {
                 ConduiTestState::Waiting
             }
             (ConduiTestState::Waiting, AppMsg::BeginRegisterChallenge(ccr)) => {
+
+                // We need a way to cancel any dangling promises from
+                // condui here.
+
                 console::log!(format!("ccr -> {:?}", ccr));
                 let promise = utils::window()
                     .navigator()
@@ -155,8 +165,11 @@ impl Component for ConduiTest {
                 // the user did something so now we are waiting.
                 ConduiTestState::Waiting
             }
+
+            // Do nothing.
+            (state, AppMsg::Cancelled) => state.clone(),
+
             (ConduiTestState::Waiting, AppMsg::LoginSuccess) => ConduiTestState::LoginSuccess,
-            (ConduiTestState::Main(_), AppMsg::Cancelled) => ConduiTestState::Main(ChallengeState::Cancelled),
             (s, m) => {
                 let msg = format!("Invalid State Transition -> {:?}, {:?}", s, m);
                 console::log!(msg.as_str());
@@ -223,8 +236,18 @@ impl Component for ConduiTest {
                 });
             }
             ConduiTestState::Main(ChallengeState::Presented(ccr)) => {
-                let c_options: web_sys::CredentialRequestOptions = ccr.clone().into();
+                let mut c_options: web_sys::CredentialRequestOptions = ccr.clone().into();
                 console::log!(format!("raw c_options {:?}", c_options).as_str());
+
+                // Setup the abort controller.
+                let mut abort_controller = AbortController::new().expect(
+                    "Failed to build abort controller"
+                );
+
+                std::mem::swap(&mut self.abort_controller, &mut abort_controller);
+                let abort_signal = self.abort_controller.signal();
+
+                c_options.signal(&abort_signal);
 
                 let promise = utils::window()
                     .navigator()
@@ -233,8 +256,11 @@ impl Component for ConduiTest {
                     .expect("Unable to create promise");
                 let fut = JsFuture::from(promise);
 
+
                 ctx.link().send_future(async {
                     console::log!("Started future for navigator cred get");
+                    // Im not sure if we select! over this, if we can cancel this future / promise
+                    // or not.
                     match fut.await {
                         Ok(data) => {
                             console::log!(format!("nav cred get data -> {:?}", data).as_str());
@@ -246,6 +272,8 @@ impl Component for ConduiTest {
                         }
                     }
                 });
+
+
             }
             ConduiTestState::Main(ChallengeState::Cancelled) => {
                 console::log!("Condui dialog canceled or errored");
@@ -316,10 +344,13 @@ impl ConduiTest {
                 <div class="vert-center">
                   <div>
                     <p>
-                    {"This will conduct a compatability test of your authenticator (security token) to determine how it works with Conditional UI." }
+                    {"This will conduct a compatability test of your authenticator (security token) and browser to determine how it works with Conditional UI." }
                     </p>
                     <p>
-                    { "Due to the nature of this test, it will consume space on your authenticator, which may leave it unable to register to new websites in some cases" }
+                    { "Due to the nature of this test, it will consume space on your authenticator, which may leave it unable to register to new websites in some cases." }
+                    </p>
+                    <p>
+                    { "Many types of authenticators do NOT allow you to reclaim that space without RESETING the device, wiping all credentials." }
                     </p>
                     <p>
                     { "You should be absolutely sure before you proceed with this test" }
@@ -348,7 +379,7 @@ impl ConduiTest {
                           { "Are you sure you want to proceed with this test?" }
                           </p>
                           <p>
-                          { "Some authenticators can NEVER remove the credentials created during this test without fully reseting the device." }
+                          { "Some authenticators can NEVER remove the credentials created during this test without fully RESETING the device." }
                           </p>
                           <p>
                           { "This may prevent you signing up and using this device with other websites in the future." }
@@ -361,7 +392,7 @@ impl ConduiTest {
                       <button type="button" class="btn btn-danger"
                         data-bs-dismiss="modal"
                         onclick={ ctx.link().callback(|_| AppMsg::Main) }>
-                        { "Yes, I Am Sure" }</button>
+                        { "Yes, I Accept the Risk" }</button>
                     </div>
                   </div>
                 </div>

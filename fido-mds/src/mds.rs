@@ -294,6 +294,32 @@ pub enum AuthenticationAlgorithm {
     RsassaPkcsv15Sha256Raw,
 }
 
+impl fmt::Display for AuthenticationAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthenticationAlgorithm::Secp256r1EcdsaSha256Raw => {
+                write!(f, "secp256r1_ecdsa_sha256_raw")
+            }
+            AuthenticationAlgorithm::Secp256r1EcdsaSha256Der => {
+                write!(f, "secp256r1_ecdsa_sha256_der")
+            }
+            AuthenticationAlgorithm::Secp256K1EcdsaSha256Raw => {
+                write!(f, "secp256k1_ecdsa_sha256_raw")
+            }
+            AuthenticationAlgorithm::RsaEmsaPkcs1Sha256Raw => {
+                write!(f, "rsa_emsa_pkcs1_sha256_raw")
+            }
+            AuthenticationAlgorithm::Ed25519EddsaSha512Raw => write!(f, "ed25519_eddsa_sha512_raw"),
+            AuthenticationAlgorithm::Secp384r1EcdsaSha384Raw => {
+                write!(f, "secp384r1_ecdsa_sha384_raw")
+            }
+            AuthenticationAlgorithm::RsassaPkcsv15Sha256Raw => {
+                write!(f, "rsassa_pkcsv15_sha256_raw")
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 /// The public key format used by the authenticator during registration operations.
