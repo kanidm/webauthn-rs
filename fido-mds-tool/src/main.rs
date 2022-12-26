@@ -162,7 +162,7 @@ fn main() {
                                     first = false;
                                     print!(" {}", uvm_and);
                                 }
-                                println!("");
+                                println!();
                             }
                         }
                     }

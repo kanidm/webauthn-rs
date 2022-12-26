@@ -226,7 +226,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             return Err(WebauthnCError::Internal);
         }
         if permissions.intersects(Permissions::MAKE_CREDENTIAL | Permissions::GET_ASSERTION)
-            && rp_id == None
+            && rp_id.is_none()
         {
             error!("rp_id is required for MakeCredential and GetAssertion requests");
             return Err(WebauthnCError::Internal);
