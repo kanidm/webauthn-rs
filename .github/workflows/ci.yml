@@ -52,7 +52,7 @@ jobs:
         with:
           pkgs: openssl
           triplet: x64-windows-static-md
-
+          token: ${{ github.token }}
       - run: cargo build --release ${{ matrix.features }}
       - run: cargo fmt --check
       - run: cargo clippy --all-targets ${{ matrix.features }}
