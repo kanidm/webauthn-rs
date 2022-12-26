@@ -18,8 +18,8 @@ use std::str::FromStr;
 use tracing::{debug, trace, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
+use fido_mds::query::Query;
 use fido_mds::FidoMds;
-use uuid::Uuid;
 
 #[derive(Debug, Args)]
 pub struct CommonOpt {
@@ -32,7 +32,7 @@ pub struct CommonOpt {
 
 #[derive(Debug, Args)]
 pub struct QueryOpt {
-    pub aaguid: Uuid,
+    pub query: String,
     #[clap(flatten)]
     pub common: CommonOpt,
 }
@@ -50,8 +50,8 @@ pub enum Opt {
         #[clap(short = 'x', long = "extra")]
         extra_details: bool,
     },
-    /// Query and display metadata for a specific FIDO2 device by its AAGUID
-    QueryAaguid(QueryOpt),
+    /// Query and display metadata for FIDO2 devices based on a query expression.
+    Query(QueryOpt),
 }
 
 impl Opt {
@@ -62,7 +62,7 @@ impl Opt {
                 common: CommonOpt { debug, .. },
                 ..
             } => *debug,
-            Opt::QueryAaguid(QueryOpt {
+            Opt::Query(QueryOpt {
                 common: CommonOpt { debug, .. },
                 ..
             }) => *debug,
@@ -172,8 +172,8 @@ fn main() {
                 }
             }
         }
-        Opt::QueryAaguid(QueryOpt {
-            aaguid,
+        Opt::Query(QueryOpt {
+            query,
             common: CommonOpt { debug: _, path },
         }) => {
             trace!("{:?}", path);
@@ -186,66 +186,79 @@ fn main() {
                 }
             };
 
+            let query = match Query::from_str(&query) {
+                Ok(q) => q,
+                Err(e) => {
+                    tracing::error!(?e, "Failed to parse query");
+                    return;
+                }
+            };
+
             match FidoMds::from_str(&s) {
                 Ok(mds) => {
                     debug!("{} fido metadata avaliable", mds.fido2.len());
-                    match mds.fido2.get(&aaguid) {
-                        Some(fd) => {
-                            println!("aaguid: {}", fd.aaguid);
-                            println!("last update: {}", fd.time_of_last_status_change);
-                            println!("description: {}", fd.description);
-                            println!("authenticator_version: {}", fd.authenticator_version);
-                            println!("authentication_algorithms:");
-                            for alg in fd.authentication_algorithms.iter() {
-                                println!("  {:?}", alg);
-                            }
-                            println!("public_key_alg_and_encodings: ");
-                            for alg in fd.public_key_alg_and_encodings.iter() {
-                                println!("  {:?}", alg);
-                            }
-
-                            println!("user_verification_details:");
-                            for uvm_or in fd.user_verification_details.iter() {
-                                println!("-- OR");
-                                for uvm_and in uvm_or.iter() {
-                                    println!("  AND");
-                                    println!("  {}", uvm_and);
+                    match mds.fido2_query(&query) {
+                        Some(fds) => {
+                            for fd in fds {
+                                println!("aaguid: {}", fd.aaguid);
+                                println!("last update: {}", fd.time_of_last_status_change);
+                                println!("description: {}", fd.description);
+                                println!("authenticator_version: {}", fd.authenticator_version);
+                                println!("authentication_algorithms:");
+                                for alg in fd.authentication_algorithms.iter() {
+                                    println!("  {:?}", alg);
                                 }
-                            }
-                            println!("key_protection:");
-                            for kp in fd.key_protection.iter() {
-                                println!("  {:?}", kp);
-                            }
-                            println!("is_key_restricted: {}", fd.is_key_restricted);
-                            println!(
-                                "is_fresh_user_verification_required: {}",
-                                fd.is_fresh_user_verification_required
-                            );
+                                println!("public_key_alg_and_encodings: ");
+                                for alg in fd.public_key_alg_and_encodings.iter() {
+                                    println!("  {:?}", alg);
+                                }
 
-                            // attestation root certificates
-
-                            println!("supported_extensions:");
-                            for se in fd.supported_extensions.iter() {
+                                println!("user_verification_details:");
+                                for uvm_or in fd.user_verification_details.iter() {
+                                    println!("-- OR");
+                                    for uvm_and in uvm_or.iter() {
+                                        println!("  AND");
+                                        println!("  {}", uvm_and);
+                                    }
+                                }
+                                println!("key_protection:");
+                                for kp in fd.key_protection.iter() {
+                                    println!("  {:?}", kp);
+                                }
+                                println!("is_key_restricted: {}", fd.is_key_restricted);
                                 println!(
-                                    "  {} - {} - {}",
-                                    se.id,
-                                    se.fail_if_unknown,
-                                    se.data.as_deref().unwrap_or("")
+                                    "is_fresh_user_verification_required: {}",
+                                    fd.is_fresh_user_verification_required
                                 );
-                            }
 
-                            if let Some(authenticator_info) = &fd.authenticator_get_info {
-                                println!("authenticator_get_info: {:?}", authenticator_info);
-                            } else {
-                                println!("authenticator_get_info: not present")
-                            }
+                                // attestation root certificates
 
-                            println!("status_reports:");
-                            for sr in fd.status_reports.iter() {
-                                println!("  {:?}", sr);
+                                println!("supported_extensions:");
+                                for se in fd.supported_extensions.iter() {
+                                    println!(
+                                        "  {} - {} - {}",
+                                        se.id,
+                                        se.fail_if_unknown,
+                                        se.data.as_deref().unwrap_or("")
+                                    );
+                                }
+
+                                if let Some(authenticator_info) = &fd.authenticator_get_info {
+                                    println!("authenticator_get_info: {:?}", authenticator_info);
+                                } else {
+                                    println!("authenticator_get_info: not present")
+                                }
+
+                                println!("status_reports:");
+                                for sr in fd.status_reports.iter() {
+                                    println!("  {:?}", sr);
+                                }
+
+                                println!();
                             }
+                            // End fds
                         }
-                        None => warn!("No metadata associated with {}", aaguid),
+                        None => warn!("No metadata matched query"),
                     }
                 }
                 Err(e) => {
