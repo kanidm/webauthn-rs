@@ -48,7 +48,7 @@ jobs:
         run: sudo apt-get -y install libusb-1.0-0-dev
 
       - if: runner.os == 'windows'
-        uses: johnwason/vcpkg-action@v3
+        uses: johnwason/vcpkg-action@v4
         with:
           pkgs: openssl
           triplet: x64-windows-static-md
