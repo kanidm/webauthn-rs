@@ -8,6 +8,7 @@ env:
 jobs:
   build_and_test:
     strategy:
+      fail-fast: false
       matrix:
         rust_version: [stable, 1.45.0]
         features:
