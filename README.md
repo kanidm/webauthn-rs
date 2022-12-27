@@ -40,7 +40,7 @@ This library consists of multiple major parts.
 
 A safe, use-case driven api, which is defined in [Webauthn-RS](https://docs.rs/webauthn-rs/)
 
-The low level, protocol level interactions which is defined in [Webauthn-Core-RS](https://docs.rs/webauthn-core-rs/)
+The low level, protocol level interactions which is defined in [Webauthn-Core-RS](https://docs.rs/webauthn-rs-core/)
 
 Protocol bindings which are defined in [Webauthn-RS-proto](https://docs.rs/webauthn-rs-proto/)
 
