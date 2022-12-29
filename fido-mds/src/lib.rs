@@ -9,7 +9,7 @@
 
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::unwrap_used)]
@@ -21,6 +21,7 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 pub mod mds;
+pub mod query;
 
 use crate::mds::AuthenticatorStatus;
 use crate::mds::FidoDevice as RawFidoDevice;
@@ -35,6 +36,8 @@ use crate::mds::{
     CodeAccuracyDescriptor, EcdaaAnchor, ExtensionDescriptor, KeyProtection,
     PatternAccuracyDescriptor, ProtocolFamily, PublicKeyAlg,
 };
+
+use crate::query::{AttrValueAssertion, CompareOp, Query};
 
 use compact_jwt::JwtError;
 use std::cmp::Ordering;
@@ -850,6 +853,24 @@ impl fmt::Display for FIDO2 {
     }
 }
 
+impl FIDO2 {
+    fn query_attr(&self, ava: &AttrValueAssertion, op: &CompareOp) -> bool {
+        match (ava, op) {
+            (AttrValueAssertion::Aaguid(u), CompareOp::Equal) => self.aaguid == *u,
+            (AttrValueAssertion::Aaguid(u), CompareOp::NotEqual) => self.aaguid != *u,
+        }
+    }
+
+    fn query_match(&self, q: &Query) -> bool {
+        match q {
+            Query::Op(ava, op) => self.query_attr(ava, op),
+            Query::And(a, b) => self.query_match(a) && self.query_match(b),
+            Query::Or(a, b) => self.query_match(a) || self.query_match(b),
+            Query::Not(a) => !self.query_match(a),
+        }
+    }
+}
+
 impl TryFrom<RawFidoDevice> for FidoDevice {
     type Error = ();
 
@@ -1150,5 +1171,27 @@ impl FromStr for FidoMds {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         RawFidoMds::from_str(s).map(|rawmds| rawmds.into())
+    }
+}
+
+impl FidoMds {
+    pub fn fido2_query(&self, query: &Query) -> Option<Vec<rc::Rc<FIDO2>>> {
+        debug!("{:?}", query);
+
+        // Iterate over the set of metadata.
+        let fds = self
+            .fido2
+            .values()
+            .filter(|fd| fd.query_match(query))
+            // This is cheap due to Rc,
+            .cloned()
+            .collect::<Vec<rc::Rc<FIDO2>>>();
+
+        // If != empty.
+        if fds.is_empty() {
+            None
+        } else {
+            Some(fds)
+        }
     }
 }

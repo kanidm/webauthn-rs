@@ -2,6 +2,8 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
+use std::fmt;
+use uuid::Uuid;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use self::CBORCommand;
@@ -53,6 +55,73 @@ pub struct GetInfoResponse {
     /// Use [get_min_pin_length][Self::get_min_pin_length] to get a default
     /// value for when this is not present.
     pub min_pin_length: Option<usize>,
+}
+
+impl fmt::Display for GetInfoResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "versions: ")?;
+        for v in self.versions.iter() {
+            write!(f, "{} ", v)?;
+        }
+        writeln!(f)?;
+
+        write!(f, "extensions: ")?;
+        for e in self.extensions.iter().flatten() {
+            write!(f, "{} ", e)?;
+        }
+        writeln!(f)?;
+
+        if let Ok(aaguid) = Uuid::from_slice(self.aaguid.as_slice()) {
+            writeln!(f, "aaguid: {}", aaguid)?;
+        } else {
+            writeln!(f, "aaguid: INVALID - {:?}", self.aaguid)?;
+        }
+
+        write!(f, "options: ")?;
+        for (o, b) in self.options.iter().flatten() {
+            write!(f, "{}:{} ", o, b)?;
+        }
+        writeln!(f)?;
+
+        if let Some(mms) = self.max_msg_size {
+            writeln!(f, "max message size: {}", mms)?;
+        } else {
+            writeln!(f, "max message size: N/A")?;
+        }
+
+        write!(f, "pin_protocols: ")?;
+        for e in self.pin_protocols.iter().flatten() {
+            write!(f, "{} ", e)?;
+        }
+        writeln!(f)?;
+
+        if let Some(mms) = self.max_cred_count_in_list {
+            writeln!(f, "max cred count in list: {}", mms)?;
+        } else {
+            writeln!(f, "max cred count in list: N/A")?;
+        }
+
+        if let Some(mms) = self.max_cred_id_len {
+            writeln!(f, "max cred id len: {}", mms)?;
+        } else {
+            writeln!(f, "max cred id len: N/A")?;
+        }
+
+        write!(f, "transports: ")?;
+        for e in self.transports.iter().flatten() {
+            write!(f, "{} ", e)?;
+        }
+        writeln!(f)?;
+
+        // ???
+        writeln!(f, "algorithms: {:?}", self.algorithms)?;
+
+        if let Some(mms) = self.min_pin_length {
+            writeln!(f, "min pin len: {}", mms)
+        } else {
+            writeln!(f, "min pin len: N/A")
+        }
+    }
 }
 
 impl GetInfoResponse {
