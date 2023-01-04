@@ -76,22 +76,6 @@
 //! Enabling the feature `danger-allow-state-serialisation` allows you to re-enable serialisation
 //! of these types, provided you accept and understand the handling risks associated.
 //!
-//! ## Allow Insecure RSA_SHA1
-//!
-//! Many Windows Hello credentials are signed with RSA and SHA1. SHA1 is considered broken
-//! and should not be trusted in cryptographic contexts. These signatures are used only
-//! during attestation, but the credentials themself are generally RSA-SHA256. In some
-//! cases this may allow forgery of a credentials attestation, meaning you are unable to
-//! trust the integrity of the authenticator.
-//!
-//! For the broadest compatibility, and if you do not use attestation (such as passkey only users)
-//! then you do not need to enable this feature since attestation is not requested.
-//!
-//! If you require attestation of authenticators,
-//! you may choose to use RSA SHA1 attestation signed credentials with `danger-insecure-rs1`.
-//!
-//! If in doubt, do not enable this feature.
-//!
 //! ## Credential Internals and Type Changes
 //!
 //! By default the type wrappers around the keys are opaque. However in some cases you

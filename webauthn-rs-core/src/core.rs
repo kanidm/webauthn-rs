@@ -2434,14 +2434,10 @@ mod tests {
             true,
         );
         trace!("{:?}", result);
-        if cfg!(feature = "insecure-rs1") {
-            assert!(result.is_ok());
-        } else {
-            assert!(matches!(
-                result,
-                Err(WebauthnError::CredentialInsecureCryptography)
-            ))
-        }
+        assert!(matches!(
+            result,
+            Err(WebauthnError::CredentialInsecureCryptography)
+        ))
     }
 
     fn register_userid(
@@ -3802,27 +3798,10 @@ mod tests {
             true,
         );
 
-        if cfg!(feature = "insecure-rs1") {
-            assert!(result.is_ok());
-            match result.unwrap().attestation.metadata {
-                AttestationMetadata::Tpm {
-                    aaguid,
-                    firmware_version,
-                } => {
-                    assert!(firmware_version == 1390997124431944132);
-                    assert!(
-                        aaguid
-                            == uuid::Uuid::parse_str("08987058cadc4b81b6e130de50dcbe96").unwrap()
-                    );
-                }
-                _ => panic!("invalid metadata"),
-            }
-        } else {
-            assert!(matches!(
-                result,
-                Err(WebauthnError::CredentialInsecureCryptography)
-            ))
-        }
+        assert!(matches!(
+            result,
+            Err(WebauthnError::CredentialInsecureCryptography)
+        ))
     }
 
     #[test]
