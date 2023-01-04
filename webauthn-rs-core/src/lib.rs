@@ -35,10 +35,11 @@ mod macros;
 mod constants;
 
 mod attestation;
-mod crypto;
+pub(crate) mod crypto;
 
 pub mod core;
 pub mod error;
+pub mod ssh;
 
 pub mod interface;
 mod internals;

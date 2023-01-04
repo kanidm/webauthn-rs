@@ -302,7 +302,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
     Ok(())
 }
 
-pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
     // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
     // Statement Certificate Requirements.
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
@@ -726,7 +726,7 @@ impl COSEKey {
         }
     }
 
-    fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
+    pub(crate) fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
         match &self.key {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type

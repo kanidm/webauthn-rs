@@ -19,6 +19,8 @@ use openssl::hash::MessageDigest;
 use openssl::{bn, ec, nid, pkey, x509};
 use uuid::Uuid;
 
+use sshkeys::PublicKey;
+
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
 pub type Aaguid = [u8; 16];
@@ -363,6 +365,25 @@ pub struct CredentialV3 {
     pub registration_policy: UserVerificationPolicy,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+/*
+#[serde(
+    try_from = "SerialisableAttestedPublicKey",
+    into = "SerialisableAttestedPublicKey"
+)]
+*/
+pub struct AttestedPublicKey {
+    pub pubkey: PublicKey,
+    // Does this mean that uv=true on all auth? I don't think it does
+    // due to ctap2.1. We need to use cred protect
+    pub user_verified: bool,
+    /// The set of registrations that were verified at registration, that can
+    /// be used in future authentication attempts
+    pub extensions: RegisteredExtensions,
+    pub attestation: ParsedAttestation,
+    pub attestation_format: AttestationFormat,
+}
+
 /// Serialised Attestation Data which can be stored in a stable database or similar.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SerialisableAttestationData {
@@ -495,6 +516,7 @@ pub enum ParsedAttestationData {
     /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain,
 }
+
 #[allow(clippy::from_over_into)]
 impl Into<SerialisableAttestationData> for ParsedAttestationData {
     fn into(self) -> SerialisableAttestationData {
