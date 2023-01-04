@@ -422,15 +422,13 @@ impl EDDSACurve {
 
 pub(crate) fn only_hash_from_type(
     alg: COSEAlgorithm,
-    input: &[u8],
+    _input: &[u8],
 ) -> Result<Vec<u8>, WebauthnError> {
     match alg {
         COSEAlgorithm::INSECURE_RS1 => {
             // sha1
             warn!("INSECURE SHA1 USAGE DETECTED");
-            hash::hash(hash::MessageDigest::sha1(), input)
-                .map(|dbytes| Vec::from(dbytes.as_ref()))
-                .map_err(WebauthnError::OpenSSLError)
+            Err(WebauthnError::CredentialInsecureCryptography)
         }
         c_alg => {
             debug!(?c_alg, "WebauthnError::COSEKeyInvalidType");
