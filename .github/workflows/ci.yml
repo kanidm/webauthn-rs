@@ -13,9 +13,11 @@ jobs:
         rust_version: [stable, 1.45.0]
         features:
           - ""
+          - --features cable
           - --features nfc
           - --features usb
           - --features nfc,usb
+          - --features cable,nfc,usb
         os:
           - ubuntu-latest
           - windows-latest
@@ -24,7 +26,7 @@ jobs:
             features: --features win10
             rust_version: stable
           - os: windows-latest
-            features: --features nfc,usb,win10
+            features: --features cable,nfc,usb,win10
             rust_version: stable
         exclude:
           - os: windows-latest
@@ -46,6 +48,8 @@ jobs:
         run: sudo apt-get -y install libpcsclite-dev
       - if: contains(matrix.features, 'usb') && runner.os != 'windows'
         run: sudo apt-get -y install libusb-1.0-0-dev
+      - if: contains(matrix.features, 'cable') && runner.os != 'windows'
+        run: sudo apt-get -y install libdbus-1-dev
 
       - if: runner.os == 'windows'
         uses: johnwason/vcpkg-action@v4

@@ -180,6 +180,18 @@ pub(crate) fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {
     }
 }
 
+#[cfg(feature = "cable")]
+pub(crate) fn value_to_u64(v: &Value, loc: &str) -> Option<u64> {
+    if let Value::Integer(i) = v {
+        u64::try_from(*i)
+            .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
+            .ok()
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
+}
+
 /// Converts a [`Value::Bool`] into [`Option<bool>`]. Returns [`Option::None`] for other [`Value`] types.
 pub(crate) fn value_to_bool(v: &Value, loc: &str) -> Option<bool> {
     if let Value::Bool(b) = v {

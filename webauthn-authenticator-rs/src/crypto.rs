@@ -1,5 +1,10 @@
 //! Common cryptographic routines for FIDO2.
 
+#[cfg(feature = "cable")]
+use openssl::{
+    bn::BigNumContext,
+    ec::{EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
+};
 use openssl::{
     ec::{EcGroup, EcKey},
     md::Md,
@@ -92,6 +97,37 @@ pub fn ecdh(
     ctx.derive_set_peer(&peer_key)?;
     ctx.derive(Some(output))?;
     Ok(())
+}
+
+#[cfg(feature = "cable")]
+/// Reads `buf` as a compressed or uncompressed P-256 key.
+pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcKey<Public>, WebauthnCError> {
+    let group = get_group()?;
+    let mut ctx = BigNumContext::new()?;
+    let point = EcPoint::from_bytes(&group, buf, &mut ctx)?;
+    Ok(EcKey::from_public_key(&group, &point)?)
+}
+
+#[cfg(feature = "cable")]
+/// Converts a P-256 `point` into compressed or uncompressed bytes.
+pub fn point_to_bytes(point: &EcPointRef, compressed: bool) -> Result<Vec<u8>, WebauthnCError> {
+    let group = get_group()?;
+    let mut ctx = BigNumContext::new()?;
+    Ok(point.to_bytes(
+        &group,
+        if compressed {
+            PointConversionForm::COMPRESSED
+        } else {
+            PointConversionForm::UNCOMPRESSED
+        },
+        &mut ctx,
+    )?)
+}
+
+#[cfg(feature = "cable")]
+/// Gets the public key for a private `key`.
+pub fn public_key_from_private(key: &EcKeyRef<Private>) -> Result<EcKey<Public>, WebauthnCError> {
+    Ok(EcKey::from_public_key(key.group(), key.public_key())?)
 }
 
 #[cfg(test)]

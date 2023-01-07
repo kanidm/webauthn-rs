@@ -46,6 +46,9 @@ pub mod types;
 pub mod ui;
 mod util;
 
+#[cfg(feature = "cable")]
+pub mod cable;
+
 #[cfg(feature = "nfc")]
 pub mod nfc;
 
