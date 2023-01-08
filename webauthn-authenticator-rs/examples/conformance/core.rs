@@ -1,5 +1,5 @@
 use pcsc::Scope;
-use webauthn_authenticator_rs::ctap2::{commands::*, *};
+use webauthn_authenticator_rs::ctap2::commands::*;
 use webauthn_authenticator_rs::nfc::*;
 use webauthn_authenticator_rs::transport::iso7816::*;
 
@@ -62,7 +62,7 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
         return TestResult::Fail("Unsupported CTAP applet");
     }
 
-    let mut get_info = (GetInfoRequest {}).to_extended_apdu().unwrap();
+    let mut get_info = to_extended_apdu((GetInfoRequest {}).cbor().unwrap());
     get_info.ne = 65536;
     resp = card
         .transmit(&get_info, &ISO7816LengthForm::Extended)

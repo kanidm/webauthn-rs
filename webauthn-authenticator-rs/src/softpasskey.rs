@@ -1,8 +1,8 @@
+use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
+use crate::crypto::get_group;
 use crate::error::WebauthnCError;
 use crate::util::compute_sha256;
-use crate::AuthenticatorBackend;
-use crate::Url;
-use openssl::{bn, ec, hash, nid, pkey, rand, sign};
+use openssl::{bn, ec, hash, pkey, rand, sign};
 use serde_cbor::value::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -12,8 +12,8 @@ use base64urlsafedata::Base64UrlSafeData;
 
 use webauthn_rs_proto::{
     AllowCredentials, AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
-    AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, CollectedClientData,
-    PublicKeyCredential, PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
+    AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, PublicKeyCredential,
+    PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
 
@@ -45,10 +45,10 @@ pub struct U2FSignData {
     user_present: u8,
 }
 
-impl AuthenticatorBackend for SoftPasskey {
+impl AuthenticatorBackendHashedClientData for SoftPasskey {
     fn perform_register(
         &mut self,
-        origin: Url,
+        client_data_json_hash: Vec<u8>,
         options: PublicKeyCredentialCreationOptions,
         _timeout_ms: u32,
     ) -> Result<RegisterPublicKeyCredential, WebauthnCError> {
@@ -89,36 +89,6 @@ impl AuthenticatorBackend for SoftPasskey {
             //     Let authenticatorExtensionInput be the (CBOR) result of running extensionId’s client extension processing algorithm on clientExtensionInput. If the algorithm returned an error, continue.
             //     Set authenticatorExtensions[extensionId] to the base64url encoding of authenticatorExtensionInput.
         */
-
-        // Let collectedClientData be a new CollectedClientData instance whose fields are:
-        //    type
-        //        The string "webauthn.create".
-        //    challenge
-        //        The base64url encoding of options.challenge.
-        //    origin
-        //        The serialization of callerOrigin.
-
-        //    Not Supported Yet.
-        //    tokenBinding
-        //        The status of Token Binding between the client and the callerOrigin, as well as the Token Binding ID associated with callerOrigin, if one is available.
-        let collected_client_data = CollectedClientData {
-            type_: "webauthn.create".to_string(),
-            challenge: options.challenge.clone(),
-            origin,
-            token_binding: None,
-            cross_origin: None,
-            unknown_keys: BTreeMap::new(),
-        };
-
-        //  Let clientDataJSON be the JSON-serialized client data constructed from collectedClientData.
-        let client_data_json =
-            serde_json::to_string(&collected_client_data).map_err(|_| WebauthnCError::Json)?;
-
-        // Let clientDataHash be the hash of the serialized client data represented by clientDataJSON.
-        let client_data_json_hash = compute_sha256(client_data_json.as_bytes()).to_vec();
-
-        trace!("client_data_json -> {:x?}", client_data_json);
-        trace!("client_data_json_hash -> {:x?}", client_data_json_hash);
 
         // Not required.
         // If the options.signal is present and its aborted flag is set to true, return a DOMException whose name is "AbortError" and terminate this algorithm.
@@ -232,7 +202,7 @@ impl AuthenticatorBackend for SoftPasskey {
         rand::rand_bytes(key_handle.as_mut_slice())?;
 
         // Create a new key.
-        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
+        let ecgroup = get_group()?;
 
         let eckey = ec::EcKey::generate(&ecgroup)?;
 
@@ -384,7 +354,7 @@ impl AuthenticatorBackend for SoftPasskey {
             raw_id: Base64UrlSafeData(key_handle),
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(ao_bytes),
-                client_data_json: Base64UrlSafeData(client_data_json.as_bytes().to_vec()),
+                client_data_json: Base64UrlSafeData(vec![]),
                 transports: None,
             },
             type_: "public-key".to_string(),
@@ -397,7 +367,7 @@ impl AuthenticatorBackend for SoftPasskey {
 
     fn perform_auth(
         &mut self,
-        origin: Url,
+        client_data_json_hash: Vec<u8>,
         options: PublicKeyCredentialRequestOptions,
         timeout_ms: u32,
     ) -> Result<PublicKeyCredential, WebauthnCError> {
@@ -405,26 +375,6 @@ impl AuthenticatorBackend for SoftPasskey {
 
         // If the extensions member of options is present, then for each extensionId → clientExtensionInput of options.extensions:
         // ...
-
-        // Let collectedClientData be a new CollectedClientData instance whose fields are:
-        let collected_client_data = CollectedClientData {
-            type_: "webauthn.get".to_string(),
-            challenge: options.challenge.clone(),
-            origin,
-            token_binding: None,
-            cross_origin: None,
-            unknown_keys: BTreeMap::new(),
-        };
-
-        // Let clientDataJSON be the JSON-serialized client data constructed from collectedClientData.
-        let client_data_json =
-            serde_json::to_string(&collected_client_data).map_err(|_| WebauthnCError::Json)?;
-
-        // Let clientDataHash be the hash of the serialized client data represented by clientDataJSON.
-        let client_data_json_hash = compute_sha256(client_data_json.as_bytes()).to_vec();
-
-        trace!("client_data_json -> {:x?}", client_data_json);
-        trace!("client_data_json_hash -> {:x?}", client_data_json_hash);
 
         // This is where we deviate from the spec, since we aren't a browser.
 
@@ -462,7 +412,7 @@ impl AuthenticatorBackend for SoftPasskey {
             raw_id: Base64UrlSafeData(u2sd.key_handle.clone()),
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: Base64UrlSafeData(authdata),
-                client_data_json: Base64UrlSafeData(client_data_json.as_bytes().to_vec()),
+                client_data_json: Base64UrlSafeData(vec![]),
                 signature: Base64UrlSafeData(u2sd.signature),
                 user_handle: None,
             },

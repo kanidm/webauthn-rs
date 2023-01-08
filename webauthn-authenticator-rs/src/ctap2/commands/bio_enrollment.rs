@@ -220,8 +220,8 @@ pub enum BioSubCommand {
     /// Captures another sample of a fingerprint while enrollment is in
     /// progress:
     ///
-    /// * [Vec<u8>]: `template_id` of the partially-enrolled fingerprint.
-    /// * [Duration]: time-out for the operation.
+    /// * [`Vec<u8>`]: `template_id` of the partially-enrolled fingerprint.
+    /// * [`Duration`]: time-out for the operation.
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enrollingFingerprint>
     FingerprintEnrollCaptureNextSample(/* id */ Vec<u8>, /* timeout */ Duration),

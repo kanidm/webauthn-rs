@@ -140,23 +140,25 @@ fn main() {
         println!("No tokens available!");
         return;
     }
+
+    let token_count = tokens.len();
     // let authenticator = select_transport(&ui);
-    let authenticator = &tokens[0];
+    let authenticator = &mut tokens[0];
 
     match opt.commands {
         Opt::Selection => {
-            let token = block_on(select_one_token(tokens.iter()));
+            let token = block_on(select_one_token(tokens.iter_mut()));
             println!("selected token: {:?}", token);
         }
 
         Opt::Info => {
             for token in &tokens {
-                println!("{}", token.get_info());
+                println!("{:?}", token.get_info());
             }
         }
 
         Opt::FactoryReset => {
-            assert_eq!(tokens.len(), 1);
+            assert_eq!(token_count, 1);
             println!("Resetting token to factory settings. Type 'yes' to continue.");
             let mut buf = String::new();
             stdout().flush().ok();
@@ -171,18 +173,18 @@ fn main() {
         }
 
         Opt::ToggleAlwaysUv => {
-            assert_eq!(tokens.len(), 1);
+            assert_eq!(token_count, 1);
             block_on(authenticator.toggle_always_uv()).expect("Error toggling UV");
         }
 
         Opt::EnableEnterpriseAttestation => {
-            assert_eq!(tokens.len(), 1);
+            assert_eq!(token_count, 1);
             block_on(authenticator.enable_enterprise_attestation())
                 .expect("Error enabling enterprise attestation");
         }
 
         Opt::BioInfo => {
-            for token in &tokens {
+            for token in &mut tokens {
                 if let CtapAuthenticator::Fido21(t) = token {
                     let i = block_on(t.get_fingerprint_sensor_info());
                     println!("Fingerprint sensor info: {:?}", i);
@@ -193,7 +195,7 @@ fn main() {
         }
 
         Opt::EnrollFingerprint(o) => {
-            let tokens: Vec<_> = tokens
+            let mut tokens: Vec<_> = tokens
                 .drain(..)
                 .filter_map(|t| {
                     if let CtapAuthenticator::Fido21(t) = t {
@@ -205,8 +207,7 @@ fn main() {
                 })
                 .collect();
             assert_eq!(
-                tokens.len(),
-                1,
+                token_count, 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
             let id =
@@ -216,7 +217,7 @@ fn main() {
         }
 
         Opt::ListFingerprints => {
-            let tokens: Vec<_> = tokens
+            let mut tokens: Vec<_> = tokens
                 .drain(..)
                 .filter_map(|t| {
                     if let CtapAuthenticator::Fido21(t) = t {
@@ -246,7 +247,7 @@ fn main() {
         }
 
         Opt::RenameFingerprint(o) => {
-            let tokens: Vec<_> = tokens
+            let mut tokens: Vec<_> = tokens
                 .drain(..)
                 .filter_map(|t| {
                     if let CtapAuthenticator::Fido21(t) = t {
@@ -273,7 +274,7 @@ fn main() {
         }
 
         Opt::RemoveFingerprint(o) => {
-            let tokens: Vec<_> = tokens
+            let mut tokens: Vec<_> = tokens
                 .drain(..)
                 .filter_map(|t| {
                     if let CtapAuthenticator::Fido21(t) = t {
@@ -285,8 +286,7 @@ fn main() {
                 })
                 .collect();
             assert_eq!(
-                tokens.len(),
-                1,
+                token_count, 1,
                 "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
             );
             let ids: Vec<Vec<u8>> =
@@ -297,7 +297,7 @@ fn main() {
         }
 
         Opt::SetPinPolicy(o) => {
-            assert_eq!(tokens.len(), 1);
+            assert_eq!(token_count, 1);
             block_on(authenticator.set_min_pin_length(
                 o.length,
                 o.rpids.unwrap_or_default(),
@@ -307,12 +307,12 @@ fn main() {
         }
 
         Opt::SetPin(o) => {
-            assert_eq!(tokens.len(), 1);
+            assert_eq!(token_count, 1);
             block_on(authenticator.set_new_pin(&o.new_pin)).expect("Error setting PIN");
         }
 
         Opt::ChangePin(o) => {
-            assert_eq!(tokens.len(), 1);
+            assert_eq!(token_count, 1);
             block_on(authenticator.change_pin(&o.old_pin, &o.new_pin)).expect("Error changing PIN");
         }
     }

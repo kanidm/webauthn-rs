@@ -68,9 +68,8 @@ impl<'b> Transport<'b> for AnyTransport {
 #[allow(clippy::unimplemented)]
 impl Token for AnyToken {
     #[allow(unused_variables)]
-    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand,
         U: UiCallback,
     {
         match self {
@@ -92,13 +91,13 @@ impl Token for AnyToken {
         }
     }
 
-    fn close(&self) -> Result<(), WebauthnCError> {
+    async fn close(&mut self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => n.close(),
+            AnyToken::Nfc(n) => n.close().await,
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => u.close(),
+            AnyToken::Usb(u) => u.close().await,
         }
     }
 

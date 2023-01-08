@@ -15,6 +15,17 @@ pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
+    // Let collectedClientData be a new CollectedClientData instance whose fields are:
+    //    type
+    //        The string "webauthn.create".
+    //    challenge
+    //        The base64url encoding of options.challenge.
+    //    origin
+    //        The serialization of callerOrigin.
+
+    //    Not Supported Yet.
+    //    tokenBinding
+    //        The status of Token Binding between the client and the callerOrigin, as well as the Token Binding ID associated with callerOrigin, if one is available.
     CollectedClientData {
         type_: "webauthn.create".to_string(),
         challenge,

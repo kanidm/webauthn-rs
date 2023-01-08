@@ -9,7 +9,6 @@
 mod framing;
 mod responses;
 
-use crate::ctap2::*;
 use crate::error::WebauthnCError;
 use crate::transport::*;
 use crate::ui::UiCallback;
@@ -206,17 +205,15 @@ impl USBToken {
 
 #[async_trait]
 impl Token for USBToken {
-    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand,
         U: UiCallback,
     {
-        let cbor = cmd.cbor().map_err(|_| WebauthnCError::Cbor)?;
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CBOR,
-            len: cbor.len() as u16,
-            data: cbor,
+            len: cmd.len() as u16,
+            data: cmd.to_vec(),
         };
         self.send(&cmd)?;
 
@@ -282,7 +279,7 @@ impl Token for USBToken {
         }
     }
 
-    fn close(&self) -> Result<(), WebauthnCError> {
+    async fn close(&mut self) -> Result<(), WebauthnCError> {
         Ok(())
     }
 

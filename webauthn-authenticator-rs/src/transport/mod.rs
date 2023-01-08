@@ -35,6 +35,17 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
             .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
             .collect())
     }
+
+    fn connect_one<'a, U: UiCallback>(
+        &mut self,
+        ui: &'a U,
+    ) -> Result<CtapAuthenticator<'a, Self::Token, U>, WebauthnCError> {
+        self.tokens()?
+            .drain(..)
+            .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
+            .next()
+            .ok_or(WebauthnCError::NoSelectedToken)
+    }
 }
 
 /// Represents a connection to a single FIDO token over a [Transport].
@@ -51,13 +62,14 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
     fn get_transport(&self) -> AuthenticatorTransport;
 
     /// Transmit a CBOR message to a token, and deserialises the response.
-    async fn transmit<'a, C, R, U>(&self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
+    async fn transmit<'a, C, R, U>(&mut self, cmd: C, ui: &U) -> Result<R, WebauthnCError>
     where
         C: CBORCommand<Response = R>,
         R: CBORResponse,
         U: UiCallback,
     {
-        let resp = self.transmit_raw(cmd, ui).await?;
+        let cbor = cmd.cbor().map_err(|_| WebauthnCError::Cbor)?;
+        let resp = self.transmit_raw(&cbor, ui).await?;
 
         R::try_from(resp.as_slice()).map_err(|_| {
             //error!("error: {:?}", e);
@@ -67,12 +79,13 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
 
     /// Transmits a command on the underlying transport.
     ///
+    /// `cbor` is a CBOR-encoded command.
+    ///
     /// Interfaces need to check for and return any transport-layer-specific
     /// error code [WebauthnCError::Ctap], but don't need to worry about
     /// deserialising CBOR.
-    async fn transmit_raw<C, U>(&self, cmd: C, ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<U>(&mut self, cbor: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand,
         U: UiCallback;
 
     /// Cancels a pending request.
@@ -82,5 +95,5 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
     async fn init(&mut self) -> Result<(), WebauthnCError>;
 
     /// Closes the [Token]
-    fn close(&self) -> Result<(), WebauthnCError>;
+    async fn close(&mut self) -> Result<(), WebauthnCError>;
 }

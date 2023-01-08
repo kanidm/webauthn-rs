@@ -1,18 +1,17 @@
 use std::fmt::Debug;
 
 use crate::{
+    authenticator_hashed::AuthenticatorBackendHashedClientData,
     ctap2::{commands::*, pin_uv::*},
     error::WebauthnCError,
     transport::Token,
     ui::UiCallback,
-    util::{check_pin, compute_sha256, creation_to_clientdata, get_to_clientdata},
-    AuthenticatorBackend,
+    util::check_pin,
 };
 
 use base64urlsafedata::Base64UrlSafeData;
 use futures::executor::block_on;
 
-use url::Url;
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
     AuthenticatorAttestationResponseRaw, PublicKeyCredential, RegisterPublicKeyCredential,
@@ -44,18 +43,21 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     }
 
     /// Perform a factory reset of the token, deleting all data.
-    pub async fn factory_reset(&self) -> Result<(), WebauthnCError> {
+    pub async fn factory_reset(&mut self) -> Result<(), WebauthnCError> {
+        let ui_callback = self.ui_callback;
         self.token
-            .transmit(ResetRequest {}, self.ui_callback)
+            .transmit(ResetRequest {}, ui_callback)
             .await
             .map(|_| ())
     }
 
     async fn config(
-        &self,
+        &mut self,
         sub_command: ConfigSubCommand,
         bypass_always_uv: bool,
     ) -> Result<(), WebauthnCError> {
+        let ui_callback = self.ui_callback;
+
         let (pin_uv_auth_proto, pin_uv_auth_param) = self
             .get_pin_uv_auth_token(
                 sub_command.prf().as_slice(),
@@ -69,7 +71,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         self.token
             .transmit(
                 ConfigRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
-                self.ui_callback,
+                ui_callback,
             )
             .await
             .map(|_| ())
@@ -78,7 +80,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// Toggles the state of the "Always Require User Verification" feature.
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv>
-    pub async fn toggle_always_uv(&self) -> Result<(), WebauthnCError> {
+    pub async fn toggle_always_uv(&mut self) -> Result<(), WebauthnCError> {
         self.config(ConfigSubCommand::ToggleAlwaysUv, true).await
     }
 
@@ -86,7 +88,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength>
     pub async fn set_min_pin_length(
-        &self,
+        &mut self,
         new_min_pin_length: Option<u32>,
         min_pin_length_rpids: Vec<String>,
         force_change_pin: Option<bool>,
@@ -105,7 +107,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// Enables the Enterprise Attestation feature.
     ///
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn>
-    pub async fn enable_enterprise_attestation(&self) -> Result<(), WebauthnCError> {
+    pub async fn enable_enterprise_attestation(&mut self) -> Result<(), WebauthnCError> {
         if self.info.get_option("ep").is_none() {
             return Err(WebauthnCError::NotSupported);
         }
@@ -122,7 +124,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// Sets a PIN on a device which does not already have one.
     ///
     /// To change a PIN, use [`change_pin()`][Self::change_pin].
-    pub async fn set_new_pin(&self, pin: &str) -> Result<(), WebauthnCError> {
+    pub async fn set_new_pin(&mut self, pin: &str) -> Result<(), WebauthnCError> {
+        let ui_callback = self.ui_callback;
         let pin = self.validate_pin(pin)?;
 
         let mut padded_pin: [u8; 64] = [0; 64];
@@ -131,7 +134,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
 
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, self.ui_callback).await?;
+        let ret = self.token.transmit(p, ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
@@ -141,7 +144,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         trace!(?shared_secret);
 
         let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice())?;
-        let ret = self.token.transmit(set_pin, self.ui_callback).await?;
+        let ret = self.token.transmit(set_pin, ui_callback).await?;
         trace!(?ret);
         Ok(())
     }
@@ -149,7 +152,9 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// Changes a PIN on a device.
     ///
     /// To set a PIN for the first time, use [`set_new_pin()`][Self::set_new_pin].
-    pub async fn change_pin(&self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
+    pub async fn change_pin(&mut self, old_pin: &str, new_pin: &str) -> Result<(), WebauthnCError> {
+        let ui_callback = self.ui_callback;
+
         // TODO: we actually really only need this in normal form C
         let old_pin = self.validate_pin(old_pin)?;
         let new_pin = self.validate_pin(new_pin)?;
@@ -159,12 +164,12 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
 
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, self.ui_callback).await?;
+        let ret = self.token.transmit(p, ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         let shared_secret = iface.encapsulate(key_agreement)?;
 
         let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret)?;
-        let ret = self.token.transmit(change_pin, self.ui_callback).await?;
+        let ret = self.token.transmit(change_pin, ui_callback).await?;
         trace!(?ret);
         Ok(())
     }
@@ -192,7 +197,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// References:
     /// * <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken>
     pub(super) async fn get_pin_uv_auth_token(
-        &self,
+        &mut self,
         client_data_hash: &[u8],
         permissions: Permissions,
         rp_id: Option<String>,
@@ -216,7 +221,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     }
 
     pub(super) async fn get_pin_uv_auth_session(
-        &self,
+        &mut self,
         permissions: Permissions,
         rp_id: Option<String>,
         bypass_always_uv: bool,
@@ -232,6 +237,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             return Err(WebauthnCError::Internal);
         }
 
+        let ui_callback = self.ui_callback;
         let client_pin = self.info.get_option("clientPin");
         let always_uv = self.info.get_option("alwaysUv");
         let make_cred_uv_not_required = self.info.get_option("makeCredUvNotRqd");
@@ -279,7 +285,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
         // 6.5.5.4: Obtaining the shared secret
         let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, self.ui_callback).await?;
+        let ret = self.token.transmit(p, ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
         trace!(?key_agreement);
 
@@ -312,7 +318,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             }
         };
 
-        let ret = self.token.transmit(p, self.ui_callback).await?;
+        let ret = self.token.transmit(p, ui_callback).await?;
         trace!(?ret);
         let pin_token = ret
             .pin_uv_auth_token
@@ -324,38 +330,36 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         Ok((Some(iface), Some(pin_token)))
     }
 
-    async fn request_pin(&self, pin_uv_protocol: Option<u32>) -> Result<String, WebauthnCError> {
+    async fn request_pin(
+        &mut self,
+        pin_uv_protocol: Option<u32>,
+    ) -> Result<String, WebauthnCError> {
         let p = ClientPinRequest {
             pin_uv_protocol,
             sub_command: ClientPinSubCommand::GetPinRetries,
             ..Default::default()
         };
 
-        let ret = self.token.transmit(p, self.ui_callback).await?;
+        let ui_callback = self.ui_callback;
+        let ret = self.token.transmit(p, ui_callback).await?;
         trace!(?ret);
 
         // TODO: handle lockouts
 
-        self.ui_callback
-            .request_pin()
-            .ok_or(WebauthnCError::Cancelled)
+        ui_callback.request_pin().ok_or(WebauthnCError::Cancelled)
     }
 }
 
-impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'a, T, U> {
+impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
+    for Ctap20Authenticator<'a, T, U>
+{
     fn perform_register(
         &mut self,
-        origin: Url,
+        client_data_hash: Vec<u8>,
         options: webauthn_rs_proto::PublicKeyCredentialCreationOptions,
         _timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::RegisterPublicKeyCredential, crate::prelude::WebauthnCError>
     {
-        let client_data = creation_to_clientdata(origin, options.challenge.clone());
-        let client_data: Vec<u8> = serde_json::to_string(&client_data)
-            .map_err(|_| WebauthnCError::Json)?
-            .into();
-        let client_data_hash = compute_sha256(&client_data).to_vec();
-
         let (pin_uv_auth_proto, pin_uv_auth_param) = block_on(self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::MAKE_CREDENTIAL,
@@ -405,7 +409,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
             extensions: RegistrationExtensionsClientOutputs::default(), // TODO
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(raw),
-                client_data_json: Base64UrlSafeData(client_data),
+                client_data_json: Base64UrlSafeData(vec![]),
                 // All transports the token supports, as opposed to the
                 // transport which was actually used.
                 transports: self.info.get_transports(),
@@ -415,16 +419,11 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
 
     fn perform_auth(
         &mut self,
-        origin: Url,
+        client_data_hash: Vec<u8>,
         options: webauthn_rs_proto::PublicKeyCredentialRequestOptions,
         _timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::PublicKeyCredential, crate::prelude::WebauthnCError> {
         trace!("trying to authenticate...");
-        let client_data = get_to_clientdata(origin, options.challenge.clone());
-        let client_data: Vec<u8> = serde_json::to_string(&client_data)
-            .map_err(|_| WebauthnCError::Json)?
-            .into();
-        let client_data_hash = compute_sha256(&client_data).to_vec();
 
         let (pin_uv_auth_proto, pin_uv_auth_param) = block_on(self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
@@ -437,7 +436,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
             rp_id: options.rp_id,
             client_data_hash,
             allow_list: options.allow_credentials,
-            options: None, // TODO
+            options: None,
             pin_uv_auth_param,
             pin_uv_auth_proto,
         };
@@ -464,7 +463,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for Ctap20Authenticator<'
             raw_id,
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data,
-                client_data_json: Base64UrlSafeData(client_data),
+                client_data_json: Base64UrlSafeData(vec![]),
                 signature,
                 // TODO
                 user_handle: None,
