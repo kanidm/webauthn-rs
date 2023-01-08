@@ -3,13 +3,16 @@ use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::middleware::Logger;
 use actix_web::web::get;
+use actix_web::web::JsonConfig;
 use actix_web::{App, HttpServer};
 use log::info;
 
 use crate::handler::index::index;
 use crate::handler::serve_wasm::serve_wasm;
+use crate::startup::startup;
 
 mod handler;
+mod startup;
 
 #[tokio::main]
 async fn main() {
@@ -20,8 +23,10 @@ async fn main() {
     // Normally you would read this from a configuration file.
     let key = Key::generate();
 
-    info!("Start listening on: http://0.0.0.0:8080");
+    let (webauthn, webauthn_users) = startup();
 
+    // Build the webserver and run it
+    info!("Start listening on: http://0.0.0.0:8080");
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
@@ -30,6 +35,9 @@ async fn main() {
                     .cookie_name("webauthnrs".to_string())
                     .build(),
             )
+            .app_data(JsonConfig::default())
+            .app_data(webauthn.clone())
+            .app_data(webauthn_users.clone())
             .route("/", get().to(index))
             .route("/pkg/{filename:.*}", get().to(serve_wasm))
     })

@@ -20,3 +20,6 @@ tokio = { version = "~1.24", features = ["macros", "rt-multi-thread"] }
 # Logging framework + facade
 env_logger = { version = "~0.10" }
 log = { version = "~0.4" }
+
+# Webauthn framework
+webauthn-rs = { path = "../../../webauthn-rs", features = ["danger-allow-state-serialisation"] }
