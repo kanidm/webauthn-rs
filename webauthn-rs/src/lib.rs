@@ -51,8 +51,20 @@
 //! # Features
 //!
 //! This library supports some optional features that you may wish to use. These are all
-//! disabled by default as they have risks associated that you need to be aware of as an
+//! disabled by default (except for `uuid`) as they have risks associated that you need to be aware of as an
 //! authentication provider.
+//!
+//! ## Disabling UUIDs
+//!
+//! User IDs are required to be unique, have a max size of 64 bytes, and not contain personally identifying
+//! information such as a username or e-mail address (see 
+//! [the spec](https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialuserentity-id)). They *should* also be unique
+//! across different registrations (even when they all point to the same user; think 1:N relationships). V4 UUIDs generally
+//! enforce this criteria so the `uuid` feature is on by default.
+//! 
+//! Disabling this feature allows you to pass in your own identifiers, however keep in mind the above requirements.
+//!
+//! UUIDs provide a uniform
 //!
 //! ## Allow Serialising Registration and Authentication State
 //!
@@ -125,6 +137,7 @@ extern crate tracing;
 mod interface;
 
 use url::Url;
+#[cfg(feature = "uuid")]
 use uuid::Uuid;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::*;
@@ -138,6 +151,7 @@ pub mod prelude {
     pub use crate::{Webauthn, WebauthnBuilder};
     pub use base64urlsafedata::Base64UrlSafeData;
     pub use url::Url;
+    #[cfg(feature = "uuid")]
     pub use uuid::Uuid;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     #[cfg(feature = "danger-credential-internals")]
@@ -416,7 +430,8 @@ impl Webauthn {
     /// ```
     pub fn start_passkey_registration(
         &self,
-        user_unique_id: Uuid,
+        #[cfg(feature = "uuid")] user_unique_id: Uuid,
+        #[cfg(not(feature = "uuid"))] user_unique_id: &[u8],
         user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
@@ -438,7 +453,10 @@ impl Webauthn {
 
         self.core
             .generate_challenge_register_options(
+                #[cfg(feature = "uuid")]
                 user_unique_id.as_bytes(),
+                #[cfg(not(feature = "uuid"))]
+                user_unique_id,
                 user_name,
                 user_display_name,
                 attestation,
@@ -637,7 +655,8 @@ impl Webauthn {
     /// ```
     pub fn start_securitykey_registration(
         &self,
-        user_unique_id: Uuid,
+        #[cfg(feature = "uuid")] user_unique_id: Uuid,
+        #[cfg(not(feature = "uuid"))] user_unique_id: &[u8],
         user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
@@ -665,7 +684,10 @@ impl Webauthn {
 
         self.core
             .generate_challenge_register_options(
+                #[cfg(feature = "uuid")]
                 user_unique_id.as_bytes(),
+                #[cfg(not(feature = "uuid"))]
+                user_unique_id,
                 user_name,
                 user_display_name,
                 attestation,
@@ -885,7 +907,8 @@ impl Webauthn {
     /// ```
     pub fn start_passwordlesskey_registration(
         &self,
-        user_unique_id: Uuid,
+        #[cfg(feature = "uuid")] user_unique_id: Uuid,
+        #[cfg(not(feature = "uuid"))] user_unique_id: &[u8],
         user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
@@ -913,7 +936,10 @@ impl Webauthn {
 
         self.core
             .generate_challenge_register_options(
+                #[cfg(feature = "uuid")]
                 user_unique_id.as_bytes(),
+                #[cfg(not(feature = "uuid"))]
+                user_unique_id,
                 user_name,
                 user_display_name,
                 attestation,
@@ -1044,6 +1070,7 @@ impl Webauthn {
     }
 
     /// WIP DO NOT USE
+    #[cfg(feature = "uuid")]
     pub fn identify_discoverable_authentication<'a>(
         &'_ self,
         reg: &'a PublicKeyCredential,
@@ -1073,7 +1100,8 @@ impl Webauthn {
     /// TODO
     pub fn start_devicekey_registration(
         &self,
-        user_unique_id: Uuid,
+        #[cfg(feature = "uuid")] user_unique_id: Uuid,
+        #[cfg(not(feature = "uuid"))] user_unique_id: &[u8],
         user_name: &str,
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
@@ -1110,7 +1138,10 @@ impl Webauthn {
 
         self.core
             .generate_challenge_register_options(
+                #[cfg(feature = "uuid")]
                 user_unique_id.as_bytes(),
+                #[cfg(not(feature = "uuid"))]
+                user_unique_id,
                 user_name,
                 user_display_name,
                 attestation,

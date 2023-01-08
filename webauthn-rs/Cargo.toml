@@ -14,11 +14,13 @@ license = "MPL-2.0"
 features = ["danger-allow-state-serialisation", "danger-user-presence-only-security-keys", "danger-credential-internals"]
 
 [features]
+default = ["uuid"]
 resident-key-support = []
 preview-features = []
 danger-allow-state-serialisation = []
 danger-credential-internals = []
 danger-user-presence-only-security-keys = []
+uuid = ["dep:uuid"]
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
@@ -26,4 +28,4 @@ webauthn-rs-core = { version = "0.5.0-dev", path = "../webauthn-rs-core" }
 url = { version = "2", features = ["serde"] }
 tracing = "0.1"
 serde = { version = "1", features = ["derive"] }
-uuid = { version = "1", features = ["v4", "serde"] }
+uuid = { version = "1", features = ["v4", "serde"], optional = true }
