@@ -77,7 +77,7 @@ If your key/browser combination don't work (generally due to missing crypto rout
 please conduct a [compatability test](https://webauthn.firstyear.id.au/compat_test) and then open
 an issue so that we can resolve the issue!
 
-Known BROKEN Keys/Harwdare
+Known BROKEN Keys/Hardware
 --------------------------
 
 * Pixel 3a / Pixel 4 + Chrome - Does not send correct attestation certificates,
