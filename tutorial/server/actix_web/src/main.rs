@@ -1,1 +1,41 @@
+use actix_session::storage::CookieSessionStore;
+use actix_session::SessionMiddleware;
+use actix_web::cookie::Key;
+use actix_web::middleware::Logger;
+use actix_web::web::get;
+use actix_web::{App, HttpServer};
+use log::info;
 
+use crate::handler::index::index;
+use crate::handler::serve_wasm::serve_wasm;
+
+mod handler;
+
+#[tokio::main]
+async fn main() {
+    // Initialize env-logger
+    env_logger::init();
+
+    // Generate secret key for cookies.
+    // Normally you would read this from a configuration file.
+    let key = Key::generate();
+
+    info!("Start listening on: http://0.0.0.0:8080");
+
+    HttpServer::new(move || {
+        App::new()
+            .wrap(Logger::default())
+            .wrap(
+                SessionMiddleware::builder(CookieSessionStore::default(), key.clone())
+                    .cookie_name("webauthnrs".to_string())
+                    .build(),
+            )
+            .route("/", get().to(index))
+            .route("/pkg/{filename:.*}", get().to(serve_wasm))
+    })
+    .bind(("0.0.0.0", 8080))
+    .unwrap()
+    .run()
+    .await
+    .unwrap();
+}

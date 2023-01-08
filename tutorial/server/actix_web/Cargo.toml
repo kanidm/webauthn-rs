@@ -2,7 +2,21 @@
 name = "actix_web"
 version = "0.1.0"
 edition = "2021"
+authors = ["Niklas Pfister <git@omikron.dev>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# Webframework
+actix-web = { version = "~4.2" }
+# Session framework for actix-web
+actix-session = { version = "~0.7", features = ["cookie-session"] }
+# Serve static file. Used to serve wasm
+actix-files = { version = "~0.6" }
+
+# Async runtime
+tokio = { version = "~1.24", features = ["macros", "rt-multi-thread"] }
+
+# Logging framework + facade
+env_logger = { version = "~0.10" }
+log = { version = "~0.4" }
