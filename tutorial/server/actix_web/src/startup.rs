@@ -31,7 +31,7 @@ pub(crate) fn startup() -> (Data<Webauthn>, Data<Mutex<UserData>>) {
     // Now, with the builder you can define other options.
     // Set a "nice" relying party name. Has no security properties and
     // may be changed in the future.
-    let builder = builder.rp_name("Axum Webauthn-rs");
+    let builder = builder.rp_name("Actix-web webauthn-rs");
 
     // Consume the builder and create our webauthn instance.
     // Webauthn has no mutable inner state, so Arc (Data) and read only is sufficient.
