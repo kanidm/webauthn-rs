@@ -53,21 +53,22 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     /// Requests user presence on a token.
     ///
     /// This feature is only available in `FIDO_V2_1`, and not available for NFC.
-    pub async fn selection(&self) -> Result<(), WebauthnCError> {
+    pub async fn selection(&mut self) -> Result<(), WebauthnCError> {
         if !self.token.has_button() {
             // The token doesn't have a button on a transport level (ie: NFC),
             // so immediately mark this as the "selected" token.
             Ok(())
         } else {
+            let ui_callback = self.ui_callback;
             self.token
-                .transmit(SelectionRequest {}, self.ui_callback)
+                .transmit(SelectionRequest {}, ui_callback)
                 .await
                 .map(|_| ())
         }
     }
 
     async fn bio(
-        &self,
+        &mut self,
         sub_command: BioSubCommand,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
         let (pin_uv_auth_proto, pin_uv_auth_param) = self
@@ -79,17 +80,18 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             )
             .await?;
 
+        let ui_callback = self.ui_callback;
         self.token
             .transmit(
                 BioEnrollmentRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
-                self.ui_callback,
+                ui_callback,
             )
             .await
     }
 
     /// Send a [BioSubCommand] using a provided `pin_uv_auth_token` session.
     async fn bio_with_session(
-        &self,
+        &mut self,
         sub_command: BioSubCommand,
         iface: Option<&PinUvPlatformInterface>,
         pin_uv_auth_token: Option<&Vec<u8>>,
@@ -108,22 +110,24 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             _ => (None, None),
         };
 
+        let ui_callback = self.ui_callback;
         self.token
             .transmit(
                 BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param),
-                self.ui_callback,
+                ui_callback,
             )
             .await
     }
 
     /// Checks that the device supports fingerprints.
-    async fn check_fingerprint_support(&self) -> Result<(), WebauthnCError> {
+    async fn check_fingerprint_support(&mut self) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         if !self.info.supports_ctap21_biometrics() {
             return Err(WebauthnCError::NotSupported);
         }
 
-        let r = self.token.transmit(GET_MODALITY, self.ui_callback).await?;
+        let ui_callback = self.ui_callback;
+        let r = self.token.transmit(GET_MODALITY, ui_callback).await?;
         if r.modality != Some(Modality::Fingerprint) {
             return Err(WebauthnCError::NotSupported);
         }
@@ -132,10 +136,14 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     }
 
     /// Checks that a given `friendly_name` complies with authenticator limits, and returns the value in Unicode Normal Form C.
-    async fn check_friendly_name(&self, friendly_name: String) -> Result<String, WebauthnCError> {
+    async fn check_friendly_name(
+        &mut self,
+        friendly_name: String,
+    ) -> Result<String, WebauthnCError> {
+        let ui_callback = self.ui_callback;
         let r = self
             .token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, ui_callback)
             .await?;
 
         // Normalise into Normal Form C
@@ -151,11 +159,12 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
     pub async fn get_fingerprint_sensor_info(
-        &self,
+        &mut self,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
         self.check_fingerprint_support().await?;
+        let ui_callback = self.ui_callback;
         self.token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, self.ui_callback)
+            .transmit(GET_FINGERPRINT_SENSOR_INFO, ui_callback)
             .await
     }
 
@@ -167,7 +176,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
     pub async fn enroll_fingerprint(
-        &self,
+        &mut self,
         timeout: Duration,
         friendly_name: Option<String>,
     ) -> Result<Vec<u8>, WebauthnCError> {
@@ -232,7 +241,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     /// Lists all enrolled fingerprints in the device.
     ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
-    pub async fn list_fingerprints(&self) -> Result<Vec<TemplateInfo>, WebauthnCError> {
+    pub async fn list_fingerprints(&mut self) -> Result<Vec<TemplateInfo>, WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         self.check_fingerprint_support().await?;
 
@@ -246,7 +255,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
 
     /// Renames an enrolled fingerprint.
     pub async fn rename_fingerprint(
-        &self,
+        &mut self,
         id: Vec<u8>,
         friendly_name: String,
     ) -> Result<(), WebauthnCError> {
@@ -262,7 +271,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     }
 
     /// Removes an enrolled fingerprint.
-    pub async fn remove_fingerprint(&self, id: Vec<u8>) -> Result<(), WebauthnCError> {
+    pub async fn remove_fingerprint(&mut self, id: Vec<u8>) -> Result<(), WebauthnCError> {
         // TODO: handle CTAP_2_1_PRE version too
         self.check_fingerprint_support().await?;
 
@@ -278,7 +287,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     /// further processing will stop, and the request may be incomplete.
     ///
     /// Call [Self::list_fingerprints] to check what was actually done.
-    pub async fn remove_fingerprints(&self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError> {
+    pub async fn remove_fingerprints(&mut self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError> {
         let (iface, pin_uv_auth_token) = self
             .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
             .await?;

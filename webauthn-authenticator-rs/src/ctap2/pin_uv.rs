@@ -1,14 +1,15 @@
-use crate::{error::WebauthnCError, util::compute_sha256};
+use crate::{
+    crypto::{decrypt, ecdh, encrypt, get_group, hkdf_sha_256, regenerate},
+    error::WebauthnCError,
+    util::compute_sha256,
+};
 use openssl::{
     bn,
-    ec::{self, EcKey, EcKeyRef},
+    ec::{EcKey, EcKeyRef},
     hash,
-    md::Md,
-    nid,
     pkey::{PKey, Private},
-    pkey_ctx::PkeyCtx,
     rand::rand_bytes,
-    sign, symm,
+    sign,
 };
 use std::{fmt::Debug, ops::Deref};
 use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
@@ -81,7 +82,6 @@ impl PinUvPlatformInterface {
                 }
             }
         }
-
         Err(WebauthnCError::NotSupported)
     }
 
@@ -96,7 +96,7 @@ impl PinUvPlatformInterface {
         // 3. Let Z be the 32-byte, big-endian encoding of the x-coordinate of the shared point.
         let mut z: [u8; 32] = [0; 32];
         if let COSEKeyType::EC_EC2(ec) = peer_cose_key.key {
-            ecdh(self.private_key.as_ref(), &ec, &mut z)?;
+            ecdh(self.private_key.to_owned(), (&ec).try_into()?, &mut z)?;
         } else {
             error!("Unexpected peer key type: {:?}", peer_cose_key);
             return Err(WebauthnCError::Internal);
@@ -231,40 +231,6 @@ impl PinUvPlatformInterface {
     }
 }
 
-/// Encrypts some data using AES-256-CBC, with no padding.
-///
-/// `plaintext.len()` must be a multiple of the cipher's blocksize.
-fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-    let cipher = symm::Cipher::aes_256_cbc();
-    let mut ct = vec![0; plaintext.len() + cipher.block_size()];
-    let mut c = symm::Crypter::new(cipher, symm::Mode::Encrypt, key, iv)?;
-    c.pad(false);
-    let l = c.update(plaintext, &mut ct)?;
-    let l = l + c.finalize(&mut ct[l..])?;
-    ct.truncate(l);
-    Ok(ct)
-}
-
-fn decrypt(key: &[u8], iv: Option<&[u8]>, ciphertext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-    let cipher = openssl::symm::Cipher::aes_256_cbc();
-    if ciphertext.len() % cipher.block_size() != 0 {
-        error!(
-            "ciphertext length {} is not a multiple of {} bytes",
-            ciphertext.len(),
-            cipher.block_size()
-        );
-        return Err(WebauthnCError::Internal);
-    }
-
-    let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
-    let mut c = symm::Crypter::new(cipher, symm::Mode::Decrypt, key, iv)?;
-    c.pad(false);
-    let l = c.update(ciphertext, &mut pt)?;
-    let l = l + c.finalize(&mut pt[l..])?;
-    pt.truncate(l);
-    Ok(pt)
-}
-
 pub trait PinUvPlatformInterfaceProtocol {
     fn kdf(&self, z: &[u8]) -> Result<Vec<u8>, WebauthnCError>;
 
@@ -394,8 +360,8 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         // (see [RFC5869] for the definition of HKDF).
         let mut o: Vec<u8> = vec![0; 64];
         let zero: [u8; 32] = [0; 32];
-        hkdf_sha_256(&zero, z, b"CTAP2 HMAC key", &mut o[0..32])?;
-        hkdf_sha_256(&zero, z, b"CTAP2 AES key", &mut o[32..64])?;
+        hkdf_sha_256(&zero, z, Some(b"CTAP2 HMAC key"), &mut o[0..32])?;
+        hkdf_sha_256(&zero, z, Some(b"CTAP2 AES key"), &mut o[32..64])?;
 
         Ok(o)
     }
@@ -405,71 +371,9 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
     }
 }
 
-fn hkdf_sha_256(
-    salt: &[u8],
-    ikm: &[u8],
-    info: &[u8],
-    output: &mut [u8],
-) -> Result<(), openssl::error::ErrorStack> {
-    let mut ctx = PkeyCtx::new_id(openssl::pkey::Id::HKDF)?;
-    ctx.derive_init()?;
-    ctx.set_hkdf_md(Md::sha256())?;
-    ctx.set_hkdf_salt(salt)?;
-    ctx.set_hkdf_key(ikm)?;
-    ctx.add_hkdf_info(info)?;
-    ctx.derive(Some(output))?;
-    Ok(())
-}
-
-fn ecdh(
-    private_key: &EcKeyRef<Private>,
-    peer_key: &COSEEC2Key,
-    output: &mut [u8],
-) -> Result<(), openssl::error::ErrorStack> {
-    // let mut ctx = BigNumContext::new()?;
-
-    // let mut x = BigNum::new()?;
-    // let mut y = BigNum::new()?;
-    // let peer_key: EcKey<Public> = peer_key.into();
-    // let peer_key_pub = peer_key.public_key();
-
-    // let pk = private_key.private_key();
-    // let group = private_key.group();
-
-    // let mut pt = EcPoint::new(group)?;
-    // pt.mul(group, peer_key_pub, pk, &ctx)?;
-    // pt.affine_coordinates_gfp(group, &mut x, &mut y, &mut ctx)?;
-
-    // let buflen = (group.degree() + 7) / 8;
-    // trace!(?buflen);
-    // let x = x.to_vec();
-    // trace!(?x);
-    //output.copy_from_slice(x.as_slice());
-
-    // Both the low level and high level return same outputs.
-    let peer_key = PKey::from_ec_key(peer_key.try_into()?)?;
-    let pkey = PKey::from_ec_key(private_key.to_owned())?;
-    let mut ctx = PkeyCtx::new(&pkey)?;
-    ctx.derive_init()?;
-    ctx.derive_set_peer(&peer_key)?;
-    ctx.derive(Some(output))?;
-    // trace!(?output);
-
-    Ok(())
-}
-
-/// Generate a fresh, random P-256 private key, x, and compute the associated public point.
-fn regenerate() -> Result<EcKey<Private>, openssl::error::ErrorStack> {
-    // Create a new key.
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
-    let eckey = ec::EcKey::generate(&ecgroup)?;
-
-    Ok(eckey)
-}
-
-/// Gets the public key for a private key as [COSEKey].
-fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, openssl::error::ErrorStack> {
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
+/// Gets the public key for a private key as [COSEKey] for PinUvProtocol.
+fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, WebauthnCError> {
+    let ecgroup = get_group()?;
     // Extract the public x and y coords.
     let ecpub_points = private_key.public_key();
 
@@ -492,26 +396,9 @@ fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, openssl::e
 #[cfg(test)]
 mod tests {
     use base64urlsafedata::Base64UrlSafeData;
+    use openssl::ec;
 
     use super::*;
-
-    #[test]
-    fn hkdf() {
-        let salt: Vec<u8> = (0..0x0d).collect();
-        let ikm: [u8; 22] = [0x0b; 22];
-        let info: Vec<u8> = (0xf0..0xfa).collect();
-        let expected: [u8; 42] = [
-            0x3c, 0xb2, 0x5f, 0x25, 0xfa, 0xac, 0xd5, 0x7a, 0x90, 0x43, 0x4f, 0x64, 0xd0, 0x36,
-            0x2f, 0x2a, 0x2d, 0x2d, 0xa, 0x90, 0xcf, 0x1a, 0x5a, 0x4c, 0x5d, 0xb0, 0x2d, 0x56,
-            0xec, 0xc4, 0xc5, 0xbf, 0x34, 0x0, 0x72, 0x8, 0xd5, 0xb8, 0x87, 0x18, 0x58, 0x65,
-        ];
-
-        let mut output: [u8; 42] = [0; 42];
-
-        hkdf_sha_256(salt.as_slice(), &ikm, info.as_slice(), &mut output)
-            .expect("hkdf_sha_256 fail");
-        assert_eq!(expected, output);
-    }
 
     #[test]
     fn pin_encryption_and_hashing() {
@@ -579,7 +466,7 @@ mod tests {
         };
 
         let mut ctx = bn::BigNumContext::new().unwrap();
-        let group = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1).unwrap();
+        let group = get_group().unwrap();
         let x = bn::BigNum::from_hex_str(
             "44D78D7989B97E62EA993496C9EF6E8FD58B8B00715F9A89153DDD9C4657E47F",
         )

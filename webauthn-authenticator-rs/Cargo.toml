@@ -11,6 +11,7 @@ repository = "https://github.com/kanidm/webauthn-rs"
 [features]
 nfc_raw_transmit = ["nfc"]
 u2fhid = ["authenticator"]
+
 nfc = ["pcsc"]
 usb = ["hidapi"]
 win10 = ["windows"]
@@ -50,7 +51,10 @@ num-derive = "0.3"
 async-trait = "0.1.58"
 futures = "0.3.25"
 
+qrcode = { version = "^0.12.0", optional = true }
+
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
-base64 = "0.13"
 clap = { version = "^3.2", features = ["derive", "env"] }
+tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
+tempfile = { version = "3.3.0" }

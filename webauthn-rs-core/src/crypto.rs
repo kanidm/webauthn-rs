@@ -767,7 +767,8 @@ impl COSEKey {
         }
     }
 
-    pub(crate) fn verify_signature(
+    /// Verifies data was signed with this [COSEKey].
+    pub fn verify_signature(
         &self,
         signature: &[u8],
         verification_data: &[u8],

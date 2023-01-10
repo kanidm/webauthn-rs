@@ -1,17 +1,28 @@
 #[macro_use]
 extern crate tracing;
 
+use std::fs::OpenOptions;
 use std::io::{stdin, stdout, Write};
 
+use clap::{Args, Parser, Subcommand};
 use futures::executor::block_on;
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
 use webauthn_authenticator_rs::prelude::Url;
-use webauthn_authenticator_rs::softtoken::SoftToken;
+use webauthn_authenticator_rs::softtoken::{SoftToken, SoftTokenFile};
 use webauthn_authenticator_rs::transport::*;
+use webauthn_authenticator_rs::types::CableRequestType;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::AuthenticatorBackend;
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
+
+#[derive(Debug, clap::Parser)]
+#[clap(about = "Register and authenticate test")]
+pub struct CliParser {
+    /// Provider to use.
+    #[clap(subcommand)]
+    provider: Provider,
+}
 
 fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend + 'a {
     let mut reader = AnyTransport::new().unwrap();
@@ -22,9 +33,8 @@ fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend +
             while let Some(card) = tokens.pop() {
                 let auth = block_on(CtapAuthenticator::new(card, ui));
 
-                match auth {
-                    Some(auth) => return auth,
-                    None => (),
+                if let Some(auth) = auth {
+                    return auth;
                 }
             }
         }
@@ -34,57 +44,74 @@ fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend +
     panic!("No tokens available!");
 }
 
-fn select_provider<'a>(ui: &'a Cli) -> Box<dyn AuthenticatorBackend + 'a> {
-    let mut providers: Vec<(&str, fn(&'a Cli) -> Box<dyn AuthenticatorBackend>)> = Vec::new();
+#[derive(Debug, Args, Clone)]
+pub struct SoftTokenOpt {
+    /// Path to serialised key data, created by the softtoken example.
+    ///
+    /// If not supplied, creates a temporary key in memory.
+    #[clap()]
+    pub path: Option<String>,
+}
 
-    providers.push(("SoftToken", |_| Box::new(SoftToken::new().unwrap().0)));
-    providers.push(("CTAP", |ui| Box::new(select_transport(ui))));
+#[derive(Debug, Clone, Subcommand)]
+enum Provider {
+    /// Software token provider
+    SoftToken(SoftTokenOpt),
+
+    /// CtapAuthenticator using Transport/Token backends (NFC, USB HID)
+    ///
+    /// Requires administrative permissions on Windows.
+    Ctap,
 
     #[cfg(feature = "u2fhid")]
-    providers.push(("Mozilla", |_| {
-        Box::new(webauthn_authenticator_rs::u2fhid::U2FHid::default())
-    }));
+    /// Mozilla webauthn-authenticator-rs provider, supporting USB HID only.
+    Mozilla,
 
     #[cfg(feature = "win10")]
-    providers.push(("Windows 10", |_| {
-        Box::new(webauthn_authenticator_rs::win10::Win10::default())
-    }));
+    /// Windows 10 WebAuthn API, supporting BTLE, NFC and USB HID.
+    Win10,
+}
 
-    if providers.is_empty() {
-        panic!("oops, no providers available in this build!");
-    }
-
-    loop {
-        println!("Select a provider:");
-        for (i, (name, _)) in providers.iter().enumerate() {
-            println!("({}): {}", i + 1, name);
-        }
-
-        let mut buf = String::new();
-        print!("? ");
-        stdout().flush().ok();
-        stdin().read_line(&mut buf).expect("Cannot read stdin");
-        let selected: Result<u64, _> = buf.trim().parse();
-        match selected {
-            Ok(v) => {
-                if v < 1 || (v as usize) > providers.len() {
-                    println!("Input out of range: {}", v);
+impl Provider {
+    #[allow(unused_variables)]
+    async fn connect_provider<'a, U: UiCallback>(
+        &self,
+        request_type: CableRequestType,
+        ui: &'a U,
+    ) -> Box<dyn AuthenticatorBackend + 'a> {
+        match self {
+            Provider::SoftToken(o) => {
+                if let Some(path) = &o.path {
+                    let file = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .create(false)
+                        .open(path)
+                        .unwrap();
+                    Box::new(SoftTokenFile::open(file).unwrap())
                 } else {
-                    let p = providers.remove((v as usize) - 1);
-                    println!("Using {}...", p.0);
-                    return p.1(ui);
+                    Box::new(SoftToken::new().unwrap().0)
                 }
             }
-            Err(_) => println!("Input was not a number"),
+            Provider::Ctap => Box::new(select_transport(ui)),
+            #[cfg(feature = "u2fhid")]
+            Provider::Mozilla => Box::new(webauthn_authenticator_rs::u2fhid::U2FHid::default()),
+            #[cfg(feature = "win10")]
+            Provider::Win10 => Box::new(webauthn_authenticator_rs::win10::Win10::default()),
         }
-        println!();
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    let opt = CliParser::parse();
+
     tracing_subscriber::fmt::init();
     let ui = Cli {};
-    let mut u = select_provider(&ui);
+    let provider = opt.provider;
+    let mut u = provider
+        .connect_provider(CableRequestType::MakeCredential, &ui)
+        .await;
 
     // WARNING: don't use this as an example of how to use the library!
     let wan = Webauthn::new_unsafe_experts_only(
@@ -118,8 +145,17 @@ fn main() {
     let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
     trace!(?cred);
+    drop(u);
+    let mut buf = String::new();
+    println!("WARNING: Some NFC keys need to be power-cycled before you can authenticate.");
+    println!("Press ENTER to authenticate, or Ctrl-C to abort");
+    stdout().flush().ok();
+    stdin().read_line(&mut buf).expect("Cannot read stdin");
 
     loop {
+        u = provider
+            .connect_provider(CableRequestType::GetAssertion, &ui)
+            .await;
         let (chal, auth_state) = wan
             .generate_challenge_authenticate(
                 vec![cred.clone()],
@@ -150,6 +186,8 @@ fn main() {
 
             info!("auth_res -> {:x?}", auth_res);
         }
+
+        drop(u);
         let mut buf = String::new();
         println!("Press ENTER to try again, or Ctrl-C to abort");
         stdout().flush().ok();

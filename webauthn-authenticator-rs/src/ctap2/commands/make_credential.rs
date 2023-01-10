@@ -1,15 +1,18 @@
+use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 use serde_cbor::{value::to_value, Value};
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User};
+
+use crate::ctap2::commands::{value_to_map, value_to_vec_u8};
 
 use super::{value_to_bool, value_to_string, CBORCommand};
 
 /// `authenticatorMakeCredential` request type.
 ///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorMakeCredential>
-#[derive(Serialize, Debug, Clone)]
-#[serde(into = "BTreeMap<u32, Value>")]
+#[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(into = "BTreeMap<u32, Value>", try_from = "BTreeMap<u32, Value>")]
 pub struct MakeCredentialRequest {
     /// Hash of the ClientData binding specified by the host.
     pub client_data_hash: Vec<u8>,
@@ -43,9 +46,20 @@ impl CBORCommand for MakeCredentialRequest {
 /// `authenticatorMakeCredential` response type.
 ///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatormakecredential-response-structure>
-// Note: this needs to have the same names as AttestationObjectInner
+///
+/// ## Implementation notes
+///
+/// This needs to be (de)serialisable to/from both `Map<u32, Value>` **and**
+/// `Map<String, Value>`:
+///
+/// * The authenticator itself uses a map with `u32` keys. This is needed to get
+///   the value from from the authenticator, and to re-serialise values for
+///   caBLE (via `AuthenticatorBackendWithRequests`)
+///
+/// * `AuthenticatorAttestationResponseRaw` uses a map with `String` keys, which
+///   need the same names as `AttestationObjectInner`.
 #[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq, Eq)]
-#[serde(rename_all = "camelCase", try_from = "BTreeMap<u32, Value>")]
+#[serde(rename_all = "camelCase")]
 pub struct MakeCredentialResponse {
     /// The attestation statement format identifier.
     pub fmt: Option<String>,
@@ -172,6 +186,93 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
     }
 }
 
+impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialRequest {
+    type Error = &'static str;
+    fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
+        trace!("raw: {:?}", raw);
+        Ok(Self {
+            client_data_hash: raw
+                .remove(&0x01)
+                .and_then(|v| value_to_vec_u8(v, "0x01"))
+                .ok_or("parsing clientDataHash")?,
+            rp: raw
+                .remove(&0x02)
+                .and_then(|v| serde_cbor::value::from_value(v).ok())
+                .ok_or("parsing rp")?,
+            user: raw
+                .remove(&0x03)
+                .and_then(|v| if let Value::Map(v) = v { Some(v) } else { None })
+                .and_then(|mut v| {
+                    Some(User {
+                        id: Base64UrlSafeData(value_to_vec_u8(
+                            v.remove(&Value::Text("id".to_string()))?,
+                            "id",
+                        )?),
+                        name: value_to_string(v.remove(&Value::Text("name".to_string()))?, "name")?,
+                        display_name: value_to_string(
+                            v.remove(&Value::Text("displayName".to_string()))?,
+                            "displayName",
+                        )?,
+                    })
+                })
+                .ok_or("parsing user")?,
+            pub_key_cred_params: raw
+                .remove(&0x04)
+                .and_then(|v| serde_cbor::value::from_value(v).ok())
+                .ok_or("parsing pubKeyCredParams")?,
+            exclude_list: raw
+                .remove(&0x05)
+                .and_then(|v| serde_cbor::value::from_value(v).ok())
+                .unwrap_or_default(),
+            options: raw
+                .remove(&0x07)
+                .and_then(|v| value_to_map(v, "0x07"))
+                .map(|v| {
+                    v.into_iter()
+                        .filter_map(|(key, value)| match (key, value) {
+                            (Value::Text(key), Value::Bool(value)) => Some((key, value)),
+                            _ => None,
+                        })
+                        .collect()
+                }),
+            // TODO
+            pin_uv_auth_param: None,
+            pin_uv_auth_proto: None,
+            enterprise_attest: None,
+        })
+    }
+}
+
+impl From<MakeCredentialResponse> for BTreeMap<u32, Value> {
+    fn from(value: MakeCredentialResponse) -> Self {
+        let MakeCredentialResponse {
+            fmt,
+            auth_data,
+            att_stmt,
+            epp_att,
+            large_blob_key,
+        } = value;
+
+        let mut keys = BTreeMap::new();
+        if let Some(fmt) = fmt {
+            keys.insert(0x01, Value::Text(fmt));
+        }
+        if let Some(auth_data) = auth_data {
+            keys.insert(0x02, auth_data);
+        }
+        if let Some(att_stmt) = att_stmt {
+            keys.insert(0x03, att_stmt);
+        }
+        if let Some(epp_att) = epp_att {
+            keys.insert(0x04, epp_att.into());
+        }
+        if let Some(large_blob_key) = large_blob_key {
+            keys.insert(0x05, large_blob_key);
+        }
+        keys
+    }
+}
+
 impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
@@ -186,6 +287,7 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialResponse {
     }
 }
 
+crate::deserialize_cbor!(MakeCredentialRequest);
 crate::deserialize_cbor!(MakeCredentialResponse);
 
 #[cfg(test)]
@@ -199,6 +301,7 @@ mod test {
 
     #[test]
     fn sample_make_credential_request() {
+        let _ = tracing_subscriber::fmt::try_init();
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#example-1a030b94
         /*
         {
@@ -289,6 +392,9 @@ mod test {
         };
 
         assert_eq!(expected, req.cbor().expect("encode error"));
+
+        let decoded = <MakeCredentialRequest as CBORResponse>::try_from(&expected[1..]).unwrap();
+        trace!(?decoded);
 
         let r = vec![
             163, 1, 102, 112, 97, 99, 107, 101, 100, 2, 89, 0, 162, 0, 33, 245, 252, 11, 133, 205,

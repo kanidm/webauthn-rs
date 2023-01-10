@@ -1,40 +1,92 @@
-use crate::error::WebauthnCError;
-use crate::util::compute_sha256;
-use crate::AuthenticatorBackend;
-use crate::Url;
+use crate::{
+    authenticator_hashed::AuthenticatorBackendHashedClientData,
+    crypto::get_group,
+    ctap2::commands::{value_to_vec_u8, GetInfoResponse},
+    error::WebauthnCError,
+    util::compute_sha256,
+};
 use openssl::x509::{
     extension::{AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier},
     X509NameBuilder, X509Ref, X509ReqBuilder, X509,
 };
-use openssl::{asn1, bn, ec, hash, nid, pkey, rand, sign};
+use openssl::{asn1, bn, ec, hash, pkey, rand, sign};
+use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value;
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
+use std::{collections::BTreeMap, fs::File, io::Read};
+use std::{
+    collections::BTreeSet,
+    io::{Seek, SeekFrom, Write},
+};
 use uuid::Uuid;
 
 use base64urlsafedata::Base64UrlSafeData;
 
 use webauthn_rs_proto::{
     AllowCredentials, AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
-    AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, CollectedClientData,
-    PublicKeyCredential, PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
+    AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, PublicKeyCredential,
+    PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
 
 pub const AAGUID: Uuid = uuid::uuid!("0fb9bcbc-a0d4-4042-bbb0-559bc1631e28");
 
+#[derive(Serialize, Deserialize)]
 pub struct SoftToken {
+    #[serde(with = "PKeyPrivateDef")]
     _ca_key: pkey::PKey<pkey::Private>,
+    #[serde(with = "X509Def")]
     _ca_cert: X509,
+    #[serde(with = "PKeyPrivateDef")]
     intermediate_key: pkey::PKey<pkey::Private>,
+    #[serde(with = "X509Def")]
     intermediate_cert: X509,
     tokens: HashMap<Vec<u8>, Vec<u8>>,
     counter: u32,
 }
 
-fn build_ca() -> Result<(pkey::PKey<pkey::Private>, X509), openssl::error::ErrorStack> {
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "pkey::PKey<pkey::Private>")]
+struct PKeyPrivateDef {
+    #[serde(getter = "private_key_to_der")]
+    der: Value,
+}
+
+fn private_key_to_der(k: &pkey::PKeyRef<pkey::Private>) -> Value {
+    Value::Bytes(
+        k.private_key_to_der()
+            .expect("Cannot convert private key to DER"),
+    )
+}
+
+impl From<PKeyPrivateDef> for pkey::PKey<pkey::Private> {
+    fn from(def: PKeyPrivateDef) -> Self {
+        let b = value_to_vec_u8(def.der, "der").expect("Cannot deserialise private key");
+        Self::private_key_from_der(&b).expect("Cannot read private key as DER")
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "X509")]
+struct X509Def {
+    #[serde(getter = "x509_to_der")]
+    der: Value,
+}
+
+fn x509_to_der(k: &X509Ref) -> Value {
+    Value::Bytes(k.to_der().expect("Cannot convert certificate to DER"))
+}
+
+impl From<X509Def> for X509 {
+    fn from(def: X509Def) -> Self {
+        let b = value_to_vec_u8(def.der, "der").expect("Cannot deserialise certificate");
+        Self::from_der(&b).expect("Cannot read certificate as DER")
+    }
+}
+
+fn build_ca() -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
+    let ecgroup = get_group()?;
     let eckey = ec::EcKey::generate(&ecgroup)?;
     let ca_key = pkey::PKey::from_ec_key(eckey)?;
     let mut x509_name = X509NameBuilder::new()?;
@@ -84,8 +136,8 @@ fn build_ca() -> Result<(pkey::PKey<pkey::Private>, X509), openssl::error::Error
 fn build_intermediate(
     ca_key: &pkey::PKeyRef<pkey::Private>,
     ca_cert: &X509Ref,
-) -> Result<(pkey::PKey<pkey::Private>, X509), openssl::error::ErrorStack> {
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
+) -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
+    let ecgroup = get_group()?;
     let eckey = ec::EcKey::generate(&ecgroup)?;
     let int_key = pkey::PKey::from_ec_key(eckey)?;
 
@@ -200,6 +252,36 @@ impl SoftToken {
             ca,
         ))
     }
+
+    pub fn get_info(&self) -> GetInfoResponse {
+        GetInfoResponse {
+            versions: BTreeSet::from(["FIDO_2_0".to_string()]),
+            extensions: None,
+            aaguid: AAGUID.to_bytes_le().to_vec(),
+            options: None,
+            max_msg_size: None,
+            pin_protocols: None,
+            max_cred_count_in_list: None,
+            max_cred_id_len: None,
+            transports: Some(vec!["internal".to_string()]),
+            algorithms: None,
+            min_pin_length: None,
+        }
+    }
+
+    pub fn to_cbor(&self) -> Result<Vec<u8>, WebauthnCError> {
+        serde_cbor::ser::to_vec(self).map_err(|e| {
+            error!("SoftToken.to_cbor: {:?}", e);
+            WebauthnCError::Cbor
+        })
+    }
+
+    pub fn from_cbor(v: &[u8]) -> Result<Self, WebauthnCError> {
+        serde_cbor::from_slice(v).map_err(|e| {
+            error!("SoftToken::from_cbor: {:?}", e);
+            WebauthnCError::Cbor
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -210,10 +292,10 @@ pub struct U2FSignData {
     flags: u8,
 }
 
-impl AuthenticatorBackend for SoftToken {
+impl AuthenticatorBackendHashedClientData for SoftToken {
     fn perform_register(
         &mut self,
-        origin: Url,
+        client_data_json_hash: Vec<u8>,
         options: PublicKeyCredentialCreationOptions,
         _timeout_ms: u32,
     ) -> Result<RegisterPublicKeyCredential, WebauthnCError> {
@@ -253,36 +335,6 @@ impl AuthenticatorBackend for SoftToken {
             //     Let authenticatorExtensionInput be the (CBOR) result of running extensionId’s client extension processing algorithm on clientExtensionInput. If the algorithm returned an error, continue.
             //     Set authenticatorExtensions[extensionId] to the base64url encoding of authenticatorExtensionInput.
         */
-
-        // Let collectedClientData be a new CollectedClientData instance whose fields are:
-        //    type
-        //        The string "webauthn.create".
-        //    challenge
-        //        The base64url encoding of options.challenge.
-        //    origin
-        //        The serialization of callerOrigin.
-
-        //    Not Supported Yet.
-        //    tokenBinding
-        //        The status of Token Binding between the client and the callerOrigin, as well as the Token Binding ID associated with callerOrigin, if one is available.
-        let collected_client_data = CollectedClientData {
-            type_: "webauthn.create".to_string(),
-            challenge: options.challenge.clone(),
-            origin,
-            token_binding: None,
-            cross_origin: None,
-            unknown_keys: BTreeMap::new(),
-        };
-
-        //  Let clientDataJSON be the JSON-serialized client data constructed from collectedClientData.
-        let client_data_json =
-            serde_json::to_string(&collected_client_data).map_err(|_| WebauthnCError::Json)?;
-
-        // Let clientDataHash be the hash of the serialized client data represented by clientDataJSON.
-        let client_data_json_hash = compute_sha256(client_data_json.as_bytes()).to_vec();
-
-        trace!("client_data_json -> {:x?}", client_data_json);
-        trace!("client_data_json_hash -> {:x?}", client_data_json_hash);
 
         // Not required.
         // If the options.signal is present and its aborted flag is set to true, return a DOMException whose name is "AbortError" and terminate this algorithm.
@@ -392,7 +444,7 @@ impl AuthenticatorBackend for SoftToken {
         rand::rand_bytes(key_handle.as_mut_slice())?;
 
         // Create a new key.
-        let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
+        let ecgroup = get_group()?;
 
         let eckey = ec::EcKey::generate(&ecgroup)?;
 
@@ -537,7 +589,7 @@ impl AuthenticatorBackend for SoftToken {
             raw_id: Base64UrlSafeData(key_handle),
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(ao_bytes),
-                client_data_json: Base64UrlSafeData(client_data_json.as_bytes().to_vec()),
+                client_data_json: Base64UrlSafeData(vec![]),
                 transports: None,
             },
             type_: "public-key".to_string(),
@@ -550,7 +602,7 @@ impl AuthenticatorBackend for SoftToken {
 
     fn perform_auth(
         &mut self,
-        origin: Url,
+        client_data_json_hash: Vec<u8>,
         options: PublicKeyCredentialRequestOptions,
         timeout_ms: u32,
     ) -> Result<PublicKeyCredential, WebauthnCError> {
@@ -558,26 +610,6 @@ impl AuthenticatorBackend for SoftToken {
 
         // If the extensions member of options is present, then for each extensionId → clientExtensionInput of options.extensions:
         // ...
-
-        // Let collectedClientData be a new CollectedClientData instance whose fields are:
-        let collected_client_data = CollectedClientData {
-            type_: "webauthn.get".to_string(),
-            challenge: options.challenge.clone(),
-            origin,
-            token_binding: None,
-            cross_origin: None,
-            unknown_keys: BTreeMap::new(),
-        };
-
-        // Let clientDataJSON be the JSON-serialized client data constructed from collectedClientData.
-        let client_data_json =
-            serde_json::to_string(&collected_client_data).map_err(|_| WebauthnCError::Json)?;
-
-        // Let clientDataHash be the hash of the serialized client data represented by clientDataJSON.
-        let client_data_json_hash = compute_sha256(client_data_json.as_bytes()).to_vec();
-
-        trace!("client_data_json -> {:x?}", client_data_json);
-        trace!("client_data_json_hash -> {:x?}", client_data_json_hash);
 
         // This is where we deviate from the spec, since we aren't a browser.
 
@@ -615,7 +647,7 @@ impl AuthenticatorBackend for SoftToken {
             raw_id: Base64UrlSafeData(u2sd.key_handle.clone()),
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: Base64UrlSafeData(authdata),
-                client_data_json: Base64UrlSafeData(client_data_json.as_bytes().to_vec()),
+                client_data_json: Base64UrlSafeData(vec![]),
                 signature: Base64UrlSafeData(u2sd.signature),
                 user_handle: None,
             },
@@ -696,6 +728,7 @@ impl U2FToken for SoftToken {
             .copied()
             .collect();
 
+        trace!("Signing: {:?}", verification_data.as_slice());
         let signature = signer
             .update(verification_data.as_slice())
             .and_then(|_| signer.sign_to_vec())?;
@@ -709,11 +742,106 @@ impl U2FToken for SoftToken {
     }
 }
 
+/// [SoftToken] which is read form, and automatically saved to a [File] when
+/// dropped.
+///
+/// ## Warning
+///
+/// **[SoftTokenFile] is intended for testing purposes only, and is not intended
+/// for production or long-term usage.**
+///
+/// [SoftTokenFile] stores private key material insecurely with no protection
+/// of any kind. Its serialisation format is subject to change in the future
+/// *without warning*, which may prevent loading or saving [SoftTokenFile]s
+/// created with other versions of this code.
+pub struct SoftTokenFile {
+    token: SoftToken,
+    file: File,
+}
+
+impl SoftTokenFile {
+    /// Creates a new [SoftTokenFile] which will be saved when dropped.
+    pub fn new(token: SoftToken, file: File) -> Self {
+        Self { token, file }
+    }
+
+    /// Reads a [SoftToken] from a [File].
+    pub fn open(mut file: File) -> Result<Self, WebauthnCError> {
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf)?;
+
+        let token: SoftToken = serde_cbor::from_slice(&buf).map_err(|e| {
+            error!("Error reading SoftToken: {:?}", e);
+            WebauthnCError::Cbor
+        })?;
+
+        Ok(Self { token, file })
+    }
+
+    /// Saves the [SoftToken] to a [File].
+    fn save(&mut self) -> Result<(), WebauthnCError> {
+        trace!("Saving SoftToken to {:?}", self.file);
+        let d = self.token.to_cbor()?;
+        self.file.set_len(0)?;
+        self.file.seek(SeekFrom::Start(0))?;
+        self.file.write_all(&d)?;
+        self.file.flush()?;
+        Ok(())
+    }
+}
+
+/// Extracts the [File] handle from this [SoftTokenFile], dropping (and saving)
+/// the [SoftTokenFile] in the process.
+impl TryFrom<SoftTokenFile> for File {
+    type Error = WebauthnCError;
+    fn try_from(value: SoftTokenFile) -> Result<Self, Self::Error> {
+        Ok(value.file.try_clone()?)
+    }
+}
+
+impl AsRef<SoftToken> for SoftTokenFile {
+    fn as_ref(&self) -> &SoftToken {
+        &self.token
+    }
+}
+
+/// Drops the [SoftTokenFile], automatically saving it to disk.
+impl Drop for SoftTokenFile {
+    fn drop(&mut self) {
+        self.save().unwrap_or_else(|e| {
+            error!("Error saving SoftToken: {:?}", e);
+        });
+    }
+}
+
+impl AuthenticatorBackendHashedClientData for SoftTokenFile {
+    fn perform_register(
+        &mut self,
+        client_data_hash: Vec<u8>,
+        options: PublicKeyCredentialCreationOptions,
+        timeout_ms: u32,
+    ) -> Result<RegisterPublicKeyCredential, WebauthnCError> {
+        self.token
+            .perform_register(client_data_hash, options, timeout_ms)
+    }
+
+    fn perform_auth(
+        &mut self,
+        client_data_hash: Vec<u8>,
+        options: PublicKeyCredentialRequestOptions,
+        timeout_ms: u32,
+    ) -> Result<PublicKeyCredential, WebauthnCError> {
+        self.token
+            .perform_auth(client_data_hash, options, timeout_ms)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{SoftToken, AAGUID};
+    use super::*;
     use crate::prelude::{Url, WebauthnAuthenticator};
     use std::collections::BTreeSet;
+    use tempfile::tempfile;
     use webauthn_rs_core::proto::{AttestationCa, AttestationCaList};
     use webauthn_rs_core::WebauthnCore as Webauthn;
     use webauthn_rs_proto::{
@@ -780,6 +908,102 @@ mod tests {
             .unwrap();
 
         info!("Credential -> {:?}", cred);
+
+        let (chal, auth_state) = wan
+            .generate_challenge_authenticate(vec![cred], None)
+            .unwrap();
+
+        let r = wa
+            .do_authentication(Url::parse("https://localhost:8080").unwrap(), chal)
+            .map_err(|e| {
+                error!("Error -> {:x?}", e);
+                e
+            })
+            .expect("Failed to auth");
+
+        let auth_res = wan
+            .authenticate_credential(&r, &auth_state)
+            .expect("webauth authentication denied");
+        info!("auth_res -> {:x?}", auth_res);
+    }
+
+    #[test]
+    fn softtoken_persistence() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = Webauthn::new_unsafe_experts_only(
+            "https://localhost:8080/auth",
+            "localhost",
+            vec![url::Url::parse("https://localhost:8080").unwrap()],
+            None,
+            None,
+            None,
+        );
+
+        let (soft_token, ca_root) = SoftToken::new().unwrap();
+        let file = tempfile().unwrap();
+        let soft_token = SoftTokenFile::new(soft_token, file);
+        assert_eq!(soft_token.token.tokens.len(), 0);
+
+        let mut wa = WebauthnAuthenticator::new(soft_token);
+
+        let unique_id = [
+            158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
+        ];
+        let name = "william";
+
+        let (chal, reg_state) = wan
+            .generate_challenge_register_options(
+                &unique_id,
+                name,
+                name,
+                AttestationConveyancePreference::Direct,
+                Some(UserVerificationPolicy::Preferred),
+                None,
+                None,
+                COSEAlgorithm::secure_algs(),
+                false,
+                None,
+                false,
+            )
+            .unwrap();
+
+        info!("🍿 challenge -> {:x?}", chal);
+
+        let r = wa
+            .do_registration(Url::parse("https://localhost:8080").unwrap(), chal)
+            .map_err(|e| {
+                error!("Error -> {:x?}", e);
+                e
+            })
+            .expect("Failed to register");
+
+        let mut aaguids = BTreeSet::new();
+        aaguids.insert(AAGUID);
+        let att_ca_list: AttestationCaList = AttestationCa {
+            ca: ca_root,
+            aaguids,
+        }
+        .try_into()
+        .expect("Failed to build attestation ca list");
+        let cred = wan
+            .register_credential(&r, &reg_state, Some(&att_ca_list))
+            .unwrap();
+
+        info!("Credential -> {:?}", cred);
+
+        assert_eq!(wa.backend.token.tokens.len(), 1);
+
+        // Save the credential to disk
+        let mut file: File = wa.backend.try_into().unwrap();
+        assert!(file.stream_position().unwrap() > 0);
+
+        // Rewind and reload
+        file.seek(SeekFrom::Start(0)).unwrap();
+
+        let soft_token = SoftTokenFile::open(file).unwrap();
+        assert_eq!(soft_token.token.tokens.len(), 1);
+
+        let mut wa = WebauthnAuthenticator::new(soft_token);
 
         let (chal, auth_state) = wan
             .generate_challenge_authenticate(vec![cred], None)

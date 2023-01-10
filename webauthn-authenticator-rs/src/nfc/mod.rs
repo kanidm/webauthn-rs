@@ -1,4 +1,5 @@
 //! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
+use crate::ctap2::commands::to_short_apdus;
 use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
@@ -16,7 +17,6 @@ mod atr;
 mod tlv;
 
 pub use self::atr::*;
-use super::ctap2::*;
 use crate::transport::iso7816::*;
 use crate::transport::*;
 
@@ -300,7 +300,11 @@ impl NFCCard {
 
         let card = reader
             .ctx
-            .connect(reader_name, ShareMode::Shared, Protocols::ANY)?;
+            .connect(reader_name, ShareMode::Exclusive, Protocols::ANY)
+            .map_err(|e| {
+                error!("Error connecting to card: {:?}", e);
+                e
+            })?;
 
         Ok(NFCCard {
             card: Mutex::new(card),
@@ -329,9 +333,8 @@ impl Token for NFCCard {
         false
     }
 
-    async fn transmit_raw<C, U>(&self, cmd: C, _ui: &U) -> Result<Vec<u8>, WebauthnCError>
+    async fn transmit_raw<U>(&mut self, cmd: &[u8], _ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
-        C: CBORCommand,
         U: UiCallback,
     {
         // let apdu = cmd.to_extended_apdu().map_err(|_| WebauthnCError::Cbor)?;
@@ -343,7 +346,7 @@ impl Token for NFCCard {
 
         //     resp = self.transmit(&NFCCTAP_GETRESPONSE, &ISO7816LengthForm::ExtendedOnly)?;
         // };
-        let apdus = cmd.to_short_apdus().map_err(|_| WebauthnCError::Cbor)?;
+        let apdus = to_short_apdus(cmd);
         let guard = self.card.lock()?;
         let resp = transmit_chunks(guard.deref(), &apdus)?;
         let mut data = resp.data;
@@ -368,7 +371,7 @@ impl Token for NFCCard {
         let resp = transmit(
             guard.deref(),
             &select_by_df_name(&APPLET_DF),
-            &ISO7816LengthForm::ExtendedOnly,
+            &ISO7816LengthForm::ShortOnly,
         )?;
 
         if !resp.is_ok() {
@@ -384,7 +387,7 @@ impl Token for NFCCard {
         Ok(())
     }
 
-    fn close(&self) -> Result<(), WebauthnCError> {
+    async fn close(&mut self) -> Result<(), WebauthnCError> {
         let guard = self.card.lock()?;
         let resp = transmit(
             guard.deref(),

@@ -86,7 +86,7 @@
 //! * `key_manager` will connect to a key, pull hardware information, and let
 //!   you reconfigure the key (reset, PIN, fingerprints, etc.)
 //!
-//! * `authenticate` works with any [AuthenticatorBackend], including
+//! * `authenticate` works with any [crate::AuthenticatorBackend], including
 //!   [CtapAuthenticator].
 //!
 //! ## Device-specific issues
@@ -185,14 +185,14 @@ use std::ops::{Deref, DerefMut};
 use futures::stream::FuturesUnordered;
 use futures::{select, StreamExt};
 
+use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::error::WebauthnCError;
 use crate::transport::Token;
 use crate::ui::UiCallback;
-use crate::AuthenticatorBackend;
 
 pub use self::commands::EnrollSampleStatus;
 use self::commands::GetInfoRequest;
-pub use self::commands::{CBORCommand, CBORResponse};
+pub use self::commands::{CBORCommand, CBORResponse, GetInfoResponse};
 pub use self::{ctap20::Ctap20Authenticator, ctap21::Ctap21Authenticator};
 
 /// Abstraction for different versions of the CTAP2 protocol.
@@ -218,6 +218,17 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         token.init().await.ok()?;
         let info = token.transmit(GetInfoRequest {}, ui_callback).await.ok()?;
 
+        Self::new_with_info(info, token, ui_callback)
+    }
+
+    /// Creates a connection to an already-initialized token, and gets a reference to the highest supported FIDO version.
+    ///
+    /// Returns `None` if we don't support any version of CTAP which the token supports.
+    pub(crate) fn new_with_info(
+        info: GetInfoResponse,
+        token: T,
+        ui_callback: &'a U,
+    ) -> Option<CtapAuthenticator<'a, T, U>> {
         if info.versions.contains(FIDO_2_1) {
             Some(Self::Fido21(Ctap21Authenticator::new(
                 info,
@@ -279,24 +290,37 @@ impl<'a, T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'a, T, U> {
     }
 }
 
-/// Wrapper for [Ctap20Authenticator]'s implementation of [AuthenticatorBackend].
-impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for CtapAuthenticator<'a, T, U> {
+/// Wrapper for [Ctap20Authenticator]'s implementation of
+/// [AuthenticatorBackendHashedClientData].
+impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
+    for CtapAuthenticator<'a, T, U>
+{
     fn perform_register(
         &mut self,
-        origin: url::Url,
+        client_data_hash: Vec<u8>,
         options: webauthn_rs_proto::PublicKeyCredentialCreationOptions,
         timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::RegisterPublicKeyCredential, WebauthnCError> {
-        Ctap20Authenticator::perform_register(self, origin, options, timeout_ms)
+        <Ctap20Authenticator<'a, T, U> as AuthenticatorBackendHashedClientData>::perform_register(
+            self,
+            client_data_hash,
+            options,
+            timeout_ms,
+        )
     }
 
     fn perform_auth(
         &mut self,
-        origin: url::Url,
+        client_data_hash: Vec<u8>,
         options: webauthn_rs_proto::PublicKeyCredentialRequestOptions,
         timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::PublicKeyCredential, WebauthnCError> {
-        Ctap20Authenticator::perform_auth(self, origin, options, timeout_ms)
+        <Ctap20Authenticator<'a, T, U> as AuthenticatorBackendHashedClientData>::perform_auth(
+            self,
+            client_data_hash,
+            options,
+            timeout_ms,
+        )
     }
 }
 
@@ -305,8 +329,8 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackend for CtapAuthenticator<'a,
 /// This only works on NFC authenticators and CTAP 2.1 (not "2.1 PRE")
 /// authenticators.
 pub async fn select_one_token<'a, T: Token + 'a, U: UiCallback + 'a>(
-    tokens: impl Iterator<Item = &'a CtapAuthenticator<'a, T, U>>,
-) -> Option<&'a CtapAuthenticator<'a, T, U>> {
+    tokens: impl Iterator<Item = &'a mut CtapAuthenticator<'a, T, U>>,
+) -> Option<&'a mut CtapAuthenticator<'a, T, U>> {
     let mut tasks: FuturesUnordered<_> = tokens
         .map(|token| async move {
             if !token.token.has_button() {
