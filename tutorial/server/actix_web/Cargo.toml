@@ -11,6 +11,16 @@ authors = ["Niklas Pfister <git@omikron.dev>"]
 actix-web = { version = "~4.2" }
 # Session framework for actix-web
 actix-session = { version = "~0.7", features = ["cookie-session"] }
+# Async trait, anyhow, chrono, once_cell and rand are required for the implementation of a
+# server-side memory-backed session store.
+# Normally, you want to use a database / redis backend as session store, but for the simplicity of this
+# tutorial, we implement our own.
+async-trait = { version = "~0.1" }
+anyhow = { version = "~1.0" }
+chrono = { version = "~0.4" }
+once_cell = { version = "~1.17" }
+rand = { version = "~0.8" }
+
 # Serve static file. Used to serve wasm
 actix-files = { version = "~0.6" }
 

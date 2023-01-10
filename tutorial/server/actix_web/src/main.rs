@@ -1,4 +1,3 @@
-use actix_session::storage::CookieSessionStore;
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::middleware::Logger;
@@ -12,9 +11,11 @@ use crate::handler::auth::{
 };
 use crate::handler::index::index;
 use crate::handler::serve_wasm::serve_wasm;
+use crate::session::MemorySession;
 use crate::startup::startup;
 
 mod handler;
+mod session;
 mod startup;
 
 #[tokio::main]
@@ -34,7 +35,7 @@ async fn main() {
         App::new()
             .wrap(Logger::default())
             .wrap(
-                SessionMiddleware::builder(CookieSessionStore::default(), key.clone())
+                SessionMiddleware::builder(MemorySession::default(), key.clone())
                     .cookie_name("webauthnrs".to_string())
                     .build(),
             )
