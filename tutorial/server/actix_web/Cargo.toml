@@ -1,0 +1,35 @@
+[package]
+name = "actix_web"
+version = "0.1.0"
+edition = "2021"
+authors = ["Niklas Pfister <git@omikron.dev>"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Webframework
+actix-web = { version = "~4.2" }
+# Session framework for actix-web
+actix-session = { version = "~0.7", features = ["cookie-session"] }
+# Async trait, anyhow, chrono, once_cell and rand are required for the implementation of a
+# server-side memory-backed session store.
+# Normally, you want to use a database / redis backend as session store, but for the simplicity of this
+# tutorial, we implement our own.
+async-trait = { version = "~0.1" }
+anyhow = { version = "~1.0" }
+chrono = { version = "~0.4" }
+once_cell = { version = "~1.17" }
+rand = { version = "~0.8" }
+
+# Serve static file. Used to serve wasm
+actix-files = { version = "~0.6" }
+
+# Async runtime
+tokio = { version = "~1.24", features = ["macros", "rt-multi-thread"] }
+
+# Logging framework + facade
+env_logger = { version = "~0.10" }
+log = { version = "~0.4" }
+
+# Webauthn framework
+webauthn-rs = { path = "../../../webauthn-rs", features = ["danger-allow-state-serialisation"] }

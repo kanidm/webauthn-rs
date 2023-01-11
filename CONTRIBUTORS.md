@@ -7,3 +7,4 @@
 
 * Eric Mark Martin (ericmarkmartin)
 * Ben Wishovich (benwis)
+* Niklas Pfister (myOmikron)
