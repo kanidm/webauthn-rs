@@ -58,3 +58,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] 
 clap = { version = "^3.2", features = ["derive", "env"] }
 tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
 tempfile = { version = "3.3.0" }
+
+[build-dependencies]
+openssl = "0.10"
