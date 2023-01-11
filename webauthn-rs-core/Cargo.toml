@@ -23,7 +23,7 @@ nom = "7.1"
 base64 = "0.13"
 thiserror = "1.0"
 tracing = "0.1"
-openssl = { version = "0.10" }
+openssl = "0.10.41"
 # We could consider replacing this with openssl rand.
 rand = { version = "0.8" }
 url = { version = "2", features = ["serde"] }
