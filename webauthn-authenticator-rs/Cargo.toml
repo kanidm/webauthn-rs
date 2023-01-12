@@ -32,7 +32,7 @@ uuid = "1"
 serde_json = "1.0"
 nom = "7.1"
 serde_cbor = { version = "0.12.0-dev", package = "serde_cbor_2" }
-openssl = "0.10"
+openssl = "0.10.41"
 rpassword = "5.0"
 
 # authenticator = { path = "../../../authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
