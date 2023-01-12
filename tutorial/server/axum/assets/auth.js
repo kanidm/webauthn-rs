@@ -5,7 +5,7 @@ function register () {
         return;
     }
 
-    fetch('http://localhost:8080/register_start/' + username, {
+    fetch('http://localhost:8080/register_start/' + encodeURIComponent(username), {
         method: 'POST'
     })
     .then(response => response.json() )
@@ -50,7 +50,7 @@ function login() {
         return;
     }
 
-    fetch('http://localhost:8080/login_start/' + username, {
+    fetch('http://localhost:8080/login_start/' + encodeURIComponent(username), {
         method: 'POST'
     })
     .then(response => response.json())
