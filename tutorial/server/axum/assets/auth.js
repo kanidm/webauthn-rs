@@ -34,10 +34,11 @@ function register () {
             })
         })
         .then((response) => {
+            const flash_message = document.getElementById('flash_message');
             if (response.ok){
-                console.log("Registered!");
+                flash_message.innerHTML = "Successfully registered!";
             } else {
-                console.log("Error");
+                flash_message.innerHTML = "Error whilst registering!";
             }
         });
     })
@@ -83,10 +84,11 @@ function login() {
             }),
         })
         .then((response) => {
+            const flash_message = document.getElementById('flash_message');
             if (response.ok){
-                console.log("Logged In!");
+                flash_message.innerHTML = "Successfully logged in!";
             } else {
-                console.log("Error");
+                flash_message.innerHTML = "Error whilst logging in!";
             }
         });
     });

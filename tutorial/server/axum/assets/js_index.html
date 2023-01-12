@@ -6,8 +6,8 @@
     <title>WebAuthn-rs Tutorial</title>
     <script
         src="https://cdn.jsdelivr.net/npm/js-base64@3.7.4/base64.min.js"
-        integrity="sha384-VkKbwLiG7C18stSGuvcw9W0BHk45Ba7P9LJG5c01Yo4BI6qhFoWSa9TQLNA6EOzI">
-        crossorigin="anonymous"
+        integrity="sha384-VkKbwLiG7C18stSGuvcw9W0BHk45Ba7P9LJG5c01Yo4BI6qhFoWSa9TQLNA6EOzI"
+        crossorigin="anonymous">
     </script>
     <script src="/assets/auth.js" async></script>
 </head>
@@ -18,6 +18,10 @@
         <input type="text" id="username" placeholder="Enter your username here">
         <button onclick="register()">Register</button>
         <button onclick="login()">Login</button>
+    </div>
+
+    <div>
+        <p id="flash_message"></p>
     </div>
 
 </body>
