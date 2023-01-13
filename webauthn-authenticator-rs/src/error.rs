@@ -67,6 +67,7 @@ pub enum WebauthnCError {
     WebsocketError(String),
     /// The value of the nonce for this object has exceeded the limit.
     NonceOverflow,
+    PermissionDenied,
 }
 
 #[cfg(feature = "nfc")]
@@ -128,7 +129,11 @@ impl From<tokio_tungstenite::tungstenite::error::Error> for WebauthnCError {
 #[cfg(feature = "bluetooth")]
 impl From<btleplug::Error> for WebauthnCError {
     fn from(v: btleplug::Error) -> Self {
-        Self::BluetoothError(v.to_string())
+        use btleplug::Error::*;
+        match v {
+            PermissionDenied => WebauthnCError::PermissionDenied,
+            _ => Self::BluetoothError(v.to_string()),
+        }
     }
 }
 

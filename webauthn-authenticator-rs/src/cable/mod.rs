@@ -5,17 +5,32 @@
 //! [Noise][]) Websocket tunnel over which the platform can send a single CTAP
 //! 2.x command and get a response.
 //!
+//! A caBLE transaction involves three entities:
+//!
+//! * The *initator* (typically a web browser) starts the caBLE session for a
+//!   `MakeCredential` or `GetAssertion` request on behalf of a relying party.
+//!
+//! * The *authenticator* (or mobile device) stores credential(s) for the user
+//!   in a secure fashion, with some sort of local authentication (biometrics /
+//!   PIN), instead of using a security key.
+//!
+//! * The *tunnel server* provides a two-way channel for the initator and
+//!   authenticator to communicate over WebSockets. There are well-known servers
+//!   operated by Apple (`wss://cable.auth.com`) and Google
+//!   (`wss://cable.ua5v.com`), and an algorithm to generate tunnel server
+//!   domain names from a hash to allow for future expansion.
+//!
 //! This module implements both the [initator][connect_cable_authenticator] and
 //! [authenticator][share_cable_authenticator] side of caBLE, provided
 //! [you have appropriate hardware](#requirements).
 //!
-//! The initiator implementation provides a [`CtapAuthenticator`][] (so works
+//! The *initiator* implementation provides a [`CtapAuthenticator`][] (so works
 //! like other authenticator backends), and uses a [`UiCallback`][]
 //! implementation to display the QR code the user. Authenticators on Android
 //! and iOS only allow the initiator to send a single command before hanging up,
 //! so other features like credential management won't work.
 //!
-//! The authenticator implementation takes an input URL (parsed from the QR
+//! The *authenticator* implementation takes an input URL (parsed from the QR
 //! code), a [`AuthenticatorBackendHashedClientData`] and an [`Advertiser`] to
 //! establish a tunnel and respond to an initator's request. This allows one to
 //! share many of the authenticator backends this library already supports over
@@ -32,8 +47,8 @@
 //!
 //! We've attempted to document and untangle things as best we can, but there
 //! are probably errors in this implementation and its documentation. caBLE's
-//! design appears to have changed multiple times during its development, aiming
-//! for compatibility with older versions of Chromium.
+//! design appears to have changed multiple times during its development, while
+//! attempting to preserve compatibility with older versions of Chromium.
 //!
 //! ## Features
 //!
@@ -61,7 +76,8 @@
 //!
 //! The initator (or "browser") requires:
 //!
-//! * a Bluetooth Low Energy (BTLE) adaptor
+//! * a Bluetooth Low Energy (BTLE) adaptor with
+//!   [appropriate permissions](#permissions).
 //!
 //! * an internet connection
 //!
@@ -74,8 +90,10 @@
 //!
 //!   * [iOS 16 or later][ios][^ios15]
 //!
+//!   * [this library][share_cable_authenticator]
+//!
 //! * a Bluetooth Low Energy (BTLE) radio which can transmit service data
-//!   advertisements
+//!   advertisements[^adv]
 //!
 //! * a camera and QR code scanner[^qr]
 //!
@@ -99,21 +117,61 @@
 //! [^ios15]: iOS 15 will recognise caBLE QR codes and offer to authenticate,
 //! but this version of the protocol is not supported.
 //!
+//! ## Permissions
+//!
+//! These permissions apply for using this library as an *initiator* (ie:
+//! accessing an authenticator on a mobile device).
+//!
+//! ### Linux
+//!
+//! This library needs to be able to communicate with `bluez` via D-Bus. This is
+//! generally available to users in the `bluetooth` group, which you can add a
+//! user to with:
+//!
+//! ```sh
+//! sudo gpasswd -a $USER bluetooth
+//! ```
+//!
+//! You'll need to log out and log in again to get the new permission.
+//!
+//! ### macOS
+//!
+//! On macOS 11 (Big Sur) and later, additional permissions are required for
+//! applications to use Bluetooth. This library doesn't try to request it.
+//!
+//! If using this library with a command-line program running from a terminal or
+//! IDE:
+//!
+//! 1. Go to System Settings → Privacy & Security → Bluetooth.
+//!
+//!    In macOS 11 (Big Sur) and 12 (Monterey), go to System Preferences →
+//!    Security & Privacy → Privacy → Bluetooth, and then click the lock icon
+//!    (🔒) to make changes (you'll be prompted for your password or Touch ID).
+//!
+//! 2. Click the plus icon (➕).
+//!
+//!    On macOS 13 (Ventura) and later, you may be prompted for your password or
+//!    Touch ID.
+//!
+//! 3. Select your terminal application or IDE (iTerm, Terminal, etc.) and click
+//!    Open to add it to the list.
+//!
+//! 4. Quit and restart your terminal application.
+//!
+//! If using this library in a bundled GUI application (`.app`), you'll need
+//! to set [NSBluetoothAlwaysUsageDescription][] in `Info.plist`. If your
+//! application uses the [App Sandbox][], you'll *also* need to add the
+//! [Bluetooth entitlement][entitlement].
+//!
+//! ### Windows
+//!
+//! An [App Capabilities Declaration][] is required to grant Bluetooth access to
+//! applications distributed via the Windows Store on Windows 10 and later.
+//!
+//! These controls **do not** apply to applications compiled locally, or
+//! distributed outside of the Windows Store.
+//!
 //! ## Protocol overview
-//!
-//! Entities in a caBLE transaction:
-//!
-//! * The _initator_ (typically a web browser) starts the caBLE session for a
-//!   `MakeCredential` or `GetAssertion` request on behalf of a relying party.
-//!
-//! * The _authenticator_ (or mobile device) stores credential(s) for the user
-//!   in a secure fashion, with some sort of local authentication.
-//!
-//! * The _tunnel server_ provides a two-way channel for the initator and
-//!   authenticator to communicate over WebSockets. There are well-known servers
-//!   operated by Apple (`wss://cable.auth.com`) and Google
-//!   (`wss://cable.ua5v.com`), and an algorithm to generate tunnel server
-//!   domain names from a hash to allow for future expansion.
 //!
 //! The user attempts to register or sign in using WebAuthn, and chooses to use
 //! caBLE ("create a passkey on another device", "save a passkey on a device
@@ -183,9 +241,12 @@
 //! The initiator then sends the authenticator's response to the relying party
 //! using the usual WebAuthn APIs.
 //!
+//! [Advertiser]: btle::Advertiser
 //! [android]: https://developers.google.com/identity/passkeys/supported-environments
 //! [android-sec]: https://security.googleblog.com/2022/10/SecurityofPasskeysintheGooglePasswordManager.html
 //! [android-ver]: https://source.chromium.org/chromium/chromium/src/+/main:chrome/android/features/cablev2_authenticator/java/src/org/chromium/chrome/browser/webauth/authenticator/CableAuthenticatorUI.java;l=170-171;drc=4a8573cb240df29b0e4d9820303538fb28e31d84
+//! [App Capabilities Declaration]: https://learn.microsoft.com/en-us/windows/uwp/packaging/app-capability-declarations
+//! [App Sandbox]: https://developer.apple.com/documentation/security/app_sandbox
 //! [cableaoa]: https://source.chromium.org/chromium/chromium/src/+/main:device/fido/aoa/
 //! [CableNoise]: noise::CableNoise
 //! [cablefcm]: https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_authenticator.h;l=150-161;drc=eef4e6f76aff3defa06b9f8d921fcd46bb3e4dc1
@@ -193,15 +254,23 @@
 //! [Crypter]: noise::Crypter
 //! [devicePubKey]: https://w3c.github.io/webauthn/#sctn-device-publickey-extension
 //! [Eid]: discovery::Eid
+//! [entitlement]: https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_device_bluetooth
 //! [GetInfoResponse]: crate::ctap2::GetInfoResponse
 //! [gpfido2]: https://developers.google.com/android/reference/com/google/android/gms/fido/fido2/Fido2PrivilegedApiClient
 //! [HandshakeV2]: handshake::HandshakeV2
 //! [ios]: https://developer.apple.com/videos/play/wwdc2022/10092/
 //! [Noise]: http://noiseprotocol.org/noise.html
 //! [nonce]: discovery::Eid::nonce
+//! [NSBluetoothAlwaysUsageDescription]: https://developer.apple.com/documentation/bundleresources/information_property_list/nsbluetoothalwaysusagedescription
 //! [qr-secret]: handshake::HandshakeV2::secret
 //! [routing_id]: discovery::Eid::routing_id
 //! [tunnel_server_id]: discovery::Eid::tunnel_server_id
+//!
+//! [^adv]: Unfortunately, most platform Bluetooth APIs do not allow sending
+//! arbitrary Bluetooth service data advertisements, so
+//! [your code must provide one][Advertiser]. The `cable_tunnel` example
+//! provides an implementation using a Bluetooth HCI controller connected to a
+//! serial UART.
 //!
 //! [^pair]: Pairing payloads are only supported on Android. Where supported,
 //! pairing payloads will always be sent, padded to a constant size,
@@ -282,6 +351,12 @@ impl CableRequestType {
 /// The resulting connection is passed as a [CtapAuthenticator], but the remote
 /// device will only accept a single command (specified in the `request_type`
 /// parameter) and then close the underlying Websocket.
+///
+/// ## Permissions
+///
+/// On some platforms, Bluetooth access requires additional permissions. If this
+/// is not available, this returns [WebauthnCError::PermissionDenied]. See
+/// [this module's documentation][self] for more information.
 pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
     request_type: CableRequestType,
     ui_callback: &'a U,
@@ -335,7 +410,8 @@ pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
 ///   to use Google's tunnel server.
 ///
 /// * `advertiser` is reference to an [Advertiser] for starting and stopping
-///   Bluetooth Low Energy advertisements.
+///   Bluetooth Low Energy advertisements. See `examples/cable_tunnel` for an
+///   example which uses a Bluetooth HCI controller connected to a serial UART.
 ///
 /// * `ui_callback` trait for prompting for user interaction where needed.
 pub async fn share_cable_authenticator<'a, U>(
