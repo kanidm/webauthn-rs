@@ -171,6 +171,10 @@
 //! These controls **do not** apply to applications compiled locally, or
 //! distributed outside of the Windows Store.
 //!
+//! The Windows WebAuthn API does not (presently) support caBLE authenticators,
+//! nor does it limit direct access to them, so this does *not* need to run as
+//! Administrator.
+//!
 //! ## Protocol overview
 //!
 //! The user attempts to register or sign in using WebAuthn, and chooses to use
