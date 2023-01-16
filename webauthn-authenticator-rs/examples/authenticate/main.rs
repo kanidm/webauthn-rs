@@ -7,7 +7,7 @@ use std::io::{stdin, stdout, Write};
 use clap::{Args, Parser, Subcommand};
 use futures::executor::block_on;
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
-use webauthn_authenticator_rs::prelude::Url;
+use webauthn_authenticator_rs::prelude::{Url, WebauthnCError};
 use webauthn_authenticator_rs::softtoken::{SoftToken, SoftTokenFile};
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::types::CableRequestType;
@@ -63,6 +63,13 @@ enum Provider {
     /// Requires administrative permissions on Windows.
     Ctap,
 
+    #[cfg(feature = "cable")]
+    /// caBLE/Hybrid authenticator, using a QR code, BTLE and Websockets.
+    ///
+    /// This requires Bluetooth permission - see the
+    /// [webauthn_authenticator_rs::cable] documentation for more information.
+    Cable,
+
     #[cfg(feature = "u2fhid")]
     /// Mozilla webauthn-authenticator-rs provider, supporting USB HID only.
     Mozilla,
@@ -94,6 +101,19 @@ impl Provider {
                 }
             }
             Provider::Ctap => Box::new(select_transport(ui)),
+            #[cfg(feature = "cable")]
+            Provider::Cable => Box::new(
+                webauthn_authenticator_rs::cable::connect_cable_authenticator(request_type, ui)
+                    .await
+                    .map_err(|e| {
+                        if e == WebauthnCError::PermissionDenied {
+                            println!("Permission denied: please grant Bluetooth permissions to your terminal app.");
+                            println!("See the webauthn_authenticator_rs::cable module documentation for more info.")
+                        }
+                        e
+                    })
+                    .unwrap(),
+            ),
             #[cfg(feature = "u2fhid")]
             Provider::Mozilla => Box::new(webauthn_authenticator_rs::u2fhid::U2FHid::default()),
             #[cfg(feature = "win10")]

@@ -56,6 +56,18 @@ pub enum WebauthnCError {
     /// The card reported as a PC/SC storage card, rather than a smart card.
     StorageCard,
     IoError(String),
+    InvalidCableUrl,
+    #[cfg(feature = "cable")]
+    Base10(crate::cable::DecodeError),
+    BluetoothError(String),
+    NoBluetoothAdapter,
+    /// Attempt to communicate with an authenticator for which the connection
+    /// has been closed.
+    Closed,
+    WebsocketError(String),
+    /// The value of the nonce for this object has exceeded the limit.
+    NonceOverflow,
+    PermissionDenied,
 }
 
 #[cfg(feature = "nfc")]
@@ -97,6 +109,31 @@ impl From<openssl::error::ErrorStack> for WebauthnCError {
 impl From<std::io::Error> for WebauthnCError {
     fn from(v: std::io::Error) -> Self {
         Self::IoError(v.to_string())
+    }
+}
+
+#[cfg(feature = "cable")]
+impl From<crate::cable::DecodeError> for WebauthnCError {
+    fn from(v: crate::cable::DecodeError) -> Self {
+        Self::Base10(v)
+    }
+}
+
+#[cfg(feature = "cable")]
+impl From<tokio_tungstenite::tungstenite::error::Error> for WebauthnCError {
+    fn from(v: tokio_tungstenite::tungstenite::error::Error) -> Self {
+        Self::WebsocketError(v.to_string())
+    }
+}
+
+#[cfg(feature = "bluetooth")]
+impl From<btleplug::Error> for WebauthnCError {
+    fn from(v: btleplug::Error) -> Self {
+        use btleplug::Error::*;
+        match v {
+            PermissionDenied => WebauthnCError::PermissionDenied,
+            _ => Self::BluetoothError(v.to_string()),
+        }
     }
 }
 

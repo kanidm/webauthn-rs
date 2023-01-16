@@ -14,6 +14,15 @@ pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
     hasher.finish()
 }
 
+#[cfg(feature = "cable")]
+/// Computes the SHA256 of `a || b`.
+pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
+    let mut hasher = sha::Sha256::new();
+    hasher.update(a);
+    hasher.update(b);
+    hasher.finish()
+}
+
 pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
     // Let collectedClientData be a new CollectedClientData instance whose fields are:
     //    type
