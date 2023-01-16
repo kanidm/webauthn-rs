@@ -13,12 +13,17 @@ tracing-subscriber = "0.3"
 serde = { version = "1", features = ["derive"] }
 rand = {version="0.8", features=["min_const_gen"]}
 webauthn-rs = { path = "../../../webauthn-rs", features = ["danger-allow-state-serialisation"] }
-axum = {version = "0.5.11", features = ["http2"]}
+axum = {version = "0.6.1", features = ["http2"]}
+axum-extra = { version = "0.4.2" , features = ["spa"]}
 tokio = {version="1.19.2", features = ["full"]}
 uuid = {version="1.1.2", features=["v4"]}
 url = "2.2.2"
 thiserror = "1.0.31"
-axum-sessions = "0.3.0"
+axum-sessions = "0.4.1"
 tower = "0.4.13"
 tower-http = {version="0.3.4", features=["fs"]}
 
+[features]
+default = ["wasm"]
+wasm = []
+javascript = []
