@@ -153,7 +153,7 @@ fn main() {
 
         Opt::Info => {
             for token in &tokens {
-                println!("{:?}", token.get_info());
+                println!("{}", token.get_info());
             }
         }
 
