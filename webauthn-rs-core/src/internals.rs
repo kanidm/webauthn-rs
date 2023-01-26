@@ -88,12 +88,11 @@ impl Deref for Challenge {
     }
 }
 
-/// A reference to the challenge issued by the server.
+/// A reference to the [Challenge] issued by the server.
 /// This contains a set of random bytes.
 ///
-/// ChallengeRef is the ?Sized Type that corresponds to Challenge
-/// in the same way that &[u8] corresponds to Vec<u8>.
-/// Vec<u8> : &[u8] :: Challenge : &ChallengeRef
+/// [ChallengeRef] is the `?Sized` type that corresponds to [Challenge]
+/// in the same way that [`&[u8]`] corresponds to [`Vec<u8>`].
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(transparent)]
 pub struct ChallengeRef([u8]);
@@ -1193,8 +1192,9 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
     }
 }
 
-/// From the [TPM Vendor ID Registry][1]
-/// [1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-VendorIDRegistry-v1p06-r0p91-pub.pdf,
+/// TPM vendor identifier, from [the TPM Vendor ID Registry][1]
+///
+/// [1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-VendorIDRegistry-v1p06-r0p91-pub.pdf
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum TpmVendor {
