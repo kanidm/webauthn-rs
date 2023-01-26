@@ -948,7 +948,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
     ))
 }
 
-/// https://www.w3.org/TR/webauthn-3/#sctn-android-key-attestation
+/// <https://www.w3.org/TR/webauthn-3/#sctn-android-key-attestation>
 pub(crate) fn verify_android_key_attestation(
     acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
@@ -1053,7 +1053,7 @@ pub(crate) fn verify_android_key_attestation(
     Ok((ParsedAttestationData::Basic(arr_x509), meta))
 }
 
-/// https://www.w3.org/TR/webauthn/#sctn-android-safetynet-attestation
+/// <https://www.w3.org/TR/webauthn/#sctn-android-safetynet-attestation>
 pub(crate) fn verify_android_safetynet_attestation(
     _acd: &AttestedCredentialData,
     att_obj: &AttestationObject<Registration>,
