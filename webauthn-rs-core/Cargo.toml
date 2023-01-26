@@ -13,6 +13,9 @@ license = "MPL-2.0"
 [features]
 default = []
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 base64urlsafedata = { version = "0.1.2", path = "../base64urlsafedata" }
 webauthn-rs-proto = { version = "0.5.0-dev", path = "../webauthn-rs-proto" }

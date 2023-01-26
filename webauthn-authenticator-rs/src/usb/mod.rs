@@ -3,9 +3,14 @@
 //! This module should work on most platforms with USB support, provided that
 //! the user has permissions.
 //!
-//! **Note:** Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
-//! non-Administrator access to all USB HID FIDO tokens, making them invisible
-//! to normal USB HID APIs.
+//! ## Windows support
+//!
+//! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
+//! non-Administrator access to **all** USB HID FIDO tokens, making them
+//! invisible to normal USB HID APIs.
+//!
+//! Use [Win10][crate::win10::Win10] (available with the `win10` feature) on
+//! Windows instead.
 mod framing;
 mod responses;
 
@@ -15,6 +20,10 @@ use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use crate::usb::responses::*;
 use async_trait::async_trait;
+
+#[cfg(doc)]
+use crate::stubs::*;
+
 use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use std::fmt;

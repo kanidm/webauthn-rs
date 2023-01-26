@@ -56,7 +56,7 @@ pub fn native_to_transports(t: u32) -> Vec<AuthenticatorTransport> {
     o
 }
 
-/// Converts a [Vec<AuthenticatorTransport>] into a value for
+/// Converts a [`Vec<AuthenticatorTransport>`] into a value for
 /// [WEBAUTHN_CREDENTIAL_EX::dwTransports]
 fn transports_to_bitmask(transports: &Option<Vec<AuthenticatorTransport>>) -> u32 {
     match transports {

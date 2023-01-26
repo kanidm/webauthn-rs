@@ -1,3 +1,7 @@
+//! Authenticator implementation using Mozilla's authenticator-rs library.
+#[cfg(doc)]
+use crate::stubs::*;
+
 use crate::error::WebauthnCError;
 use crate::AuthenticatorBackend;
 use crate::Url;
@@ -14,10 +18,13 @@ use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw, PublicKeyCredential,
 };
 
+use authenticator::{authenticatorservice::AuthenticatorService, StatusUpdate};
+
+#[cfg(feature = "u2fhid")]
 use authenticator::{
     authenticatorservice::{
-        AuthenticatorService, CtapVersion, GetAssertionExtensions, GetAssertionOptions,
-        MakeCredentialsExtensions, MakeCredentialsOptions, RegisterArgsCtap2, SignArgsCtap2,
+        CtapVersion, GetAssertionExtensions, GetAssertionOptions, MakeCredentialsExtensions,
+        MakeCredentialsOptions, RegisterArgsCtap2, SignArgsCtap2,
     },
     ctap2::server::{
         PublicKeyCredentialDescriptor, PublicKeyCredentialParameters, RelyingParty, Transport, User,
@@ -25,7 +32,7 @@ use authenticator::{
     ctap2::AssertionObject,
     errors::PinError,
     statecallback::StateCallback,
-    COSEAlgorithm, Pin, RegisterResult, SignResult, StatusUpdate,
+    COSEAlgorithm, Pin, RegisterResult, SignResult,
 };
 
 use std::sync::mpsc::{channel, RecvError, Sender};

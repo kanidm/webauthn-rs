@@ -15,6 +15,9 @@ license = "MPL-2.0"
 [features]
 wasm = ["wasm-bindgen", "web-sys", "js-sys", "serde-wasm-bindgen"]
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }
 serde = { version = "1", features = ["derive"] }

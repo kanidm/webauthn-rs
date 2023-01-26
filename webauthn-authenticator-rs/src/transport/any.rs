@@ -1,8 +1,8 @@
 //! Abstraction to merge all available transports for the platform.
-#[cfg(feature = "nfc")]
+#[cfg(any(doc, feature = "nfc"))]
 use crate::nfc::*;
 use crate::transport::*;
-#[cfg(feature = "usb")]
+#[cfg(any(doc, feature = "usb"))]
 use crate::usb::*;
 
 /// [AnyTransport] merges all available transports for the platform.
@@ -11,9 +11,9 @@ use crate::usb::*;
 /// [AnyTransport] for the best experience.
 #[derive(Debug)]
 pub struct AnyTransport {
-    #[cfg(feature = "nfc")]
+    #[cfg(any(doc, feature = "nfc"))]
     pub nfc: NFCReader,
-    #[cfg(feature = "usb")]
+    #[cfg(any(doc, feature = "usb"))]
     pub usb: USBTransport,
 }
 
@@ -22,9 +22,9 @@ pub struct AnyTransport {
 pub enum AnyToken {
     /// No-op stub entry, never used.
     Stub,
-    #[cfg(feature = "nfc")]
+    #[cfg(any(doc, feature = "nfc"))]
     Nfc(NFCCard),
-    #[cfg(feature = "usb")]
+    #[cfg(any(doc, feature = "usb"))]
     Usb(USBToken),
 }
 

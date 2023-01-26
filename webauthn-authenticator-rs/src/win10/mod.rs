@@ -7,16 +7,25 @@
 //! * [MSDN: WebAuthn API](https://learn.microsoft.com/en-us/windows/win32/api/webauthn/)
 //! * [webauthn.h](github.com/microsoft/webauthn) (describes versions)
 //! * [windows-rs API](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WindowsWebServices/index.html)
+#[cfg(feature = "win10")]
 mod clientdata;
+#[cfg(feature = "win10")]
 mod cose;
+#[cfg(feature = "win10")]
 mod credential;
+#[cfg(feature = "win10")]
 mod extensions;
+#[cfg(feature = "win10")]
 mod gui;
+#[cfg(feature = "win10")]
 mod native;
+#[cfg(feature = "win10")]
 mod rp;
+#[cfg(feature = "win10")]
 mod user;
 
 use crate::error::WebauthnCError;
+#[cfg(feature = "win10")]
 use crate::win10::{
     clientdata::{creation_to_clientdata, get_to_clientdata, WinClientData},
     cose::WinCoseCredentialParameters,
@@ -39,6 +48,7 @@ use webauthn_rs_proto::{
     PublicKeyCredentialRequestOptions, RegisterPublicKeyCredential, UserVerificationPolicy,
 };
 
+#[cfg(feature = "win10")]
 use windows::{
     core::{HSTRING, PCWSTR},
     Win32::{Foundation::BOOL, Networking::WindowsWebServices::*},
@@ -329,6 +339,7 @@ impl AuthenticatorBackend for Win10 {
     }
 }
 
+#[cfg(feature = "win10")]
 /// Converts an [AuthenticatorAttachment] into a value for
 /// [WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS::dwAuthenticatorAttachment]
 fn attachment_to_native(attachment: Option<AuthenticatorAttachment>) -> u32 {
@@ -340,6 +351,7 @@ fn attachment_to_native(attachment: Option<AuthenticatorAttachment>) -> u32 {
     }
 }
 
+#[cfg(feature = "win10")]
 /// Converts a [UserVerificationPolicy] into a value for
 /// [WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS::dwUserVerificationRequirement]
 fn user_verification_to_native(policy: Option<&UserVerificationPolicy>) -> u32 {

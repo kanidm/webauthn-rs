@@ -20,7 +20,7 @@ extern crate tracing;
 mod auth;
 mod startup;
 
-#[cfg(all(feature = "javascript", feature = "wasm"))]
+#[cfg(all(feature = "javascript", feature = "wasm", not(doc)))]
 compile_error!("Feature \"javascript\" and feature \"wasm\" cannot be enabled at the same time");
 
 // 7. That's it! The user has now authenticated!

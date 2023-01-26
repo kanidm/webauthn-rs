@@ -1,4 +1,7 @@
 //! Structures for device discovery over BTLE.
+#[cfg(doc)]
+use crate::stubs::*;
+
 use num_traits::ToPrimitive;
 use openssl::{
     ec::EcKey,

@@ -1,5 +1,6 @@
 //! ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
-use pcsc::*;
+#[cfg(feature = "nfc")]
+use pcsc::MAX_ATR_SIZE;
 
 use crate::WebauthnCError;
 
@@ -38,7 +39,7 @@ pub struct Atr {
     pub t1: Vec<u8>,
 
     /// If `true`, this is a contactless storage card per
-    /// [PC/SC Specification][pcsc] Part 3, §3.1.3.2.3.2, and Part 3
+    /// [PC/SC Specification][pcsc-spec] Part 3, §3.1.3.2.3.2, and Part 3
     /// Supplemental Document.
     ///
     /// Further clarification is available in the historical bytes
