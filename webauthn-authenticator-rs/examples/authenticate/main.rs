@@ -7,7 +7,9 @@ use std::io::{stdin, stdout, Write};
 use clap::{Args, Parser, Subcommand};
 use futures::executor::block_on;
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
-use webauthn_authenticator_rs::prelude::{Url, WebauthnCError};
+use webauthn_authenticator_rs::prelude::Url;
+#[cfg(feature = "cable")]
+use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::softtoken::{SoftToken, SoftTokenFile};
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::types::CableRequestType;
@@ -38,7 +40,7 @@ fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend +
                 }
             }
         }
-        Err(e) => panic!("Error: {:?}", e),
+        Err(e) => panic!("Error: {e:?}"),
     }
 
     panic!("No tokens available!");

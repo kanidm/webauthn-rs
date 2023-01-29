@@ -1343,7 +1343,7 @@ mod tests {
         ];
 
         let tpms_attest = TpmsAttest::try_from(data.as_slice()).unwrap();
-        println!("{:?}", tpms_attest);
+        println!("{tpms_attest:?}");
         assert!(tpms_attest.magic == TPM_GENERATED_VALUE);
     }
 
@@ -1370,7 +1370,7 @@ mod tests {
             39, 252, 9, 69, 223,
         ];
         let tpmt_public = TpmtPublic::try_from(data.as_slice()).unwrap();
-        println!("{:?}", tpmt_public);
+        println!("{tpmt_public:?}");
     }
 
     #[test]
@@ -1393,7 +1393,7 @@ mod tests {
             147, 160, 176, 137, 30, 174, 245, 148, 189,
         ];
         let tpmt_sig = TpmtSignature::try_from(data.as_slice()).unwrap();
-        println!("{:?}", tpmt_sig);
+        println!("{tpmt_sig:?}");
     }
 
     #[test]
@@ -1407,7 +1407,7 @@ mod tests {
         let cred_protect = extensions
             .cred_protect
             .expect("should have cred protect extension");
-        println!("{:?}", cred_protect);
+        println!("{cred_protect:?}");
         assert_eq!(
             cred_protect.0,
             CredentialProtectionPolicy::UserVerificationRequired
@@ -1452,10 +1452,10 @@ mod tests {
 
         let cred: CredentialV3 = serde_json::from_str(legacy_cred).unwrap();
 
-        println!("{:?}", cred);
+        println!("{cred:?}");
 
         let cred_migrated: Credential = cred.into();
 
-        println!("{:?}", cred_migrated);
+        println!("{cred_migrated:?}");
     }
 }

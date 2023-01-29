@@ -86,7 +86,7 @@ fn main() {
         match EnvFilter::try_new("fido-mds=debug,fido-mds-tool=debug") {
             Ok(f) => f,
             Err(e) => {
-                eprintln!("ERROR! Unable to start tracing {:?}", e);
+                eprintln!("ERROR! Unable to start tracing {e:?}");
                 return;
             }
         }
@@ -118,7 +118,7 @@ fn main() {
                 Ok(mds) => {
                     debug!("{} fido metadata avaliable", mds.u2f.len());
                     for fd in mds.u2f.values() {
-                        eprintln!("{}", fd);
+                        eprintln!("{fd}");
                     }
                 }
                 Err(e) => {
@@ -144,11 +144,11 @@ fn main() {
                 Ok(mds) => {
                     debug!("{} fido metadata avaliable", mds.fido2.len());
                     for fd in mds.fido2_description.values() {
-                        eprintln!("{}", fd);
+                        eprintln!("{fd}");
                         if extra_details {
                             println!("  authentication_algorithms:");
                             for alg in fd.authentication_algorithms.iter() {
-                                println!("    * {}", alg);
+                                println!("    * {alg}");
                             }
 
                             println!("  user_verification_details:");
@@ -160,7 +160,7 @@ fn main() {
                                         print!(" AND");
                                     }
                                     first = false;
-                                    print!(" {}", uvm_and);
+                                    print!(" {uvm_and}");
                                 }
                                 println!();
                             }
@@ -206,11 +206,11 @@ fn main() {
                                 println!("authenticator_version: {}", fd.authenticator_version);
                                 println!("authentication_algorithms:");
                                 for alg in fd.authentication_algorithms.iter() {
-                                    println!("  {:?}", alg);
+                                    println!("  {alg:?}");
                                 }
                                 println!("public_key_alg_and_encodings: ");
                                 for alg in fd.public_key_alg_and_encodings.iter() {
-                                    println!("  {:?}", alg);
+                                    println!("  {alg:?}");
                                 }
 
                                 println!("user_verification_details:");
@@ -218,12 +218,12 @@ fn main() {
                                     println!("-- OR");
                                     for uvm_and in uvm_or.iter() {
                                         println!("  AND");
-                                        println!("  {}", uvm_and);
+                                        println!("  {uvm_and}");
                                     }
                                 }
                                 println!("key_protection:");
                                 for kp in fd.key_protection.iter() {
-                                    println!("  {:?}", kp);
+                                    println!("  {kp:?}");
                                 }
                                 println!("is_key_restricted: {}", fd.is_key_restricted);
                                 println!(
@@ -244,14 +244,14 @@ fn main() {
                                 }
 
                                 if let Some(authenticator_info) = &fd.authenticator_get_info {
-                                    println!("authenticator_get_info: {:?}", authenticator_info);
+                                    println!("authenticator_get_info: {authenticator_info:?}");
                                 } else {
                                     println!("authenticator_get_info: not present")
                                 }
 
                                 println!("status_reports:");
                                 for sr in fd.status_reports.iter() {
-                                    println!("  {:?}", sr);
+                                    println!("  {sr:?}");
                                 }
 
                                 println!();

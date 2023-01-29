@@ -194,7 +194,7 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
         let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
 
         RegisterPublicKeyCredential {
-            id: format!("{}", data_raw_id_b64),
+            id: format!("{data_raw_id_b64}"),
             raw_id: data_raw_id_b64,
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: data_response_attestation_object_b64,

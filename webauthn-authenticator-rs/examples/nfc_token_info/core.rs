@@ -24,6 +24,6 @@ pub(crate) fn event_loop() {
                 access_card(card);
             }
         }
-        Err(e) => panic!("Error: {:?}", e),
+        Err(e) => panic!("Error: {e:?}"),
     }
 }

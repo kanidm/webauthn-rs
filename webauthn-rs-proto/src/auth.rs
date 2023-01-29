@@ -208,7 +208,7 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         let data_response_user_handle_b64 = data_response_user_handle.map(Base64UrlSafeData);
 
         PublicKeyCredential {
-            id: format!("{}", data_raw_id_b64),
+            id: format!("{data_raw_id_b64}"),
             raw_id: data_raw_id_b64,
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: data_response_authenticator_data_b64,

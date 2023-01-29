@@ -594,7 +594,7 @@ impl From<WebauthnError> for ResponseError {
             }
             WebauthnError::CredentialCrossOrigin => Self::CredentialCrossOrigin,
             #[allow(unreachable_patterns)]
-            _ => Self::UnknownError(format!("{:?}", value)),
+            _ => Self::UnknownError(format!("{value:?}")),
             // WebauthnError::OpenSSLError(_)                                                                                =>      Self::OpenSSLError,
         }
     }

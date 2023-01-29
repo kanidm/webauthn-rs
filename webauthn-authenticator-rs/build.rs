@@ -47,11 +47,11 @@ Please upgrade to OpenSSL v3.0.0 or later.
         match r {
             Ok(actual) => {
                 println!("Diagnostic: Result mismatched.");
-                println!("Expected: {:02x?}", expected);
-                println!("Actual  : {:02x?}", actual);
+                println!("Expected: {expected:02x?}");
+                println!("Actual  : {actual:02x?}");
             }
             Err(e) => {
-                println!("Diagnostic: OpenSSL error: {:?}", e);
+                println!("Diagnostic: OpenSSL error: {e:?}");
             }
         }
         println!();
