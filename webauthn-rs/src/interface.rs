@@ -229,14 +229,14 @@ impl PasswordlessKey {
     }
 }
 
-#[cfg(all(feature = "danger-credential-internals", feature="preview-features"))]
+#[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
 impl From<PasswordlessKey> for Credential {
     fn from(pk: PasswordlessKey) -> Self {
         pk.cred
     }
 }
 
-#[cfg(all(feature = "danger-credential-internals", feature="preview-features"))]
+#[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
 impl From<Credential> for PasswordlessKey {
     /// Convert a generic webauthn credential into a Passkey
     fn from(cred: Credential) -> Self {
