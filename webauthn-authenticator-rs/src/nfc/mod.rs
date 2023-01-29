@@ -99,10 +99,13 @@ impl NFCReader {
     ///
     /// Example:
     ///
-    /// ```rust
+    /// ```no_run
+    /// # #[cfg(feature = "nfc")]
     /// use pcsc::Scope;
+    /// # #[cfg(feature = "nfc")]
     /// use webauthn_authenticator_rs::nfc::NFCReader;
     ///
+    /// # #[cfg(feature = "nfc")]
     /// let reader = NFCReader::new(Scope::User);
     /// // TODO: Handle errors
     /// ```
