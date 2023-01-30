@@ -90,6 +90,9 @@ pub enum Opt {
     /// Gets information about biometric authentication on the device.
     BioInfo,
     /// Enrolls a fingerprint on the device.
+    ///
+    /// Note: you must set a PIN on the device before you can enroll any
+    /// fingerprints.
     EnrollFingerprint(EnrollFingerprintOpt),
     /// Lists all enrolled fingerprints on the device.
     ListFingerprints,
@@ -173,20 +176,44 @@ fn main() {
         }
 
         Opt::ToggleAlwaysUv => {
-            assert_eq!(token_count, 1);
-            block_on(authenticator.toggle_always_uv()).expect("Error toggling UV");
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| match t {
+                    CtapAuthenticator::Fido21(a) => Some(a),
+                    _ => None,
+                })
+                .filter(|t| t.supports_config())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
+            );
+            block_on(tokens[0].toggle_always_uv()).expect("Error toggling UV");
         }
 
         Opt::EnableEnterpriseAttestation => {
-            assert_eq!(token_count, 1);
-            block_on(authenticator.enable_enterprise_attestation())
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| match t {
+                    CtapAuthenticator::Fido21(a) => Some(a),
+                    _ => None,
+                })
+                .filter(|t| t.supports_config() && t.supports_enterprise_attestation())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
+            );
+            block_on(tokens[0].enable_enterprise_attestation())
                 .expect("Error enabling enterprise attestation");
         }
 
         Opt::BioInfo => {
             for token in &mut tokens {
-                if let CtapAuthenticator::Fido21(t) = token {
-                    let i = block_on(t.get_fingerprint_sensor_info());
+                if let Some(b) = token.bio() {
+                    let i = block_on(b.get_fingerprint_sensor_info());
                     println!("Fingerprint sensor info: {i:?}");
                 } else {
                     println!("Authenticator does not support biometrics")
@@ -197,44 +224,35 @@ fn main() {
         Opt::EnrollFingerprint(o) => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
-                .filter_map(|t| {
-                    if let CtapAuthenticator::Fido21(t) = t {
-                        if t.get_info().supports_ctap21_biometrics() {
-                            return Some(t);
-                        }
-                    }
-                    None
-                })
+                .filter(|t| t.supports_biometrics())
                 .collect();
             assert_eq!(
-                token_count, 1,
-                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting biometrics"
             );
-            let id =
-                block_on(tokens[0].enroll_fingerprint(Duration::from_secs(30), o.friendly_name))
-                    .expect("enrolling fingerprint");
+            let id = block_on(
+                tokens[0]
+                    .bio()
+                    .unwrap()
+                    .enroll_fingerprint(Duration::from_secs(30), o.friendly_name),
+            )
+            .expect("enrolling fingerprint");
             println!("Enrolled fingerpint {}", base16_encode(id));
         }
 
         Opt::ListFingerprints => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
-                .filter_map(|t| {
-                    if let CtapAuthenticator::Fido21(t) = t {
-                        if t.get_info().supports_ctap21_biometrics() {
-                            return Some(t);
-                        }
-                    }
-                    None
-                })
+                .filter(|t| t.supports_biometrics())
                 .collect();
             assert_eq!(
                 tokens.len(),
                 1,
-                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+                "Expected exactly one authenticator supporting biometrics"
             );
-            let fingerprints =
-                block_on(tokens[0].list_fingerprints()).expect("listing fingerprints");
+            let fingerprints = block_on(tokens[0].bio().unwrap().list_fingerprints())
+                .expect("listing fingerprints");
 
             println!("{} enrolled fingerprint(s):", fingerprints.len());
             for t in fingerprints {
@@ -249,23 +267,16 @@ fn main() {
         Opt::RenameFingerprint(o) => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
-                .filter_map(|t| {
-                    if let CtapAuthenticator::Fido21(t) = t {
-                        if t.get_info().supports_ctap21_biometrics() {
-                            return Some(t);
-                        }
-                    }
-                    None
-                })
+                .filter(|t| t.supports_biometrics())
                 .collect();
             assert_eq!(
                 tokens.len(),
                 1,
-                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+                "Expected exactly one authenticator supporting biometrics"
             );
 
             block_on(
-                tokens[0].rename_fingerprint(
+                tokens[0].bio().unwrap().rename_fingerprint(
                     base16_decode(&o.id).expect("decoding ID"),
                     o.friendly_name,
                 ),
@@ -276,29 +287,37 @@ fn main() {
         Opt::RemoveFingerprint(o) => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
-                .filter_map(|t| {
-                    if let CtapAuthenticator::Fido21(t) = t {
-                        if t.get_info().supports_ctap21_biometrics() {
-                            return Some(t);
-                        }
-                    }
-                    None
-                })
+                .filter(|t| t.supports_biometrics())
                 .collect();
             assert_eq!(
-                token_count, 1,
-                "Expected exactly 1 CTAP2.1 authenticator supporting biometrics"
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting biometrics"
             );
+
             let ids: Vec<Vec<u8>> =
                 o.id.iter()
                     .map(|i| base16_decode(i).expect("decoding ID"))
                     .collect();
-            block_on(tokens[0].remove_fingerprints(ids)).expect("removing fingerprint");
+            block_on(tokens[0].bio().unwrap().remove_fingerprints(ids))
+                .expect("removing fingerprint");
         }
 
         Opt::SetPinPolicy(o) => {
-            assert_eq!(token_count, 1);
-            block_on(authenticator.set_min_pin_length(
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| match t {
+                    CtapAuthenticator::Fido21(a) => Some(a),
+                    _ => None,
+                })
+                .filter(|t| t.supports_config())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
+            );
+            block_on(tokens[0].set_min_pin_length(
                 o.length,
                 o.rpids.unwrap_or_default(),
                 if o.force_change { Some(true) } else { None },

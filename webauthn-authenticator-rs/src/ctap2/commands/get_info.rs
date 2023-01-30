@@ -151,18 +151,6 @@ impl GetInfoResponse {
             .map(|v| v.to_owned())
     }
 
-    /// Returns `true` if the authenticator supports CTAP 2.1 biometrics
-    /// commands.
-    pub fn supports_ctap21_biometrics(&self) -> bool {
-        self.get_option("bioEnroll").is_some()
-    }
-
-    /// Returns `true` if the authenticator supports CTAP 2.1-PRE biometrics
-    /// commands.
-    pub fn supports_ctap21pre_biometrics(&self) -> bool {
-        self.get_option("userVerificationMgmtPreview").is_some()
-    }
-
     /// Checks if the authenticator supports and has configured CTAP 2.1
     /// biometric authentication.
     ///
