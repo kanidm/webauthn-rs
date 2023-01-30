@@ -4,6 +4,7 @@ use std::{
 };
 
 use unicode_normalization::UnicodeNormalization;
+use webauthn_rs_proto::UserVerificationPolicy;
 
 use crate::{
     ctap2::commands::TemplateInfo, error::WebauthnCError, transport::Token, ui::UiCallback,
@@ -14,7 +15,7 @@ use super::{
         BioEnrollmentRequest, BioEnrollmentResponse, BioSubCommand, GetInfoResponse, Modality,
         Permissions, SelectionRequest, GET_FINGERPRINT_SENSOR_INFO, GET_MODALITY,
     },
-    pin_uv::PinUvPlatformInterface,
+    ctap20::AuthSession,
     Ctap20Authenticator,
 };
 
@@ -76,9 +77,10 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
                 sub_command.prf().as_slice(),
                 Permissions::BIO_ENROLLMENT,
                 None,
-                false,
+                UserVerificationPolicy::Required,
             )
-            .await?;
+            .await?
+            .into_pin_uv_params();
 
         let ui_callback = self.ui_callback;
         self.token
@@ -93,18 +95,17 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     async fn bio_with_session(
         &mut self,
         sub_command: BioSubCommand,
-        iface: Option<&PinUvPlatformInterface>,
-        pin_uv_auth_token: Option<&Vec<u8>>,
+        auth_session: &AuthSession,
     ) -> Result<BioEnrollmentResponse, WebauthnCError> {
         let client_data_hash = sub_command.prf();
 
-        let (pin_uv_protocol, pin_uv_auth_param) = match (iface, pin_uv_auth_token) {
-            (Some(iface), Some(pin_uv_auth_token)) => {
+        let (pin_uv_protocol, pin_uv_auth_param) = match auth_session {
+            AuthSession::InterfaceToken(iface, pin_token) => {
                 let mut pin_uv_auth_param =
-                    iface.authenticate(pin_uv_auth_token, client_data_hash.as_slice())?;
+                    iface.authenticate(pin_token, client_data_hash.as_slice())?;
                 pin_uv_auth_param.truncate(16);
 
-                (iface.get_pin_uv_protocol(), Some(pin_uv_auth_param))
+                (Some(iface.get_pin_uv_protocol()), Some(pin_uv_auth_param))
             }
 
             _ => (None, None),
@@ -187,16 +188,16 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             None => None,
         };
 
-        let (iface, pin_uv_auth_token) = self
-            .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
+        let session = self
+            .get_pin_uv_auth_session(
+                Permissions::BIO_ENROLLMENT,
+                None,
+                UserVerificationPolicy::Required,
+            )
             .await?;
 
         let mut r = self
-            .bio_with_session(
-                BioSubCommand::FingerprintEnrollBegin(timeout),
-                iface.as_ref(),
-                pin_uv_auth_token.as_ref(),
-            )
+            .bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), &session)
             .await?;
 
         trace!("began enrollment: {:?}", r);
@@ -212,8 +213,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
             r = self
                 .bio_with_session(
                     BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout),
-                    iface.as_ref(),
-                    pin_uv_auth_token.as_ref(),
+                    &session,
                 )
                 .await?;
 
@@ -229,11 +229,13 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
                     id: id.clone(),
                     friendly_name,
                 }),
-                iface.as_ref(),
-                pin_uv_auth_token.as_ref(),
+                &session,
             )
             .await?;
         }
+
+        // This may have been the first enrolled fingerprint.
+        self.refresh_info().await?;
 
         Ok(id)
     }
@@ -278,6 +280,9 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         self.bio(BioSubCommand::FingerprintRemoveEnrollment(id))
             .await?;
 
+        // The previous command could have removed the last enrolled
+        // fingerprint.
+        self.refresh_info().await?;
         Ok(())
     }
 
@@ -288,19 +293,22 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     ///
     /// Call [Self::list_fingerprints] to check what was actually done.
     pub async fn remove_fingerprints(&mut self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError> {
-        let (iface, pin_uv_auth_token) = self
-            .get_pin_uv_auth_session(Permissions::BIO_ENROLLMENT, None, false)
+        self.check_fingerprint_support().await?;
+        let session = self
+            .get_pin_uv_auth_session(
+                Permissions::BIO_ENROLLMENT,
+                None,
+                UserVerificationPolicy::Required,
+            )
             .await?;
 
         for id in ids {
-            self.bio_with_session(
-                BioSubCommand::FingerprintRemoveEnrollment(id),
-                iface.as_ref(),
-                pin_uv_auth_token.as_ref(),
-            )
-            .await?;
+            self.bio_with_session(BioSubCommand::FingerprintRemoveEnrollment(id), &session)
+                .await?;
         }
 
+        // The previous command could have removed all enrolled fingerprints.
+        self.refresh_info().await?;
         Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{collections::BTreeMap, fmt::Debug};
 
 use crate::{
     authenticator_hashed::AuthenticatorBackendHashedClientData,
@@ -15,8 +15,35 @@ use futures::executor::block_on;
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
     AuthenticatorAttestationResponseRaw, PublicKeyCredential, RegisterPublicKeyCredential,
-    RegistrationExtensionsClientOutputs,
+    RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
+
+#[derive(Debug, Clone)]
+pub(super) enum AuthToken {
+    /// No authentication token to be supplied
+    None,
+    /// `pinUvAuthProtocol`, `pinUvAuthToken`
+    ProtocolToken(u32, Vec<u8>),
+    /// Send request with `uv = true`
+    UvTrue,
+}
+
+impl AuthToken {
+    pub fn into_pin_uv_params(self) -> (Option<u32>, Option<Vec<u8>>) {
+        match self {
+            Self::ProtocolToken(p, t) => (Some(p), Some(t)),
+            _ => (None, None),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(super) enum AuthSession {
+    None,
+    /// `iface`, `pinToken`
+    InterfaceToken(PinUvPlatformInterface, Vec<u8>),
+    UvTrue,
+}
 
 /// CTAP 2.0 protocol implementation.
 #[derive(Debug)]
@@ -51,21 +78,35 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             .map(|_| ())
     }
 
+    /// Refreshes the cached [GetInfoResponse].
+    ///
+    /// This needs to be called (internally) after sending a command which
+    /// could invalidate its content.
+    pub(super) async fn refresh_info(&mut self) -> Result<(), WebauthnCError> {
+        let ui_callback = self.ui_callback;
+        self.info = self.token.transmit(GetInfoRequest {}, ui_callback).await?;
+        Ok(())
+    }
+
     async fn config(
         &mut self,
         sub_command: ConfigSubCommand,
-        bypass_always_uv: bool,
+        skip_authentication: bool,
     ) -> Result<(), WebauthnCError> {
         let ui_callback = self.ui_callback;
 
-        let (pin_uv_auth_proto, pin_uv_auth_param) = self
-            .get_pin_uv_auth_token(
+        let (pin_uv_auth_proto, pin_uv_auth_param) = if skip_authentication {
+            (None, None)
+        } else {
+            self.get_pin_uv_auth_token(
                 sub_command.prf().as_slice(),
                 Permissions::AUTHENTICATOR_CONFIGURATION,
                 None,
-                bypass_always_uv,
+                UserVerificationPolicy::Required,
             )
-            .await?;
+            .await?
+            .into_pin_uv_params()
+        };
 
         // TODO: handle complex result type
         self.token
@@ -146,6 +187,9 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice())?;
         let ret = self.token.transmit(set_pin, ui_callback).await?;
         trace!(?ret);
+
+        // Setting a PIN invalidates info.
+        self.refresh_info().await?;
         Ok(())
     }
 
@@ -171,6 +215,9 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let change_pin = iface.change_pin_cmd(&old_pin, padded_pin, &shared_secret)?;
         let ret = self.token.transmit(change_pin, ui_callback).await?;
         trace!(?ret);
+
+        // Changing a PIN invalidates forcePinChange option.
+        self.refresh_info().await?;
         Ok(())
     }
 
@@ -178,20 +225,24 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     ///
     /// This automatically selects an appropriate verification mode.
     ///
-    /// Parameters:
+    /// Arguments:
     /// * `client_data_hash`: the SHA256 hash of the client data JSON.
     /// * `permissions`: a bitmask of permissions to request. This is only
     ///   effective when the authenticator supports
-    ///   `getPinUvAuthToken...WithPermissions`.
+    ///   `getPinUvAuthToken...WithPermissions`. If this is not set, this
+    ///   will use (legacy) `getPinToken` instead.
     /// * `rp_id`: the Relying Party to associate with the request. This is
     ///   required for `GetAssertion` and `MakeCredential` requests, and
     ///   optional for `CredentialManagement` requests. This is only effective
     ///   when the authenticator supports `getPinUvAuthToken...WithPermissions`.
+    /// * `user_verification_policy`: how to verify the user.
     ///
     /// Returns:
     /// * `Option<u32>`: the `pin_uv_auth_protocol`
     /// * `Option<Vec<u8>>`: the `pin_uv_auth_param`
     /// * `Ok((None, None))` if PIN and/or UV auth is not required.
+    /// * `Err(UserVerificationRequired)` if user verification was required, but
+    ///   was not available.
     /// * `Err` for errors from the token.
     ///
     /// References:
@@ -201,22 +252,23 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         client_data_hash: &[u8],
         permissions: Permissions,
         rp_id: Option<String>,
-        bypass_always_uv: bool,
-    ) -> Result<(Option<u32>, Option<Vec<u8>>), WebauthnCError> {
-        let (iface, pin_token) = self
-            .get_pin_uv_auth_session(permissions, rp_id, bypass_always_uv)
+        user_verification_policy: UserVerificationPolicy,
+    ) -> Result<AuthToken, WebauthnCError> {
+        let session = self
+            .get_pin_uv_auth_session(permissions, rp_id, user_verification_policy)
             .await?;
 
-        Ok(match (iface, pin_token) {
-            (Some(iface), Some(pin_token)) => {
+        Ok(match session {
+            AuthSession::InterfaceToken(iface, pin_token) => {
                 let mut pin_uv_auth_param =
                     iface.authenticate(pin_token.as_slice(), client_data_hash)?;
                 pin_uv_auth_param.truncate(16);
 
-                (iface.get_pin_uv_protocol(), Some(pin_uv_auth_param))
+                AuthToken::ProtocolToken(iface.get_pin_uv_protocol(), pin_uv_auth_param)
             }
 
-            _ => (None, None),
+            AuthSession::None => AuthToken::None,
+            AuthSession::UvTrue => AuthToken::UvTrue,
         })
     }
 
@@ -224,12 +276,15 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         &mut self,
         permissions: Permissions,
         rp_id: Option<String>,
-        bypass_always_uv: bool,
-    ) -> Result<(Option<PinUvPlatformInterface>, Option<Vec<u8>>), WebauthnCError> {
-        if permissions.is_empty() {
-            error!("no permissions were requested");
-            return Err(WebauthnCError::Internal);
+        user_verification_policy: UserVerificationPolicy,
+    ) -> Result<AuthSession, WebauthnCError> {
+        #[derive(Debug)]
+        enum PlannedOperation {
+            UvAuthTokenUsingUvWithPermissions,
+            UvAuthTokenUsingPinWithPermissions,
+            Token,
         }
+
         if permissions.intersects(Permissions::MAKE_CREDENTIAL | Permissions::GET_ASSERTION)
             && rp_id.is_none()
         {
@@ -237,105 +292,164 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             return Err(WebauthnCError::Internal);
         }
 
+        trace!("Authenticator options: {:?}", self.info.options);
         let ui_callback = self.ui_callback;
-        let client_pin = self.info.get_option("clientPin");
-        let always_uv = self.info.get_option("alwaysUv");
-        let make_cred_uv_not_required = self.info.get_option("makeCredUvNotRqd");
-        let pin_uv_auth_token = self.info.get_option("pinUvAuthToken");
-        let uv = self.info.get_option("uv");
-        let _bio_enroll = self.info.get_option("bioEnroll");
-        let _bio_enroll_preview = self.info.get_option("userVerificationMgmtPreview");
+        let client_pin = self.info.get_option("clientPin").unwrap_or_default();
+        let always_uv = self.info.get_option("alwaysUv").unwrap_or_default();
+        let make_cred_uv_not_required = self.info.make_cred_uv_not_required();
+        let pin_uv_auth_token = self.info.get_option("pinUvAuthToken").unwrap_or_default();
+        let uv = self.info.get_option("uv").unwrap_or_default();
+        // requesting the acfg permission when invoking
+        // getPinUvAuthTokenUsingUvWithPermissions is supported.
+        let uv_acfg = self.info.get_option("uvAcfg").unwrap_or_default();
+        // requesting the be permission when invoking
+        // getPinUvAuthTokenUsingUvWithPermissions is supported.
+        let uv_bio_enroll = self.info.get_option("uvBioEnroll").unwrap_or_default();
+        // TODO: noMcGaPermissionsWithClientPin means those can only run with biometric auth
+        // TODO: rp_options.uv_required == true > makeCredUvNotRqd == true
+        // TODO: discoverable credentials should bypass makeCredUvNotRqd == true
 
-        if client_pin != Some(true) && always_uv != Some(true) {
-            trace!("Skipping PIN and UV auth because they are disabled");
-            return Ok((None, None));
-        }
+        let requires_pin = (permissions.intersects(Permissions::BIO_ENROLLMENT) && !uv_bio_enroll)
+            || (permissions.intersects(Permissions::AUTHENTICATOR_CONFIGURATION) && !uv_acfg);
+        trace!("Permissions: {permissions:?}, uvBioEnroll: {uv_bio_enroll:?}, uvAcfg: {uv_acfg:?}, requiresPin: {requires_pin:?}");
+        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-platf-actions
+        // 1. If the authenticator is protected by some form of user
+        // verification, or the Relying Party prefers enforcing user
+        // verification (e.g., by setting
+        // options.authenticatorSelection.userVerification to "required", or
+        // "preferred" in the WebAuthn API):
 
-        if make_cred_uv_not_required == Some(true) && permissions == Permissions::MAKE_CREDENTIAL {
-            trace!("Skipping UV because makeCredUvNotRqd = true and this is a MakeCredential only request");
-            return Ok((None, None));
-        }
+        trace!("uvPolicy: {user_verification_policy:?}, clientPin: {client_pin:?}, uv: {uv:?}, alwaysUv: {always_uv:?}, makeCredUvNotRequired: {make_cred_uv_not_required:?}");
+        if user_verification_policy == UserVerificationPolicy::Required
+            || user_verification_policy == UserVerificationPolicy::Preferred
+            || client_pin
+            || uv
+            // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-alwaysUv
+            || always_uv
+        // TODO: Implement makeCredUvNotReqd when this supports discoverable creds
+        {
+            // Skip step 1 (we don't already have a parameter)
+            // 2. Otherwise, the platform examines various option IDs in the
+            // authenticatorGetInfo response to determine its course of action:
 
-        if pin_uv_auth_token == Some(true) {
-            if uv == Some(true) {
-                trace!("UV with in-built verification (biometrics) supported");
-            }
-
-            if client_pin == Some(true) {
-                trace!("UV with client pin supported");
-            }
-        }
-
-        if always_uv == Some(true) && uv != Some(true) && client_pin != Some(true) {
-            if bypass_always_uv {
-                trace!("Bypassing alwaysUv check (bypass_always_uv = true)");
-                return Ok((None, None));
+            let planned_operation = if uv && !requires_pin {
+                // 1. If the uv option ID is present and set to true:
+                if pin_uv_auth_token {
+                    // If the pinUvAuthToken option ID is present and true then
+                    // plan to use getPinUvAuthTokenUsingUvWithPermissions to
+                    // obtain a pinUvAuthToken, and let it be the selected
+                    // operation. Go to Step 1.1.2.3.
+                    PlannedOperation::UvAuthTokenUsingUvWithPermissions
+                } else {
+                    trace!("pinUvAuthToken not supported, planning to use uv=true");
+                    return Ok(AuthSession::UvTrue);
+                }
             } else {
-                // TODO: this will need to change once we can enroll biometrics
-                error!("alwaysUv = true, but built-in user verification (biometrics) and PIN are both unconfigured. Set one (or both) of them before continuing.");
-                return Err(WebauthnCError::Security);
-            }
+                // 2. Else (implying the uv option ID is present and set to
+                // false or absent):
+                if pin_uv_auth_token {
+                    // 1. If the pinUvAuthToken option ID is present and true:
+                    // To continue, ensure the clientPin option ID is present
+                    // and true. Plan to use
+                    // getPinUvAuthTokenUsingPinWithPermissions to obtain a
+                    // pinUvAuthToken, and let it be the selected operation. Go
+                    // to Step 1.1.2.3.
+                    if !client_pin {
+                        error!(
+                            "Client PIN not set, and user verification is preferred or required"
+                        );
+                        return Err(WebauthnCError::UserVerificationRequired);
+                    }
+
+                    PlannedOperation::UvAuthTokenUsingPinWithPermissions
+                } else {
+                    // 2. Else (implying the pinUvAuthToken option ID is absent):
+                    // To continue, ensure the clientPin option ID is present
+                    // and true. Plan to use getPinToken to obtain a
+                    // pinUvAuthToken, and let it be the selected operation.
+                    if !client_pin {
+                        error!(
+                            "Client PIN not set, and user verification is preferred or required"
+                        );
+                        return Err(WebauthnCError::UserVerificationRequired);
+                    }
+                    PlannedOperation::Token
+                }
+            };
+
+            trace!(?planned_operation);
+
+            // Step 1.1.2.3: In preparation for obtaining pinUvAuthToken, the
+            // platform:
+            let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
+
+            // 1. Obtains a shared secret
+            // 6.5.5.4: Obtaining the shared secret
+            let p = iface.get_key_agreement_cmd();
+            let ret = self.token.transmit(p, ui_callback).await?;
+            let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
+            trace!(?key_agreement);
+
+            // The platform calls encapsulate with the public key that the authenticator
+            // returned in order to generate the platform key-agreement key and the shared secret.
+            let shared_secret = iface.encapsulate(key_agreement)?;
+            trace!(?shared_secret);
+
+            // Then the platform obtains a pinUvAuthToken from the
+            // authenticator, with the mc (and likely also with the ga)
+            // permission (see "pre-flight", mentioned above), using the
+            // selected operation. If successful, the platform creates the
+            // pinUvAuthParam parameter by calling authenticate(pinUvAuthToken,
+            // clientDataHash), and goes to Step 1.1.1.
+            let p = match planned_operation {
+                PlannedOperation::UvAuthTokenUsingUvWithPermissions => {
+                    // 6.5.5.7.3. Getting pinUvAuthToken using getPinUvAuthTokenUsingUvWithPermissions (built-in user verification methods)
+                    iface.get_pin_uv_auth_token_using_uv_with_permissions_cmd(permissions, rp_id)
+                }
+                PlannedOperation::UvAuthTokenUsingPinWithPermissions => {
+                    // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
+                    let pin = self.request_pin(iface.get_pin_uv_protocol()).await?;
+                    iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(
+                        &pin,
+                        shared_secret.as_slice(),
+                        permissions,
+                        rp_id,
+                    )?
+                }
+                PlannedOperation::Token => {
+                    // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
+                    let pin = self.request_pin(iface.get_pin_uv_protocol()).await?;
+                    iface.get_pin_token_cmd(&pin, shared_secret.as_slice())?
+                }
+            };
+
+            let ret = self.token.transmit(p, ui_callback).await?;
+            trace!(?ret);
+            let pin_token = ret
+                .pin_uv_auth_token
+                .ok_or(WebauthnCError::MissingRequiredField)?;
+            // Decrypt the pin_token
+            let pin_token = iface.decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
+            trace!(?pin_token);
+            Ok(AuthSession::InterfaceToken(iface, pin_token))
+        } else {
+            // Otherwise, implying the authenticator is not presently protected
+            // by some form of user verification, or the Relying Party wants to
+            // create a non-discoverable credential and not require user
+            // verification (e.g., by setting
+            // options.authenticatorSelection.userVerification to "discouraged"
+            // in the WebAuthn API), the platform invokes the
+            // authenticatorMakeCredential operation using the marshalled input
+            // parameters along with the "uv" option key set to false and
+            // terminate these steps.
+            trace!("User verification disabled");
+            Ok(AuthSession::None)
         }
-
-        // TODO: handle cancels, timeouts
-        // TODO: handle lockouts
-
-        trace!("supported pin protocols = {:?}", self.info.pin_protocols);
-        let iface = PinUvPlatformInterface::select_protocol(self.info.pin_protocols.as_ref())?;
-
-        // 6.5.5.4: Obtaining the shared secret
-        let p = iface.get_key_agreement_cmd();
-        let ret = self.token.transmit(p, ui_callback).await?;
-        let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
-        trace!(?key_agreement);
-
-        // The platform calls encapsulate with the public key that the authenticator
-        // returned in order to generate the platform key-agreement key and the shared secret.
-        let shared_secret = iface.encapsulate(key_agreement)?;
-        trace!(?shared_secret);
-
-        let requires_pin = permissions
-            .intersects(Permissions::BIO_ENROLLMENT | Permissions::AUTHENTICATOR_CONFIGURATION);
-        let p = match (requires_pin, uv, client_pin, pin_uv_auth_token) {
-            (false, Some(true), _, Some(true)) => {
-                // 6.5.5.7.3. Getting pinUvAuthToken using getPinUvAuthTokenUsingUvWithPermissions (built-in user verification methods)
-                iface.get_pin_uv_auth_token_using_uv_with_permissions_cmd(permissions, rp_id)
-            }
-            (_, _, Some(true), Some(true)) => {
-                // 6.5.5.7.2. Getting pinUvAuthToken using getPinUvAuthTokenUsingPinWithPermissions (ClientPIN)
-                let pin = self.request_pin(iface.get_pin_uv_protocol()).await?;
-                iface.get_pin_uv_auth_token_using_pin_with_permissions_cmd(
-                    &pin,
-                    shared_secret.as_slice(),
-                    permissions,
-                    rp_id,
-                )?
-            }
-            _ => {
-                // 6.5.5.7.1. Getting pinUvAuthToken using getPinToken (superseded)
-                let pin = self.request_pin(iface.get_pin_uv_protocol()).await?;
-                iface.get_pin_token_cmd(&pin, shared_secret.as_slice())?
-            }
-        };
-
-        let ret = self.token.transmit(p, ui_callback).await?;
-        trace!(?ret);
-        let pin_token = ret
-            .pin_uv_auth_token
-            .ok_or(WebauthnCError::MissingRequiredField)?;
-        // Decrypt the pin_token
-        let pin_token = iface.decrypt(shared_secret.as_slice(), pin_token.as_slice())?;
-        trace!(?pin_token);
-
-        Ok((Some(iface), Some(pin_token)))
     }
 
-    async fn request_pin(
-        &mut self,
-        pin_uv_protocol: Option<u32>,
-    ) -> Result<String, WebauthnCError> {
+    async fn request_pin(&mut self, pin_uv_protocol: u32) -> Result<String, WebauthnCError> {
         let p = ClientPinRequest {
-            pin_uv_protocol,
+            pin_uv_protocol: Some(pin_uv_protocol),
             sub_command: ClientPinSubCommand::GetPinRetries,
             ..Default::default()
         };
@@ -360,12 +474,21 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
         _timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::RegisterPublicKeyCredential, crate::prelude::WebauthnCError>
     {
-        let (pin_uv_auth_proto, pin_uv_auth_param) = block_on(self.get_pin_uv_auth_token(
+        let authenticator_selection = options.authenticator_selection.unwrap_or_default();
+        let auth_token = block_on(self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::MAKE_CREDENTIAL,
             Some(options.rp.id.clone()),
-            false,
+            authenticator_selection.user_verification,
         ))?;
+
+        let req_options = if let AuthToken::UvTrue = auth_token {
+            // No pin_uv_auth_param, but verification is configured, so use it
+            Some(BTreeMap::from([("uv".to_owned(), true)]))
+        } else {
+            None
+        };
+        let (pin_uv_auth_proto, pin_uv_auth_param) = auth_token.into_pin_uv_params();
 
         let mc = MakeCredentialRequest {
             client_data_hash,
@@ -374,7 +497,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
             pub_key_cred_params: options.pub_key_cred_params,
             exclude_list: options.exclude_credentials.unwrap_or_default(),
 
-            options: None,
+            options: req_options,
             pin_uv_auth_param,
             pin_uv_auth_proto,
             enterprise_attest: None,
@@ -424,19 +547,26 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
         _timeout_ms: u32,
     ) -> Result<webauthn_rs_proto::PublicKeyCredential, crate::prelude::WebauthnCError> {
         trace!("trying to authenticate...");
-
-        let (pin_uv_auth_proto, pin_uv_auth_param) = block_on(self.get_pin_uv_auth_token(
+        let auth_token = block_on(self.get_pin_uv_auth_token(
             client_data_hash.as_slice(),
             Permissions::GET_ASSERTION,
             Some(options.rp_id.clone()),
-            false,
+            options.user_verification,
         ))?;
+
+        let req_options = if let AuthToken::UvTrue = auth_token {
+            // No pin_uv_auth_param, but verification is configured, so use it
+            Some(BTreeMap::from([("uv".to_owned(), true)]))
+        } else {
+            None
+        };
+        let (pin_uv_auth_proto, pin_uv_auth_param) = auth_token.into_pin_uv_params();
 
         let ga = GetAssertionRequest {
             rp_id: options.rp_id,
             client_data_hash,
             allow_list: options.allow_credentials,
-            options: None,
+            options: req_options,
             pin_uv_auth_param,
             pin_uv_auth_proto,
         };

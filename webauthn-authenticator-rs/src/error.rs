@@ -68,6 +68,10 @@ pub enum WebauthnCError {
     /// The value of the nonce for this object has exceeded the limit.
     NonceOverflow,
     PermissionDenied,
+    /// User verification was required, but is not available for this
+    /// authenticator. You may need to set a PIN, or use a different
+    /// authenticator.
+    UserVerificationRequired,
 }
 
 #[cfg(feature = "nfc")]

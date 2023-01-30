@@ -33,7 +33,7 @@ pub type CredentialID = Base64UrlSafeData;
 /// that is is NOT possible assert verification has been bypassed or not from the server
 /// viewpoint, and to the user it may create confusion about when verification is or is
 /// not required.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(non_camel_case_types)]
 #[serde(rename_all = "lowercase")]
 pub enum UserVerificationPolicy {
@@ -198,7 +198,7 @@ pub enum AuthenticatorAttachment {
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria>
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Default, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorSelectionCriteria {
     /// How the authenticator should be attached to the client machine.

@@ -16,6 +16,7 @@
 #![warn(missing_docs)]
 
 use rand::prelude::*;
+use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use url::Url;
 
@@ -843,25 +844,16 @@ impl WebauthnCore {
         //
         // https://github.com/kanidm/webauthn-rs/issues/91
         //
-        let (verified, unverified): (Vec<Credential>, Vec<Credential>) = creds
-            .into_iter()
-            .partition(|cred| cred.registration_policy == UserVerificationPolicy::Required);
-
-        match (verified.len(), unverified.len()) {
-            (_, 0) => self.generate_challenge_authenticate_inner(
-                verified,
-                UserVerificationPolicy::Required,
-                extensions,
-                false,
-            ),
-            (0, _) => self.generate_challenge_authenticate_inner(
-                unverified,
-                UserVerificationPolicy::Preferred,
-                extensions,
-                false,
-            ),
-            (_, _) => Err(WebauthnError::InconsistentUserVerificationPolicy),
+        let mut policies =
+            BTreeSet::from_iter(creds.iter().map(|cred| cred.registration_policy.to_owned()));
+        if policies.len() > 1 {
+            return Err(WebauthnError::InconsistentUserVerificationPolicy);
         }
+        let policy = policies
+            .pop_first()
+            .ok_or(WebauthnError::CredentialNotFound)?;
+
+        self.generate_challenge_authenticate_inner(creds, policy, extensions, false)
     }
 
     /// Authenticate a single credential, with the ability to override the userVerification
