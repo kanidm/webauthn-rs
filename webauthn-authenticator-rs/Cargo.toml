@@ -25,6 +25,7 @@ default = []
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 base64urlsafedata = { version = "0.1", path = "../base64urlsafedata" }

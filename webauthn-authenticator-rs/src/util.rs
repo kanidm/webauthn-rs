@@ -14,7 +14,7 @@ pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
     hasher.finish()
 }
 
-#[cfg(feature = "cable")]
+#[cfg(any(doc, feature = "cable"))]
 /// Computes the SHA256 of `a || b`.
 pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
     let mut hasher = sha::Sha256::new();
@@ -58,7 +58,7 @@ pub fn get_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> Collected
 
 /// Normalises the PIN into Unicode Normal Form C, then ensures that the PIN
 /// is at least `min_length` Unicode codepoints, less than 64 bytes when encoded
-/// as UTF-8, and does not contain any null bytes (`\0`).
+/// as UTF-8, and does not contain any null bytes (`\x00`).
 ///
 /// If the PIN is valid, returns the PIN in Unicode Normal Form C.
 pub fn check_pin(pin: &str, min_length: usize) -> Result<String, WebauthnCError> {
@@ -67,7 +67,7 @@ pub fn check_pin(pin: &str, min_length: usize) -> Result<String, WebauthnCError>
     let pin_codepoints = pin.chars().count();
     let pin_bytes = pin.len();
 
-    if pin.contains('\0') {
+    if pin.contains('\x00') {
         Err(WebauthnCError::PinContainsNull)
     } else if pin_codepoints < min_length {
         trace!("PIN too short: {} codepoints", pin_codepoints);
@@ -98,10 +98,10 @@ mod test {
             ("1234", 6, Err(WebauthnCError::PinTooShort)),
             ("123456", 6, Ok("123456".to_string())),
             // PINs cannot contain null
-            ("\0\0\0\0", 4, Err(WebauthnCError::PinContainsNull)),
-            ("1234\0", 4, Err(WebauthnCError::PinContainsNull)),
-            ("\01234", 4, Err(WebauthnCError::PinContainsNull)),
-            ("1234\05678", 4, Err(WebauthnCError::PinContainsNull)),
+            ("\x00\x00\x00\x00", 4, Err(WebauthnCError::PinContainsNull)),
+            ("1234\x00", 4, Err(WebauthnCError::PinContainsNull)),
+            ("\x001234", 4, Err(WebauthnCError::PinContainsNull)),
+            ("1234\x005678", 4, Err(WebauthnCError::PinContainsNull)),
             // Full-width romaji
             // = 3 codepoints, 9 bytes
             ("\u{ff11}\u{ff12}\u{ff13}", 4, Err(WebauthnCError::PinTooShort)),

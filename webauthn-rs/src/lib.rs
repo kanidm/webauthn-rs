@@ -106,6 +106,8 @@
 //!
 //! If in doubt, do not enable this feature.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![warn(missing_docs)]
@@ -204,7 +206,7 @@ impl<'a> WebauthnBuilder<'a> {
             .map(|effective_domain| {
                 // We need to prepend the '.' here to ensure that myexample.com != example.com,
                 // rather than just ends with.
-                effective_domain.ends_with(&format!(".{}", rp_id)) || effective_domain == rp_id
+                effective_domain.ends_with(&format!(".{rp_id}")) || effective_domain == rp_id
             })
             .unwrap_or(false);
 

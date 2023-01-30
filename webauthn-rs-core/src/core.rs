@@ -969,11 +969,10 @@ impl WebauthnCore {
     /// On successful authentication, an Ok result is returned. The Ok may contain the CredentialID
     /// and associated counter, which you *should* update for security purposes. If the Ok returns
     /// `None` then the credential does not have a counter.
-    pub fn authenticate_credential<'a>(
+    pub fn authenticate_credential(
         &self,
         rsp: &PublicKeyCredential,
-        state: &'a AuthenticationState,
-        // ) -> Result<(&'a CredentialID, AuthenticatorData<Authentication>), WebauthnError> {
+        state: &AuthenticationState,
     ) -> Result<AuthenticationResult, WebauthnError> {
         // Steps 1 through 4 are client side.
 

@@ -12,6 +12,7 @@ license = "MPL-2.0"
 
 [package.metadata.docs.rs]
 features = ["danger-allow-state-serialisation", "danger-user-presence-only-security-keys", "danger-credential-internals"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 resident-key-support = []

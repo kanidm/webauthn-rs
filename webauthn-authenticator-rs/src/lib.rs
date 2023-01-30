@@ -1,3 +1,60 @@
+//! webauthn-authenticator-rs is a library for interfacing with FIDO/CTAP 2
+//! tokens.
+//!
+//! This performs the actions that would be taken by a client application (such
+//! as a web browser) to facilitate authentication with a remote service.
+//!
+//! This library aims to provide abstrations over many platform-specific APIs,
+//! so that client applications don't need to worry as much about the finer
+//! details of the protocol.
+//!
+//! **This is a "pre-1.0" library:** it is still under active development, and
+//! the API is not yet stable or final. *Some of the modules have edge cases
+//! which may cause you to get permanently locked out of your authenticator.*
+//!
+//! This library is not FIDO certified, and currently lacks a thorough security
+//! review.
+//!
+//! ## FIDO / CTAP version support
+//!
+//! This library currently only supports CTAP 2.0, 2.1 or 2.1-PRE.
+//!
+//! Authenticators which **only** support CTAP 1.x (U2F) are *unsupported*. This
+//! generally only is an issue for older tokens.
+//!
+//! The authors of this library recommend using [FIDO2 certified][] hardware
+//! authenticators with at least [Autenticator Certification Level 2][cert].
+//! Be cautious when buying, as there are many products on the market which
+//! falsely claim certification, have implementation errors, only support U2F,
+//! or use off-the-shelf microcontrollers which do not protect key material
+//! ([Level 1][cert]).
+//!
+//! ## Features and backends
+//!
+//! **Note:** these links may be broken unless you build the documentation with
+//! the appropriate `--features` flag listed inline.
+//!
+//! * [CTAP 2.0, 2.1 and 2.1-PRE protocol implementation][crate::ctap2]
+//! * [caBLE][] (with `--features cable`)
+//! * [Mozilla Authenticator][] (with `--features u2fhid`)
+//! * [NFC][] via PC/SC API (with `--features nfc`)
+//! * [SoftPasskey][] (for testing)
+//! * [SoftToken][] (for testing)
+//! * [USB HID][] (with `--features usb`)
+//! * [Windows 10][] WebAuthn API (with `--features win10`)
+//!
+//! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
+//! [cert]: https://fidoalliance.org/certification/authenticator-certification-levels/
+//! [caBLE]: crate::cable
+//! [Mozilla Authenticator]: crate::u2fhid
+//! [NFC]: crate::nfc
+//! [SoftPasskey]: crate::softpasskey
+//! [SoftToken]: crate::softtoken
+//! [USB HID]: crate::usb
+//! [Windows 10]: crate::win10
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 // #![deny(warnings)]
 #![warn(unused_extern_crates)]
 // #![warn(missing_docs)]
@@ -46,20 +103,24 @@ pub mod types;
 pub mod ui;
 mod util;
 
-#[cfg(feature = "cable")]
+#[cfg(any(doc, feature = "cable"))]
 pub mod cable;
 
-#[cfg(feature = "nfc")]
+#[cfg(any(doc, feature = "nfc"))]
 pub mod nfc;
 
-#[cfg(feature = "usb")]
+#[cfg(any(doc, feature = "usb"))]
 pub mod usb;
 
-#[cfg(feature = "u2fhid")]
+#[cfg(any(doc, feature = "u2fhid"))]
 pub mod u2fhid;
 
-#[cfg(feature = "win10")]
+#[cfg(any(doc, feature = "win10"))]
 pub mod win10;
+
+#[cfg(doc)]
+#[doc(hidden)]
+mod stubs;
 
 pub use crate::authenticator_hashed::{
     perform_auth_with_request, perform_register_with_request, AuthenticatorBackendHashedClientData,

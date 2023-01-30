@@ -12,10 +12,18 @@
 //! data advertisements, so authenticators using this library will need to
 //! implement the [Advertiser] trait themselves. See `examples/cable_tunnel` for
 //! an example using a serial-connected BTLE HCI controller.
+#[cfg(doc)]
+use crate::stubs::*;
+
+#[cfg(feature = "bluetooth")]
 use btleplug::{
-    api::{bleuuid::uuid_from_u16, Central, CentralEvent, Manager as _, ScanFilter},
+    api::{Central, CentralEvent, Manager as _},
     platform::Manager,
 };
+
+use btleplug::api::{bleuuid::uuid_from_u16, ScanFilter};
+
+#[cfg(feature = "cable")]
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -76,6 +84,7 @@ pub trait Advertiser {
 
 /// Bluetooth Low Energy service data advertisement scanner.
 pub struct Scanner {
+    #[cfg(feature = "bluetooth")]
     manager: Manager,
 }
 

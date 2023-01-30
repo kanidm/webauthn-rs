@@ -113,7 +113,7 @@ pub struct CliParser {
 }
 
 pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
-    i.into_iter().map(|c| format!("{:02X}", c)).collect()
+    i.into_iter().map(|c| format!("{c:02X}")).collect()
 }
 
 pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
@@ -148,7 +148,7 @@ fn main() {
     match opt.commands {
         Opt::Selection => {
             let token = block_on(select_one_token(tokens.iter_mut()));
-            println!("selected token: {:?}", token);
+            println!("selected token: {token:?}");
         }
 
         Opt::Info => {
@@ -168,7 +168,7 @@ fn main() {
             if buf == "yes" {
                 block_on(authenticator.factory_reset()).expect("Error resetting token");
             } else {
-                panic!("Unexpected response {:?}, exiting!", buf);
+                panic!("Unexpected response {buf:?}, exiting!");
             }
         }
 
@@ -187,7 +187,7 @@ fn main() {
             for token in &mut tokens {
                 if let CtapAuthenticator::Fido21(t) = token {
                     let i = block_on(t.get_fingerprint_sensor_info());
-                    println!("Fingerprint sensor info: {:?}", i);
+                    println!("Fingerprint sensor info: {i:?}");
                 } else {
                     println!("Authenticator does not support biometrics")
                 }

@@ -890,7 +890,7 @@ pub struct FidoDevice {
 impl fmt::Display for FidoDevice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = serde_json::to_string_pretty(self).map_err(|_| fmt::Error)?;
-        write!(f, "FidoDevice {}", s)
+        write!(f, "FidoDevice {s}")
     }
 }
 

@@ -1,4 +1,6 @@
 //! Tunnel functions
+#[cfg(doc)]
+use crate::stubs::*;
 
 use std::collections::BTreeMap;
 use std::fmt::Debug;
@@ -12,15 +14,12 @@ use openssl::{
 use serde::Serialize;
 use serde_cbor::{ser::to_vec_packed, Value};
 use tokio::net::TcpStream;
+#[cfg(feature = "cable")]
 use tokio_tungstenite::{
     connect_async,
-    tungstenite::{
-        client::IntoClientRequest,
-        http::{HeaderValue, Uri},
-        Message,
-    },
-    MaybeTlsStream, WebSocketStream,
+    tungstenite::{client::IntoClientRequest, http::HeaderValue, Message},
 };
+use tokio_tungstenite::{tungstenite::http::Uri, MaybeTlsStream, WebSocketStream};
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use crate::{

@@ -65,9 +65,9 @@ impl UiCallback for Cli {
         feedback: Option<EnrollSampleStatus>,
     ) {
         let mut stderr = stderr();
-        writeln!(stderr, "Need {} more sample(s)", remaining_samples).ok();
+        writeln!(stderr, "Need {remaining_samples} more sample(s)").ok();
         if let Some(feedback) = feedback {
-            writeln!(stderr, "Last impression was {:?}", feedback).ok();
+            writeln!(stderr, "Last impression was {feedback:?}").ok();
         }
     }
 
@@ -99,7 +99,7 @@ impl UiCallback for Cli {
         {
             println!("QR code support not available in this build!")
         }
-        println!("{}", url);
+        println!("{url}");
     }
 
     fn dismiss_qr_code(&self) {
@@ -107,6 +107,6 @@ impl UiCallback for Cli {
     }
 
     fn cable_status_update(&self, state: CableState) {
-        println!("caBLE status: {:?}", state);
+        println!("caBLE status: {state:?}");
     }
 }

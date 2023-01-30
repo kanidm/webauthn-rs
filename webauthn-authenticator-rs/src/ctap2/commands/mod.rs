@@ -180,7 +180,7 @@ pub(crate) fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {
     }
 }
 
-#[cfg(feature = "cable")]
+#[cfg(any(doc, feature = "cable"))]
 pub(crate) fn value_to_u64(v: &Value, loc: &str) -> Option<u64> {
     if let Value::Integer(i) = v {
         u64::try_from(*i)

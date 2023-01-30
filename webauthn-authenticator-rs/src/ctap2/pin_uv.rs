@@ -61,7 +61,7 @@ impl PinUvPlatformInterface {
     ) -> Result<Self, WebauthnCError> {
         let public_key = get_public_key(&private_key)?;
         Ok(Self {
-            protocol: Box::new(T::default()),
+            protocol: Box::<T>::default(),
             public_key,
             private_key,
         })

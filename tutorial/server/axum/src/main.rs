@@ -20,7 +20,7 @@ extern crate tracing;
 mod auth;
 mod startup;
 
-#[cfg(all(feature = "javascript", feature = "wasm"))]
+#[cfg(all(feature = "javascript", feature = "wasm", not(doc)))]
 compile_error!("Feature \"javascript\" and feature \"wasm\" cannot be enabled at the same time");
 
 // 7. That's it! The user has now authenticated!
@@ -67,7 +67,7 @@ async fn main() {
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    println!("listening on {}", addr);
+    println!("listening on {addr}");
     tracing::debug!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())

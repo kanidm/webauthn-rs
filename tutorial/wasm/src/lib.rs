@@ -88,7 +88,7 @@ impl App {
         opts.method("POST");
         opts.mode(RequestMode::SameOrigin);
 
-        let dest = format!("/register_start/{}", username);
+        let dest = format!("/register_start/{username}");
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -151,8 +151,8 @@ impl App {
                     }
                 }
                 Err(e) => {
-                    console::log!(format!("error -> {:?}", e).as_str());
-                    AppMsg::Error(format!("{:?}", e))
+                    console::log!(format!("error -> {e:?}").as_str());
+                    AppMsg::Error(format!("{e:?}"))
                 }
             }
         });
@@ -162,7 +162,7 @@ impl App {
     // 5. We have the public key, which we now submit to the server. When complete
     // it will issue us a 200 ok, and this will trigger the re-render of the page.
     async fn register_complete(rpkc: RegisterPublicKeyCredential) -> Result<AppMsg, FetchError> {
-        console::log!(format!("rpkc -> {:?}", rpkc).as_str());
+        console::log!(format!("rpkc -> {rpkc:?}").as_str());
 
         let req_jsvalue = serde_json::to_string(&rpkc)
             .map(|s| JsValue::from(&s))
@@ -244,7 +244,7 @@ impl App {
         opts.method("POST");
         opts.mode(RequestMode::SameOrigin);
 
-        let dest = format!("/login_start/{}", username);
+        let dest = format!("/login_start/{username}");
         let request = Request::new_with_str_and_init(&dest, &opts)?;
 
         request
@@ -300,8 +300,8 @@ impl App {
                     }
                 }
                 Err(e) => {
-                    console::log!(format!("error -> {:?}", e).as_str());
-                    AppMsg::Error(format!("{:?}", e))
+                    console::log!(format!("error -> {e:?}").as_str());
+                    AppMsg::Error(format!("{e:?}"))
                 }
             }
         });
@@ -311,7 +311,7 @@ impl App {
     // 9. Submit the signed result to the server. If it was correct we will get
     // 200 ok.
     async fn authenticate_complete(pkc: PublicKeyCredential) -> Result<AppMsg, FetchError> {
-        console::log!(format!("pkc -> {:?}", pkc).as_str());
+        console::log!(format!("pkc -> {pkc:?}").as_str());
 
         let req_jsvalue = serde_json::to_string(&pkc)
             .map(|s| JsValue::from(&s))
@@ -443,7 +443,7 @@ impl Component for App {
                 AppState::Error(msg)
             }
             (s, m) => {
-                let msg = format!("Invalid State Transition -> {:?}, {:?}", s, m);
+                let msg = format!("Invalid State Transition -> {s:?}, {m:?}");
                 console::log!(msg.as_str());
                 AppState::Error(msg)
             }

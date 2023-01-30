@@ -1,10 +1,47 @@
-//! [NFCReader] communicates with a FIDO token over NFC, using the [pcsc] API.
+//! [NFCReader] communicates with a FIDO authenticator using the PC/SC API.
+//!
+//! ## Transport
+//!
+//! The CTAP specifications describe an "ISO 7816, ISO 14443 and Near Field
+//! Communication" transport, but PC/SC supports both contact (ISO 7816-3) and
+//! contactless (ISO 14443 and others) smart card interfaces.
+//!
+//! For consistency with other implementations (Windows) and the existing
+//! WebAuthn specification, this library calls them all "NFC", even though
+//! interface entirely operates on an ISO 7816 level. This module should work
+//! with FIDO tokens regardless of physical transport.
+//!
+//! Some tokens (like Yubikey) provide a USB CCID (smart card) interface for
+//! other applets (such as PGP and PIV), but do not typically expose the FIDO
+//! applet over the same interface due to the possibility of websites bypassing
+//! the WebAuthn API on ChromeOS by using WebUSB[^1].
+//!
+//! [^1]: [ChromeOS' PC/SC implementation][2] is pcsclite running in a browser
+//! extension, which accesses USB CCID interfaces via WebUSB. By comparison,
+//! other platforms' PC/SC implementations take exclusive control of USB CCID
+//! devices outside of the browser, preventing access from WebUSB.
+//!
+//! [2]: https://github.com/GoogleChromeLabs/chromeos_smart_card_connector/blob/main/docs/index-developer.md
+//!
+//! ## Windows support
+//!
+//! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
+//! non-Administrator access to **all** NFC FIDO tokens, throwing an error
+//! whenever an application attempts to select the FIDO applet, even if it is
+//! not present!
+//!
+//! Use [Win10][crate::win10::Win10] (available with the `win10` feature) on
+//! Windows instead.
 use crate::ctap2::commands::to_short_apdus;
 use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
 use async_trait::async_trait;
 use futures::executor::block_on;
+
+#[cfg(doc)]
+use crate::stubs::*;
+
 use pcsc::*;
 use std::ffi::{CStr, CString};
 use std::fmt;
@@ -62,10 +99,13 @@ impl NFCReader {
     ///
     /// Example:
     ///
-    /// ```rust
+    /// ```no_run
+    /// # #[cfg(feature = "nfc")]
     /// use pcsc::Scope;
+    /// # #[cfg(feature = "nfc")]
     /// use webauthn_authenticator_rs::nfc::NFCReader;
     ///
+    /// # #[cfg(feature = "nfc")]
     /// let reader = NFCReader::new(Scope::User);
     /// // TODO: Handle errors
     /// ```

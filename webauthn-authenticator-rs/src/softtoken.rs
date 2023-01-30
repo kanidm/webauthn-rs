@@ -17,7 +17,7 @@ use std::iter;
 use std::{collections::BTreeMap, fs::File, io::Read};
 use std::{
     collections::BTreeSet,
-    io::{Seek, SeekFrom, Write},
+    io::{Seek, Write},
 };
 use uuid::Uuid;
 
@@ -783,7 +783,7 @@ impl SoftTokenFile {
         trace!("Saving SoftToken to {:?}", self.file);
         let d = self.token.to_cbor()?;
         self.file.set_len(0)?;
-        self.file.seek(SeekFrom::Start(0))?;
+        self.file.rewind()?;
         self.file.write_all(&d)?;
         self.file.flush()?;
         Ok(())
@@ -998,7 +998,7 @@ mod tests {
         assert!(file.stream_position().unwrap() > 0);
 
         // Rewind and reload
-        file.seek(SeekFrom::Start(0)).unwrap();
+        file.rewind().unwrap();
 
         let soft_token = SoftTokenFile::open(file).unwrap();
         assert_eq!(soft_token.token.tokens.len(), 1);
