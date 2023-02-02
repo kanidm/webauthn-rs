@@ -34,7 +34,7 @@ pub struct GetInfoResponse {
     /// All protocol extensions which the token supports.
     pub extensions: Option<Vec<String>>,
     /// The claimed AAGUID.
-    pub aaguid: Vec<u8>,
+    pub aaguid: Option<Uuid>,
     /// List of supported options.
     pub options: Option<BTreeMap<String, bool>>,
     /// Maximum message size supported by the authenticator.
@@ -71,10 +71,9 @@ impl fmt::Display for GetInfoResponse {
         }
         writeln!(f)?;
 
-        if let Ok(aaguid) = Uuid::from_slice(self.aaguid.as_slice()) {
-            writeln!(f, "aaguid: {aaguid}")?;
-        } else {
-            writeln!(f, "aaguid: INVALID - {:?}", self.aaguid)?;
+        match self.aaguid {
+            Some(aaguid) => writeln!(f, "aaguid: {aaguid}")?,
+            None => writeln!(f, "aaguid: INVALID")?,
         }
 
         write!(f, "options: ")?;
@@ -241,7 +240,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
                     None
                 }
             })
-            .ok_or("0x03")?;
+            .and_then(|v| Uuid::from_slice(&v).ok());
 
         let options = raw.remove(&0x04).and_then(|v| {
             if let Value::Map(v) = v {
@@ -361,19 +360,20 @@ impl From<GetInfoResponse> for BTreeMap<u32, Value> {
             min_pin_length,
         } = value;
 
-        let mut o = BTreeMap::from([
-            (
-                0x01,
-                Value::Array(versions.into_iter().map(Value::Text).collect()),
-            ),
-            (0x03, Value::Bytes(aaguid)),
-        ]);
+        let mut o = BTreeMap::from([(
+            0x01,
+            Value::Array(versions.into_iter().map(Value::Text).collect()),
+        )]);
 
         if let Some(extensions) = extensions {
             o.insert(
                 0x02,
                 Value::Array(extensions.into_iter().map(Value::Text).collect()),
             );
+        }
+
+        if let Some(aaguid) = aaguid {
+            o.insert(0x03, Value::Bytes(aaguid.as_bytes().to_vec()));
         }
 
         if let Some(options) = options {
@@ -437,6 +437,7 @@ crate::deserialize_cbor!(GetInfoResponse);
 mod tests {
     use super::*;
     use crate::transport::iso7816::ISO7816LengthForm;
+    use uuid::uuid;
 
     #[test]
     fn get_info_response_nfc_usb() {
@@ -468,9 +469,9 @@ mod tests {
         assert!(a.versions.contains("FIDO_2_1_PRE"));
 
         assert!(a.extensions == Some(vec!["credProtect".to_string(), "hmac-secret".to_string()]));
-        assert!(
-            a.aaguid
-                == vec![47, 192, 87, 159, 129, 19, 71, 234, 177, 22, 187, 90, 141, 185, 32, 42]
+        assert_eq!(
+            a.aaguid,
+            Some(uuid!("2fc0579f-8113-47ea-b116-bb5a8db9202a"))
         );
 
         let m = a.options.as_ref().unwrap();

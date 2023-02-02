@@ -257,7 +257,7 @@ impl SoftToken {
         GetInfoResponse {
             versions: BTreeSet::from(["FIDO_2_0".to_string()]),
             extensions: None,
-            aaguid: AAGUID.to_bytes_le().to_vec(),
+            aaguid: Some(AAGUID),
             options: None,
             max_msg_size: None,
             pin_protocols: None,

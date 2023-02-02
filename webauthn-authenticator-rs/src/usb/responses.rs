@@ -198,6 +198,7 @@ mod tests {
     use super::*;
     use crate::ctap2::commands::GetInfoResponse;
     use crate::ctap2::CBORResponse;
+    use uuid::uuid;
 
     #[test]
     fn init() {
@@ -403,9 +404,9 @@ mod tests {
         assert!(a.versions.contains("FIDO_2_1_PRE"));
 
         assert!(a.extensions == Some(vec!["credProtect".to_string(), "hmac-secret".to_string()]));
-        assert!(
-            a.aaguid
-                == vec![20, 154, 32, 33, 142, 246, 65, 51, 150, 184, 129, 248, 213, 183, 241, 245]
+        assert_eq!(
+            a.aaguid,
+            Some(uuid!("149a2021-8ef6-4133-96b8-81f8d5b7f1f5"))
         );
 
         let m = a.options.as_ref().unwrap();
