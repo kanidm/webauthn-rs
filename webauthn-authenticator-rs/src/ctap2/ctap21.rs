@@ -77,7 +77,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     async fn config(
         &mut self,
         sub_command: ConfigSubCommand,
-        skip_authentication: bool,
+        toggle_always_uv: bool,
     ) -> Result<(), WebauthnCError> {
         if !self.supports_config() {
             return Err(WebauthnCError::NotSupported);
@@ -85,18 +85,19 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
 
         let ui_callback = self.ui_callback;
 
-        let (pin_uv_auth_proto, pin_uv_auth_param) = if skip_authentication {
-            (None, None)
-        } else {
-            self.get_pin_uv_auth_token(
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self
+            .get_pin_uv_auth_token(
                 sub_command.prf().as_slice(),
                 Permissions::AUTHENTICATOR_CONFIGURATION,
                 None,
-                UserVerificationPolicy::Required,
+                if toggle_always_uv {
+                    UserVerificationPolicy::Discouraged_DO_NOT_USE
+                } else {
+                    UserVerificationPolicy::Required
+                },
             )
             .await?
-            .into_pin_uv_params()
-        };
+            .into_pin_uv_params();
 
         // TODO: handle complex result type
         self.token
