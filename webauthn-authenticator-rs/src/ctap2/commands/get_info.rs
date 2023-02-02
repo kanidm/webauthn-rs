@@ -162,6 +162,60 @@ impl GetInfoResponse {
     pub fn supports_ctap21pre_biometrics(&self) -> bool {
         self.get_option("userVerificationMgmtPreview").is_some()
     }
+
+    /// Checks if the authenticator supports and has configured CTAP 2.1
+    /// biometric authentication.
+    ///
+    /// See also [`GetInfoResponse::ctap21pre_biometrics`][] for CTAP 2.1-PRE
+    /// authenticators.
+    ///
+    /// # Returns
+    ///
+    /// * `None`: if not supported.
+    /// * `Some(false)`: if supported, but not configured.
+    /// * `Some(true)`: if supported and configured.
+    pub fn ctap21_biometrics(&self) -> Option<bool> {
+        self.get_option("bioEnroll")
+    }
+
+    /// Checks if the authenticator supports and has configured CTAP 2.1-PRE
+    /// biometric authentication.
+    ///
+    /// See also [`GetInfoResponse::ctap21_biometrics`][] for CTAP 2.1
+    /// authenticators.
+    ///
+    /// # Returns
+    ///
+    /// * `None`: if not supported.
+    /// * `Some(false)`: if supported, but not configured.
+    /// * `Some(true)`: if supported and configured.
+    pub fn ctap21pre_biometrics(&self) -> Option<bool> {
+        self.get_option("userVerificationMgmtPreview")
+    }
+
+    /// Returns `true` if the authenticator supports built-in user verification,
+    /// and it has been configured.
+    pub fn user_verification_configured(&self) -> bool {
+        self.get_option("uv").unwrap_or_default()
+    }
+
+    /// Returns `true` if the authenticator supports CTAP 2.1 authenticator
+    /// configuration commands.
+    pub fn supports_config(&self) -> bool {
+        self.get_option("authnrCfg").unwrap_or_default()
+    }
+
+    /// Returns `true` if the authenticator supports CTAP 2.1 enterprise
+    /// attestation.
+    pub fn supports_enterprise_attestation(&self) -> bool {
+        self.get_option("ep").is_some()
+    }
+
+    /// Returns `true` if user verification is not required for `makeCredential`
+    /// requests.
+    pub fn make_cred_uv_not_required(&self) -> bool {
+        self.get_option("makeCredUvNotRqd").unwrap_or_default()
+    }
 }
 
 impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {

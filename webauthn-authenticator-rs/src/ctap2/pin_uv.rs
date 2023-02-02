@@ -70,7 +70,7 @@ impl PinUvPlatformInterface {
     /// Creates a [PinUvPlatformInterface] given a list of supported protocols. The first supported
     /// protocol will be used.
     ///
-    /// Returns `None` if no protocols are supported.
+    /// Returns [`WebauthnCError::NotSupported`] if no protocols are supported.
     pub(super) fn select_protocol(protocols: Option<&Vec<u32>>) -> Result<Self, WebauthnCError> {
         if let Some(protocols) = protocols {
             for p in protocols.iter() {
@@ -118,7 +118,7 @@ impl PinUvPlatformInterface {
     /// Generates a `getKeyAgreement` command.
     pub fn get_key_agreement_cmd(&self) -> ClientPinRequest {
         ClientPinRequest {
-            pin_uv_protocol: self.get_pin_uv_protocol(),
+            pin_uv_protocol: Some(self.get_pin_uv_protocol()),
             sub_command: ClientPinSubCommand::GetKeyAgreement,
             ..Default::default()
         }
@@ -131,7 +131,7 @@ impl PinUvPlatformInterface {
         shared_secret: &[u8],
     ) -> Result<ClientPinRequest, WebauthnCError> {
         Ok(ClientPinRequest {
-            pin_uv_protocol: self.get_pin_uv_protocol(),
+            pin_uv_protocol: Some(self.get_pin_uv_protocol()),
             sub_command: ClientPinSubCommand::GetPinToken,
             key_agreement: Some(self.public_key.clone()),
             pin_hash_enc: Some(
@@ -150,7 +150,7 @@ impl PinUvPlatformInterface {
         rp_id: Option<String>,
     ) -> ClientPinRequest {
         ClientPinRequest {
-            pin_uv_protocol: self.get_pin_uv_protocol(),
+            pin_uv_protocol: Some(self.get_pin_uv_protocol()),
             sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingUvWithPermissions,
             key_agreement: Some(self.public_key.clone()),
             permissions,
@@ -171,7 +171,7 @@ impl PinUvPlatformInterface {
     ) -> Result<ClientPinRequest, WebauthnCError> {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
         Ok(ClientPinRequest {
-            pin_uv_protocol: self.get_pin_uv_protocol(),
+            pin_uv_protocol: Some(self.get_pin_uv_protocol()),
             sub_command: ClientPinSubCommand::GetPinUvAuthTokenUsingPinWithPermissions,
             key_agreement: Some(self.public_key.clone()),
             pin_hash_enc: Some(
@@ -192,7 +192,7 @@ impl PinUvPlatformInterface {
         let new_pin_enc = self.encrypt(shared_secret, &padded_pin)?;
         let pin_uv_auth_param = Some(self.authenticate(shared_secret, new_pin_enc.as_slice())?);
         Ok(ClientPinRequest {
-            pin_uv_protocol: self.get_pin_uv_protocol(),
+            pin_uv_protocol: Some(self.get_pin_uv_protocol()),
             sub_command: ClientPinSubCommand::SetPin,
             key_agreement: Some(self.public_key.clone()),
             new_pin_enc: Some(new_pin_enc),
@@ -220,7 +220,7 @@ impl PinUvPlatformInterface {
             Some(self.authenticate(shared_secret, pin_uv_auth_param.as_slice())?);
 
         Ok(ClientPinRequest {
-            pin_uv_protocol: self.get_pin_uv_protocol(),
+            pin_uv_protocol: Some(self.get_pin_uv_protocol()),
             sub_command: ClientPinSubCommand::ChangePin,
             key_agreement: Some(self.public_key.clone()),
             pin_hash_enc: Some(pin_hash_enc),
@@ -231,7 +231,7 @@ impl PinUvPlatformInterface {
     }
 }
 
-pub trait PinUvPlatformInterfaceProtocol {
+pub trait PinUvPlatformInterfaceProtocol: Sync + Send {
     fn kdf(&self, z: &[u8]) -> Result<Vec<u8>, WebauthnCError>;
 
     /// Encrypts a `plaintext` to produce a ciphertext, which may be longer than
@@ -250,7 +250,7 @@ pub trait PinUvPlatformInterfaceProtocol {
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError>;
 
     /// Gets the numeric identifier for this [PinUvPlatformInterfaceProtocol].
-    fn get_pin_uv_protocol(&self) -> Option<u32>;
+    fn get_pin_uv_protocol(&self) -> u32;
 }
 
 #[derive(Default)]
@@ -289,8 +289,8 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
         Ok(o)
     }
 
-    fn get_pin_uv_protocol(&self) -> Option<u32> {
-        Some(1)
+    fn get_pin_uv_protocol(&self) -> u32 {
+        1
     }
 }
 
@@ -366,8 +366,8 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         Ok(o)
     }
 
-    fn get_pin_uv_protocol(&self) -> Option<u32> {
-        Some(2)
+    fn get_pin_uv_protocol(&self) -> u32 {
+        2
     }
 }
 
@@ -577,21 +577,21 @@ mod tests {
 
         // Single supported protocol
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![1])).unwrap();
-        assert_eq!(Some(1), t.get_pin_uv_protocol());
+        assert_eq!(1, t.get_pin_uv_protocol());
 
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![2])).unwrap();
-        assert_eq!(Some(2), t.get_pin_uv_protocol());
+        assert_eq!(2, t.get_pin_uv_protocol());
 
         // Always choose the first supported protocol (even if it is lower)
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![2, 1])).unwrap();
-        assert_eq!(Some(2), t.get_pin_uv_protocol());
+        assert_eq!(2, t.get_pin_uv_protocol());
 
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![1, 2])).unwrap();
-        assert_eq!(Some(1), t.get_pin_uv_protocol());
+        assert_eq!(1, t.get_pin_uv_protocol());
 
         // Newer, unknown protocol should fall back to first one we support
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![9999, 2, 1])).unwrap();
-        assert_eq!(Some(2), t.get_pin_uv_protocol());
+        assert_eq!(2, t.get_pin_uv_protocol());
 
         // Unknown protocol
         let t = PinUvPlatformInterface::select_protocol(Some(&vec![9999]));

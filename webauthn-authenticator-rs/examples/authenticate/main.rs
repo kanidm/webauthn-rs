@@ -4,6 +4,7 @@ extern crate tracing;
 use std::fs::OpenOptions;
 use std::io::{stdin, stdout, Write};
 
+use clap::clap_derive::ValueEnum;
 use clap::{Args, Parser, Subcommand};
 use futures::executor::block_on;
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
@@ -17,6 +18,7 @@ use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::AuthenticatorBackend;
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
+use webauthn_rs_proto::{AttestationConveyancePreference, COSEAlgorithm, UserVerificationPolicy};
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "Register and authenticate test")]
@@ -24,9 +26,31 @@ pub struct CliParser {
     /// Provider to use.
     #[clap(subcommand)]
     provider: Provider,
+
+    /// User verification policy for the request.
+    #[clap(short, long, value_enum, default_value_t)]
+    verification_policy: UvPolicy,
 }
 
-fn select_transport<'a, U: UiCallback>(ui: &'a U) -> impl AuthenticatorBackend + 'a {
+#[derive(ValueEnum, Clone, Default, Debug)]
+pub enum UvPolicy {
+    Discouraged,
+    #[default]
+    Preferred,
+    Required,
+}
+
+impl From<UvPolicy> for UserVerificationPolicy {
+    fn from(value: UvPolicy) -> Self {
+        match value {
+            UvPolicy::Discouraged => UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            UvPolicy::Preferred => UserVerificationPolicy::Preferred,
+            UvPolicy::Required => UserVerificationPolicy::Required,
+        }
+    }
+}
+
+fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
     let mut reader = AnyTransport::new().unwrap();
     info!("Using reader: {:?}", reader);
 
@@ -151,7 +175,19 @@ async fn main() {
     let name = "william";
 
     let (chal, reg_state) = wan
-        .generate_challenge_register(&unique_id, name, name, false)
+        .generate_challenge_register_options(
+            &unique_id,
+            name,
+            name,
+            AttestationConveyancePreference::None,
+            Some(opt.verification_policy.into()),
+            None,
+            None,
+            COSEAlgorithm::secure_algs(),
+            false,
+            None,
+            false,
+        )
         .unwrap();
 
     info!("🍿 challenge -> {:x?}", chal);
