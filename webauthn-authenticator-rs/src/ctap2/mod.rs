@@ -1,6 +1,7 @@
-//! This package provides a [CTAP 2.0][Ctap20Authenticator] and
-//! [CTAP 2.1][Ctap21Authenticator] protocol implementation on top of [Token],
-//! allowing you to interface with FIDO authenticators.
+//! This package provides a [CTAP 2.0][Ctap20Authenticator],
+//! [CTAP 2.1-PRE][Ctap21PreAuthenticator] and [CTAP 2.1][Ctap21Authenticator]
+//! protocol implementation on top of [Token], allowing you to interface with
+//! FIDO authenticators.
 //!
 //! The main interface for this package is [CtapAuthenticator].
 //!
@@ -49,8 +50,6 @@
 //!
 //! * [request extensions]
 //!
-//! * CTAP v2.1-PRE fallback (for "preview" biometric support)
-//!
 //! ## Features
 //!
 //! * Basic [registration][Ctap20Authenticator::perform_register] and
@@ -62,8 +61,10 @@
 //! * CTAP 2.1 and NFC [authenticator selection][select_one_token]
 //!
 //! * Fingerprint (biometric) authentication,
-//!   [enrollment][Ctap21Authenticator::enroll_fingerprint], and management
-//!   (CTAP 2.1 only)
+//!   [enrollment and management][BiometricAuthenticator]
+//!   (CTAP 2.1 and 2.1-PRE)
+//!
+//! * Built-in user verification
 //!
 //! * [Setting][Ctap20Authenticator::set_new_pin] and
 //!   [changing][Ctap20Authenticator::change_pin] device PINs
@@ -74,8 +75,8 @@
 //!
 //! * [Factory-resetting authenticators][Ctap20Authenticator::factory_reset]
 //!
-//! * configuring [user verification][Ctap20Authenticator::toggle_always_uv]
-//!   and [minimum PIN length][Ctap20Authenticator::set_min_pin_length]
+//! * configuring [user verification][Ctap21Authenticator::toggle_always_uv]
+//!   and [minimum PIN length][Ctap21Authenticator::set_min_pin_length]
 //!   requirements
 //!
 //! ## Examples
@@ -176,8 +177,13 @@
 
 // TODO: `commands` may become private in future.
 pub mod commands;
+#[doc(hidden)]
 mod ctap20;
+#[doc(hidden)]
 mod ctap21;
+mod ctap21_bio;
+#[doc(hidden)]
+mod ctap21pre;
 mod pin_uv;
 
 use std::ops::{Deref, DerefMut};
@@ -190,19 +196,28 @@ use crate::error::WebauthnCError;
 use crate::transport::Token;
 use crate::ui::UiCallback;
 
-pub use self::commands::EnrollSampleStatus;
 use self::commands::GetInfoRequest;
-pub use self::commands::{CBORCommand, CBORResponse, GetInfoResponse};
-pub use self::{ctap20::Ctap20Authenticator, ctap21::Ctap21Authenticator};
+use self::ctap21_bio::BiometricAuthenticatorInfo;
+
+#[doc(inline)]
+pub use self::{
+    commands::{CBORCommand, CBORResponse, EnrollSampleStatus, GetInfoResponse},
+    ctap20::Ctap20Authenticator,
+    ctap21::Ctap21Authenticator,
+    ctap21_bio::BiometricAuthenticator,
+    ctap21pre::Ctap21PreAuthenticator,
+};
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///
 /// All tokens can [Deref] into [Ctap20Authenticator].
 #[derive(Debug)]
 pub enum CtapAuthenticator<'a, T: Token, U: UiCallback> {
-    /// Interface for tokens supporting CTAP 2.0
+    /// Interface for CTAP 2.0 tokens.
     Fido20(Ctap20Authenticator<'a, T, U>),
-    /// Interface for tokens supporting CTAP 2.1
+    /// Interface for CTAP 2.1-PRE tokens.
+    Fido21Pre(Ctap21PreAuthenticator<'a, T, U>),
+    /// Interface for CTAP 2.1 tokens.
     Fido21(Ctap21Authenticator<'a, T, U>),
 }
 
@@ -235,9 +250,13 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
                 token,
                 ui_callback,
             )))
-        } else if info.versions.contains(FIDO_2_0) || info.versions.contains(FIDO_2_1_PRE) {
-            // TODO: Implement FIDO 2.1-PRE properly (prototype authenticatorBioEnrollment, prototype authenticatorCredentialManagement)
-            // 2.1-PRE intentionally falls back to v2.0, because 2.1-PRE doesn't support all v2.1 commands.
+        } else if info.versions.contains(FIDO_2_1_PRE) {
+            Some(Self::Fido21Pre(Ctap21PreAuthenticator::new(
+                info,
+                token,
+                ui_callback,
+            )))
+        } else if info.versions.contains(FIDO_2_0) {
             Some(Self::Fido20(Ctap20Authenticator::new(
                 info,
                 token,
@@ -248,14 +267,32 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         }
     }
 
-    /// Gets a reference to a
-    /// [CTAP 2.1 compatible interface][Ctap21Authenticator], if the token
-    /// supports it.
-    ///
-    /// Otherwise, returns `None`.
-    pub fn ctap21(&self) -> Option<&Ctap21Authenticator<'a, T, U>> {
+    /// Returns `true` if the token supports biometric commands.
+    pub fn supports_biometrics(&self) -> bool {
         match self {
-            Self::Fido21(a) => Some(a),
+            Self::Fido21(a) => a.supports_biometrics(),
+            Self::Fido21Pre(a) => a.supports_biometrics(),
+            _ => false,
+        }
+    }
+
+    /// Returns `true` if the token has configured biometric authentication.
+    pub fn configured_biometrics(&self) -> bool {
+        match self {
+            Self::Fido21(a) => a.configured_biometrics(),
+            Self::Fido21Pre(a) => a.configured_biometrics(),
+            _ => false,
+        }
+    }
+
+    /// Gets a mutable reference to a [BiometricAuthenticator] trait for the
+    /// token, if it supports biometric commands.
+    ///
+    /// Returns `None` if the token does not support biometrics.
+    pub fn bio(&mut self) -> Option<&mut dyn BiometricAuthenticator> {
+        match self {
+            Self::Fido21(a) => a.supports_biometrics().then_some(a),
+            Self::Fido21Pre(a) => a.supports_biometrics().then_some(a),
             _ => None,
         }
     }
@@ -271,6 +308,7 @@ impl<'a, T: Token, U: UiCallback> Deref for CtapAuthenticator<'a, T, U> {
         use CtapAuthenticator::*;
         match self {
             Fido20(a) => a,
+            Fido21Pre(a) => a,
             Fido21(a) => a,
         }
     }
@@ -285,6 +323,7 @@ impl<'a, T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'a, T, U> {
         use CtapAuthenticator::*;
         match self {
             Fido20(a) => a,
+            Fido21Pre(a) => a,
             Fido21(a) => a,
         }
     }

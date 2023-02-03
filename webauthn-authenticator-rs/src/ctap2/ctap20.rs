@@ -88,74 +88,6 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         Ok(())
     }
 
-    async fn config(
-        &mut self,
-        sub_command: ConfigSubCommand,
-        skip_authentication: bool,
-    ) -> Result<(), WebauthnCError> {
-        let ui_callback = self.ui_callback;
-
-        let (pin_uv_auth_proto, pin_uv_auth_param) = if skip_authentication {
-            (None, None)
-        } else {
-            self.get_pin_uv_auth_token(
-                sub_command.prf().as_slice(),
-                Permissions::AUTHENTICATOR_CONFIGURATION,
-                None,
-                UserVerificationPolicy::Required,
-            )
-            .await?
-            .into_pin_uv_params()
-        };
-
-        // TODO: handle complex result type
-        self.token
-            .transmit(
-                ConfigRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
-                ui_callback,
-            )
-            .await
-            .map(|_| ())
-    }
-
-    /// Toggles the state of the "Always Require User Verification" feature.
-    ///
-    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv>
-    pub async fn toggle_always_uv(&mut self) -> Result<(), WebauthnCError> {
-        self.config(ConfigSubCommand::ToggleAlwaysUv, true).await
-    }
-
-    /// Sets the minimum PIN length policy.
-    ///
-    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength>
-    pub async fn set_min_pin_length(
-        &mut self,
-        new_min_pin_length: Option<u32>,
-        min_pin_length_rpids: Vec<String>,
-        force_change_pin: Option<bool>,
-    ) -> Result<(), WebauthnCError> {
-        self.config(
-            ConfigSubCommand::SetMinPinLength(SetMinPinLengthParams {
-                new_min_pin_length,
-                min_pin_length_rpids,
-                force_change_pin,
-            }),
-            false,
-        )
-        .await
-    }
-
-    /// Enables the Enterprise Attestation feature.
-    ///
-    /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn>
-    pub async fn enable_enterprise_attestation(&mut self) -> Result<(), WebauthnCError> {
-        if self.info.get_option("ep").is_none() {
-            return Err(WebauthnCError::NotSupported);
-        }
-        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
-            .await
-    }
-
     /// Checks whether a provided PIN follows the rules defined by the
     /// authenticator. This does not share the PIN with the authenticator.
     pub fn validate_pin(&self, pin: &str) -> Result<String, WebauthnCError> {
@@ -295,7 +227,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         trace!("Authenticator options: {:?}", self.info.options);
         let ui_callback = self.ui_callback;
         let client_pin = self.info.get_option("clientPin").unwrap_or_default();
-        let always_uv = self.info.get_option("alwaysUv").unwrap_or_default();
+        let mut always_uv = self.info.get_option("alwaysUv").unwrap_or_default();
         let make_cred_uv_not_required = self.info.make_cred_uv_not_required();
         let pin_uv_auth_token = self.info.get_option("pinUvAuthToken").unwrap_or_default();
         let uv = self.info.get_option("uv").unwrap_or_default();
@@ -308,6 +240,21 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         // TODO: noMcGaPermissionsWithClientPin means those can only run with biometric auth
         // TODO: rp_options.uv_required == true > makeCredUvNotRqd == true
         // TODO: discoverable credentials should bypass makeCredUvNotRqd == true
+
+        // Allow toggleAlwaysUv to bypass alwaysUv if no user verification is
+        // configured, to allow for initial configuration.
+        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorConfig
+        if permissions == Permissions::AUTHENTICATOR_CONFIGURATION
+            && user_verification_policy == UserVerificationPolicy::Discouraged_DO_NOT_USE
+            && !client_pin
+            && !uv
+            && always_uv
+        {
+            trace!(
+                "Pretending alwaysUv = false to allow for initial configuration of toggleAlwaysUv"
+            );
+            always_uv = false;
+        }
 
         let requires_pin = (permissions.intersects(Permissions::BIO_ENROLLMENT) && !uv_bio_enroll)
             || (permissions.intersects(Permissions::AUTHENTICATOR_CONFIGURATION) && !uv_acfg);

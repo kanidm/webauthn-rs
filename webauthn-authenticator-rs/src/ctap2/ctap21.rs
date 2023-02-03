@@ -1,21 +1,15 @@
-use std::{
-    ops::{Deref, DerefMut},
-    time::Duration,
-};
+use std::ops::{Deref, DerefMut};
 
-use unicode_normalization::UnicodeNormalization;
 use webauthn_rs_proto::UserVerificationPolicy;
 
-use crate::{
-    ctap2::commands::TemplateInfo, error::WebauthnCError, transport::Token, ui::UiCallback,
-};
+use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 
 use super::{
     commands::{
-        BioEnrollmentRequest, BioEnrollmentResponse, BioSubCommand, GetInfoResponse, Modality,
-        Permissions, SelectionRequest, GET_FINGERPRINT_SENSOR_INFO, GET_MODALITY,
+        BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, GetInfoResponse, Permissions,
+        SelectionRequest, SetMinPinLengthParams,
     },
-    ctap20::AuthSession,
+    ctap21_bio::BiometricAuthenticatorInfo,
     Ctap20Authenticator,
 };
 
@@ -68,247 +62,121 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         }
     }
 
-    async fn bio(
+    /// Returns `true` if the authenticator supports configuration commands.
+    ///
+    /// # See also
+    ///
+    /// * [`enable_enterprise_attestation()`][Self::enable_enterprise_attestation]
+    /// * [`set_min_pin_length()`][Self::set_min_pin_length]
+    /// * [`toggle_always_uv()`][Self::toggle_always_uv]
+    #[inline]
+    pub fn supports_config(&self) -> bool {
+        self.info.supports_config()
+    }
+
+    async fn config(
         &mut self,
-        sub_command: BioSubCommand,
-    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
+        sub_command: ConfigSubCommand,
+        toggle_always_uv: bool,
+    ) -> Result<(), WebauthnCError> {
+        if !self.supports_config() {
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        let ui_callback = self.ui_callback;
+
         let (pin_uv_auth_proto, pin_uv_auth_param) = self
             .get_pin_uv_auth_token(
                 sub_command.prf().as_slice(),
-                Permissions::BIO_ENROLLMENT,
+                Permissions::AUTHENTICATOR_CONFIGURATION,
                 None,
-                UserVerificationPolicy::Required,
+                if toggle_always_uv {
+                    UserVerificationPolicy::Discouraged_DO_NOT_USE
+                } else {
+                    UserVerificationPolicy::Required
+                },
             )
             .await?
             .into_pin_uv_params();
 
-        let ui_callback = self.ui_callback;
+        // TODO: handle complex result type
         self.token
             .transmit(
-                BioEnrollmentRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
+                ConfigRequest::new(sub_command, pin_uv_auth_proto, pin_uv_auth_param),
                 ui_callback,
             )
-            .await
-    }
-
-    /// Send a [BioSubCommand] using a provided `pin_uv_auth_token` session.
-    async fn bio_with_session(
-        &mut self,
-        sub_command: BioSubCommand,
-        auth_session: &AuthSession,
-    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
-        let client_data_hash = sub_command.prf();
-
-        let (pin_uv_protocol, pin_uv_auth_param) = match auth_session {
-            AuthSession::InterfaceToken(iface, pin_token) => {
-                let mut pin_uv_auth_param =
-                    iface.authenticate(pin_token, client_data_hash.as_slice())?;
-                pin_uv_auth_param.truncate(16);
-
-                (Some(iface.get_pin_uv_protocol()), Some(pin_uv_auth_param))
-            }
-
-            _ => (None, None),
-        };
-
-        let ui_callback = self.ui_callback;
-        self.token
-            .transmit(
-                BioEnrollmentRequest::new(sub_command, pin_uv_protocol, pin_uv_auth_param),
-                ui_callback,
-            )
-            .await
-    }
-
-    /// Checks that the device supports fingerprints.
-    async fn check_fingerprint_support(&mut self) -> Result<(), WebauthnCError> {
-        // TODO: handle CTAP_2_1_PRE version too
-        if !self.info.supports_ctap21_biometrics() {
-            return Err(WebauthnCError::NotSupported);
-        }
-
-        let ui_callback = self.ui_callback;
-        let r = self.token.transmit(GET_MODALITY, ui_callback).await?;
-        if r.modality != Some(Modality::Fingerprint) {
-            return Err(WebauthnCError::NotSupported);
-        }
-
-        Ok(())
-    }
-
-    /// Checks that a given `friendly_name` complies with authenticator limits, and returns the value in Unicode Normal Form C.
-    async fn check_friendly_name(
-        &mut self,
-        friendly_name: String,
-    ) -> Result<String, WebauthnCError> {
-        let ui_callback = self.ui_callback;
-        let r = self
-            .token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, ui_callback)
             .await?;
 
-        // Normalise into Normal Form C
-        let friendly_name = friendly_name.nfc().collect::<String>();
-        if friendly_name.as_bytes().len() > r.get_max_template_friendly_name() {
-            return Err(WebauthnCError::FriendlyNameTooLong);
-        }
-
-        Ok(friendly_name)
+        self.refresh_info().await
     }
 
-    /// Gets information about the token's fingerprint sensor.
+    /// Toggles the state of the [Always Require User Verification][0] feature.
     ///
-    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
-    pub async fn get_fingerprint_sensor_info(
+    /// This is only available on authenticators which
+    /// [support configuration][Self::supports_config].
+    ///
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#toggle-alwaysUv
+    pub async fn toggle_always_uv(&mut self) -> Result<(), WebauthnCError> {
+        self.config(ConfigSubCommand::ToggleAlwaysUv, true).await
+    }
+
+    /// Sets a [minimum PIN length policy][0].
+    ///
+    /// This is only available on authenticators which
+    /// [support configuration][Self::supports_config].
+    ///
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#setMinPINLength
+    pub async fn set_min_pin_length(
         &mut self,
-    ) -> Result<BioEnrollmentResponse, WebauthnCError> {
-        self.check_fingerprint_support().await?;
-        let ui_callback = self.ui_callback;
-        self.token
-            .transmit(GET_FINGERPRINT_SENSOR_INFO, ui_callback)
-            .await
-    }
-
-    /// Enrolls a fingerprint with the token.
-    ///
-    /// This generally takes multiple user interactions (touches or swipes) of the sensor.
-    ///
-    /// If enrollment is successful, returns the fingerprint ID.
-    ///
-    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
-    pub async fn enroll_fingerprint(
-        &mut self,
-        timeout: Duration,
-        friendly_name: Option<String>,
-    ) -> Result<Vec<u8>, WebauthnCError> {
-        // TODO: handle CTAP_2_1_PRE version too
-        self.check_fingerprint_support().await?;
-        let friendly_name = match friendly_name {
-            Some(n) => Some(self.check_friendly_name(n).await?),
-            None => None,
-        };
-
-        let session = self
-            .get_pin_uv_auth_session(
-                Permissions::BIO_ENROLLMENT,
-                None,
-                UserVerificationPolicy::Required,
-            )
-            .await?;
-
-        let mut r = self
-            .bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), &session)
-            .await?;
-
-        trace!("began enrollment: {:?}", r);
-        let id = r.template_id.ok_or(WebauthnCError::MissingRequiredField)?;
-
-        let mut remaining_samples = r
-            .remaining_samples
-            .ok_or(WebauthnCError::MissingRequiredField)?;
-        while remaining_samples > 0 {
-            self.ui_callback
-                .fingerprint_enrollment_feedback(remaining_samples, r.last_enroll_sample_status);
-
-            r = self
-                .bio_with_session(
-                    BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout),
-                    &session,
-                )
-                .await?;
-
-            remaining_samples = r
-                .remaining_samples
-                .ok_or(WebauthnCError::MissingRequiredField)?;
-        }
-
-        // Now it's enrolled, give it a name.
-        if friendly_name.is_some() {
-            self.bio_with_session(
-                BioSubCommand::FingerprintSetFriendlyName(TemplateInfo {
-                    id: id.clone(),
-                    friendly_name,
-                }),
-                &session,
-            )
-            .await?;
-        }
-
-        // This may have been the first enrolled fingerprint.
-        self.refresh_info().await?;
-
-        Ok(id)
-    }
-
-    /// Lists all enrolled fingerprints in the device.
-    ///
-    /// Returns [WebauthnCError::NotSupported] if the token does not support fingerprint authentication.
-    pub async fn list_fingerprints(&mut self) -> Result<Vec<TemplateInfo>, WebauthnCError> {
-        // TODO: handle CTAP_2_1_PRE version too
-        self.check_fingerprint_support().await?;
-
-        // works without authentication if alwaysUv = false?
-        let templates = self
-            .bio(BioSubCommand::FingerprintEnumerateEnrollments)
-            .await?;
-
-        Ok(templates.template_infos)
-    }
-
-    /// Renames an enrolled fingerprint.
-    pub async fn rename_fingerprint(
-        &mut self,
-        id: Vec<u8>,
-        friendly_name: String,
+        new_min_pin_length: Option<u32>,
+        min_pin_length_rpids: Vec<String>,
+        force_change_pin: Option<bool>,
     ) -> Result<(), WebauthnCError> {
-        // TODO: handle CTAP_2_1_PRE version too
-        self.check_fingerprint_support().await?;
-        let friendly_name = Some(self.check_friendly_name(friendly_name).await?);
-        self.bio(BioSubCommand::FingerprintSetFriendlyName(TemplateInfo {
-            id,
-            friendly_name,
-        }))
-        .await?;
-        Ok(())
+        self.config(
+            ConfigSubCommand::SetMinPinLength(SetMinPinLengthParams {
+                new_min_pin_length,
+                min_pin_length_rpids,
+                force_change_pin,
+            }),
+            false,
+        )
+        .await
     }
 
-    /// Removes an enrolled fingerprint.
-    pub async fn remove_fingerprint(&mut self, id: Vec<u8>) -> Result<(), WebauthnCError> {
-        // TODO: handle CTAP_2_1_PRE version too
-        self.check_fingerprint_support().await?;
-
-        self.bio(BioSubCommand::FingerprintRemoveEnrollment(id))
-            .await?;
-
-        // The previous command could have removed the last enrolled
-        // fingerprint.
-        self.refresh_info().await?;
-        Ok(())
+    /// Returns `true` if the authenticator supports
+    /// [enterprise attestation][0].
+    ///
+    /// # See also
+    ///
+    /// * [`enable_enterprise_attestation()`][Self::enable_enterprise_attestation]
+    ///
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn
+    #[inline]
+    pub fn supports_enterprise_attestation(&self) -> bool {
+        self.info.supports_enterprise_attestation()
     }
 
-    /// Removes multiple enrolled fingerprints.
+    /// Enables the [Enterprise Attestation][0] feature.
     ///
-    /// **Warning:** this is not an atomic operation. If any command fails,
-    /// further processing will stop, and the request may be incomplete.
+    /// This is only available on authenticators which support
+    /// [configuration][Self::supports_config] and
+    /// [enterprise attestation][Self::supports_enterprise_attestation].
     ///
-    /// Call [Self::list_fingerprints] to check what was actually done.
-    pub async fn remove_fingerprints(&mut self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError> {
-        self.check_fingerprint_support().await?;
-        let session = self
-            .get_pin_uv_auth_session(
-                Permissions::BIO_ENROLLMENT,
-                None,
-                UserVerificationPolicy::Required,
-            )
-            .await?;
-
-        for id in ids {
-            self.bio_with_session(BioSubCommand::FingerprintRemoveEnrollment(id), &session)
-                .await?;
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn
+    pub async fn enable_enterprise_attestation(&mut self) -> Result<(), WebauthnCError> {
+        if !self.supports_enterprise_attestation() || !self.supports_config() {
+            return Err(WebauthnCError::NotSupported);
         }
+        self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
+            .await
+    }
+}
 
-        // The previous command could have removed all enrolled fingerprints.
-        self.refresh_info().await?;
-        Ok(())
+impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U> for Ctap21Authenticator<'a, T, U> {
+    type RequestType = BioEnrollmentRequest;
+
+    #[inline]
+    fn biometrics(&self) -> Option<bool> {
+        self.info.ctap21_biometrics()
     }
 }

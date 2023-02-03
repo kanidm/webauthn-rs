@@ -208,7 +208,7 @@ impl From<&U2FHIDFrame> for HidSendReportBytes {
 
         if f.cmd & 0x80 > 0 {
             // Initial
-            o[6..8].copy_from_slice(&(f.len as u16).to_be_bytes());
+            o[6..8].copy_from_slice(&(f.len).to_be_bytes());
             o[8..8 + f.data.len()].copy_from_slice(&f.data);
         } else {
             o[6..6 + f.data.len()].copy_from_slice(&f.data);
