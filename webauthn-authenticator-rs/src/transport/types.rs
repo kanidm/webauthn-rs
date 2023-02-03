@@ -5,6 +5,8 @@ use super::iso7816::ISO7816ResponseAPDU;
 
 pub const TYPE_INIT: u8 = 0x80;
 pub const U2FHID_PING: u8 = TYPE_INIT | 0x01;
+#[cfg(any(doc, feature = "bluetooth"))]
+pub const BTLE_KEEPALIVE: u8 = TYPE_INIT | 0x02;
 pub const U2FHID_MSG: u8 = TYPE_INIT | 0x03;
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_INIT: u8 = TYPE_INIT | 0x06;
@@ -14,6 +16,8 @@ pub const U2FHID_CBOR: u8 = TYPE_INIT | 0x10;
 pub const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11;
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b;
+#[cfg(any(doc, feature = "bluetooth"))]
+pub const BTLE_CANCEL: u8 = TYPE_INIT | 0x3e;
 pub const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f;
 
 /// Type for parsing all responses from a BTLE or USB FIDO token.

@@ -12,6 +12,7 @@ repository = "https://github.com/kanidm/webauthn-rs"
 [features]
 nfc_raw_transmit = ["nfc"]
 u2fhid = ["authenticator"]
+bluetooth = ["btleplug", "tokio"]
 
 # caBLE / hybrid authenticator
 cable = ["btleplug", "hex", "tokio", "tokio-tungstenite", "qrcode"]

@@ -31,7 +31,7 @@ pub mod pcsc {
     pub struct ReaderState {}
 }
 
-#[cfg(not(feature = "cable"))]
+#[cfg(not(feature = "tokio"))]
 pub mod tokio {
     pub mod net {
         pub struct TcpStream {}
@@ -41,6 +41,9 @@ pub mod tokio {
             pub struct Sender<T> {}
             pub struct Receiver<T> {}
         }
+    }
+    pub mod time {
+        pub async fn sleep(_: std::time::Duration) {}
     }
 }
 

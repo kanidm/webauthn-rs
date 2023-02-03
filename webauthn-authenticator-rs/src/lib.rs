@@ -35,6 +35,7 @@
 //! the appropriate `--features` flag listed inline.
 //!
 //! * [CTAP 2.0, 2.1 and 2.1-PRE protocol implementation][crate::ctap2]
+//! * [Bluetooth][] (with `--features bluetooth`)
 //! * [caBLE][] (with `--features cable`)
 //! * [NFC][] via PC/SC API (with `--features nfc`)
 //! * [SoftPasskey][] (for testing)
@@ -44,6 +45,7 @@
 //! * [Windows 10][] WebAuthn API (with `--features win10`)
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
+//! [Bluetooth]: crate::bluetooth
 //! [cert]: https://fidoalliance.org/certification/authenticator-certification-levels/
 //! [caBLE]: crate::cable
 //! [Mozilla Authenticator]: crate::u2fhid
@@ -102,6 +104,9 @@ pub mod transport;
 pub mod types;
 pub mod ui;
 mod util;
+
+#[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
+pub mod bluetooth;
 
 #[cfg(any(all(doc, not(doctest)), feature = "cable"))]
 pub mod cable;
