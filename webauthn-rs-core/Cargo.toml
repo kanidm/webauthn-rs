@@ -20,7 +20,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 base64.workspace = true
 base64urlsafedata.workspace = true
+webauthn-attestation-ca.workspace = true
 webauthn-rs-proto.workspace = true
+base64urlsafedata.workspace = true
 serde.workspace = true
 serde_cbor_2.workspace = true
 serde_json.workspace = true
@@ -39,3 +41,4 @@ uuid = { workspace = true, features = ["serde"] }
 [dev-dependencies]
 hex-literal = "0.3"
 tracing-subscriber.workspace = true
+webauthn-rs-device-catalog.workspace = true

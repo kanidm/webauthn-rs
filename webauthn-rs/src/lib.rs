@@ -670,13 +670,19 @@ impl Webauthn {
     ///
     /// // Only allow credentials from manufacturers that are trusted and part of the webauthn-rs
     /// // strict "high quality" list.
+    ///
+    /// use webauthn_rs_device_catalog::Data;
+    /// let device_catalog = Data::strict();
+    ///
+    /// let attestation_ca_list = (&device_catalog).into();
+    ///
     /// let (ccr, skr) = webauthn
     ///     .start_securitykey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
     ///         "Claire",
     ///         None,
-    ///         Some(AttestationCaList::strict()),
+    ///         Some(attestation_ca_list),
     ///         None,
     ///     )
     ///     .expect("Failed to start registration.");
@@ -913,6 +919,7 @@ impl Webauthn {
     ///
     /// ```
     /// # use webauthn_rs::prelude::*;
+    /// use webauthn_rs_device_catalog::Data;
     ///
     /// # let rp_id = "example.com";
     /// # let rp_origin = Url::parse("https://idm.example.com")
@@ -926,7 +933,12 @@ impl Webauthn {
     /// // use an existed UUID source.
     /// let user_unique_id = Uuid::new_v4();
     ///
-    /// // Initiate a basic registration flow, allowing any cryptograhpic authenticator to proceed.
+    /// // Create a device catalog reference that contains a list of known high quality authenticators
+    /// let device_catalog = Data::all_known_devices();
+    ///
+    /// let attestation_ca_list = (&device_catalog).into();
+    ///
+    /// // Initiate a basic registration flow, allowing any attested cryptograhpic authenticator to proceed.
     /// // Hint (but do not enforce) that we prefer this to be a token/key like a yubikey.
     /// // To enforce this you can validate the properties of the returned device aaguid.
     /// let (ccr, skr) = webauthn
@@ -935,7 +947,7 @@ impl Webauthn {
     ///         "claire",
     ///         "Claire",
     ///         None,
-    ///         AttestationCaList::strict(),
+    ///         attestation_ca_list,
     ///         Some(AuthenticatorAttachment::CrossPlatform),
     ///     )
     ///     .expect("Failed to start registration.");
@@ -944,13 +956,18 @@ impl Webauthn {
     /// // strict "high quality" list.
     /// // Hint (but do not enforce) that we prefer this to be a device like TouchID.
     /// // To enforce this you can validate the attestation ca used along with the returned device aaguid
+    ///
+    /// let device_catalog = Data::strict();
+    ///
+    /// let attestation_ca_list = (&device_catalog).into();
+    ///
     /// let (ccr, skr) = webauthn
     ///     .start_attested_passkey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
     ///         "Claire",
     ///         None,
-    ///         AttestationCaList::strict(),
+    ///         attestation_ca_list,
     ///         Some(AuthenticatorAttachment::Platform),
     ///     )
     ///     .expect("Failed to start registration.");

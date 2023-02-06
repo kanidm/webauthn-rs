@@ -15,6 +15,8 @@ pub use webauthn_rs_proto::{
     RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
+use webauthn_rs_device_catalog::Data;
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum AttestationLevel {
     None,
@@ -28,8 +30,14 @@ impl Into<Option<AttestationCaList>> for AttestationLevel {
     fn into(self) -> Option<AttestationCaList> {
         match self {
             AttestationLevel::None => None,
-            AttestationLevel::AnyKnown => Some(AttestationCaList::all_known_cas()),
-            AttestationLevel::Strict => Some(AttestationCaList::strict()),
+            AttestationLevel::AnyKnown => {
+                let data = Data::all_known_devices();
+                Some((&data).into())
+            }
+            AttestationLevel::Strict => {
+                let data = Data::strict();
+                Some((&data).into())
+            }
         }
     }
 }

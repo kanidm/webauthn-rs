@@ -12,3 +12,4 @@ serde.workspace = true
 
 webauthn-rs-core = { workspace = true, optional = true }
 webauthn-rs-proto = { workspace = true }
+webauthn-rs-device-catalog =  { workspace = true }
