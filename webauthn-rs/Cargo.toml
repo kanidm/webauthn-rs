@@ -7,7 +7,7 @@ rust-version = "1.66.0"
 description = "Webauthn Framework for Rust Web Servers"
 repository = "https://github.com/kanidm/webauthn-rs"
 readme = "../README.md"
-keywords = ["webauthn", "authentication"]
+keywords = ["webauthn", "authentication", "passkeys"]
 categories = ["authentication", "web-programming"]
 license = "MPL-2.0"
 
@@ -29,3 +29,6 @@ url = { workspace = true, features = ["serde"] }
 tracing.workspace = true
 serde.workspace = true
 uuid = { workspace = true, features = ["v4", "serde"] }
+
+[dev-dependencies]
+webauthn-rs-device-catalog.workspace = true

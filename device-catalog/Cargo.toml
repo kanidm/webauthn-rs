@@ -1,0 +1,20 @@
+[package]
+name = "webauthn-rs-device-catalog"
+version = "0.5.0-20230418"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2021"
+description = "Webauthn RS Device Catalog"
+repository = "https://github.com/kanidm/webauthn-rs"
+readme = "README.md"
+keywords = ["webauthn", "authentication"]
+categories = ["authentication", "web-programming"]
+license = "MPL-2.0"
+
+[dependencies]
+webauthn-attestation-ca.workspace = true
+base64urlsafedata = { version = "0.1.2", path = "../base64urlsafedata" }
+openssl = "0.10.41"
+peg = "0.8.1"
+serde = { version = "^1.0.141", features = ["derive"] }
+tracing.workspace = true
+uuid = { version = "1", features = ["serde"] }
