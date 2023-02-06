@@ -1,4 +1,7 @@
 //! Abstraction to merge all available transports for the platform.
+//!
+//! This is still a work in progress, and doesn't yet handle tokens quite as
+//! well as we'd like.
 #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
 use crate::nfc::*;
 use crate::transport::*;
@@ -6,9 +9,6 @@ use crate::transport::*;
 use crate::usb::*;
 
 /// [AnyTransport] merges all available transports for the platform.
-///
-/// If you don't care which transport is used for tokens, prefer to use
-/// [AnyTransport] for the best experience.
 #[derive(Debug)]
 pub struct AnyTransport {
     #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
@@ -17,7 +17,7 @@ pub struct AnyTransport {
     pub usb: USBTransport,
 }
 
-/// [AnyToken] abstracts calls to NFC and USB security tokens.
+/// [AnyToken] abstracts calls to physical authenticators.
 #[derive(Debug)]
 pub enum AnyToken {
     /// No-op stub entry, never used.
@@ -32,7 +32,7 @@ impl AnyTransport {
     /// Creates connections to all available transports.
     ///
     /// For NFC, uses `Scope::User`.
-    pub fn new() -> Result<Self, WebauthnCError> {
+    pub async fn new() -> Result<Self, WebauthnCError> {
         Ok(AnyTransport {
             #[cfg(feature = "nfc")]
             nfc: NFCReader::new(pcsc::Scope::User)?,
@@ -111,13 +111,13 @@ impl Token for AnyToken {
         }
     }
 
-    fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&self) -> Result<(), WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),
             #[cfg(feature = "nfc")]
-            AnyToken::Nfc(n) => n.cancel(),
+            AnyToken::Nfc(n) => n.cancel().await,
             #[cfg(feature = "usb")]
-            AnyToken::Usb(u) => u.cancel(),
+            AnyToken::Usb(u) => u.cancel().await,
         }
     }
 

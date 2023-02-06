@@ -5,7 +5,6 @@ use std::time::Duration;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
-use futures::executor::block_on;
 use webauthn_authenticator_rs::ctap2::{select_one_token, CtapAuthenticator};
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::ui::Cli;
@@ -130,13 +129,14 @@ pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
         .ok()
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("DANGER: make sure you only have one key connected");
     let opt = CliParser::parse();
     tracing_subscriber::fmt::init();
 
     let ui = Cli {};
-    let mut transport = AnyTransport::new().unwrap();
+    let mut transport = AnyTransport::new().await.unwrap();
     let mut tokens = transport.connect_all(&ui).expect("connect_all");
 
     if tokens.is_empty() {
@@ -150,7 +150,7 @@ fn main() {
 
     match opt.commands {
         Opt::Selection => {
-            let token = block_on(select_one_token(tokens.iter_mut()));
+            let token = select_one_token(tokens.iter_mut()).await;
             println!("selected token: {token:?}");
         }
 
@@ -169,7 +169,10 @@ fn main() {
             buf = buf.trim_end().to_ascii_lowercase();
 
             if buf == "yes" {
-                block_on(authenticator.factory_reset()).expect("Error resetting token");
+                authenticator
+                    .factory_reset()
+                    .await
+                    .expect("Error resetting token");
             } else {
                 panic!("Unexpected response {buf:?}, exiting!");
             }
@@ -189,7 +192,10 @@ fn main() {
                 1,
                 "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
             );
-            block_on(tokens[0].toggle_always_uv()).expect("Error toggling UV");
+            tokens[0]
+                .toggle_always_uv()
+                .await
+                .expect("Error toggling UV");
         }
 
         Opt::EnableEnterpriseAttestation => {
@@ -206,14 +212,16 @@ fn main() {
                 1,
                 "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
             );
-            block_on(tokens[0].enable_enterprise_attestation())
+            tokens[0]
+                .enable_enterprise_attestation()
+                .await
                 .expect("Error enabling enterprise attestation");
         }
 
         Opt::BioInfo => {
             for token in &mut tokens {
                 if let Some(b) = token.bio() {
-                    let i = block_on(b.get_fingerprint_sensor_info());
+                    let i = b.get_fingerprint_sensor_info().await;
                     println!("Fingerprint sensor info: {i:?}");
                 } else {
                     println!("Authenticator does not support biometrics")
@@ -231,13 +239,12 @@ fn main() {
                 1,
                 "Expected exactly one authenticator supporting biometrics"
             );
-            let id = block_on(
-                tokens[0]
-                    .bio()
-                    .unwrap()
-                    .enroll_fingerprint(Duration::from_secs(30), o.friendly_name),
-            )
-            .expect("enrolling fingerprint");
+            let id = tokens[0]
+                .bio()
+                .unwrap()
+                .enroll_fingerprint(Duration::from_secs(30), o.friendly_name)
+                .await
+                .expect("enrolling fingerprint");
             println!("Enrolled fingerpint {}", base16_encode(id));
         }
 
@@ -251,7 +258,11 @@ fn main() {
                 1,
                 "Expected exactly one authenticator supporting biometrics"
             );
-            let fingerprints = block_on(tokens[0].bio().unwrap().list_fingerprints())
+            let fingerprints = tokens[0]
+                .bio()
+                .unwrap()
+                .list_fingerprints()
+                .await
                 .expect("listing fingerprints");
 
             println!("{} enrolled fingerprint(s):", fingerprints.len());
@@ -275,13 +286,12 @@ fn main() {
                 "Expected exactly one authenticator supporting biometrics"
             );
 
-            block_on(
-                tokens[0].bio().unwrap().rename_fingerprint(
-                    base16_decode(&o.id).expect("decoding ID"),
-                    o.friendly_name,
-                ),
-            )
-            .expect("renaming fingerprint");
+            tokens[0]
+                .bio()
+                .unwrap()
+                .rename_fingerprint(base16_decode(&o.id).expect("decoding ID"), o.friendly_name)
+                .await
+                .expect("renaming fingerprint");
         }
 
         Opt::RemoveFingerprint(o) => {
@@ -299,7 +309,11 @@ fn main() {
                 o.id.iter()
                     .map(|i| base16_decode(i).expect("decoding ID"))
                     .collect();
-            block_on(tokens[0].bio().unwrap().remove_fingerprints(ids))
+            tokens[0]
+                .bio()
+                .unwrap()
+                .remove_fingerprints(ids)
+                .await
                 .expect("removing fingerprint");
         }
 
@@ -317,22 +331,30 @@ fn main() {
                 1,
                 "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
             );
-            block_on(tokens[0].set_min_pin_length(
-                o.length,
-                o.rpids.unwrap_or_default(),
-                if o.force_change { Some(true) } else { None },
-            ))
-            .expect("error setting policy");
+            tokens[0]
+                .set_min_pin_length(
+                    o.length,
+                    o.rpids.unwrap_or_default(),
+                    if o.force_change { Some(true) } else { None },
+                )
+                .await
+                .expect("error setting policy");
         }
 
         Opt::SetPin(o) => {
             assert_eq!(token_count, 1);
-            block_on(authenticator.set_new_pin(&o.new_pin)).expect("Error setting PIN");
+            authenticator
+                .set_new_pin(&o.new_pin)
+                .await
+                .expect("Error setting PIN");
         }
 
         Opt::ChangePin(o) => {
             assert_eq!(token_count, 1);
-            block_on(authenticator.change_pin(&o.old_pin, &o.new_pin)).expect("Error changing PIN");
+            authenticator
+                .change_pin(&o.old_pin, &o.new_pin)
+                .await
+                .expect("Error changing PIN");
         }
     }
 }

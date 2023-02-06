@@ -3,6 +3,8 @@
 //! See [crate::ctap2] for a higher-level abstraction over this API.
 mod any;
 pub mod iso7816;
+#[cfg(any(doc, feature = "usb"))]
+pub(crate) mod types;
 
 pub use crate::transport::any::{AnyToken, AnyTransport};
 
@@ -89,7 +91,7 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
         U: UiCallback;
 
     /// Cancels a pending request.
-    fn cancel(&self) -> Result<(), WebauthnCError>;
+    async fn cancel(&self) -> Result<(), WebauthnCError>;
 
     /// Initializes the [Token]
     async fn init(&mut self) -> Result<(), WebauthnCError>;

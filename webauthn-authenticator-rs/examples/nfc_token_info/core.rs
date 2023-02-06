@@ -15,7 +15,7 @@ fn access_card<T: Token>(card: T) {
 }
 
 pub(crate) fn event_loop() {
-    let mut reader = AnyTransport::new().unwrap();
+    let mut reader = block_on(AnyTransport::new()).unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.tokens() {

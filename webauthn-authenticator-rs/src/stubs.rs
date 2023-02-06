@@ -58,14 +58,24 @@ pub mod tokio_tungstenite {
     pub struct WebSocketStream<T> {}
 }
 
-#[cfg(not(feature = "bluetooth"))]
+#[cfg(not(feature = "btleplug"))]
 pub mod btleplug {
     pub mod api {
+        pub struct Central {}
+        pub enum CentralEvent {}
+        pub struct Characteristic {}
+        pub struct Manager {}
+        pub struct Peripheral {}
         pub struct ScanFilter {}
+        pub enum WriteType {}
         pub mod bleuuid {
             pub const fn uuid_from_u16(_: u16) -> uuid::Uuid {
                 uuid::Uuid::nil()
             }
         }
+    }
+    pub mod platform {
+        pub struct Manager {}
+        pub struct Peripheral {}
     }
 }

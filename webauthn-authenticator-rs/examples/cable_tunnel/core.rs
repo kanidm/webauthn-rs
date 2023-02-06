@@ -249,7 +249,7 @@ pub(super) async fn main() {
         .unwrap();
     } else {
         // Use a physical authenticator
-        let mut transport = AnyTransport::new().unwrap();
+        let mut transport = AnyTransport::new().await.unwrap();
         let token = transport.tokens().unwrap().pop().unwrap();
         let mut authenticator = CtapAuthenticator::new(token, &ui).await.unwrap();
         let info = authenticator.get_info().to_owned();

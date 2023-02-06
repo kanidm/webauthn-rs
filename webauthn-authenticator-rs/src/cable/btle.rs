@@ -15,13 +15,10 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-#[cfg(feature = "bluetooth")]
 use btleplug::{
-    api::{Central, CentralEvent, Manager as _},
+    api::{bleuuid::uuid_from_u16, Central, CentralEvent, Manager as _, ScanFilter},
     platform::Manager,
 };
-
-use btleplug::api::{bleuuid::uuid_from_u16, ScanFilter};
 
 #[cfg(feature = "cable")]
 use futures::StreamExt;
@@ -84,7 +81,6 @@ pub trait Advertiser {
 
 /// Bluetooth Low Energy service data advertisement scanner.
 pub struct Scanner {
-    #[cfg(feature = "bluetooth")]
     manager: Manager,
 }
 

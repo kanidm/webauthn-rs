@@ -55,7 +55,7 @@ impl From<UvPolicy> for UserVerificationPolicy {
 }
 
 fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
-    let mut reader = AnyTransport::new().unwrap();
+    let mut reader = block_on(AnyTransport::new()).unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.tokens() {
