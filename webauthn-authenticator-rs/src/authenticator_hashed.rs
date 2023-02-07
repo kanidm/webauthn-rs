@@ -205,7 +205,7 @@ pub fn perform_auth_with_request(
 #[cfg(test)]
 #[allow(clippy::panic)]
 mod test {
-    use openssl::{hash::MessageDigest, rand::rand_bytes, sign::Verifier, x509::X509};
+    use boring::{hash::MessageDigest, rand::rand_bytes, sign::Verifier, x509::X509};
     use webauthn_rs_core::proto::COSEKey;
     use webauthn_rs_proto::{AllowCredentials, PubKeyCredParams, RelyingParty, User};
 

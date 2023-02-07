@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use base64urlsafedata::Base64UrlSafeData;
-use openssl::sha;
+use boring::sha;
 use unicode_normalization::UnicodeNormalization;
 use url::Url;
 use webauthn_rs_proto::CollectedClientData;

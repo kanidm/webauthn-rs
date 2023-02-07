@@ -7,7 +7,7 @@
 //! [Noise protocol]: http://noiseprotocol.org/noise.html
 use std::mem::size_of;
 
-use openssl::{
+use boring::{
     ec::{EcKey, EcKeyRef, EcPointRef},
     pkey::{Private, Public},
     symm::{decrypt_aead, encrypt_aead, Cipher},

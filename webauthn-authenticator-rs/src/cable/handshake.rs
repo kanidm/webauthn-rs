@@ -1,4 +1,4 @@
-use openssl::{ec::EcKey, pkey::Public};
+use boring::{ec::EcKey, pkey::Public};
 use serde::Serialize;
 use serde_cbor::Value;
 use std::{

@@ -2,7 +2,7 @@ use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::crypto::get_group;
 use crate::error::WebauthnCError;
 use crate::util::compute_sha256;
-use openssl::{bn, ec, hash, pkey, rand, sign};
+use boring::{bn, ec, hash, pkey, rand, sign};
 use serde_cbor::value::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;

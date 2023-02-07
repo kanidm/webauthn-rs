@@ -1,11 +1,11 @@
 //! Common cryptographic routines for FIDO2.
 
 #[cfg(any(doc, feature = "cable"))]
-use openssl::{
+use boring::{
     bn::BigNumContext,
     ec::{EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
 };
-use openssl::{
+use boring::{
     ec::{EcGroup, EcKey},
     md::Md,
     nid::Nid,

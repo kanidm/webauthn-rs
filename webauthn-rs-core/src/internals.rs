@@ -1293,6 +1293,15 @@ mod tests {
     use crate::interface::*;
     use std::convert::TryFrom;
 
+    use base64::{
+        alphabet,
+        engine::{self, general_purpose},
+        Engine as _,
+    };
+    
+    const URL_SAFE_NO_PAD_ENGINE: engine::GeneralPurpose =
+        engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
+    
     #[test]
     fn deserialise_register_response() {
         let x = r#"
@@ -1310,7 +1319,7 @@ mod tests {
 
     #[test]
     fn deserialise_attestation_object() {
-        let raw_ao = base64::decode(
+        let raw_ao = URL_SAFE_NO_PAD_ENGINE.decode(
             "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg=="
         ).unwrap();
 

@@ -1,14 +1,14 @@
-use openssl::asn1::Asn1Time;
-use openssl::bn::{BigNum, MsbOption};
-use openssl::hash::MessageDigest;
-use openssl::nid::Nid;
-use openssl::pkey::PKey;
-use openssl::rsa::Rsa;
-use openssl::x509::{X509Name, X509};
+use boring::asn1::Asn1Time;
+use boring::bn::{BigNum, MsbOption};
+use boring::hash::MessageDigest;
+use boring::nid::Nid;
+use boring::pkey::PKey;
+use boring::rsa::Rsa;
+use boring::x509::{X509Name, X509};
 
 use rustls::{internal::pemfile, ServerConfig};
 
-use openssl::x509::extension::{
+use boring::x509::extension::{
     AuthorityKeyIdentifier, BasicConstraints, ExtendedKeyUsage, KeyUsage, SubjectAlternativeName,
     SubjectKeyIdentifier,
 };

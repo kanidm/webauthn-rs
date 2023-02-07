@@ -6,7 +6,7 @@
 #![allow(non_camel_case_types)]
 
 use core::convert::TryFrom;
-use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
+use boring::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 use x509_parser::x509::X509Version;
 
 // use super::constants::*;
@@ -619,9 +619,9 @@ impl TryFrom<(COSEAlgorithm, &x509::X509)> for COSEKey {
                 let ec_grpref = ec_key.group();
 
                 let mut ctx =
-                    openssl::bn::BigNumContext::new().map_err(WebauthnError::OpenSSLError)?;
-                let mut xbn = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
-                let mut ybn = openssl::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+                    boring::bn::BigNumContext::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut xbn = boring::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
+                let mut ybn = boring::bn::BigNum::new().map_err(WebauthnError::OpenSSLError)?;
 
                 ec_key
                     .public_key()

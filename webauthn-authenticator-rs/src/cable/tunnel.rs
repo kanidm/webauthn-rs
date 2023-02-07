@@ -7,7 +7,7 @@ use std::fmt::Debug;
 
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
-use openssl::{
+use boring::{
     ec::EcKeyRef,
     pkey::{Private, Public},
 };
