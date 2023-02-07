@@ -15,8 +15,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-use openssl::hash::MessageDigest;
-use openssl::{bn, ec, nid, pkey, x509};
+use boring::hash::MessageDigest;
+use boring::{bn, ec, nid, pkey, x509};
 use uuid::Uuid;
 
 /// Representation of an AAGUID
@@ -140,7 +140,7 @@ pub struct COSEEC2Key {
 }
 
 impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
-    type Error = openssl::error::ErrorStack;
+    type Error = boring::error::ErrorStack;
 
     fn try_from(k: &COSEEC2Key) -> Result<Self, Self::Error> {
         let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
@@ -148,7 +148,7 @@ impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
         let mut point = ec::EcPoint::new(&group)?;
         let x = bn::BigNum::from_slice(k.x.0.as_slice())?;
         let y = bn::BigNum::from_slice(k.y.0.as_slice())?;
-        point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
+        point.affine_coordinates_gfp(&group, &mut x, &mut y, &mut ctx)?;
 
         ec::EcKey::from_public_key(&group, &point)
     }

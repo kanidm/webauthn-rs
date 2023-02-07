@@ -3,7 +3,7 @@
 use crate::stubs::*;
 
 use num_traits::ToPrimitive;
-use openssl::{
+use boring::{
     ec::EcKey,
     hash::MessageDigest,
     pkey::{PKey, Private},

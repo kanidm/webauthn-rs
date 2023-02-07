@@ -104,8 +104,8 @@ impl From<Error> for WebauthnCError {
     }
 }
 
-impl From<openssl::error::ErrorStack> for WebauthnCError {
-    fn from(v: openssl::error::ErrorStack) -> Self {
+impl From<boring::error::ErrorStack> for WebauthnCError {
+    fn from(v: boring::error::ErrorStack) -> Self {
         Self::OpenSSL(v.to_string())
     }
 }

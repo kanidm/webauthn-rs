@@ -6,9 +6,9 @@
 
 // use base64urlsafedata::Base64UrlSafeData;
 use compact_jwt::{Jws, JwsUnverified, JwtError};
-use openssl::stack;
-use openssl::x509;
-use openssl::x509::store;
+use boring::stack;
+use boring::x509;
+use boring::x509::store;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;

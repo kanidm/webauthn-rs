@@ -1,7 +1,7 @@
 //! Possible errors that may occur during Webauthn Operation processing
 
 use base64::DecodeError as b64DecodeError;
-use openssl::error::ErrorStack as OpenSSLErrorStack;
+use boring::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
 // use serde::{Deserialize, Serialize};

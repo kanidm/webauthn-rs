@@ -1,4 +1,4 @@
-use openssl::{error::ErrorStack, md::Md, pkey::Id, pkey_ctx::PkeyCtx, version::version};
+use boring::{error::ErrorStack, md::Md, pkey::Id, pkey_ctx::PkeyCtx, version::version};
 
 /// Performs HKDF-SHA-256; copy of version from `./src/crypto.rs`.
 fn hkdf_sha_256<const N: usize>(salt: &[u8], ikm: &[u8]) -> Result<[u8; N], ErrorStack> {

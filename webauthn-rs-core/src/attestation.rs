@@ -13,12 +13,12 @@ use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
-use openssl::hash::MessageDigest;
-use openssl::sha::sha256;
-use openssl::stack;
-use openssl::x509;
-use openssl::x509::store;
-use openssl::x509::verify;
+use boring::hash::MessageDigest;
+use boring::sha::sha256;
+use boring::stack;
+use boring::x509;
+use boring::x509::store;
+use boring::x509::verify;
 use uuid::Uuid;
 use x509_parser::oid_registry::Oid;
 
@@ -1126,7 +1126,7 @@ pub(crate) fn verify_android_safetynet_attestation(
         Base64(#[from] base64::DecodeError),
 
         #[error("openssl")]
-        OpenSSL(#[from] openssl::error::ErrorStack),
+        OpenSSL(#[from] boring::error::ErrorStack),
 
         #[error("nonce mismatch")]
         NonceMismatch,
@@ -1170,7 +1170,7 @@ pub(crate) fn verify_android_safetynet_attestation(
             let common_name = {
                 let name = leaf_cert
                     .subject_name()
-                    .entries_by_nid(openssl::nid::Nid::COMMONNAME)
+                    .entries_by_nid(boring::nid::Nid::COMMONNAME)
                     .next()
                     .ok_or(SafetyNetError::InvalidHostname)?;
                 name.data().as_utf8()?.to_string()

@@ -3,7 +3,7 @@ use crate::{
     error::WebauthnCError,
     util::compute_sha256,
 };
-use openssl::{
+use boring::{
     bn,
     ec::{EcKey, EcKeyRef},
     hash,
@@ -396,7 +396,7 @@ fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, WebauthnCE
 #[cfg(test)]
 mod tests {
     use base64urlsafedata::Base64UrlSafeData;
-    use openssl::ec;
+    use boring::ec;
 
     use super::*;
 

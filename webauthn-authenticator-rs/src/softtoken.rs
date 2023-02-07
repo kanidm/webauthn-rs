@@ -5,11 +5,11 @@ use crate::{
     error::WebauthnCError,
     util::compute_sha256,
 };
-use openssl::x509::{
+use boring::x509::{
     extension::{AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier},
     X509NameBuilder, X509Ref, X509ReqBuilder, X509,
 };
-use openssl::{asn1, bn, ec, hash, pkey, rand, sign};
+use boring::{asn1, bn, ec, hash, pkey, rand, sign};
 use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value;
 use std::collections::HashMap;

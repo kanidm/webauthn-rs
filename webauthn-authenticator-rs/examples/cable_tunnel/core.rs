@@ -7,7 +7,7 @@ use bluetooth_hci::{
     BdAddr, BdAddrType,
 };
 use clap::{ArgGroup, Parser};
-use openssl::rand::rand_bytes;
+use boring::rand::rand_bytes;
 use serialport::FlowControl;
 use serialport_hci::{
     vendor::none::{Event, Vendor},

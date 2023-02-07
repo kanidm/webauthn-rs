@@ -25,7 +25,7 @@ use async_trait::async_trait;
 use crate::stubs::*;
 
 use hidapi::{HidApi, HidDevice};
-use openssl::rand::rand_bytes;
+use boring::rand::rand_bytes;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Mutex;
