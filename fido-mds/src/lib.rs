@@ -39,6 +39,7 @@ use crate::mds::{
 
 use crate::query::{AttrValueAssertion, CompareOp, Query};
 
+use base64::{engine::general_purpose::STANDARD, Engine};
 use compact_jwt::JwtError;
 use std::cmp::Ordering;
 use std::fmt;
@@ -979,7 +980,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                     invalid_metadata = true;
                     None
                 } else {
-                    match base64::decode_config(trim_cert, base64::STANDARD) {
+                    match STANDARD.decode(trim_cert) {
                         Ok(der) => Some(der),
                         Err(e) => {
                             warn!(

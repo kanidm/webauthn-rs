@@ -14,6 +14,7 @@
 #![deny(clippy::needless_pass_by_value)]
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
+use base64::{engine::general_purpose::{GeneralPurpose, STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD}, Engine};
 use serde::de::{Error, SeqAccess, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::borrow::Borrow;
@@ -21,11 +22,11 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::hash::Hash;
 
-static ALLOWED_DECODING_FORMATS: &[base64::Config] = &[
-    base64::URL_SAFE_NO_PAD,
-    base64::URL_SAFE,
-    base64::STANDARD,
-    base64::STANDARD_NO_PAD,
+static ALLOWED_DECODING_FORMATS: &[GeneralPurpose] = &[
+    URL_SAFE_NO_PAD,
+    URL_SAFE,
+    STANDARD,
+    STANDARD_NO_PAD,
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
@@ -38,7 +39,7 @@ impl fmt::Display for Base64UrlSafeData {
         write!(
             f,
             "{}",
-            base64::encode_config(self, base64::URL_SAFE_NO_PAD)
+            URL_SAFE_NO_PAD.encode(self)
         )
     }
 }
@@ -74,7 +75,7 @@ impl TryFrom<&str> for Base64UrlSafeData {
 
     fn try_from(v: &str) -> Result<Self, Self::Error> {
         for config in ALLOWED_DECODING_FORMATS {
-            if let Ok(data) = base64::decode_config(v, *config) {
+            if let Ok(data) = config.decode(v) {
                 return Ok(Base64UrlSafeData(data));
             }
         }
@@ -97,7 +98,7 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
     {
         // Forgive alt base64 decoding formats
         for config in ALLOWED_DECODING_FORMATS {
-            if let Ok(data) = base64::decode_config(v, *config) {
+            if let Ok(data) = config.decode(v) {
                 return Ok(Base64UrlSafeData(data));
             }
         }
@@ -137,7 +138,7 @@ impl Serialize for Base64UrlSafeData {
     where
         S: Serializer,
     {
-        let encoded = base64::encode_config(self, base64::URL_SAFE_NO_PAD);
+        let encoded = URL_SAFE_NO_PAD.encode(self);
         serializer.serialize_str(&encoded)
     }
 }

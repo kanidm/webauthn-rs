@@ -13,7 +13,7 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.13"
+base64 = "0.21"
 compact_jwt = "^0.2.3"
 peg = "0.8.1"
 openssl = { version = "0.10" }
