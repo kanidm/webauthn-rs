@@ -1290,8 +1290,8 @@ mod tests {
         RegisterPublicKeyCredential, Registration, RegistrationSignedExtensions, TpmsAttest,
         TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
-    use base64::{engine::general_purpose::STANDARD, Engine};
     use crate::interface::*;
+    use base64::{engine::general_purpose::STANDARD, Engine};
     use std::convert::TryFrom;
 
     #[test]

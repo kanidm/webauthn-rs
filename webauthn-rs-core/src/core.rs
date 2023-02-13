@@ -1397,8 +1397,11 @@ mod tests {
             None,
         );
 
-        let chal =
-            Challenge::new(STANDARD.decode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc=").unwrap());
+        let chal = Challenge::new(
+            STANDARD
+                .decode("+Ri5NZTzJ8b6mvW3TVScLotEoALfgBa2Bn4YSaIObHc=")
+                .unwrap(),
+        );
 
         let rsp = r#"
         {
@@ -1439,8 +1442,11 @@ mod tests {
             None,
         );
 
-        let chal =
-            Challenge::new(STANDARD.decode("lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=").unwrap());
+        let chal = Challenge::new(
+            STANDARD
+                .decode("lP6mWNAtG+/Vv15iM7lb/XRkdWMvVQ+lTyKwZuOg1Vo=")
+                .unwrap(),
+        );
 
         // Example generated using navigator.credentials.create on Chrome Version 77.0.3865.120
         // using Touch ID on MacBook running MacOS 10.15
@@ -1864,8 +1870,11 @@ mod tests {
             None,
         );
 
-        let chal =
-            Challenge::new(STANDARD.decode("tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=").unwrap());
+        let chal = Challenge::new(
+            STANDARD
+                .decode("tvR1m+d/ohXrwVxQjMgH8KnovHZ7BRWhZmDN4TVMpNU=")
+                .unwrap(),
+        );
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),
