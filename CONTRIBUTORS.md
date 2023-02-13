@@ -8,3 +8,4 @@
 * Eric Mark Martin (ericmarkmartin)
 * Ben Wishovich (benwis)
 * Niklas Pfister (myOmikron)
+* Cynthia Coan (Mythra): cynthia@coan.dev
