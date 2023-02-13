@@ -1291,6 +1291,7 @@ mod tests {
         TpmtPublic, TpmtSignature, TPM_GENERATED_VALUE,
     };
     use crate::interface::*;
+    use base64::{engine::general_purpose::STANDARD, Engine};
     use std::convert::TryFrom;
 
     #[test]
@@ -1310,7 +1311,7 @@ mod tests {
 
     #[test]
     fn deserialise_attestation_object() {
-        let raw_ao = base64::decode(
+        let raw_ao = STANDARD.decode(
             "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg=="
         ).unwrap();
 
