@@ -431,7 +431,15 @@ impl Webauthn {
         let reject_passkeys = false;
 
         let extensions = Some(RequestRegistrationExtensions {
-            cred_protect: None,
+            cred_protect: Some(CredProtect {
+                // Since this may contain PII, we want to enforce this. We also
+                // want the device to strictly enforce it's UV state.
+                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                // If set to true, causes many authenticators to shit the bed. We have to just hope
+                // and pray instead. This is because many device classes when they see this extension
+                // and can't satisfy it, they fail the operation instead.
+                enforce_credential_protection_policy: Some(false),
+            }),
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: None,
@@ -655,7 +663,27 @@ impl Webauthn {
         } else {
             AttestationConveyancePreference::None
         };
-        let extensions = None;
+
+        let cred_protect = if self.user_presence_only_security_keys {
+            Some(CredProtect {
+                    // We want the device to strictly enforce it's UV state.
+                    credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                    // If set to true, causes many authenticators to shit the bed. Since this type doesn't
+                    // have the same strict rules about attestation, then we just use this opportunistically.
+                    enforce_credential_protection_policy: Some(false),
+                })
+        } else {
+            None
+        };
+
+        let extensions = Some(RequestRegistrationExtensions {
+            cred_protect,
+            uvm: Some(true),
+            cred_props: Some(true),
+            min_pin_length: None,
+            hmac_create_secret: None,
+        });
+
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
         let policy = if self.user_presence_only_security_keys {
@@ -906,7 +934,14 @@ impl Webauthn {
         let reject_passkeys = true;
 
         let extensions = Some(RequestRegistrationExtensions {
-            cred_protect: None,
+            cred_protect: Some(CredProtect {
+                // Since this may contain PII, we need to enforce this. We also
+                // want the device to strictly enforce it's UV state.
+                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                // Set to true since this function requires attestation, and attestation is really
+                // only viable on FIDO2/CTAP2 creds that actually support this.
+                enforce_credential_protection_policy: Some(true),
+            }),
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: Some(true),
@@ -1097,10 +1132,9 @@ impl Webauthn {
             cred_protect: Some(CredProtect {
                 // Since this will contain PII, we need to enforce this.
                 credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
-                // If set to true, causes many authenticators to shit the bed. As a result,
-                // during the registration, we check if the aaguid is credProtect viable and
-                // then enforce it there.
-                enforce_credential_protection_policy: Some(false),
+                // Set to true since this function requires attestation, and attestation is really
+                // only viable on FIDO2/CTAP2 creds that actually support this.
+                enforce_credential_protection_policy: Some(true),
             }),
             // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
             uvm: Some(true),
