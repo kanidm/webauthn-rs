@@ -183,6 +183,8 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
         Ok(sk) => {
             let mut users_guard = request.state().users.lock().await;
 
+            debug!(?sk, "The following credential was registered");
+
             users_guard
                 .keys
                 .entry(user_unique_id)
@@ -309,6 +311,7 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
             let mut users_guard = request.state().users.lock().await;
 
             // Update the credential counter, if possible.
+            debug!(?auth_result, "The following auth_result was returned");
 
             users_guard
                 .keys
