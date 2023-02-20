@@ -665,6 +665,8 @@ impl Webauthn {
         };
 
         let cred_protect = if self.user_presence_only_security_keys {
+            None
+        } else {
             Some(CredProtect {
                     // We want the device to strictly enforce it's UV state.
                     credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
@@ -672,8 +674,6 @@ impl Webauthn {
                     // have the same strict rules about attestation, then we just use this opportunistically.
                     enforce_credential_protection_policy: Some(false),
                 })
-        } else {
-            None
         };
 
         let extensions = Some(RequestRegistrationExtensions {
