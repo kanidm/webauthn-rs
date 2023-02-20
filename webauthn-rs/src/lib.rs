@@ -668,12 +668,12 @@ impl Webauthn {
             None
         } else {
             Some(CredProtect {
-                    // We want the device to strictly enforce it's UV state.
-                    credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
-                    // If set to true, causes many authenticators to shit the bed. Since this type doesn't
-                    // have the same strict rules about attestation, then we just use this opportunistically.
-                    enforce_credential_protection_policy: Some(false),
-                })
+                // We want the device to strictly enforce it's UV state.
+                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                // If set to true, causes many authenticators to shit the bed. Since this type doesn't
+                // have the same strict rules about attestation, then we just use this opportunistically.
+                enforce_credential_protection_policy: Some(false),
+            })
         };
 
         let extensions = Some(RequestRegistrationExtensions {
