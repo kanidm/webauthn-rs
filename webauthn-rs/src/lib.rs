@@ -427,7 +427,7 @@ impl Webauthn {
         let credential_algorithms = self.algorithms.clone();
         let require_resident_key = false;
         let authenticator_attachment = None;
-        let policy = Some(UserVerificationPolicy::Preferred);
+        let policy = Some(UserVerificationPolicy::Required);
         let reject_passkeys = false;
 
         let extensions = Some(RequestRegistrationExtensions {
@@ -502,7 +502,7 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, PasskeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-        let policy = UserVerificationPolicy::Preferred;
+        let policy = UserVerificationPolicy::Required;
         let allow_backup_eligible_upgrade = true;
 
         self.core
