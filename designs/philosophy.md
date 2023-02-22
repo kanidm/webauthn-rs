@@ -59,7 +59,7 @@ WebAuthn addresses this issue by describing [the user entity][user]
   byte sequence of up to 64 bytes, which is the *only* attribute to be used by
   an application when making authentication or authorisation decisions.
 
-* `displayName` (`DOMString`), a human-palatable name for the account, where
+* `displayName` (`DOMString`) is a human-palatable name for the account, where
   authenticators display at least 64 bytes.
 
 * `name`[^name] (`DOMString`) is a human-palatable identifier for the account,
