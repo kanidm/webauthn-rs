@@ -176,7 +176,7 @@ impl User {
 
     pub fn register_credential(&self) -> Result<T, E> {
         webauthn.start_passkey_registration(
-            self.id.to_owned(),
+            &self.id,
             &self.username,
             &self.display_name,
             /* ... */
