@@ -193,6 +193,3 @@ While there *are* ways to bypass this (such as converting other types into a
 [uuid-type]: https://docs.rs/uuid/latest/uuid/
 [user]: https://w3c.github.io/webauthn/#dictionary-user-credential-params
 [name-attr]: https://w3c.github.io/webauthn/#dom-publickeycredentialentity-name
-
-## Example: avoid shipping platform specific code
-
