@@ -318,7 +318,11 @@ impl AuthenticatorBackend for Win10 {
                 .to_string()
                 .map_err(|_| WebauthnCError::Internal)?;
 
-            let mut extensions = native_to_assertion_extensions(&a.Extensions)?;
+            let mut extensions = if a.dwVersion >= 2 {
+                native_to_assertion_extensions(&a.Extensions)?
+            } else {
+                Default::default()
+            };
             extensions.appid = Some(app_id_used.into());
 
             Ok(PublicKeyCredential {
