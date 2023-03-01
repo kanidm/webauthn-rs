@@ -192,10 +192,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
 
         Ok(match session {
             AuthSession::InterfaceToken(iface, pin_token) => {
-                let mut pin_uv_auth_param =
+                let pin_uv_auth_param =
                     iface.authenticate(pin_token.as_slice(), client_data_hash)?;
-                pin_uv_auth_param.truncate(16);
-
                 AuthToken::ProtocolToken(iface.get_pin_uv_protocol(), pin_uv_auth_param)
             }
 

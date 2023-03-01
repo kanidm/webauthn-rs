@@ -568,6 +568,84 @@ mod tests {
             t.change_pin_cmd("1234", new_padded_pin, &shared_secret)
                 .unwrap()
         );
+
+        let message = [0xff; 64];
+        let signed_message = t.authenticate(&shared_secret, &message).unwrap();
+        let expected_signature = vec![
+            0xb3, 0x01, 0x68, 0x96, 0x07, 0x4e, 0x5a, 0x89, 0x54, 0xe8, 0xe3, 0x05, 0x69, 0xd2,
+            0x34, 0x21,
+        ];
+        assert_eq!(16, expected_signature.len());
+        assert_eq!(expected_signature, signed_message);
+    }
+
+    #[test]
+    fn shared_secret_pin_protocol_two() {
+        let expected_secret = vec![
+            0x65, 0xef, 0x95, 0x5d, 0xd8, 0xcf, 0xca, 0xca, 0xb4, 0x89, 0xad, 0x58, 0x2d, 0x64,
+            0xb8, 0x72, 0x29, 0x9c, 0xec, 0x19, 0x70, 0xae, 0xff, 0xb1, 0x0c, 0x90, 0xb9, 0xd9,
+            0xf4, 0xb4, 0xf1, 0xa7, 0x46, 0xcc, 0x03, 0x96, 0x48, 0x25, 0xcc, 0xba, 0xf1, 0x59,
+            0xfd, 0xe1, 0x95, 0x8b, 0x20, 0x63, 0x87, 0x1b, 0xd5, 0xb6, 0x6e, 0xcf, 0x28, 0x97,
+            0x2e, 0xaa, 0xc5, 0x83, 0x21, 0x4a, 0x22, 0xd8,
+        ];
+        let dev_public_key = COSEKey {
+            type_: COSEAlgorithm::PinUvProtocol,
+            key: COSEKeyType::EC_EC2(COSEEC2Key {
+                curve: ECDSACurve::SECP256R1,
+                x: Base64UrlSafeData::from(vec![
+                    0x5, 0x1, 0xd5, 0xbc, 0x78, 0xda, 0x92, 0x52, 0x56, 0xa, 0x26, 0xcb, 0x8, 0xfc,
+                    0xc6, 0xc, 0xbe, 0xb, 0x6d, 0x3b, 0x8e, 0x1d, 0x1f, 0xce, 0xe5, 0x14, 0xfa,
+                    0xc0, 0xaf, 0x67, 0x51, 0x68,
+                ]),
+                y: Base64UrlSafeData::from(vec![
+                    0xd5, 0x51, 0xb3, 0xed, 0x46, 0xf6, 0x65, 0x73, 0x1f, 0x95, 0xb4, 0x53, 0x29,
+                    0x39, 0xc2, 0x5d, 0x91, 0xdb, 0x7e, 0xb8, 0x44, 0xbd, 0x96, 0xd4, 0xab, 0xd4,
+                    0x8, 0x37, 0x85, 0xf8, 0xdf, 0x47,
+                ]),
+            }),
+        };
+
+        let mut ctx = bn::BigNumContext::new().unwrap();
+        let group = get_group().unwrap();
+        let x = bn::BigNum::from_hex_str(
+            "44D78D7989B97E62EA993496C9EF6E8FD58B8B00715F9A89153DDD9C4657E47F",
+        )
+        .unwrap();
+        let y = bn::BigNum::from_hex_str(
+            "EC802EE7D22BD4E100F12E48537EB4E7E96ED3A47A0A3BD5F5EEAB65001664F9",
+        )
+        .unwrap();
+        let mut ec_pub = ec::EcPoint::new(&group).unwrap();
+        ec_pub
+            .set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)
+            .unwrap();
+        let ec_priv = bn::BigNum::from_hex_str(
+            "7452E599FEE739D8A653F6A507343D12D382249108A651402520B72F24FE7684",
+        )
+        .unwrap();
+        let ec_priv = ec::EcKey::from_private_components(&group, &ec_priv, &ec_pub).unwrap();
+
+        let t =
+            PinUvPlatformInterface::__new_with_private_key::<PinUvPlatformInterfaceProtocolTwo>(
+                ec_priv,
+            )
+            .unwrap();
+
+        let shared_secret = t.encapsulate(dev_public_key).unwrap();
+        assert_eq!(expected_secret, shared_secret);
+
+        // PIN Protocol 2's encrypt() has a dynamic IV, so we can't test PIN functions with it with known values.
+
+        let message = [0xff; 64];
+        let signed_message = t.authenticate(&shared_secret, &message).unwrap();
+        let expected_signature = vec![
+            0x5f, 0xa8, 0x1a, 0xf3, 0x3e, 0x37, 0x2c, 0x49, 0xa0, 0x54, 0xa0, 0x6b, 0xdb, 0x18,
+            0xe9, 0x25, 0xc9, 0xef, 0x08, 0x41, 0x27, 0x17, 0x67, 0xb3, 0x48, 0x44, 0xd1, 0x27,
+            0x0b, 0x40, 0xb3, 0x9c,
+        ];
+        // Signature is SHA256, so we should get an appropriate length value back
+        assert_eq!(256 / 8, expected_signature.len());
+        assert_eq!(expected_signature, signed_message);
     }
 
     #[test]
