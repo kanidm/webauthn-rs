@@ -1,10 +1,9 @@
-use futures::executor::block_on;
 use webauthn_authenticator_rs::{ctap2::CtapAuthenticator, transport::*, ui::Cli};
 
-fn access_card<T: Token>(card: T) {
+async fn access_card<T: Token>(card: T) {
     info!("Card detected ...");
 
-    let auth = block_on(CtapAuthenticator::new(card, &Cli {}));
+    let auth = CtapAuthenticator::new(card, &Cli {}).await;
 
     match auth {
         Some(x) => {
@@ -14,14 +13,14 @@ fn access_card<T: Token>(card: T) {
     }
 }
 
-pub(crate) fn event_loop() {
-    let mut reader = block_on(AnyTransport::new()).unwrap();
+pub(crate) async fn event_loop() {
+    let mut reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.tokens() {
         Ok(mut tokens) => {
             while let Some(card) = tokens.pop() {
-                access_card(card);
+                access_card(card).await;
             }
         }
         Err(e) => panic!("Error: {e:?}"),

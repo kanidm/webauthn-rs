@@ -6,7 +6,6 @@ use std::io::{stdin, stdout, Write};
 
 use clap::clap_derive::ValueEnum;
 use clap::{Args, Parser, Subcommand};
-use futures::executor::block_on;
 #[cfg(feature = "cable")]
 use tokio_tungstenite::tungstenite::http::uri::Builder;
 #[cfg(feature = "cable-override-tunnel")]
@@ -54,14 +53,14 @@ impl From<UvPolicy> for UserVerificationPolicy {
     }
 }
 
-fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
-    let mut reader = block_on(AnyTransport::new()).unwrap();
+async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
+    let mut reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.tokens() {
         Ok(mut tokens) => {
             while let Some(card) = tokens.pop() {
-                let auth = block_on(CtapAuthenticator::new(card, ui));
+                let auth = CtapAuthenticator::new(card, ui).await;
 
                 if let Some(auth) = auth {
                     return auth;
@@ -160,7 +159,7 @@ impl Provider {
                     Box::new(SoftToken::new().unwrap().0)
                 }
             }
-            Provider::Ctap => Box::new(select_transport(ui)),
+            Provider::Ctap => Box::new(select_transport(ui).await),
             #[cfg(feature = "cable")]
             Provider::Cable(o) => Box::new(
                 if let Some(connect_uri) = o.get_cable_tunnel_uri() {

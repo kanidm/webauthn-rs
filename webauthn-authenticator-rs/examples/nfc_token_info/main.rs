@@ -3,7 +3,8 @@ extern crate tracing;
 
 mod core;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     tracing_subscriber::fmt::init();
-    core::event_loop();
+    core::event_loop().await;
 }
