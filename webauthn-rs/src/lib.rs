@@ -1225,3 +1225,16 @@ impl Webauthn {
         self.core.authenticate_credential(reg, &state.ast)
     }
 }
+
+#[test]
+/// Test building a webauthn object from a chrome extension origin
+fn test_webauthnbuilder_chrome_url() {
+    use crate::prelude::*;
+    let rp_id = "2114c9f524d0cbd74dbe846a51c3e5b34b83ac02c5220ec5cdff751096fa25a5";
+    let rp_origin = Url::parse(&format!("chrome-extension://{rp_id}")).expect("Invalid URL");
+    println!("{rp_origin:?}");
+    let builder = WebauthnBuilder::new(rp_id, &rp_origin).expect("Invalid configuration");
+    println!("rp_id: {:?}", builder.rp_id);
+    let built = builder.build().expect("Failed to build");
+    println!("rp_name: {}", built.core.rp_name);
+}

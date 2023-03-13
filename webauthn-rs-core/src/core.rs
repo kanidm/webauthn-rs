@@ -50,6 +50,10 @@ use base64urlsafedata::Base64UrlSafeData;
 /// as much as possible.
 #[derive(Debug)]
 pub struct WebauthnCore {
+    /// The RP name
+    #[cfg(debug_assertions)]
+    pub rp_name: String,
+    #[cfg(not(debug_assertions))]
     rp_name: String,
     rp_id: String,
     rp_id_hash: [u8; 32],
@@ -1710,7 +1714,7 @@ mod tests {
             "rawId":"at-FfKGsOI21EhtCu7Vx-7t7FKkpUOyKXIkEBBD_vC-eym_AdW6Y9V8WyKxHmii11EBQEe7uFQ0bkYwb0GWmUQ",
             "extensions": {
                 "appid": true
-            }, 
+            },
             "response":{
                 "authenticatorData":"SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MBAAAAFA",
                 "clientDataJSON":"eyJjaGFsbGVuZ2UiOiJXZ1h6X2tUdjNXVVUxa3c4aG0tT0dvR1M0WkNIWF8zYkVxSEgyUHZWcDhNIiwiY2xpZW50RXh0ZW5zaW9ucyI6e30sImhhc2hBbGdvcml0aG0iOiJTSEEtMjU2Iiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmdldCJ9",
@@ -3564,7 +3568,7 @@ mod tests {
                 {
                 "type": "public-key",
                 "alg": -7
-                }              
+                }
             ],
             "authenticatorSelection": {
                 "authenticatorAttachment": "platform",
