@@ -50,10 +50,6 @@ use base64urlsafedata::Base64UrlSafeData;
 /// as much as possible.
 #[derive(Debug)]
 pub struct WebauthnCore {
-    /// The RP name
-    #[cfg(debug_assertions)]
-    pub rp_name: String,
-    #[cfg(not(debug_assertions))]
     rp_name: String,
     rp_id: String,
     rp_id_hash: [u8; 32],
@@ -1160,6 +1156,11 @@ impl WebauthnCore {
         } else {
             true
         }
+    }
+
+    /// Returns the RP name
+    pub fn rp_name(&self) -> &str {
+        self.rp_name.as_str()
     }
 }
 
