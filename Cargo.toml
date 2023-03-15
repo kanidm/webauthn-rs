@@ -10,6 +10,10 @@ members = [
     "webauthn-rs",
     # Authenticator interactions
     "webauthn-authenticator-rs",
+    # caBLE tunnel server
+    "cable-tunnel-server/backend",
+    "cable-tunnel-server/common",
+    "cable-tunnel-server/frontend",
     # Authenticator CLI,
     "authenticator-cli",
     # Tutorial / Example sites.
