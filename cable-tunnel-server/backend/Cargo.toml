@@ -8,19 +8,15 @@ license = "MPL-2.0"
 
 [dependencies]
 cable-tunnel-server-common = { path = "../common" }
+
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
-tide = "0.16"
-tide-websockets = "^0.4.0"
-async-std = { version = "1.6", features = ["attributes"] }
 
-
+hyper = { version = "0.14", default-features = false, features = ["http1", "server", "tcp"] }
 tungstenite = { version = "^0.18.0", default-features = false }
-# tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
-# tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
+tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
+tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
 futures = "0.3.25"
 futures-channel = "0.3"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-openssl = "0.10.41"
 hex = { version = "0.4.3" }
-
