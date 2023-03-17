@@ -1,18 +1,15 @@
-use std::{
-    convert::Infallible,
-    env,
-    net::SocketAddr,
-};
+use std::{convert::Infallible, env, net::SocketAddr};
 
 use hyper::{
     header::HeaderValue,
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
     upgrade::Upgraded,
-    Body, Request, Response, Server,
+    Body, Request, Response, Server, StatusCode,
 };
 
 use cable_tunnel_server_common::*;
+use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 #[macro_use]
 extern crate tracing;
@@ -26,10 +23,10 @@ async fn handle_request(
 ) -> Result<Response<Body>, Infallible> {
     info!("Received a new, potentially ws handshake");
     info!("The request's path is: {}", req.uri().path());
-    info!("The request's headers are:");
-    for (ref header, _value) in req.headers() {
-        info!("* {}", header);
-    }
+    // info!("The request's headers are:");
+    // for (ref header, _value) in req.headers() {
+    //     info!("* {}", header);
+    // }
 
     let mut path = match Router::route(&req) {
         Router::Static(res) => return Ok(res),
@@ -60,14 +57,72 @@ async fn handle_request(
     };
 
     // TODO: connect to the backend task
+    let target_stream = TcpStream::connect(backend).await.unwrap();
+    let (mut sender, conn) = hyper::client::conn::handshake(target_stream).await.unwrap();
+
+    // Await  disconnection
+    // tokio::task::spawn(async move {
+    //     if let Err(err) = conn.await {
+    //         println!("Connection failed: {:?}", err);
+    //     }
+    // });
 
     // TODO: pass the entire request to the selected backend
+    let mut req_copy = Request::builder().method(req.method());
+    req_copy.headers_mut().unwrap().extend(req.headers().to_owned());
+    let req_copy = req_copy.body(Body::empty()).unwrap();
+
+    let mut res = sender.send_request(req_copy).await.unwrap();
+    if res.status() != StatusCode::SWITCHING_PROTOCOLS {
+        error!("backend didn't upgrade!");
+        return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
+    }
 
     // TODO: set up the "upgrade" handler to connect the two sockets together
+    tokio::task::spawn(async move {
+        // On the client
+        // match hyper::upgrade::on(&mut res).await {
+        //     Ok(upgraded) => {
+        //         todo!()
+        //     }
+        //     Err(e) => error!("upgrade error: {}", e),
+        // }
+
+        // TODO: pass the TcpStream
+        let mut parts = conn.without_shutdown().await.unwrap();
+        let (mut ro, mut wo) = parts.io.split();
+
+        // On the server
+        let upgraded = match hyper::upgrade::on(&mut req).await {
+            Ok(u) => u,
+            Err(e) => {
+                error!("upgrade error: {}", e);
+                return;
+            }
+        };
+
+        let mut upgraded = upgraded.downcast::<TcpStream>().unwrap();
+        let (mut ri, mut wi) = upgraded.io.split();
+
+        let client_to_server = async {
+            tokio::io::copy(&mut ri, &mut wo).await?;
+            wo.shutdown().await
+        };
+
+        let server_to_client = async {
+            tokio::io::copy(&mut ro, &mut wi).await?;
+            wi.shutdown().await
+        };
+
+        tokio::try_join!(client_to_server, server_to_client).map_err(|e| {
+            error!("socket broke? {e:?}");
+            ()
+        }).ok();
+    });
 
     // TODO: pass back the backend's response
+    Ok(res)
 
-    todo!()
     // tokio::task::spawn(async move {
     //     match hyper::upgrade::on(&mut req).await {
     //         Ok(upgraded) => {
@@ -84,7 +139,6 @@ async fn handle_request(
     // });
 
     // Ok(res)
-    
 }
 
 #[tokio::main]

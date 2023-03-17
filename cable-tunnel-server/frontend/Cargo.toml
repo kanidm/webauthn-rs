@@ -10,7 +10,7 @@ cable-tunnel-server-common = { path = "../common" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
 
-hyper = { version = "0.14", default-features = false, features = ["http1", "server", "tcp"] }
+hyper = { version = "0.14", default-features = false, features = ["http1", "client", "server", "tcp"] }
 tungstenite = { version = "^0.18.0", default-features = false }
 tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
 tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
