@@ -2,8 +2,9 @@
 name = "cable-tunnel-server-common"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MPL-2.0"
 
 [dependencies]
 hex = { version = "0.4.3" }
+hyper = { version = "0.14", default-features = false, features = ["http1", "server", "tcp"] }
+tungstenite = { version = "^0.18.0", default-features = false }
