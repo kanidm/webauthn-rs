@@ -55,9 +55,6 @@ const BACKEND: &str = "127.0.0.1:8081";
 
 const FAVICON: &[u8] = include_bytes!("favicon.ico");
 
-// #[derive(Default, Clone)]
-// struct AppState {}
-
 struct Tunnel {
     authenticator_rx: Rx,
     initiator_tx: Tx,
@@ -70,10 +67,6 @@ async fn handle_connection(
     path: CablePath,
 ) {
     info!("WebSocket connection established: {}", addr);
-
-    // Insert the write part of this peer to the peer map.
-    // let (tx, rx) = unbounded();
-
     let (tx, rx) = match path {
         CablePath::New(tunnel_id) => {
             let mut lock = peer_map.lock().unwrap();
@@ -124,31 +117,12 @@ async fn handle_connection(
 
     let receiver = rx.map(Ok).forward(outgoing);
 
-    // let broadcast_incoming = incoming.try_for_each(|msg| {
-    //     info!("Received a message from {}: {}", addr, msg.to_text().unwrap());
-    //     let peers = peer_map.lock().unwrap();
-
-    //     // We want to broadcast the message to everyone except ourselves.
-    //     let broadcast_recipients =
-    //         peers.iter().filter(|(peer_addr, _)| peer_addr != &&addr).map(|(_, ws_sink)| ws_sink);
-
-    //     for recp in broadcast_recipients {
-    //         recp.unbounded_send(msg.clone()).unwrap();
-    //     }
-
-    //     future::ok(())
-    // });
-
-    // let receive_from_others = rx.map(Ok).forward(outgoing);
-
     pin_mut!(forwarder, receiver);
     future::select(forwarder, receiver).await;
 
-    // pin_mut!(broadcast_incoming, receive_from_others);
-    // future::select(broadcast_incoming, receive_from_others).await;
-
     info!("{} disconnected", &addr);
-    // peer_map.lock().unwrap().remove(&addr);
+
+    // TODO: Clean up stale peer_map entry
 }
 
 async fn handle_request(
