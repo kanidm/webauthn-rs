@@ -1,9 +1,9 @@
-use std::mem::size_of;
+use std::{fmt::Display, mem::size_of};
 
 use hyper::{
     header::{CONTENT_TYPE, SEC_WEBSOCKET_PROTOCOL},
     http::HeaderValue,
-    Body, Method, Request, Response,
+    Body, Method, Request, Response, StatusCode,
 };
 use tungstenite::handshake::server::create_response_with_body;
 
@@ -24,9 +24,51 @@ const FAVICON: &[u8] = include_bytes!("favicon.ico");
 const INDEX: &str = include_str!("index.html");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CablePath {
-    New(RoutingId, TunnelId),
-    Connect(RoutingId, TunnelId),
+pub struct CablePath {
+    pub method: CableMethod,
+    pub routing_id: RoutingId,
+    pub tunnel_id: TunnelId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CableMethod {
+    New,
+    Connect,
+}
+
+impl CablePath {
+    pub fn new(tunnel_id: TunnelId) -> Self {
+        Self {
+            method: CableMethod::New,
+            routing_id: [0; size_of::<RoutingId>()],
+            tunnel_id,
+        }
+    }
+
+    pub fn connect(routing_id: RoutingId, tunnel_id: TunnelId) -> Self {
+        Self {
+            method: CableMethod::Connect,
+            routing_id,
+            tunnel_id,
+        }
+    }
+}
+
+impl Display for CablePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.method {
+            CableMethod::New => {
+                write!(f, "{}{}", CABLE_NEW_PATH, hex::encode_upper(self.tunnel_id))
+            }
+            CableMethod::Connect => write!(
+                f,
+                "{}{}/{}",
+                CABLE_CONNECT_PATH,
+                hex::encode_upper(self.routing_id),
+                hex::encode_upper(self.tunnel_id)
+            ),
+        }
+    }
 }
 
 impl TryFrom<&str> for CablePath {
@@ -37,7 +79,7 @@ impl TryFrom<&str> for CablePath {
         } else if let Some(path) = path.strip_prefix(CABLE_NEW_PATH) {
             let mut tunnel_id: TunnelId = [0; size_of::<TunnelId>()];
             if hex::decode_to_slice(path, &mut tunnel_id).is_ok() {
-                return Ok(Self::New([0; size_of::<RoutingId>()], tunnel_id));
+                return Ok(Self::new(tunnel_id));
             }
         } else if let Some(path) = path.strip_prefix(CABLE_CONNECT_PATH) {
             let mut routing_id: RoutingId = [0; size_of::<RoutingId>()];
@@ -65,7 +107,7 @@ impl TryFrom<&str> for CablePath {
                 return Err(());
             }
 
-            return Ok(Self::Connect(routing_id, tunnel_id));
+            return Ok(Self::connect(routing_id, tunnel_id));
         }
         return Err(());
     }
@@ -85,33 +127,32 @@ impl Router {
     pub fn route(req: &Request<Body>) -> Self {
         if req.method() != Method::GET {
             let response = Response::builder()
-                .status(405)
+                .status(StatusCode::METHOD_NOT_ALLOWED)
                 .header("Allow", "GET")
                 .body(Body::empty())
                 .unwrap();
             return Self::Static(response);
         }
 
-        if req.uri().path().eq("/") {
-            return Self::Static(Response::new(Body::from(INDEX)));
-        }
+        let mut path = match req.uri().path() {
+            "/" => return Self::Static(Response::new(Body::from(INDEX))),
+            "/favicon.ico" => {
+                let mut response = Response::new(Body::from(FAVICON));
+                response.headers_mut().insert(
+                    CONTENT_TYPE,
+                    HeaderValue::from_static("image/vnd.microsoft.icon"),
+                );
 
-        if req.uri().path().eq_ignore_ascii_case("/favicon.ico") {
-            let mut response = Response::new(Body::from(FAVICON));
-            response.headers_mut().insert(
-                CONTENT_TYPE,
-                HeaderValue::from_static("image/vnd.microsoft.icon"),
-            );
-
-            return Self::Static(response);
-        }
-
-        // Find the path
-        let mut path = match CablePath::try_from(req.uri().path()) {
-            Err(()) => {
-                return Self::Static(Response::builder().status(404).body(Body::empty()).unwrap());
+                return Self::Static(response);
             }
-            Ok(p) => p,
+            path => match CablePath::try_from(path) {
+                Err(()) => {
+                    return Self::Static(
+                        Response::builder().status(404).body(Body::empty()).unwrap(),
+                    );
+                }
+                Ok(p) => p,
+            },
         };
 
         let mut res = match create_response_with_body(&req, || Body::empty()) {
@@ -119,7 +160,7 @@ impl Router {
             Err(_) => {
                 return Self::Static(
                     Response::builder()
-                        .status(400)
+                        .status(StatusCode::BAD_REQUEST)
                         .body(Body::from("Bad request for websocket"))
                         .unwrap(),
                 );
@@ -137,23 +178,30 @@ impl Router {
         {
             return Self::Static(
                 Response::builder()
-                    .status(400)
+                    .status(StatusCode::BAD_REQUEST)
                     .body(Body::from("Unsupported websocket protocol"))
                     .unwrap(),
             );
         }
 
-        if let CablePath::New(mut r, _) = &mut path {
+        if path.method == CableMethod::New {
             // The "new" URL has no routing_id. Check to see if the routing ID
             // header was set (by the load balancer), and if it is valid,
-            // insert it.
+            // put it in the CablePath.
             if let Some(routing_id) = req
                 .headers()
                 .get(CABLE_ROUTING_ID_HEADER)
                 .and_then(|v| v.to_str().ok())
             {
-                hex::decode_to_slice(routing_id, &mut r).ok();
+                hex::decode_to_slice(routing_id, &mut path.routing_id).ok();
             }
+
+            // Add the routing ID (even a null one, if the previous step failed)
+            // as a response header.
+            res.headers_mut().append(
+                CABLE_ROUTING_ID_HEADER,
+                HeaderValue::from_str(&hex::encode_upper(&path.routing_id)).unwrap(),
+            );
         }
 
         // We have the correct protocol, include in the response
@@ -165,31 +213,74 @@ impl Router {
     }
 }
 
+pub fn copy_request_empty_body(r: &Request<Body>) -> Request<Body> {
+    let mut o = Request::builder().method(r.method()).uri(r.uri());
+    {
+        let headers = o.headers_mut().unwrap();
+        headers.extend(r.headers().to_owned());
+    }
+
+    o.body(Body::empty()).unwrap()
+}
+
+pub fn copy_response_empty_body(r: &Response<Body>) -> Response<Body> {
+    let mut o = Response::builder().status(r.status());
+    {
+        let headers = o.headers_mut().unwrap();
+        headers.extend(r.headers().to_owned());
+    }
+
+    o.body(Body::empty()).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn parse_urls() {
-        const NULL_ROUTING_ID: RoutingId = [0, 0, 0];
-        // Upper-case valid paths
+        // Parse valid paths in upper case
         assert_eq!(
-            CablePath::New(NULL_ROUTING_ID, *b"hello, webauthn!"),
+            CablePath::new(*b"hello, webauthn!"),
             CablePath::try_from("/cable/new/68656C6C6F2C20776562617574686E21").unwrap()
         );
         assert_eq!(
-            CablePath::Connect(*b"abc", *b"hello, webauthn!"),
+            CablePath::connect(*b"abc", *b"hello, webauthn!"),
             CablePath::try_from("/cable/connect/616263/68656C6C6F2C20776562617574686E21").unwrap()
         );
 
-        // Lower-case valid paths
+        // Converting to string should always return upper-case paths
         assert_eq!(
-            CablePath::New(NULL_ROUTING_ID, *b"hello, webauthn!"),
+            "/cable/new/68656C6C6F2C20776562617574686E21",
+            CablePath::new(*b"hello, webauthn!").to_string(),
+        );
+        assert_eq!(
+            "/cable/connect/616263/68656C6C6F2C20776562617574686E21",
+            CablePath::connect(*b"abc", *b"hello, webauthn!").to_string(),
+        );
+
+        // Parse valid paths in lower case
+        assert_eq!(
+            CablePath::new(*b"hello, webauthn!"),
             CablePath::try_from("/cable/new/68656c6c6f2c20776562617574686e21").unwrap()
         );
         assert_eq!(
-            CablePath::Connect(*b"abc", *b"hello, webauthn!"),
+            CablePath::connect(*b"abc", *b"hello, webauthn!"),
             CablePath::try_from("/cable/connect/616263/68656c6c6f2c20776562617574686e21").unwrap()
+        );
+
+        // Parsing lower-case paths should return strings in upper case.
+        assert_eq!(
+            "/cable/new/68656C6C6F2C20776562617574686E21",
+            CablePath::try_from("/cable/new/68656c6c6f2c20776562617574686e21")
+                .unwrap()
+                .to_string()
+        );
+        assert_eq!(
+            "/cable/connect/616263/68656C6C6F2C20776562617574686E21",
+            CablePath::try_from("/cable/connect/616263/68656c6c6f2c20776562617574686e21")
+                .unwrap()
+                .to_string()
         );
 
         // Invalid paths
