@@ -7,18 +7,20 @@ use hyper::{
 };
 use tungstenite::handshake::server::create_response_with_body;
 
+#[macro_use]
+extern crate tracing;
+
 pub type RoutingId = [u8; 3];
 pub type TunnelId = [u8; 16];
 
 pub const CABLE_PROTOCOL: &str = "fido.cable";
-pub const CABLE_PROTOCOLS: [&str; 1] = [CABLE_PROTOCOL];
 pub const CABLE_ROUTING_ID_HEADER: &str = "X-caBLE-Routing-ID";
 
 pub const CABLE_NEW_PATH: &str = "/cable/new/";
 pub const CABLE_CONNECT_PATH: &str = "/cable/connect/";
 
 pub const MAX_URL_LENGTH: usize =
-    CABLE_CONNECT_PATH.len() + ((size_of::<RoutingId>() + size_of::<TunnelId>()) * 2) + 1;
+    CABLE_CONNECT_PATH.len() + ((size_of::<RoutingId>() + size_of::<TunnelId>()) * 2) + 2;
 
 const FAVICON: &[u8] = include_bytes!("favicon.ico");
 const INDEX: &str = include_str!("index.html");
@@ -75,12 +77,14 @@ impl TryFrom<&str> for CablePath {
     type Error = ();
     fn try_from(path: &str) -> Result<Self, Self::Error> {
         if path.len() > MAX_URL_LENGTH {
+            error!("path too long: {} > {MAX_URL_LENGTH} bytes", path.len());
             return Err(());
         } else if let Some(path) = path.strip_prefix(CABLE_NEW_PATH) {
             let mut tunnel_id: TunnelId = [0; size_of::<TunnelId>()];
             if hex::decode_to_slice(path, &mut tunnel_id).is_ok() {
                 return Ok(Self::new(tunnel_id));
             }
+            error!("invalid new path: {path}");
         } else if let Some(path) = path.strip_prefix(CABLE_CONNECT_PATH) {
             let mut routing_id: RoutingId = [0; size_of::<RoutingId>()];
             let mut tunnel_id: TunnelId = [0; size_of::<TunnelId>()];
@@ -92,6 +96,7 @@ impl TryFrom<&str> for CablePath {
                 .and_then(|c| hex::decode_to_slice(c, &mut routing_id).ok())
                 .is_none()
             {
+                error!("invalid routing_id in connect path: {path}");
                 return Err(());
             }
 
@@ -100,14 +105,18 @@ impl TryFrom<&str> for CablePath {
                 .and_then(|c| hex::decode_to_slice(c, &mut tunnel_id).ok())
                 .is_none()
             {
+                error!("invalid tunnel_id in connect path: {path}");
                 return Err(());
             }
 
             if splitter.next().is_some() {
+                error!("unexpected extra token in connect path: {path}");
                 return Err(());
             }
 
             return Ok(Self::connect(routing_id, tunnel_id));
+        } else {
+            error!("unknown path: {path}")
         }
         return Err(());
     }
@@ -126,6 +135,7 @@ impl Router {
     /// Routes an incoming HTTP request.
     pub fn route(req: &Request<Body>) -> Self {
         if req.method() != Method::GET {
+            error!("method {} not allowed", req.method());
             let response = Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .header("Allow", "GET")
@@ -148,7 +158,10 @@ impl Router {
             path => match CablePath::try_from(path) {
                 Err(()) => {
                     return Self::Static(
-                        Response::builder().status(404).body(Body::empty()).unwrap(),
+                        Response::builder()
+                            .status(StatusCode::NOT_FOUND)
+                            .body(Body::empty())
+                            .unwrap(),
                     );
                 }
                 Ok(p) => p,
@@ -157,11 +170,12 @@ impl Router {
 
         let mut res = match create_response_with_body(&req, || Body::empty()) {
             Ok(r) => r,
-            Err(_) => {
+            Err(e) => {
+                error!("Bad request for WebSocket: {e}");
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::BAD_REQUEST)
-                        .body(Body::from("Bad request for websocket"))
+                        .body(Body::empty())
                         .unwrap(),
                 );
             }
@@ -176,10 +190,11 @@ impl Router {
             .map(|v| v.eq_ignore_ascii_case(CABLE_PROTOCOL))
             .unwrap_or_default()
         {
+            error!("Unsupported or missing WebSocket protocol");
             return Self::Static(
                 Response::builder()
                     .status(StatusCode::BAD_REQUEST)
-                    .body(Body::from("Unsupported websocket protocol"))
+                    .body(Body::empty())
                     .unwrap(),
             );
         }
@@ -239,6 +254,8 @@ mod tests {
 
     #[test]
     fn parse_urls() {
+        let _ = tracing_subscriber::fmt::try_init();
+
         // Parse valid paths in upper case
         assert_eq!(
             CablePath::new(*b"hello, webauthn!"),
@@ -308,6 +325,10 @@ mod tests {
         );
         assert!(
             CablePath::try_from("/cable/connect/C0FFEE/68656C6C6F2C20776562617574686E21/1234")
+                .is_err()
+        );
+        assert!(
+            CablePath::try_from("/cable/connect/C0FFEE/68656C6C6F2C20776562617574686E21/")
                 .is_err()
         );
 

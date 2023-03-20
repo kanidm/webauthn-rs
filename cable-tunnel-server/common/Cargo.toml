@@ -5,6 +5,9 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
+
 hex = { version = "0.4.3" }
 hyper = { version = "0.14", default-features = false, features = ["http1", "server", "tcp"] }
-tungstenite = { version = "^0.18.0", default-features = false }
+tungstenite = { version = "^0.18.0", default-features = false, features = ["handshake"] }
