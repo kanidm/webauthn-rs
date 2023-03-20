@@ -54,13 +54,13 @@ async fn handle_request(
 
         CableMethod::Connect => {
             // TODO lookup routing ID
-            if path.routing_id != ROUTING_ID {
-                error!("{addr}: unknown routing ID");
-                return Ok(Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Body::empty())
-                    .unwrap());
-            }
+            // if path.routing_id != ROUTING_ID {
+            //     error!("{addr}: unknown routing ID");
+            //     return Ok(Response::builder()
+            //         .status(StatusCode::NOT_FOUND)
+            //         .body(Body::empty())
+            //         .unwrap());
+            // }
 
             BACKEND
         }

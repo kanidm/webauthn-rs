@@ -33,7 +33,7 @@ type Tx = UnboundedSender<Message>;
 type PeerMap = Arc<Mutex<HashMap<TunnelId, Tunnel>>>;
 
 /// Maximum amount of time a tunnel may be open for.
-const TUNNEL_TTL: Duration = Duration::from_secs(10);
+const TUNNEL_TTL: Duration = Duration::from_secs(120);
 
 /// Maximum amount of messages that may be sent to a channel.
 const MAX_MESSAGE_COUNT: u8 = 16;
