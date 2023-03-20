@@ -1,13 +1,9 @@
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    env,
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc, time::Duration, num::ParseIntError};
 
+use clap::Parser;
+use hex::{FromHex, FromHexError};
 use hyper::{
+    http::HeaderValue,
     server::conn::AddrStream,
     service::{make_service_fn, service_fn},
     upgrade::Upgraded,
@@ -17,6 +13,7 @@ use hyper::{
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
+use tokio::sync::RwLock;
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{
     error::CapacityError,
@@ -30,20 +27,61 @@ extern crate tracing;
 
 type Rx = UnboundedReceiver<Message>;
 type Tx = UnboundedSender<Message>;
-type PeerMap = Arc<Mutex<HashMap<TunnelId, Tunnel>>>;
+type PeerMap = Arc<RwLock<HashMap<TunnelId, Tunnel>>>;
 
-/// Maximum amount of time a tunnel may be open for.
-const TUNNEL_TTL: Duration = Duration::from_secs(120);
+#[derive(Debug, clap::Parser)]
+#[clap(about = "caBLE tunnel server backend")]
+pub struct Flags {
+    /// Bind address and port for the server.
+    #[clap(long, default_value = "127.0.0.1:8081", value_name = "ADDR")]
+    bind_address: String,
 
-/// Maximum amount of messages that may be sent to a channel.
-const MAX_MESSAGE_COUNT: u8 = 16;
+    /// If set, the routing ID to report on new tunnel requests. This is a 3
+    /// byte, base-16 encoded value (eg: `123456`).
+    /// 
+    /// When this flag is not set, this uses the `X-caBLE-Routing-ID` header
+    /// sent by the client (load balancer). Otherwise, the routing ID `000000`
+    /// is used.
+    /// 
+    /// Note: the routing ID provided in connect requests is never checked
+    /// against this value.
+    #[clap(long, value_parser = parse_hex::<RoutingId>, value_name = "ID")]
+    routing_id: Option<RoutingId>,
 
-/// Maximum message length.
-const MAX_MESSAGE_LENGTH: usize = 65_535;
+    /// If set, the required Origin for requests sent to the WebSocket server.
+    /// 
+    /// When not set, the tunnel server allows requests from any Origin.
+    #[clap(long)]
+    origin: Option<String>,
+
+    /// Maximum amount of time a tunnel may be open for, in seconds.
+    #[clap(long, default_value = "120", value_parser = parse_duration_secs, value_name = "SECONDS")]
+    tunnel_ttl: Duration,
+
+    /// Maximum number of messages that may be sent to a tunnel by each peer.
+    #[clap(long, default_value = "16", value_name = "MESSAGES")]
+    max_messages: u8,
+
+    /// Maximum message length which may be sent to a tunnel by a peer. If a
+    /// peer sends a longer message, the connection will be closed.
+    #[clap(long, default_value = "65535", value_name = "BYTES")]
+    max_length: usize,
+}
 
 struct Tunnel {
     authenticator_rx: Rx,
     initiator_tx: Tx,
+}
+
+fn parse_hex<T>(i: &str) -> Result<T, FromHexError>
+where
+    T: FromHex<Error = FromHexError>,
+{
+    FromHex::from_hex(i)
+}
+
+fn parse_duration_secs(i: &str) -> Result<Duration, ParseIntError> {
+    u64::from_str_radix(i, 10).map(Duration::from_secs)
 }
 
 impl Tunnel {
@@ -55,7 +93,13 @@ impl Tunnel {
     }
 }
 
-async fn connect_stream(ws_stream: WebSocketStream<Upgraded>, tx: Tx, rx: Rx, addr: SocketAddr) {
+async fn connect_stream(
+    flags: Arc<Flags>,
+    ws_stream: WebSocketStream<Upgraded>,
+    tx: Tx,
+    rx: Rx,
+    addr: SocketAddr,
+) {
     info!("{addr}: WebSocket connected");
     let (outgoing, incoming) = ws_stream.split();
     let mut message_count = 0u8;
@@ -84,13 +128,16 @@ async fn connect_stream(ws_stream: WebSocketStream<Upgraded>, tx: Tx, rx: Rx, ad
             Message::Frame(_) => unreachable!(),
         };
 
-        if msg.len() >= MAX_MESSAGE_LENGTH {
-            error!("{addr}: maximum message length ({MAX_MESSAGE_LENGTH}) exceeded");
+        if msg.len() >= flags.max_length {
+            error!(
+                "{addr}: maximum message length ({}) exceeded",
+                flags.max_length
+            );
             tx.unbounded_send(Message::Close(None)).ok();
             return future::err(
                 CapacityError::MessageTooLong {
                     size: msg.len(),
-                    max_size: MAX_MESSAGE_LENGTH,
+                    max_size: flags.max_length,
                 }
                 .into(),
             );
@@ -99,8 +146,11 @@ async fn connect_stream(ws_stream: WebSocketStream<Upgraded>, tx: Tx, rx: Rx, ad
         // Count the message towards the quota
         message_count += 1;
 
-        if message_count > MAX_MESSAGE_COUNT {
-            error!("{addr}: maximum message count ({MAX_MESSAGE_COUNT}) reached");
+        if message_count > flags.max_messages || message_count == u8::MAX {
+            error!(
+                "{addr}: maximum message count ({}) reached",
+                flags.max_messages
+            );
             tx.unbounded_send(Message::Close(None)).ok();
             return future::err(tungstenite::Error::ConnectionClosed);
         }
@@ -120,20 +170,38 @@ async fn connect_stream(ws_stream: WebSocketStream<Upgraded>, tx: Tx, rx: Rx, ad
 }
 
 async fn handle_request(
+    flags: Arc<Flags>,
     peer_map: PeerMap,
     mut req: Request<Body>,
     addr: SocketAddr,
 ) -> Result<Response<Body>, Infallible> {
     info!("{addr}: {} {}", req.method(), req.uri().path());
 
-    let (res, path) = match Router::route(&req) {
+    let (mut res, mut path) = match Router::route(&req, &flags.origin) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(res, path) => (res, path),
     };
 
     let (tx, rx) = match path.method {
         CableMethod::New => {
-            let mut lock = peer_map.lock().unwrap();
+            if let Some(routing_id) = flags.routing_id {
+                path.routing_id.copy_from_slice(&routing_id);
+            }
+
+            // Add a routing ID as a response header. This is from the request
+            // header, if set by the frontend.
+            res.headers_mut().append(
+                CABLE_ROUTING_ID_HEADER,
+                HeaderValue::from_str(&hex::encode_upper(path.routing_id)).unwrap(),
+            );
+
+            // Create both channels in the authenticator side, as the first one here
+            let (authenticator_tx, authenticator_rx) = unbounded();
+            let (initiator_tx, initiator_rx) = unbounded();
+            let tunnel = Tunnel::new(authenticator_rx, initiator_tx);
+
+            // Put it in our peer_map, if we can...
+            let mut lock = peer_map.write().await;
             if lock.contains_key(&path.tunnel_id) {
                 error!("{addr}: tunnel already exists: {path}");
                 return Ok(Response::builder()
@@ -141,12 +209,6 @@ async fn handle_request(
                     .body(Body::empty())
                     .unwrap());
             }
-
-            // Create both channels in the authenticator side, as the first one here
-            let (authenticator_tx, authenticator_rx) = unbounded();
-            let (initiator_tx, initiator_rx) = unbounded();
-
-            let tunnel = Tunnel::new(authenticator_rx, initiator_tx);
             lock.insert(path.tunnel_id, tunnel);
 
             drop(lock);
@@ -155,8 +217,7 @@ async fn handle_request(
         }
 
         CableMethod::Connect => {
-            let mut lock = peer_map.lock().unwrap();
-            if let Some(c) = lock.remove(&path.tunnel_id) {
+            if let Some(c) = peer_map.write().await.remove(&path.tunnel_id) {
                 (c.initiator_tx, c.authenticator_rx)
             } else {
                 error!("{addr}: no peer available for tunnel: {path}");
@@ -169,12 +230,12 @@ async fn handle_request(
     };
 
     tokio::task::spawn(async move {
-        tokio::time::timeout(TUNNEL_TTL, async move {
+        tokio::time::timeout(flags.tunnel_ttl, async move {
             match hyper::upgrade::on(&mut req).await {
                 Ok(upgraded) => {
                     let ws_stream =
                         WebSocketStream::from_raw_socket(upgraded, Role::Server, None).await;
-                    connect_stream(ws_stream, tx, rx, addr).await;
+                    connect_stream(flags, ws_stream, tx, rx, addr).await;
                 }
                 Err(e) => error!("{addr}: upgrade error: {e}"),
             }
@@ -187,7 +248,7 @@ async fn handle_request(
 
         if path.method == CableMethod::New {
             // Remove any stale entry
-            peer_map.lock().unwrap().remove(&path.tunnel_id);
+            peer_map.write().await.remove(&path.tunnel_id);
         }
     });
 
@@ -197,22 +258,21 @@ async fn handle_request(
 #[tokio::main]
 async fn main() -> Result<(), hyper::Error> {
     tracing_subscriber::fmt::init();
-    let state = PeerMap::new(Mutex::new(HashMap::new()));
-
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8081".to_string())
-        .parse()
-        .unwrap();
+    let flags = Arc::new(Flags::parse());
+    let addr = flags.bind_address.parse().unwrap();
+    let peer_map = Arc::new(RwLock::new(HashMap::new()));
 
     let make_svc = make_service_fn(move |conn: &AddrStream| {
         let remote_addr = conn.remote_addr();
-        let state = state.clone();
-        let service = service_fn(move |req| handle_request(state.clone(), req, remote_addr));
+        let flags = flags.clone();
+        let peer_map = peer_map.clone();
+        let service = service_fn(move |req| {
+            handle_request(flags.clone(), peer_map.clone(), req, remote_addr)
+        });
         async { Ok::<_, Infallible>(service) }
     });
 
-    info!("Starting server on {:?}", addr);
+    info!("Starting server on {addr}");
     let server = Server::bind(&addr).serve(make_svc);
 
     server.await?;

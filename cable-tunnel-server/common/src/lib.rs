@@ -1,9 +1,9 @@
 use std::{fmt::Display, mem::size_of};
 
 use hyper::{
-    header::{CONTENT_TYPE, SEC_WEBSOCKET_PROTOCOL},
+    header::{CONTENT_TYPE, ORIGIN, SEC_WEBSOCKET_PROTOCOL},
     http::HeaderValue,
-    Body, Method, Request, Response, StatusCode,
+    Body, Method, Request, Response, StatusCode, Uri,
 };
 use tungstenite::handshake::server::create_response_with_body;
 
@@ -118,7 +118,7 @@ impl TryFrom<&str> for CablePath {
         } else {
             error!("unknown path: {path}")
         }
-        
+
         Err(())
     }
 }
@@ -134,7 +134,7 @@ pub enum Router {
 
 impl Router {
     /// Routes an incoming HTTP request.
-    pub fn route(req: &Request<Body>) -> Self {
+    pub fn route(req: &Request<Body>, origin: &Option<String>) -> Self {
         if req.method() != Method::GET {
             error!("method {} not allowed", req.method());
             let response = Response::builder()
@@ -200,6 +200,30 @@ impl Router {
             );
         }
 
+        // Check the origin header
+        if let Some(origin) = origin {
+            if !req
+                .headers()
+                .get(ORIGIN)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<Uri>().ok())
+                .map(|v| {
+                    v.host()
+                        .map(|o| o.eq_ignore_ascii_case(origin))
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default()
+            {
+                error!("Incorrect or missing Origin header");
+                return Self::Static(
+                    Response::builder()
+                        .status(StatusCode::FORBIDDEN)
+                        .body(Body::empty())
+                        .unwrap(),
+                );
+            }
+        }
+
         if path.method == CableMethod::New {
             // The "new" URL has no routing_id. Check to see if the routing ID
             // header was set (by the load balancer), and if it is valid,
@@ -211,13 +235,6 @@ impl Router {
             {
                 hex::decode_to_slice(routing_id, &mut path.routing_id).ok();
             }
-
-            // Add the routing ID (even a null one, if the previous step failed)
-            // as a response header.
-            res.headers_mut().append(
-                CABLE_ROUTING_ID_HEADER,
-                HeaderValue::from_str(&hex::encode_upper(path.routing_id)).unwrap(),
-            );
         }
 
         // We have the correct protocol, include in the response
@@ -329,8 +346,7 @@ mod tests {
                 .is_err()
         );
         assert!(
-            CablePath::try_from("/cable/connect/C0FFEE/68656C6C6F2C20776562617574686E21/")
-                .is_err()
+            CablePath::try_from("/cable/connect/C0FFEE/68656C6C6F2C20776562617574686E21/").is_err()
         );
 
         // other nonsense
