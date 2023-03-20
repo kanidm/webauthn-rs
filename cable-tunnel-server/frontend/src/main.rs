@@ -45,7 +45,7 @@ async fn handle_request(
             // selected routing ID.
             headers.insert(
                 CABLE_ROUTING_ID_HEADER,
-                HeaderValue::from_str(&hex::encode_upper(&path.routing_id)).unwrap(),
+                HeaderValue::from_str(&hex::encode_upper(path.routing_id)).unwrap(),
             );
 
             // TODO

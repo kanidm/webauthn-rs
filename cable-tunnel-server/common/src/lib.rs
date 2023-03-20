@@ -118,7 +118,8 @@ impl TryFrom<&str> for CablePath {
         } else {
             error!("unknown path: {path}")
         }
-        return Err(());
+        
+        Err(())
     }
 }
 
@@ -168,7 +169,7 @@ impl Router {
             },
         };
 
-        let mut res = match create_response_with_body(&req, || Body::empty()) {
+        let mut res = match create_response_with_body(req, Body::empty) {
             Ok(r) => r,
             Err(e) => {
                 error!("Bad request for WebSocket: {e}");
@@ -215,7 +216,7 @@ impl Router {
             // as a response header.
             res.headers_mut().append(
                 CABLE_ROUTING_ID_HEADER,
-                HeaderValue::from_str(&hex::encode_upper(&path.routing_id)).unwrap(),
+                HeaderValue::from_str(&hex::encode_upper(path.routing_id)).unwrap(),
             );
         }
 
