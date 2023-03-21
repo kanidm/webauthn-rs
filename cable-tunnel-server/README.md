@@ -2,34 +2,89 @@
 
 **Warning:** This is still a work in progress, and not yet fully implemented.
 
+## Background
+
+To facilitate two-way communication between an initiator (browser) and
+authenticator (mobile phone), caBLE uses a WebSocket tunnel server. There are
+tunnel servers run by Apple (`cable.auth.com`) and Google (`cable.ua5v.com`),
+and a facility to procedurally generate new tunnel server domain names (see
+`get_domain()` in `webauthn-authenticator-rs/src/cable/tunnel.rs`).
+
+As far as the tunnel server is concerned, what happens is:
+
+1. The authenticator and initator choose a 16 byte tunnel ID.
+
+2. The authenticator connects to a tunnel server of its choosing, using HTTPS.
+
+3. The authenticator makes a WebSocket request to `/cable/new/${TUNNEL_ID}`.
+
+4. The tunnel server responds with a WebSocket handshake, and includes a 3 byte
+   routing ID in the HTTP response headers to indicate which task is serving
+   the request.
+
+5. The authenticator transmits the tunnel server ID and routing ID as as an
+   encrypted Bluetooth Low Energy advertisement to the initiator.
+
+6. The initiator decrypts the advertisement, and connects to the tunnel server
+   using HTTPS.
+
+7. The initiator makes a WebSocket request to
+   `/cable/connect/${ROUTING_ID}/${TUNNEL_ID}`.
+
+8. The tunnel server responds with a WebSocket handshake.
+
+9. The tunnel server relays WebSocket messages between the authenticator and
+   initiator.
+
+The initiator starts a Noise channel with the authenticator for further
+communication such that the tunnel server cannot read their communications, and
+then does registration or authentication using the FIDO 2 protocol.
+
+Aside from implementing some basic request filtering, message limits and session
+limits, the tunnel server implementations are very simple. The tunnel server
+itself does not need to concern itself with the minutae of the Noise protocol -
+it only needs to pass binary messages across the tunnel verbatim.
+
 ## Design
 
-caBLE has authenticator-chosen 16 byte tunnel IDs. When the authenticator
-connects, the tunnel server responds with a 3 byte routing ID. When the initator
-connects, it uses the tunnel ID and the routing ID, and this should direct it
-to the same serving task as the authenticator.
-
-The `cable-tunnel-server` consists of three parts:
+`cable-tunnel-server` consists of three parts:
 
 * `backend`: serving binary which passes messages between the authenticator and
-  initator on a known tunnel ID.
+  initiator on a known tunnel ID.
 
 * `frontend`: serving binary which routes requests to a `backend` task based on
-  the routing ID (for the initator), or some other load balancing algorithm (for
-  the authenticator).
+  the routing ID (for `connect` / initiator requests), or some other load
+  balancing algorithm (for `new` / authenticator requests).
 
 * `common`: contains all the web server and caBLE boilerplate which is shared
   between the `backend` and `frontend` binaries.
 
-It should be possible to run the `backend` without a `frontend` – in this case
-the routing ID will be ignored.
+### Backend
 
-The `frontend` should be able to handle having `backend` tasks coming and going,
-and have health checks to avoid routing it to bad `backend` tasks.
+It should be possible to run the `backend` without a `frontend` – in this case
+the routing ID will be ignored, and all tunnels exist inside of a single serving
+task.
+
+### Frontend
+
+**Warning:** The `frontend` is not yet fully implemented, and does not yet do
+everything described here. This would be necessary for a larger scale deployment
+of a caBLE tunnel server.
+
+The `frontend` needs to do some basic request processing (for routing) before
+handing off the connection to a `backend`:
+
+* For connecting to existing tunnels, the `frontend` needs to connect to
+  arbitrary `backend` tasks *in any location*.
+
+* For establishing new tunnels, the `frontend` should prefer to route to "local"
+  `backend` tasks, taking into account backend availability and load balancing.
 
 This will probably need some distributed lock service to allocate the routing
-IDs. It should be possible to route based on the tunnel ID _as well_, but may
-not be necessary.
+IDs.
+
+While it would be possible to route based on the tunnel ID *alone*, this would
+make tunnel create / fetch operations global.
 
 ## Example session
 
@@ -63,4 +118,10 @@ not be necessary.
 2023-03-20T07:54:59.599062Z  INFO cable_tunnel_server_backend: 127.0.0.1:51416: closing connection
 2023-03-20T07:54:59.599358Z  INFO cable_tunnel_server_backend: 127.0.0.1:51416: finishing
 2023-03-20T07:54:59.599995Z  INFO cable_tunnel_server_backend: 127.0.0.1:51420: finishing
+```
+
+Safari:
+
+```
+Request { method: GET, uri: /cable/connect/000000/AF2F010B02F4013B4E0393870AE2D9BC, version: HTTP/1.1, headers: {"host": "cable.my4kstlhndi4c.net", "user-agent": "com.apple.AuthenticationServicesCore.AuthenticationServicesAgent/18614.4.6.1.6 CFNetwork/1404.0.5 Darwin/22.3.0", "sec-websocket-protocol": "fido.cable", "sec-websocket-key": "Zz2jOa5v7DBnA/yFGJc/0A==", "sec-websocket-version": "13", "upgrade": "websocket", "accept": "*/*", "sec-websocket-extensions": "permessage-deflate", "accept-language": "en-AU,en;q=0.9", "accept-encoding": "gzip, deflate", "connection": "Upgrade"}, body: Body(Empty) }
 ```

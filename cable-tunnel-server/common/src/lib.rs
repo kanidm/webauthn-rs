@@ -1,11 +1,13 @@
 use std::{fmt::Display, mem::size_of};
 
+use http_body_util::Full;
 use hyper::{
+    body::Bytes,
     header::{CONTENT_TYPE, ORIGIN, SEC_WEBSOCKET_PROTOCOL},
     http::HeaderValue,
-    Body, Method, Request, Response, StatusCode, Uri,
+    Method, Request, Response, StatusCode, Uri,
 };
-use tungstenite::handshake::server::create_response_with_body;
+use tungstenite::handshake::server::create_response;
 
 #[macro_use]
 extern crate tracing;
@@ -126,29 +128,29 @@ impl TryFrom<&str> for CablePath {
 pub enum Router {
     /// The web server should handle the request as a caBLE WebSocket
     /// connection.
-    Websocket(Response<Body>, CablePath),
+    Websocket(Response<Full<Bytes>>, CablePath),
     /// The web server should return a static response. This may be an error
     /// message.
-    Static(Response<Body>),
+    Static(Response<Full<Bytes>>),
 }
 
 impl Router {
     /// Routes an incoming HTTP request.
-    pub fn route(req: &Request<Body>, origin: &Option<String>) -> Self {
+    pub fn route(req: &Request<()>, origin: &Option<String>) -> Self {
         if req.method() != Method::GET {
             error!("method {} not allowed", req.method());
             let response = Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .header("Allow", "GET")
-                .body(Body::empty())
+                .body(Bytes::new().into())
                 .unwrap();
             return Self::Static(response);
         }
 
         let mut path = match req.uri().path() {
-            "/" => return Self::Static(Response::new(Body::from(INDEX))),
+            "/" => return Self::Static(Response::new(Bytes::from(INDEX).into())),
             "/favicon.ico" => {
-                let mut response = Response::new(Body::from(FAVICON));
+                let mut response = Response::new(Bytes::from(FAVICON).into());
                 response.headers_mut().insert(
                     CONTENT_TYPE,
                     HeaderValue::from_static("image/vnd.microsoft.icon"),
@@ -161,7 +163,7 @@ impl Router {
                     return Self::Static(
                         Response::builder()
                             .status(StatusCode::NOT_FOUND)
-                            .body(Body::empty())
+                            .body(Bytes::new().into())
                             .unwrap(),
                     );
                 }
@@ -169,14 +171,14 @@ impl Router {
             },
         };
 
-        let mut res = match create_response_with_body(req, Body::empty) {
+        let mut res = match create_response(req) {
             Ok(r) => r,
             Err(e) => {
                 error!("Bad request for WebSocket: {e}");
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::BAD_REQUEST)
-                        .body(Body::empty())
+                        .body(Bytes::new().into())
                         .unwrap(),
                 );
             }
@@ -195,7 +197,7 @@ impl Router {
             return Self::Static(
                 Response::builder()
                     .status(StatusCode::BAD_REQUEST)
-                    .body(Body::empty())
+                    .body(Bytes::new().into())
                     .unwrap(),
             );
         }
@@ -218,7 +220,7 @@ impl Router {
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::FORBIDDEN)
-                        .body(Body::empty())
+                        .body(Bytes::new().into())
                         .unwrap(),
                 );
             }
@@ -242,28 +244,30 @@ impl Router {
             SEC_WEBSOCKET_PROTOCOL,
             HeaderValue::from_static(CABLE_PROTOCOL),
         );
+        let res = res.map(|_| Default::default());
+
         Router::Websocket(res, path)
     }
 }
 
-pub fn copy_request_empty_body(r: &Request<Body>) -> Request<Body> {
+pub fn copy_request_empty_body(r: &Request<Bytes>) -> Request<Bytes> {
     let mut o = Request::builder().method(r.method()).uri(r.uri());
     {
         let headers = o.headers_mut().unwrap();
         headers.extend(r.headers().to_owned());
     }
 
-    o.body(Body::empty()).unwrap()
+    o.body(Bytes::new()).unwrap()
 }
 
-pub fn copy_response_empty_body(r: &Response<Body>) -> Response<Body> {
+pub fn copy_response_empty_body(r: &Response<Full<Bytes>>) -> Response<Full<Bytes>> {
     let mut o = Response::builder().status(r.status());
     {
         let headers = o.headers_mut().unwrap();
         headers.extend(r.headers().to_owned());
     }
 
-    o.body(Body::empty()).unwrap()
+    o.body(Bytes::new().into()).unwrap()
 }
 
 #[cfg(test)]

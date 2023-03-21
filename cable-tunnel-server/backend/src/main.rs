@@ -1,19 +1,27 @@
-use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc, time::Duration, num::ParseIntError};
+use std::{
+    collections::HashMap, convert::Infallible, fs::read, net::SocketAddr, num::ParseIntError,
+    path::PathBuf, sync::Arc, time::Duration,
+};
 
 use clap::Parser;
 use hex::{FromHex, FromHexError};
+use http_body_util::Full;
 use hyper::{
+    body::{Bytes, Incoming},
     http::HeaderValue,
-    server::conn::AddrStream,
-    service::{make_service_fn, service_fn},
+    service::service_fn,
     upgrade::Upgraded,
-    Body, Request, Response, Server, StatusCode,
+    Request, Response, StatusCode,
 };
 
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
-use tokio::sync::RwLock;
+use tokio::{net::TcpListener, sync::RwLock};
+use tokio_native_tls::{
+    native_tls::{self, Identity},
+    TlsAcceptor,
+};
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{
     error::CapacityError,
@@ -29,7 +37,7 @@ type Rx = UnboundedReceiver<Message>;
 type Tx = UnboundedSender<Message>;
 type PeerMap = Arc<RwLock<HashMap<TunnelId, Tunnel>>>;
 
-#[derive(Debug, clap::Parser)]
+#[derive(Debug, Parser)]
 #[clap(about = "caBLE tunnel server backend")]
 pub struct Flags {
     /// Bind address and port for the server.
@@ -38,18 +46,18 @@ pub struct Flags {
 
     /// If set, the routing ID to report on new tunnel requests. This is a 3
     /// byte, base-16 encoded value (eg: `123456`).
-    /// 
+    ///
     /// When this flag is not set, this uses the `X-caBLE-Routing-ID` header
     /// sent by the client (load balancer). Otherwise, the routing ID `000000`
     /// is used.
-    /// 
+    ///
     /// Note: the routing ID provided in connect requests is never checked
     /// against this value.
     #[clap(long, value_parser = parse_hex::<RoutingId>, value_name = "ID")]
     routing_id: Option<RoutingId>,
 
     /// If set, the required Origin for requests sent to the WebSocket server.
-    /// 
+    ///
     /// When not set, the tunnel server allows requests from any Origin.
     #[clap(long)]
     origin: Option<String>,
@@ -64,8 +72,14 @@ pub struct Flags {
 
     /// Maximum message length which may be sent to a tunnel by a peer. If a
     /// peer sends a longer message, the connection will be closed.
-    #[clap(long, default_value = "65535", value_name = "BYTES")]
+    #[clap(long, default_value = "16384", value_name = "BYTES")]
     max_length: usize,
+
+    #[clap(long, value_name = "PEM")]
+    tls_public_key: PathBuf,
+
+    #[clap(long, value_name = "PEM")]
+    tls_private_key: PathBuf,
 }
 
 struct Tunnel {
@@ -104,7 +118,7 @@ async fn connect_stream(
     let (outgoing, incoming) = ws_stream.split();
     let mut message_count = 0u8;
 
-    // TODO: add some limits on the size and number of messages
+    // Add some limits on the size and number of messages
     let forwarder = incoming.try_for_each(|msg| {
         let msg = match msg {
             Message::Binary(b) => b,
@@ -172,10 +186,12 @@ async fn connect_stream(
 async fn handle_request(
     flags: Arc<Flags>,
     peer_map: PeerMap,
-    mut req: Request<Body>,
+    req: Request<Incoming>,
     addr: SocketAddr,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<Full<Bytes>>, Infallible> {
     info!("{addr}: {} {}", req.method(), req.uri().path());
+    trace!("Request data: {req:?}");
+    let mut req = req.map(|_| ());
 
     let (mut res, mut path) = match Router::route(&req, &flags.origin) {
         Router::Static(res) => return Ok(res),
@@ -206,7 +222,7 @@ async fn handle_request(
                 error!("{addr}: tunnel already exists: {path}");
                 return Ok(Response::builder()
                     .status(StatusCode::CONFLICT)
-                    .body(Body::empty())
+                    .body(Bytes::new().into())
                     .unwrap());
             }
             lock.insert(path.tunnel_id, tunnel);
@@ -223,7 +239,7 @@ async fn handle_request(
                 error!("{addr}: no peer available for tunnel: {path}");
                 return Ok(Response::builder()
                     .status(StatusCode::NOT_FOUND)
-                    .body(Body::empty())
+                    .body(Bytes::new().into())
                     .unwrap());
             }
         }
@@ -256,26 +272,51 @@ async fn handle_request(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), hyper::Error> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let flags = Arc::new(Flags::parse());
-    let addr = flags.bind_address.parse().unwrap();
+    let addr: SocketAddr = flags.bind_address.parse()?;
     let peer_map = Arc::new(RwLock::new(HashMap::new()));
 
-    let make_svc = make_service_fn(move |conn: &AddrStream| {
-        let remote_addr = conn.remote_addr();
+    let tcp = TcpListener::bind(&addr).await?;
+    let pem = read(&flags.tls_public_key)?;
+    let key = read(&flags.tls_private_key)?;
+    let identity = Identity::from_pkcs8(&pem, &key)?;
+    let tls_acceptor = TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build()?);
+
+    loop {
+        let (stream, remote_addr) = match tcp.accept().await {
+            Ok(o) => o,
+            Err(e) => {
+                error!("tcp.accept: {e}");
+                continue;
+            }
+        };
+        let stream = match tls_acceptor.accept(stream).await {
+            Ok(o) => o,
+            Err(e) => {
+                error!("tls_acceptor.accept: {e}");
+                continue;
+            }
+        };
+
         let flags = flags.clone();
         let peer_map = peer_map.clone();
         let service = service_fn(move |req| {
             handle_request(flags.clone(), peer_map.clone(), req, remote_addr)
         });
-        async { Ok::<_, Infallible>(service) }
-    });
 
-    info!("Starting server on {addr}");
-    let server = Server::bind(&addr).serve(make_svc);
+        tokio::task::spawn(async move {
+            let conn = hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
+            let conn = conn.with_upgrades();
 
-    server.await?;
-
-    Ok::<_, hyper::Error>(())
+            match conn.await {
+                Err(e) => {
+                    error!("Connection error: {e}");
+                    return;
+                }
+                _ => (),
+            }
+        });
+    }
 }
