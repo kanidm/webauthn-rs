@@ -8,8 +8,11 @@ license = "MPL-2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
 
+clap = { version = "^3.2", features = ["derive", "env"] }
 hex = { version = "0.4.3" }
 http-body = "=1.0.0-rc.2"
 http-body-util = "=0.1.0-rc.2"
 hyper = { version = "=1.0.0-rc.3", default-features = false, features = ["http1", "server"] }
+tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
+tokio-native-tls = "^0.3.1"
 tungstenite = { version = "^0.18.0", default-features = false, features = ["handshake"] }

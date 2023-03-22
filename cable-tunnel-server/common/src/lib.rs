@@ -12,6 +12,9 @@ use tungstenite::handshake::server::create_response;
 #[macro_use]
 extern crate tracing;
 
+mod tls;
+pub use tls::*;
+
 pub type RoutingId = [u8; 3];
 pub type TunnelId = [u8; 16];
 
@@ -132,6 +135,8 @@ pub enum Router {
     /// The web server should return a static response. This may be an error
     /// message.
     Static(Response<Full<Bytes>>),
+
+    Debug,
 }
 
 impl Router {
@@ -158,6 +163,7 @@ impl Router {
 
                 return Self::Static(response);
             }
+            "/debug" => return Self::Debug,
             path => match CablePath::try_from(path) {
                 Err(()) => {
                     return Self::Static(

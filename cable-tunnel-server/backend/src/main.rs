@@ -1,6 +1,6 @@
 use std::{
-    collections::HashMap, convert::Infallible, fs::read, net::SocketAddr, num::ParseIntError,
-    path::PathBuf, sync::Arc, time::Duration,
+    collections::HashMap, convert::Infallible, net::SocketAddr, num::ParseIntError, sync::Arc,
+    time::Duration,
 };
 
 use clap::Parser;
@@ -11,18 +11,15 @@ use hyper::{
     http::HeaderValue,
     service::service_fn,
     upgrade::Upgraded,
-    Request, Response, StatusCode,
+    Request, Response, StatusCode, header::CONTENT_TYPE,
 };
 
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
 use tokio::{net::TcpListener, sync::RwLock};
-use tokio_native_tls::{
-    native_tls::{self, Identity},
-    TlsAcceptor,
-};
-use tokio_tungstenite::WebSocketStream;
+
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use tungstenite::{
     error::CapacityError,
     protocol::{Message, Role},
@@ -75,11 +72,9 @@ pub struct Flags {
     #[clap(long, default_value = "16384", value_name = "BYTES")]
     max_length: usize,
 
-    #[clap(long, value_name = "PEM")]
-    tls_public_key: PathBuf,
-
-    #[clap(long, value_name = "PEM")]
-    tls_private_key: PathBuf,
+    /// Serving protocol to use.
+    #[clap(subcommand)]
+    protocol: TransportProtocol,
 }
 
 struct Tunnel {
@@ -196,6 +191,19 @@ async fn handle_request(
     let (mut res, mut path) = match Router::route(&req, &flags.origin) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(res, path) => (res, path),
+        Router::Debug => {
+            let peer_map_read = peer_map.read().await;
+            let debug = format!(
+                "flags.strong_count = {}\npeer_map.strong_count = {}\npeer_map.capacity = {}\npeer_map.len = {}\n",
+                Arc::strong_count(&flags),
+                Arc::strong_count(&peer_map),
+                peer_map_read.capacity(),
+                peer_map_read.len(),
+            );
+            let mut res = Response::new(Bytes::from(debug).into());
+            res.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+            return Ok(res);
+        }
     };
 
     let (tx, rx) = match path.method {
@@ -279,10 +287,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let peer_map = Arc::new(RwLock::new(HashMap::new()));
 
     let tcp = TcpListener::bind(&addr).await?;
-    let pem = read(&flags.tls_public_key)?;
-    let key = read(&flags.tls_private_key)?;
-    let identity = Identity::from_pkcs8(&pem, &key)?;
-    let tls_acceptor = TlsAcceptor::from(native_tls::TlsAcceptor::builder(identity).build()?);
+    let tls_acceptor = flags.protocol.tls_acceptor()?.map(Arc::new);
+    let uri = flags.protocol.uri(&addr)?;
+    info!("Started server at {uri}");
 
     loop {
         let (stream, remote_addr) = match tcp.accept().await {
@@ -292,21 +299,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
         };
-        let stream = match tls_acceptor.accept(stream).await {
-            Ok(o) => o,
-            Err(e) => {
-                error!("tls_acceptor.accept: {e}");
-                continue;
-            }
-        };
 
         let flags = flags.clone();
         let peer_map = peer_map.clone();
         let service = service_fn(move |req| {
             handle_request(flags.clone(), peer_map.clone(), req, remote_addr)
         });
+        let tls_acceptor = tls_acceptor.clone();
 
         tokio::task::spawn(async move {
+            let stream = match tls_acceptor {
+                None => MaybeTlsStream::Plain(stream),
+                Some(tls_acceptor) => match tls_acceptor.accept(stream).await {
+                    Ok(o) => MaybeTlsStream::NativeTls(o),
+                    Err(e) => {
+                        error!("tls_acceptor.accept: {e}");
+                        return;
+                    }
+                },
+            };
+
             let conn = hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
             let conn = conn.with_upgrades();
 
