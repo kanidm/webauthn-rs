@@ -1,12 +1,20 @@
-use std::{fmt::Display, mem::size_of};
+use std::{
+    convert::Infallible, error::Error as StdError, fmt::Display, future::Future, mem::size_of,
+    net::SocketAddr, num::ParseIntError, sync::Arc, time::Duration,
+};
 
-use http_body_util::Full;
+use hex::{FromHex, FromHexError};
+use http_body::Body;
+use http_body_util::{Empty, Full};
 use hyper::{
-    body::Bytes,
+    body::{Bytes, Incoming},
     header::{CONTENT_TYPE, ORIGIN, SEC_WEBSOCKET_PROTOCOL},
     http::HeaderValue,
-    Method, Request, Response, StatusCode, Uri,
+    service::service_fn,
+    HeaderMap, Method, Request, Response, StatusCode, Uri,
 };
+use tokio::net::TcpListener;
+use tokio_tungstenite::MaybeTlsStream;
 use tungstenite::handshake::server::create_response;
 
 #[macro_use]
@@ -29,6 +37,17 @@ pub const MAX_URL_LENGTH: usize =
 
 const FAVICON: &[u8] = include_bytes!("favicon.ico");
 const INDEX: &str = include_str!("index.html");
+
+pub fn parse_hex<T>(i: &str) -> Result<T, FromHexError>
+where
+    T: FromHex<Error = FromHexError>,
+{
+    FromHex::from_hex(i)
+}
+
+pub fn parse_duration_secs(i: &str) -> Result<Duration, ParseIntError> {
+    i.parse::<u64>().map(Duration::from_secs)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CablePath {
@@ -58,6 +77,13 @@ impl CablePath {
             routing_id,
             tunnel_id,
         }
+    }
+
+    pub fn insert_routing_id_header(&self, headers: &mut HeaderMap) {
+        headers.insert(
+            CABLE_ROUTING_ID_HEADER,
+            HeaderValue::from_str(&hex::encode_upper(self.routing_id)).unwrap(),
+        );
     }
 }
 
@@ -147,12 +173,12 @@ impl Router {
             let response = Response::builder()
                 .status(StatusCode::METHOD_NOT_ALLOWED)
                 .header("Allow", "GET")
-                .body(Bytes::new().into())
+                .body(Default::default())
                 .unwrap();
             return Self::Static(response);
         }
 
-        let mut path = match req.uri().path() {
+        let path = match req.uri().path() {
             "/" => return Self::Static(Response::new(Bytes::from(INDEX).into())),
             "/favicon.ico" => {
                 let mut response = Response::new(Bytes::from(FAVICON).into());
@@ -169,7 +195,7 @@ impl Router {
                     return Self::Static(
                         Response::builder()
                             .status(StatusCode::NOT_FOUND)
-                            .body(Bytes::new().into())
+                            .body(Default::default())
                             .unwrap(),
                     );
                 }
@@ -184,7 +210,7 @@ impl Router {
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::BAD_REQUEST)
-                        .body(Bytes::new().into())
+                        .body(Default::default())
                         .unwrap(),
                 );
             }
@@ -203,7 +229,7 @@ impl Router {
             return Self::Static(
                 Response::builder()
                     .status(StatusCode::BAD_REQUEST)
-                    .body(Bytes::new().into())
+                    .body(Default::default())
                     .unwrap(),
             );
         }
@@ -226,22 +252,9 @@ impl Router {
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::FORBIDDEN)
-                        .body(Bytes::new().into())
+                        .body(Default::default())
                         .unwrap(),
                 );
-            }
-        }
-
-        if path.method == CableMethod::New {
-            // The "new" URL has no routing_id. Check to see if the routing ID
-            // header was set (by the load balancer), and if it is valid,
-            // put it in the CablePath.
-            if let Some(routing_id) = req
-                .headers()
-                .get(CABLE_ROUTING_ID_HEADER)
-                .and_then(|v| v.to_str().ok())
-            {
-                hex::decode_to_slice(routing_id, &mut path.routing_id).ok();
             }
         }
 
@@ -256,24 +269,79 @@ impl Router {
     }
 }
 
-pub fn copy_request_empty_body(r: &Request<Bytes>) -> Request<Bytes> {
+pub fn copy_request_empty_body<T>(r: &Request<T>) -> Request<Empty<Bytes>> {
     let mut o = Request::builder().method(r.method()).uri(r.uri());
     {
         let headers = o.headers_mut().unwrap();
         headers.extend(r.headers().to_owned());
     }
 
-    o.body(Bytes::new()).unwrap()
+    o.body(Default::default()).unwrap()
 }
 
-pub fn copy_response_empty_body(r: &Response<Full<Bytes>>) -> Response<Full<Bytes>> {
+pub fn copy_response_empty_body<T>(r: &Response<T>) -> Response<Empty<Bytes>> {
     let mut o = Response::builder().status(r.status());
     {
         let headers = o.headers_mut().unwrap();
         headers.extend(r.headers().to_owned());
     }
 
-    o.body(Bytes::new().into()).unwrap()
+    o.body(Default::default()).unwrap()
+}
+
+pub async fn run_server<F, R, ResBody, T>(
+    bind_address: SocketAddr,
+    protocol: ServerTransportProtocol,
+    server_state: T,
+    mut request_handler: F,
+) -> Result<(), Box<dyn StdError>>
+where
+    F: FnMut(Arc<T>, SocketAddr, Request<Incoming>) -> R + Copy + Send + Sync + 'static,
+    R: Future<Output = Result<Response<ResBody>, Infallible>> + Send,
+    ResBody: Body + Send + 'static,
+    <ResBody as Body>::Error: Into<Box<dyn StdError + Send + Sync>>,
+    <ResBody as Body>::Data: Send,
+    T: Send + Sync + 'static,
+{
+    let server_state = Arc::new(server_state);
+    let tcp = TcpListener::bind(&bind_address).await?;
+    let tls_acceptor = protocol.tls_acceptor()?.map(Arc::new);
+    let uri = protocol.uri(&bind_address)?;
+    info!("Started server at {uri}");
+
+    loop {
+        let (stream, remote_addr) = match tcp.accept().await {
+            Ok(o) => o,
+            Err(e) => {
+                error!("tcp.accept: {e}");
+                continue;
+            }
+        };
+        let server_state = server_state.clone();
+        let service =
+            service_fn(move |req| request_handler(server_state.clone(), remote_addr, req));
+        let tls_acceptor = tls_acceptor.clone();
+
+        tokio::task::spawn(async move {
+            let stream = match tls_acceptor {
+                None => MaybeTlsStream::Plain(stream),
+                Some(tls_acceptor) => match tls_acceptor.accept(stream).await {
+                    Ok(o) => MaybeTlsStream::NativeTls(o),
+                    Err(e) => {
+                        error!("tls_acceptor.accept: {e}");
+                        return;
+                    }
+                },
+            };
+
+            let conn = hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
+            let conn = conn.with_upgrades();
+
+            if let Err(e) = conn.await {
+                error!("Connection error: {e}");
+            }
+        });
+    }
 }
 
 #[cfg(test)]

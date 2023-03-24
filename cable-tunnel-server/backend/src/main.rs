@@ -1,25 +1,25 @@
 use std::{
-    collections::HashMap, convert::Infallible, net::SocketAddr, num::ParseIntError, sync::Arc,
-    time::Duration,
+    collections::HashMap, convert::Infallible, error::Error as StdError, net::SocketAddr,
+    sync::Arc, time::Duration,
 };
 
 use clap::Parser;
-use hex::{FromHex, FromHexError};
+
 use http_body_util::Full;
 use hyper::{
     body::{Bytes, Incoming},
+    header::CONTENT_TYPE,
     http::HeaderValue,
-    service::service_fn,
     upgrade::Upgraded,
-    Request, Response, StatusCode, header::CONTENT_TYPE,
+    Request, Response, StatusCode,
 };
 
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
-use tokio::{net::TcpListener, sync::RwLock};
+use tokio::sync::RwLock;
 
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::WebSocketStream;
 use tungstenite::{
     error::CapacityError,
     protocol::{Message, Role},
@@ -32,7 +32,12 @@ extern crate tracing;
 
 type Rx = UnboundedReceiver<Message>;
 type Tx = UnboundedSender<Message>;
-type PeerMap = Arc<RwLock<HashMap<TunnelId, Tunnel>>>;
+type PeerMap = RwLock<HashMap<TunnelId, Tunnel>>;
+
+struct ServerState {
+    flags: Flags,
+    peer_map: PeerMap,
+}
 
 #[derive(Debug, Parser)]
 #[clap(about = "caBLE tunnel server backend")]
@@ -44,14 +49,10 @@ pub struct Flags {
     /// If set, the routing ID to report on new tunnel requests. This is a 3
     /// byte, base-16 encoded value (eg: `123456`).
     ///
-    /// When this flag is not set, this uses the `X-caBLE-Routing-ID` header
-    /// sent by the client (load balancer). Otherwise, the routing ID `000000`
-    /// is used.
-    ///
     /// Note: the routing ID provided in connect requests is never checked
     /// against this value.
-    #[clap(long, value_parser = parse_hex::<RoutingId>, value_name = "ID")]
-    routing_id: Option<RoutingId>,
+    #[clap(long, default_value = "000000", value_parser = parse_hex::<RoutingId>, value_name = "ID")]
+    routing_id: RoutingId,
 
     /// If set, the required Origin for requests sent to the WebSocket server.
     ///
@@ -74,23 +75,12 @@ pub struct Flags {
 
     /// Serving protocol to use.
     #[clap(subcommand)]
-    protocol: TransportProtocol,
+    protocol: ServerTransportProtocol,
 }
 
 struct Tunnel {
     authenticator_rx: Rx,
     initiator_tx: Tx,
-}
-
-fn parse_hex<T>(i: &str) -> Result<T, FromHexError>
-where
-    T: FromHex<Error = FromHexError>,
-{
-    FromHex::from_hex(i)
-}
-
-fn parse_duration_secs(i: &str) -> Result<Duration, ParseIntError> {
-    u64::from_str_radix(i, 10).map(Duration::from_secs)
 }
 
 impl Tunnel {
@@ -103,7 +93,7 @@ impl Tunnel {
 }
 
 async fn connect_stream(
-    flags: Arc<Flags>,
+    state: Arc<ServerState>,
     ws_stream: WebSocketStream<Upgraded>,
     tx: Tx,
     rx: Rx,
@@ -137,16 +127,16 @@ async fn connect_stream(
             Message::Frame(_) => unreachable!(),
         };
 
-        if msg.len() >= flags.max_length {
+        if msg.len() >= state.flags.max_length {
             error!(
                 "{addr}: maximum message length ({}) exceeded",
-                flags.max_length
+                state.flags.max_length
             );
             tx.unbounded_send(Message::Close(None)).ok();
             return future::err(
                 CapacityError::MessageTooLong {
                     size: msg.len(),
-                    max_size: flags.max_length,
+                    max_size: state.flags.max_length,
                 }
                 .into(),
             );
@@ -155,10 +145,10 @@ async fn connect_stream(
         // Count the message towards the quota
         message_count += 1;
 
-        if message_count > flags.max_messages || message_count == u8::MAX {
+        if message_count > state.flags.max_messages || message_count == u8::MAX {
             error!(
                 "{addr}: maximum message count ({}) reached",
-                flags.max_messages
+                state.flags.max_messages
             );
             tx.unbounded_send(Message::Close(None)).ok();
             return future::err(tungstenite::Error::ConnectionClosed);
@@ -179,45 +169,37 @@ async fn connect_stream(
 }
 
 async fn handle_request(
-    flags: Arc<Flags>,
-    peer_map: PeerMap,
-    req: Request<Incoming>,
+    state: Arc<ServerState>,
     addr: SocketAddr,
+    req: Request<Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     info!("{addr}: {} {}", req.method(), req.uri().path());
     trace!("Request data: {req:?}");
     let mut req = req.map(|_| ());
 
-    let (mut res, mut path) = match Router::route(&req, &flags.origin) {
+    let (mut res, mut path) = match Router::route(&req, &state.flags.origin) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(res, path) => (res, path),
         Router::Debug => {
-            let peer_map_read = peer_map.read().await;
+            let peer_map_read = state.peer_map.read().await;
             let debug = format!(
-                "flags.strong_count = {}\npeer_map.strong_count = {}\npeer_map.capacity = {}\npeer_map.len = {}\n",
-                Arc::strong_count(&flags),
-                Arc::strong_count(&peer_map),
+                "server_state.strong_count = {}\npeer_map.capacity = {}\npeer_map.len = {}\n",
+                Arc::strong_count(&state),
                 peer_map_read.capacity(),
                 peer_map_read.len(),
             );
             let mut res = Response::new(Bytes::from(debug).into());
-            res.headers_mut().insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+            res.headers_mut()
+                .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
             return Ok(res);
         }
     };
 
     let (tx, rx) = match path.method {
         CableMethod::New => {
-            if let Some(routing_id) = flags.routing_id {
-                path.routing_id.copy_from_slice(&routing_id);
-            }
-
-            // Add a routing ID as a response header. This is from the request
-            // header, if set by the frontend.
-            res.headers_mut().append(
-                CABLE_ROUTING_ID_HEADER,
-                HeaderValue::from_str(&hex::encode_upper(path.routing_id)).unwrap(),
-            );
+            // Add the routing ID to the response header.
+            path.routing_id.copy_from_slice(&state.flags.routing_id);
+            path.insert_routing_id_header(res.headers_mut());
 
             // Create both channels in the authenticator side, as the first one here
             let (authenticator_tx, authenticator_rx) = unbounded();
@@ -225,7 +207,7 @@ async fn handle_request(
             let tunnel = Tunnel::new(authenticator_rx, initiator_tx);
 
             // Put it in our peer_map, if we can...
-            let mut lock = peer_map.write().await;
+            let mut lock = state.peer_map.write().await;
             if lock.contains_key(&path.tunnel_id) {
                 error!("{addr}: tunnel already exists: {path}");
                 return Ok(Response::builder()
@@ -241,7 +223,7 @@ async fn handle_request(
         }
 
         CableMethod::Connect => {
-            if let Some(c) = peer_map.write().await.remove(&path.tunnel_id) {
+            if let Some(c) = state.peer_map.write().await.remove(&path.tunnel_id) {
                 (c.initiator_tx, c.authenticator_rx)
             } else {
                 error!("{addr}: no peer available for tunnel: {path}");
@@ -254,12 +236,13 @@ async fn handle_request(
     };
 
     tokio::task::spawn(async move {
-        tokio::time::timeout(flags.tunnel_ttl, async move {
+        let ss = state.clone();
+        tokio::time::timeout(state.flags.tunnel_ttl, async move {
             match hyper::upgrade::on(&mut req).await {
                 Ok(upgraded) => {
                     let ws_stream =
                         WebSocketStream::from_raw_socket(upgraded, Role::Server, None).await;
-                    connect_stream(flags, ws_stream, tx, rx, addr).await;
+                    connect_stream(ss, ws_stream, tx, rx, addr).await;
                 }
                 Err(e) => error!("{addr}: upgrade error: {e}"),
             }
@@ -272,7 +255,7 @@ async fn handle_request(
 
         if path.method == CableMethod::New {
             // Remove any stale entry
-            peer_map.write().await.remove(&path.tunnel_id);
+            state.peer_map.write().await.remove(&path.tunnel_id);
         }
     });
 
@@ -280,55 +263,23 @@ async fn handle_request(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<(), Box<dyn StdError>> {
     tracing_subscriber::fmt::init();
-    let flags = Arc::new(Flags::parse());
-    let addr: SocketAddr = flags.bind_address.parse()?;
-    let peer_map = Arc::new(RwLock::new(HashMap::new()));
+    let peer_map = RwLock::new(HashMap::new());
 
-    let tcp = TcpListener::bind(&addr).await?;
-    let tls_acceptor = flags.protocol.tls_acceptor()?.map(Arc::new);
-    let uri = flags.protocol.uri(&addr)?;
-    info!("Started server at {uri}");
+    let server_state = ServerState {
+        flags: Flags::parse(),
+        peer_map,
+    };
+    let bind_address: SocketAddr = server_state.flags.bind_address.parse()?;
 
-    loop {
-        let (stream, remote_addr) = match tcp.accept().await {
-            Ok(o) => o,
-            Err(e) => {
-                error!("tcp.accept: {e}");
-                continue;
-            }
-        };
+    run_server(
+        bind_address,
+        server_state.flags.protocol.clone(),
+        server_state,
+        handle_request,
+    )
+    .await?;
 
-        let flags = flags.clone();
-        let peer_map = peer_map.clone();
-        let service = service_fn(move |req| {
-            handle_request(flags.clone(), peer_map.clone(), req, remote_addr)
-        });
-        let tls_acceptor = tls_acceptor.clone();
-
-        tokio::task::spawn(async move {
-            let stream = match tls_acceptor {
-                None => MaybeTlsStream::Plain(stream),
-                Some(tls_acceptor) => match tls_acceptor.accept(stream).await {
-                    Ok(o) => MaybeTlsStream::NativeTls(o),
-                    Err(e) => {
-                        error!("tls_acceptor.accept: {e}");
-                        return;
-                    }
-                },
-            };
-
-            let conn = hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
-            let conn = conn.with_upgrades();
-
-            match conn.await {
-                Err(e) => {
-                    error!("Connection error: {e}");
-                    return;
-                }
-                _ => (),
-            }
-        });
-    }
+    Ok(())
 }

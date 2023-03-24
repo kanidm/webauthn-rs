@@ -7,15 +7,13 @@ license = "MPL-2.0"
 [dependencies]
 cable-tunnel-server-common = { path = "../common" }
 
+clap = { version = "^3.2", features = ["derive", "env"] }
+hex = "0.4.3"
+http-body-util = "=0.1.0-rc.2"
+hyper = { version = "=1.0.0-rc.3", default-features = false, features = ["client", "http1", "server"] }
+tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
+tokio-native-tls = "^0.3.1"
+tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
-
-hyper = { version = "0.14", default-features = false, features = ["http1", "client", "server", "tcp"] }
 tungstenite = { version = "^0.18.0", default-features = false }
-tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
-tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
-futures = "0.3.25"
-futures-channel = "0.3"
-futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-openssl = "0.10.41"
-hex = { version = "0.4.3" }
