@@ -38,6 +38,9 @@ pub const MAX_URL_LENGTH: usize =
 const FAVICON: &[u8] = include_bytes!("favicon.ico");
 const INDEX: &str = include_str!("index.html");
 
+/// Parses a Base-16 encoded string.
+///
+/// This function is intended for use as a `clap` `value_parser`.
 pub fn parse_hex<T>(i: &str) -> Result<T, FromHexError>
 where
     T: FromHex<Error = FromHexError>,
@@ -45,20 +48,31 @@ where
     FromHex::from_hex(i)
 }
 
+/// Parses a duration as a number of seconds from a string.
+///
+/// This function is intended for use as a `clap` `value_parser`.
 pub fn parse_duration_secs(i: &str) -> Result<Duration, ParseIntError> {
     i.parse::<u64>().map(Duration::from_secs)
 }
 
+/// Path for caBLE WebSocket tunnel protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CablePath {
+    /// The method for the tunnel.
     pub method: CableMethod,
+    /// The routing ID of the tunnel.
     pub routing_id: RoutingId,
+    /// The tunnel ID of the tunnel.
     pub tunnel_id: TunnelId,
 }
 
+/// Method for caBLE WebSocket tunnel protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CableMethod {
+    /// Request from the authenticator to establish a new tunnel. This needs to
+    /// be allocated a routing ID.
     New,
+    /// Request from the initiator to connect to an existing tunnel.
     Connect,
 }
 
@@ -79,6 +93,7 @@ impl CablePath {
         }
     }
 
+    /// Inserts the caBLE routing ID header into a HTTP response.
     pub fn insert_routing_id_header(&self, headers: &mut HeaderMap) {
         headers.insert(
             CABLE_ROUTING_ID_HEADER,
@@ -154,6 +169,7 @@ impl TryFrom<&str> for CablePath {
     }
 }
 
+/// HTTP router for a caBLE WebSocket tunnel server.
 pub enum Router {
     /// The web server should handle the request as a caBLE WebSocket
     /// connection.
@@ -269,6 +285,7 @@ impl Router {
     }
 }
 
+/// Creates a copy of an existing HTTP request, discarding the body.
 pub fn copy_request_empty_body<T>(r: &Request<T>) -> Request<Empty<Bytes>> {
     let mut o = Request::builder().method(r.method()).uri(r.uri());
     {
@@ -279,6 +296,7 @@ pub fn copy_request_empty_body<T>(r: &Request<T>) -> Request<Empty<Bytes>> {
     o.body(Default::default()).unwrap()
 }
 
+/// Creates a copy of an existing HTTP response, discarding the body.
 pub fn copy_response_empty_body<T>(r: &Response<T>) -> Response<Empty<Bytes>> {
     let mut o = Response::builder().status(r.status());
     {
@@ -289,6 +307,7 @@ pub fn copy_response_empty_body<T>(r: &Response<T>) -> Response<Empty<Bytes>> {
     o.body(Default::default()).unwrap()
 }
 
+/// Runs a HTTP server for the caBLE WebSockets tunnel.
 pub async fn run_server<F, R, ResBody, T>(
     bind_address: SocketAddr,
     protocol: ServerTransportProtocol,

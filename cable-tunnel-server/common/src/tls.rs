@@ -28,6 +28,9 @@ pub struct TlsServerOptions {
 }
 
 impl ServerTransportProtocol {
+    /// Returns a [TlsAcceptor] for this [ServerTransportProtocol]
+    ///
+    /// Returns `None` if insecure HTTP connections should be used.
     pub fn tls_acceptor(&self) -> Result<Option<TlsAcceptor>, Box<dyn StdError>> {
         match &self {
             Self::Http => Ok(None),
@@ -47,6 +50,8 @@ impl ServerTransportProtocol {
         }
     }
 
+    /// Returns a `http` or `https` URI for this [ServerTransportProtocol] for a
+    /// given [SocketAddr].
     pub fn uri(&self, addr: &SocketAddr) -> Result<Uri, hyper::http::Error> {
         Builder::new()
             .scheme(match self {
@@ -77,6 +82,9 @@ pub struct BackendClientOptions {
 }
 
 impl BackendClientOptions {
+    /// Creates a [TlsConnector] for the [BackendClientOptions].
+    ///
+    /// Returns `None` if insecure HTTP connections should be used.
     pub fn tls_connector(&self) -> Result<Option<TlsConnector>, Box<dyn StdError>> {
         if self.insecure_http_backend {
             if self.trusted_ca.is_some() {
