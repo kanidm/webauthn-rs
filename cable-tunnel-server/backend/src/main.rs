@@ -35,8 +35,12 @@ type Tx = UnboundedSender<Message>;
 type PeerMap = RwLock<HashMap<TunnelId, Tunnel>>;
 
 struct ServerState {
-    flags: Flags,
     peer_map: PeerMap,
+    max_messages: u8,
+    max_length: usize,
+    origin: Option<String>,
+    routing_id: RoutingId,
+    tunnel_ttl: Duration,
 }
 
 #[derive(Debug, Parser)]
@@ -76,6 +80,19 @@ pub struct Flags {
     /// Serving protocol to use.
     #[clap(subcommand)]
     protocol: ServerTransportProtocol,
+}
+
+impl From<&Flags> for ServerState {
+    fn from(f: &Flags) -> Self {
+        Self {
+            peer_map: RwLock::new(HashMap::new()),
+            max_messages: f.max_messages,
+            max_length: f.max_length,
+            origin: f.origin.to_owned(),
+            routing_id: f.routing_id,
+            tunnel_ttl: f.tunnel_ttl,
+        }
+    }
 }
 
 struct Tunnel {
@@ -127,16 +144,16 @@ async fn connect_stream(
             Message::Frame(_) => unreachable!(),
         };
 
-        if msg.len() >= state.flags.max_length {
+        if msg.len() >= state.max_length {
             error!(
                 "{addr}: maximum message length ({}) exceeded",
-                state.flags.max_length
+                state.max_length
             );
             tx.unbounded_send(Message::Close(None)).ok();
             return future::err(
                 CapacityError::MessageTooLong {
                     size: msg.len(),
-                    max_size: state.flags.max_length,
+                    max_size: state.max_length,
                 }
                 .into(),
             );
@@ -145,10 +162,10 @@ async fn connect_stream(
         // Count the message towards the quota
         message_count += 1;
 
-        if message_count > state.flags.max_messages || message_count == u8::MAX {
+        if message_count > state.max_messages || message_count == u8::MAX {
             error!(
                 "{addr}: maximum message count ({}) reached",
-                state.flags.max_messages
+                state.max_messages
             );
             tx.unbounded_send(Message::Close(None)).ok();
             return future::err(tungstenite::Error::ConnectionClosed);
@@ -177,7 +194,7 @@ async fn handle_request(
     trace!("Request data: {req:?}");
     let mut req = req.map(|_| ());
 
-    let (mut res, mut path) = match Router::route(&req, &state.flags.origin) {
+    let (mut res, mut path) = match Router::route(&req, &state.origin) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(res, path) => (res, path),
         Router::Debug => {
@@ -198,7 +215,7 @@ async fn handle_request(
     let (tx, rx) = match path.method {
         CableMethod::New => {
             // Add the routing ID to the response header.
-            path.routing_id.copy_from_slice(&state.flags.routing_id);
+            path.routing_id.copy_from_slice(&state.routing_id);
             path.insert_routing_id_header(res.headers_mut());
 
             // Create both channels in the authenticator side, as the first one here
@@ -237,7 +254,7 @@ async fn handle_request(
 
     tokio::task::spawn(async move {
         let ss = state.clone();
-        tokio::time::timeout(state.flags.tunnel_ttl, async move {
+        tokio::time::timeout(state.tunnel_ttl, async move {
             match hyper::upgrade::on(&mut req).await {
                 Ok(upgraded) => {
                     let ws_stream =
@@ -265,21 +282,11 @@ async fn handle_request(
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn StdError>> {
     tracing_subscriber::fmt::init();
-    let peer_map = RwLock::new(HashMap::new());
+    let flags = Flags::parse();
+    let server_state = ServerState::from(&flags);
+    let bind_address: SocketAddr = flags.bind_address.parse().expect("invalid --bind-address");
 
-    let server_state = ServerState {
-        flags: Flags::parse(),
-        peer_map,
-    };
-    let bind_address: SocketAddr = server_state.flags.bind_address.parse()?;
-
-    run_server(
-        bind_address,
-        server_state.flags.protocol.clone(),
-        server_state,
-        handle_request,
-    )
-    .await?;
+    run_server(bind_address, flags.protocol, server_state, handle_request).await?;
 
     Ok(())
 }

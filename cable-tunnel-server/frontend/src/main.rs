@@ -56,6 +56,17 @@ pub struct Flags {
     protocol: ServerTransportProtocol,
 }
 
+impl From<&Flags> for ServerState {
+    fn from(f: &Flags) -> Self {
+        Self {
+            origin: f.origin.to_owned(),
+            tls_domain: f.backend_options.domain.to_owned(),
+            backend_connector: f.backend_options.tls_connector().expect("Cannot setup TLS connector"),
+            backends: RwLock::new(HashMap::new()),
+        }
+    }
+}
+
 async fn handle_request(
     state: Arc<ServerState>,
     addr: SocketAddr,
@@ -265,26 +276,21 @@ async fn handle_request(
 async fn main() -> Result<(), Box<dyn StdError>> {
     tracing_subscriber::fmt::init();
     let flags = Flags::parse();
-
-    let server_state = ServerState {
-        backend_connector: flags.backend_options.tls_connector()?,
-        backends: RwLock::new(HashMap::new()),
-        origin: flags.origin,
-        tls_domain: flags.backend_options.domain,
-    };
+    let server_state = ServerState::from(&flags);
+    let bind_address: SocketAddr = flags.bind_address.parse().expect("invalid --bind-address");
 
     // TODO: implement properly
+    let backend_address: SocketAddr = flags.backend_address.parse().expect("invalid --backend-address");
+    assert_ne!(bind_address, backend_address, "--bind-address cannot not be the same as --backend--address");
     server_state
         .backends
         .write()
         .await
-        .insert(ROUTING_ID, flags.backend_address.parse()?);
-
-    let bind_address: SocketAddr = flags.bind_address.parse()?;
+        .insert(ROUTING_ID, backend_address);
 
     run_server(
         bind_address,
-        flags.protocol.clone(),
+        flags.protocol,
         server_state,
         handle_request,
     )
