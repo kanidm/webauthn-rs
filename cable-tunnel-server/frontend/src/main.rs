@@ -7,6 +7,8 @@ use clap::Parser;
 use http_body_util::Full;
 use hyper::{
     body::{Bytes, Incoming},
+    header::CONTENT_TYPE,
+    http::HeaderValue,
     Request, Response, StatusCode,
 };
 
@@ -19,9 +21,11 @@ use tokio_tungstenite::MaybeTlsStream;
 extern crate tracing;
 
 const ROUTING_ID: RoutingId = [0xC0, 0xFF, 0xEE];
+const FORWARDED_HEADER: &str = "X-WebAuthnRS-Forwarded";
 
 struct ServerState {
-    flags: Flags,
+    origin: Option<String>,
+    tls_domain: Option<String>,
     backend_connector: Option<TlsConnector>,
 
     backends: RwLock<HashMap<RoutingId, SocketAddr>>,
@@ -65,15 +69,45 @@ async fn handle_request(
 
     // Use our usual routing logic for static files, except ignore the crafted
     // response for Websocket connections.
-    let mut path = match Router::route(&req, &state.flags.origin) {
+    let mut path = match Router::route(&req, &state.origin) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(_, path) => path,
-        Router::Debug => todo!(),
+        Router::Debug => {
+            let backends_read = state.backends.read().await;
+            let backends_info: String = backends_read
+                .iter()
+                .map(|(k, v)| format!("backends[{}] = {v}\n", hex::encode_upper(k)))
+                .collect();
+            let debug = format!(
+                "server_state.strong_count = {}\nbackends.capacity = {}\nbackends.len = {}\n{}",
+                Arc::strong_count(&state),
+                backends_read.capacity(),
+                backends_read.len(),
+                backends_info,
+            );
+            let mut res = Response::new(Bytes::from(debug).into());
+            res.headers_mut()
+                .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
+            return Ok(res);
+        }
     };
 
     // Copy the incoming request to re-send to the backend.
     let mut backend_req = copy_request_empty_body(&req);
-    // TODO: add forwarding headers
+    if backend_req
+        .headers_mut()
+        .insert(FORWARDED_HEADER, HeaderValue::from_static("1"))
+        .is_some()
+    {
+        // The request has been forwarded by us once before. Refuse to get into
+        // a loop.
+        error!("{addr}: request seems to be previously forwarded - refusing to get in a loop!");
+        return Ok(Response::builder()
+            .status(StatusCode::LOOP_DETECTED)
+            .body(Default::default())
+            .unwrap());
+    }
+    // TODO: add standard proxy forwarding headers
 
     // Get the backend address, and set the Routing ID header in the request
     let backend = match &mut path.method {
@@ -130,12 +164,7 @@ async fn handle_request(
         None => MaybeTlsStream::Plain(backend_socket),
         Some(tls_connector) => {
             let backend_ip = backend.ip().to_string();
-            let domain = state
-                .flags
-                .backend_options
-                .domain
-                .as_deref()
-                .unwrap_or(backend_ip.as_str());
+            let domain = state.tls_domain.as_deref().unwrap_or(backend_ip.as_str());
 
             trace!("{addr}: TLS handshake with {backend} using domain {domain}");
             match tls_connector.connect(domain, backend_socket).await {
@@ -240,7 +269,8 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     let server_state = ServerState {
         backend_connector: flags.backend_options.tls_connector()?,
         backends: RwLock::new(HashMap::new()),
-        flags,
+        origin: flags.origin,
+        tls_domain: flags.backend_options.domain,
     };
 
     // TODO: implement properly
@@ -248,13 +278,13 @@ async fn main() -> Result<(), Box<dyn StdError>> {
         .backends
         .write()
         .await
-        .insert(ROUTING_ID, server_state.flags.backend_address.parse()?);
+        .insert(ROUTING_ID, flags.backend_address.parse()?);
 
-    let bind_address: SocketAddr = server_state.flags.bind_address.parse()?;
+    let bind_address: SocketAddr = flags.bind_address.parse()?;
 
     run_server(
         bind_address,
-        server_state.flags.protocol.clone(),
+        flags.protocol.clone(),
         server_state,
         handle_request,
     )
