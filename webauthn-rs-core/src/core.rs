@@ -133,6 +133,7 @@ impl WebauthnCore {
         let exclude_credentials = None;
         let extensions = None;
         let credential_algorithms = COSEAlgorithm::secure_algs();
+        let resident_key = None;
         let require_resident_key = false;
         let authenticator_attachment = None;
 
@@ -145,6 +146,7 @@ impl WebauthnCore {
             exclude_credentials,
             extensions,
             credential_algorithms,
+            resident_key,
             require_resident_key,
             authenticator_attachment,
             false,
@@ -174,6 +176,7 @@ impl WebauthnCore {
         extensions: Option<RequestRegistrationExtensions>,
 
         credential_algorithms: Vec<COSEAlgorithm>,
+        resident_key: Option<ResidentKeyRequirement>,
         require_resident_key: bool,
         authenticator_attachment: Option<AuthenticatorAttachment>,
         experimental_reject_passkeys: bool,
@@ -241,6 +244,7 @@ impl WebauthnCore {
                 }),
                 authenticator_selection: Some(AuthenticatorSelectionCriteria {
                     authenticator_attachment,
+                    resident_key,
                     require_resident_key,
                     user_verification: policy,
                 }),

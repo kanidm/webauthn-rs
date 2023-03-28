@@ -265,6 +265,7 @@ impl WebauthnActor {
             None,
             extensions,
             algorithm.unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
+            None,
             false,
             attachment,
             false,

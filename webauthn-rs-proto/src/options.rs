@@ -197,6 +197,20 @@ pub enum AuthenticatorAttachment {
     CrossPlatform,
 }
 
+/// The Relying Party's requirements for client-side discoverable credentials.
+///
+/// <https://www.w3.org/TR/webauthn-2/#enumdef-residentkeyrequirement>
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "lowercase")]
+pub enum ResidentKeyRequirement {
+    /// <https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-discouraged>
+    Discouraged,
+    /// <https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-preferred>
+    Preferred,
+    /// <https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-required>
+    Required,
+}
+
 /// <https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria>
 #[derive(Debug, Default, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -206,6 +220,13 @@ pub struct AuthenticatorSelectionCriteria {
     /// <https://www.w3.org/TR/webauthn/#attachment>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authenticator_attachment: Option<AuthenticatorAttachment>,
+
+    /// Hint to the credential to create a resident key. Note this value should be
+    /// a member of ResidentKeyRequirement, but client must ignore unknown values,
+    /// treating an unknown value as if the member does not exist.
+    /// <https://www.w3.org/TR/webauthn-2/#dom-authenticatorselectioncriteria-residentkey>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resident_key: Option<ResidentKeyRequirement>,
 
     /// Hint to the credential to create a resident key. Note this can not be enforced
     /// or validated, so the authenticator may choose to ignore this parameter.

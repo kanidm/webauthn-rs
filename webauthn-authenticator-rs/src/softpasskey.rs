@@ -542,6 +542,7 @@ mod tests {
                 None,
                 None,
                 COSEAlgorithm::secure_algs(),
+                None,
                 false,
                 None,
                 false,
