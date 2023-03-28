@@ -5,6 +5,7 @@ use std::{
 
 use clap::Parser;
 
+use futures::{SinkExt, StreamExt};
 use http_body_util::Full;
 use hyper::{
     body::{Bytes, Incoming},
@@ -14,16 +15,15 @@ use hyper::{
     Request, Response, StatusCode,
 };
 
-use futures_channel::mpsc::{channel, Receiver, Sender};
-use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
+use tokio::{
+    sync::mpsc::{channel, error::TrySendError, Receiver, Sender},
+    time::error::Elapsed,
+};
 
-use tokio::sync::RwLock;
+use tokio::{select, sync::RwLock};
 
 use tokio_tungstenite::WebSocketStream;
-use tungstenite::{
-    error::CapacityError,
-    protocol::{frame::coding::CloseCode, CloseFrame, Message, Role},
-};
+use tungstenite::protocol::{frame::coding::CloseCode, CloseFrame, Message, Role, WebSocketConfig};
 
 use cable_tunnel_server_common::*;
 
@@ -33,6 +33,7 @@ extern crate tracing;
 type Rx = Receiver<Message>;
 type Tx = Sender<Message>;
 type PeerMap = RwLock<HashMap<TunnelId, Tunnel>>;
+const CHANNEL_BUFFER_SIZE: usize = 6;
 
 struct ServerState {
     peer_map: PeerMap,
@@ -68,7 +69,8 @@ pub struct Flags {
     #[clap(long, default_value = "120", value_parser = parse_duration_secs, value_name = "SECONDS")]
     tunnel_ttl: Duration,
 
-    /// Maximum number of messages that may be sent to a tunnel by each peer.
+    /// Maximum number of messages that may be sent to a tunnel by each peer in
+    /// a session.
     #[clap(long, default_value = "16", value_name = "MESSAGES")]
     max_messages: u8,
 
@@ -97,131 +99,191 @@ impl From<&Flags> for ServerState {
 
 struct Tunnel {
     authenticator_rx: Rx,
-    authenticator_tx: Tx,
     initiator_tx: Tx,
 }
 
 impl Tunnel {
-    pub fn new(authenticator_rx: Rx, authenticator_tx: Tx, initiator_tx: Tx) -> Self {
+    pub fn new(authenticator_rx: Rx, initiator_tx: Tx) -> Self {
         Self {
             authenticator_rx,
-            authenticator_tx,
             initiator_tx,
         }
     }
 }
 
-const UNSUPPORTED_MESSAGE_FRAME: CloseFrame = CloseFrame {
-    code: CloseCode::Unsupported,
-    reason: Cow::Borrowed("Unsupported message type"),
-};
-
-const MESSAGE_TOO_LARGE_FRAME: CloseFrame = CloseFrame {
-    code: CloseCode::Size,
-    reason: Cow::Borrowed("Message too large"),
-};
-
-const TOO_MANY_MESSAGES_FRAME: CloseFrame = CloseFrame {
-    code: CloseCode::Policy,
-    reason: Cow::Borrowed("Too many messages"),
-};
-
 const PEER_DISCONNECTED_FRAME: CloseFrame = CloseFrame {
     code: CloseCode::Normal,
-    reason: Cow::Borrowed("Peer disconnected"),
+    reason: Cow::Borrowed("Remote peer cleanly disconnected"),
 };
+
+#[derive(thiserror::Error, Debug)]
+enum CableError {
+    #[error("Remote peer sent erroneous frame")]
+    RemotePeerErrorFrame,
+    #[error("Remote peer abnormally disconnected")]
+    RemotePeerAbnormallyDisconnected,
+    #[error("Client sent too many messages")]
+    TooManyMessages,
+    #[error("Client sent unsupported message type")]
+    UnsupportedMessageType,
+    #[error("Tunnel TTL exceeded")]
+    TtlExceeded,
+    #[error("WebSocket error: {0}")]
+    WebSocketError(tungstenite::Error),
+}
+
+impl From<tungstenite::Error> for CableError {
+    fn from(e: tungstenite::Error) -> Self {
+        Self::WebSocketError(e)
+    }
+}
+
+impl CableError {
+    fn close_reason(&self) -> Option<CloseFrame> {
+        use CableError::*;
+        let code = match self {
+            RemotePeerErrorFrame => CloseCode::Policy,
+            RemotePeerAbnormallyDisconnected => CloseCode::Away,
+            TooManyMessages => CloseCode::Policy,
+            UnsupportedMessageType => CloseCode::Unsupported,
+            TtlExceeded => CloseCode::Policy,
+            // Don't expose other error types
+            _ => return None,
+        };
+
+        Some(CloseFrame {
+            code,
+            reason: self.to_string().into(),
+        })
+    }
+
+    /// Create a message to notify the remote peer about a local error.
+    fn peer_message(&self) -> Option<Message> {
+        use CableError::*;
+        let f = match self {
+            RemotePeerAbnormallyDisconnected => return None,
+
+            TtlExceeded => TtlExceeded.close_reason(),
+            TooManyMessages => TooManyMessages.close_reason(),
+            WebSocketError(_) => RemotePeerAbnormallyDisconnected.close_reason(),
+            _ => RemotePeerErrorFrame.close_reason(),
+        };
+
+        Some(Message::Close(f))
+    }
+}
 
 async fn connect_stream(
     state: Arc<ServerState>,
-    ws_stream: WebSocketStream<Upgraded>,
-    mut tx: Tx,
-    mut self_tx: Tx,
-    rx: Rx,
+    mut ws_stream: WebSocketStream<Upgraded>,
+    tx: Tx,
+    mut rx: Rx,
     addr: SocketAddr,
-) {
+) -> Result<(), CableError> {
     info!("{addr}: WebSocket connected");
-    let (outgoing, incoming) = ws_stream.split();
     let mut message_count = 0u8;
 
-    let forwarder = incoming.try_for_each(|msg| {
-        // Handle incoming messages, adding some limits on the size and number
-        // of messages.
-        if msg.is_close() {
-            info!("{addr}: closing connection");
-            // Send a closing frame to the peer
-            tx.try_send(Message::Close(None)).ok();
-            return future::err(tungstenite::Error::ConnectionClosed);
-        }
+    let r = match tokio::time::timeout(state.tunnel_ttl, async {
+        loop {
+            select! {
+                r = rx.recv() => match r {
+                    Some(msg) => {
+                        // A message was received from the remote peer, send it onward.
+                        match msg {
+                            Message::Close(reason) => {
+                                info!("{addr}: client closing message: {reason:?}");
+                                ws_stream.close(reason).await?;
+                                return Ok(());
+                            }
+                            msg => {
+                                ws_stream.send(msg).await?;
+                            }
+                        }
+                    },
+                    None => {
+                        // The peer disconnected
+                        return Err(CableError::RemotePeerAbnormallyDisconnected);
+                    }
+                },
 
-        if msg.is_ping() || msg.is_pong() {
-            // Ignore PING/PONG messages, and don't count them towards
-            // quota. Tungstenite handles replies for us.
-            return future::ok(());
-        }
+                r = ws_stream.next() => match r {
+                    None => {
+                        // Stream ended
+                        error!("{addr}: client disconnected");
+                        tx.try_send(Message::Close(Some(PEER_DISCONNECTED_FRAME.clone()))).ok();
+                        return Ok(());
+                    },
+                    Some(Err(e)) => {
+                        // Websocket protocol error
+                        error!("{addr}: reading websocket: {e}");
+                        return Err(e.into());
+                    },
+                    Some(Ok(msg)) => {
+                        // A message was received from the local peer, validate it and
+                        // send it onward
+                        if msg.is_close() {
+                            info!("{addr}: closing connection");
+                            tx.try_send(Message::Close(Some(PEER_DISCONNECTED_FRAME.clone()))).ok();
+                            ws_stream.close(None).await?;
+                            return Ok(());
+                        }
 
-        let msg = if let Message::Binary(msg) = msg {
-            msg
-        } else {
-            // Drop connection on other message types.
-            error!("{addr}: non-binary message, closing connection");
-            tx.try_send(Message::Close(None)).ok();
-            self_tx
-                .try_send(Message::Close(Some(UNSUPPORTED_MESSAGE_FRAME.clone())))
-                .ok();
-            return future::err(tungstenite::Error::ConnectionClosed);
-        };
+                        if msg.is_ping() || msg.is_pong() {
+                            // Ignore PING/PONG messages, and don't count them towards
+                            // quota. Tungstenite handles replies for us.
+                            continue;
+                        }
 
-        if msg.len() > state.max_length {
-            error!(
-                "{addr}: maximum message length ({}) exceeded",
-                state.max_length
-            );
-            tx.try_send(Message::Close(None)).ok();
-            self_tx
-                .try_send(Message::Close(Some(MESSAGE_TOO_LARGE_FRAME.clone())))
-                .ok();
-            return future::err(
-                CapacityError::MessageTooLong {
-                    size: msg.len(),
-                    max_size: state.max_length,
+                        let msg = if let Message::Binary(msg) = msg {
+                            msg
+                        } else {
+                            // Drop connection on other message types.
+                            return Err(CableError::UnsupportedMessageType);
+                        };
+
+                        // Count the message towards the quota
+                        message_count += 1;
+
+                        if message_count > state.max_messages || message_count == u8::MAX {
+                            return Err(CableError::TooManyMessages);
+                        }
+
+                        info!("{addr}: message {message_count}: {}", hex::encode(&msg));
+                        match tx.try_send(Message::Binary(msg)) {
+                            Err(TrySendError::Closed(_)) =>
+                                return Err(CableError::RemotePeerAbnormallyDisconnected),
+                            Err(TrySendError::Full(_)) =>
+                                return Err(CableError::TooManyMessages),
+                            Ok(_) => (),
+                        }
+                    }
                 }
-                .into(),
-            );
+            }
         }
-
-        // Count the message towards the quota
-        message_count += 1;
-
-        if message_count > state.max_messages || message_count == u8::MAX {
-            error!(
-                "{addr}: maximum message count ({}) reached",
-                state.max_messages
-            );
-            tx.try_send(Message::Close(None)).ok();
-            self_tx
-                .try_send(Message::Close(Some(TOO_MANY_MESSAGES_FRAME.clone())))
-                .ok();
-            return future::err(tungstenite::Error::ConnectionClosed);
+    })
+    .await
+    {
+        Err(e) => {
+            let _: Elapsed = e;
+            // Timeout elapsed
+            Err(CableError::TtlExceeded)
         }
+        Ok(o) => o,
+    };
 
-        info!("{addr}: message {message_count}: {}", hex::encode(&msg));
-        if tx.try_send(Message::Binary(msg)).is_err() {
-            error!("sending error");
-            self_tx
-                .try_send(Message::Close(Some(PEER_DISCONNECTED_FRAME.clone())))
-                .ok();
-            return future::err(tungstenite::Error::ConnectionClosed);
-        };
+    if let Err(e) = &r {
+        // An error result indicates that no Close message has been sent
+        // already, and we may need to notify the peer. Sending messages or
+        // closing may fail at this stage, but we don't care.
+        error!("{addr}: {e}");
+        if let Some(msg) = e.peer_message() {
+            tx.try_send(msg).ok();
+        }
+        ws_stream.close(e.close_reason()).await.ok();
+    }
 
-        future::ok(())
-    });
-
-    let receiver = rx.map(Ok).forward(outgoing);
-
-    pin_mut!(forwarder, receiver);
-    future::select(forwarder, receiver).await;
-
-    info!("{addr}: finishing");
+    info!("{addr}: Closing connection");
+    r
 }
 
 async fn handle_request(
@@ -251,40 +313,36 @@ async fn handle_request(
         }
     };
 
-    let (tx, self_tx, rx) = match path.method {
+    let (tx, rx) = match path.method {
         CableMethod::New => {
             // Add the routing ID to the response header.
             path.routing_id.copy_from_slice(&state.routing_id);
             path.insert_routing_id_header(res.headers_mut());
 
             // Create both channels in the authenticator side, as the first one here
-            let (authenticator_tx, authenticator_rx) = channel(5);
-            let (initiator_tx, initiator_rx) = channel(5);
-            let tunnel = Tunnel::new(
-                authenticator_rx,
-                authenticator_tx.clone(),
-                initiator_tx.clone(),
-            );
+            let (authenticator_tx, authenticator_rx) = channel(CHANNEL_BUFFER_SIZE);
+            let (initiator_tx, initiator_rx) = channel(CHANNEL_BUFFER_SIZE);
+            let tunnel = Tunnel::new(authenticator_rx, initiator_tx);
 
             // Put it in our peer_map, if we can...
-            let mut lock = state.peer_map.write().await;
-            if lock.contains_key(&path.tunnel_id) {
-                error!("{addr}: tunnel already exists: {path}");
-                return Ok(Response::builder()
-                    .status(StatusCode::CONFLICT)
-                    .body(Bytes::new().into())
-                    .unwrap());
+            {
+                let mut lock = state.peer_map.write().await;
+                if lock.contains_key(&path.tunnel_id) {
+                    error!("{addr}: tunnel already exists: {path}");
+                    return Ok(Response::builder()
+                        .status(StatusCode::CONFLICT)
+                        .body(Bytes::new().into())
+                        .unwrap());
+                }
+                lock.insert(path.tunnel_id, tunnel);
             }
-            lock.insert(path.tunnel_id, tunnel);
 
-            drop(lock);
-
-            (authenticator_tx, initiator_tx, initiator_rx)
+            (authenticator_tx, initiator_rx)
         }
 
         CableMethod::Connect => {
             if let Some(c) = state.peer_map.write().await.remove(&path.tunnel_id) {
-                (c.initiator_tx, c.authenticator_tx, c.authenticator_rx)
+                (c.initiator_tx, c.authenticator_rx)
             } else {
                 error!("{addr}: no peer available for tunnel: {path}");
                 return Ok(Response::builder()
@@ -297,21 +355,22 @@ async fn handle_request(
 
     tokio::task::spawn(async move {
         let ss = state.clone();
-        tokio::time::timeout(state.tunnel_ttl, async move {
-            match hyper::upgrade::on(&mut req).await {
-                Ok(upgraded) => {
-                    let ws_stream =
-                        WebSocketStream::from_raw_socket(upgraded, Role::Server, None).await;
-                    connect_stream(ss, ws_stream, tx, self_tx, rx, addr).await;
-                }
-                Err(e) => error!("{addr}: upgrade error: {e}"),
+        let config = Some(WebSocketConfig {
+            max_message_size: Some(ss.max_length),
+            max_frame_size: Some(ss.max_length),
+            ..Default::default()
+        });
+
+        match hyper::upgrade::on(&mut req).await {
+            Ok(upgraded) => {
+                let ws_stream =
+                    WebSocketStream::from_raw_socket(upgraded, Role::Server, config).await;
+                connect_stream(ss, ws_stream, tx, rx, addr).await.ok();
             }
-        })
-        .await
-        .map_err(|_| {
-            info!("{addr}: connection TTL reached, disconnecting");
-        })
-        .ok();
+            Err(e) => {
+                error!("{addr}: upgrade error: {e}");
+            }
+        }
 
         if path.method == CableMethod::New {
             // Remove any stale entry
