@@ -1,6 +1,6 @@
 use std::{
-    collections::HashMap, convert::Infallible, error::Error as StdError, net::SocketAddr,
-    sync::Arc, time::Duration,
+    borrow::Cow, collections::HashMap, convert::Infallible, error::Error as StdError,
+    net::SocketAddr, sync::Arc, time::Duration,
 };
 
 use clap::Parser;
@@ -14,7 +14,7 @@ use hyper::{
     Request, Response, StatusCode,
 };
 
-use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+use futures_channel::mpsc::{channel, Receiver, Sender};
 use futures_util::{future, pin_mut, stream::TryStreamExt, StreamExt};
 
 use tokio::sync::RwLock;
@@ -22,7 +22,7 @@ use tokio::sync::RwLock;
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{
     error::CapacityError,
-    protocol::{Message, Role},
+    protocol::{frame::coding::CloseCode, CloseFrame, Message, Role},
 };
 
 use cable_tunnel_server_common::*;
@@ -30,8 +30,8 @@ use cable_tunnel_server_common::*;
 #[macro_use]
 extern crate tracing;
 
-type Rx = UnboundedReceiver<Message>;
-type Tx = UnboundedSender<Message>;
+type Rx = Receiver<Message>;
+type Tx = Sender<Message>;
 type PeerMap = RwLock<HashMap<TunnelId, Tunnel>>;
 
 struct ServerState {
@@ -97,22 +97,45 @@ impl From<&Flags> for ServerState {
 
 struct Tunnel {
     authenticator_rx: Rx,
+    authenticator_tx: Tx,
     initiator_tx: Tx,
 }
 
 impl Tunnel {
-    pub fn new(authenticator_rx: Rx, initiator_tx: Tx) -> Self {
+    pub fn new(authenticator_rx: Rx, authenticator_tx: Tx, initiator_tx: Tx) -> Self {
         Self {
             authenticator_rx,
+            authenticator_tx,
             initiator_tx,
         }
     }
 }
 
+const UNSUPPORTED_MESSAGE_FRAME: CloseFrame = CloseFrame {
+    code: CloseCode::Unsupported,
+    reason: Cow::Borrowed("Unsupported message type"),
+};
+
+const MESSAGE_TOO_LARGE_FRAME: CloseFrame = CloseFrame {
+    code: CloseCode::Size,
+    reason: Cow::Borrowed("Message too large"),
+};
+
+const TOO_MANY_MESSAGES_FRAME: CloseFrame = CloseFrame {
+    code: CloseCode::Policy,
+    reason: Cow::Borrowed("Too many messages"),
+};
+
+const PEER_DISCONNECTED_FRAME: CloseFrame = CloseFrame {
+    code: CloseCode::Normal,
+    reason: Cow::Borrowed("Peer disconnected"),
+};
+
 async fn connect_stream(
     state: Arc<ServerState>,
     ws_stream: WebSocketStream<Upgraded>,
-    tx: Tx,
+    mut tx: Tx,
+    mut self_tx: Tx,
     rx: Rx,
     addr: SocketAddr,
 ) {
@@ -120,36 +143,43 @@ async fn connect_stream(
     let (outgoing, incoming) = ws_stream.split();
     let mut message_count = 0u8;
 
-    // Add some limits on the size and number of messages
     let forwarder = incoming.try_for_each(|msg| {
-        let msg = match msg {
-            Message::Binary(b) => b,
-            Message::Close(_) => {
-                info!("{addr}: closing connection");
-                // Send a closing frame to the peer
-                tx.unbounded_send(Message::Close(None)).ok();
-                return future::err(tungstenite::Error::ConnectionClosed);
-            }
-            Message::Text(_) => {
-                // Text messages are not allowed.
-                error!("{addr}: text messages are not allowed");
-                tx.unbounded_send(Message::Close(None)).ok();
-                return future::err(tungstenite::Error::ConnectionClosed);
-            }
-            Message::Ping(_) | Message::Pong(_) => {
-                // Ignore PING/PONG messages, and don't count them towards
-                // quota.
-                return future::ok(());
-            }
-            Message::Frame(_) => unreachable!(),
+        // Handle incoming messages, adding some limits on the size and number
+        // of messages.
+        if msg.is_close() {
+            info!("{addr}: closing connection");
+            // Send a closing frame to the peer
+            tx.try_send(Message::Close(None)).ok();
+            return future::err(tungstenite::Error::ConnectionClosed);
+        }
+
+        if msg.is_ping() || msg.is_pong() {
+            // Ignore PING/PONG messages, and don't count them towards
+            // quota. Tungstenite handles replies for us.
+            return future::ok(());
+        }
+
+        let msg = if let Message::Binary(msg) = msg {
+            msg
+        } else {
+            // Drop connection on other message types.
+            error!("{addr}: non-binary message, closing connection");
+            tx.try_send(Message::Close(None)).ok();
+            self_tx
+                .try_send(Message::Close(Some(UNSUPPORTED_MESSAGE_FRAME.clone())))
+                .ok();
+            return future::err(tungstenite::Error::ConnectionClosed);
         };
 
-        if msg.len() >= state.max_length {
+        if msg.len() > state.max_length {
             error!(
                 "{addr}: maximum message length ({}) exceeded",
                 state.max_length
             );
-            tx.unbounded_send(Message::Close(None)).ok();
+            tx.try_send(Message::Close(None)).ok();
+            self_tx
+                .try_send(Message::Close(Some(MESSAGE_TOO_LARGE_FRAME.clone())))
+                .ok();
             return future::err(
                 CapacityError::MessageTooLong {
                     size: msg.len(),
@@ -167,12 +197,21 @@ async fn connect_stream(
                 "{addr}: maximum message count ({}) reached",
                 state.max_messages
             );
-            tx.unbounded_send(Message::Close(None)).ok();
+            tx.try_send(Message::Close(None)).ok();
+            self_tx
+                .try_send(Message::Close(Some(TOO_MANY_MESSAGES_FRAME.clone())))
+                .ok();
             return future::err(tungstenite::Error::ConnectionClosed);
         }
 
         info!("{addr}: message {message_count}: {}", hex::encode(&msg));
-        tx.unbounded_send(Message::Binary(msg)).unwrap();
+        if tx.try_send(Message::Binary(msg)).is_err() {
+            error!("sending error");
+            self_tx
+                .try_send(Message::Close(Some(PEER_DISCONNECTED_FRAME.clone())))
+                .ok();
+            return future::err(tungstenite::Error::ConnectionClosed);
+        };
 
         future::ok(())
     });
@@ -212,16 +251,20 @@ async fn handle_request(
         }
     };
 
-    let (tx, rx) = match path.method {
+    let (tx, self_tx, rx) = match path.method {
         CableMethod::New => {
             // Add the routing ID to the response header.
             path.routing_id.copy_from_slice(&state.routing_id);
             path.insert_routing_id_header(res.headers_mut());
 
             // Create both channels in the authenticator side, as the first one here
-            let (authenticator_tx, authenticator_rx) = unbounded();
-            let (initiator_tx, initiator_rx) = unbounded();
-            let tunnel = Tunnel::new(authenticator_rx, initiator_tx);
+            let (authenticator_tx, authenticator_rx) = channel(5);
+            let (initiator_tx, initiator_rx) = channel(5);
+            let tunnel = Tunnel::new(
+                authenticator_rx,
+                authenticator_tx.clone(),
+                initiator_tx.clone(),
+            );
 
             // Put it in our peer_map, if we can...
             let mut lock = state.peer_map.write().await;
@@ -236,12 +279,12 @@ async fn handle_request(
 
             drop(lock);
 
-            (authenticator_tx, initiator_rx)
+            (authenticator_tx, initiator_tx, initiator_rx)
         }
 
         CableMethod::Connect => {
             if let Some(c) = state.peer_map.write().await.remove(&path.tunnel_id) {
-                (c.initiator_tx, c.authenticator_rx)
+                (c.initiator_tx, c.authenticator_tx, c.authenticator_rx)
             } else {
                 error!("{addr}: no peer available for tunnel: {path}");
                 return Ok(Response::builder()
@@ -259,7 +302,7 @@ async fn handle_request(
                 Ok(upgraded) => {
                     let ws_stream =
                         WebSocketStream::from_raw_socket(upgraded, Role::Server, None).await;
-                    connect_stream(ss, ws_stream, tx, rx, addr).await;
+                    connect_stream(ss, ws_stream, tx, self_tx, rx, addr).await;
                 }
                 Err(e) => error!("{addr}: upgrade error: {e}"),
             }
