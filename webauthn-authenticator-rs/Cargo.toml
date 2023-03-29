@@ -75,8 +75,8 @@ tempfile = { version = "3.3.0" }
 serialport = { version = "4.2.0" }
 serialport-hci = { git = "https://github.com/micolous/serialport-hci.git", rev = "7931ad32510ac162f9c4e1147bdd411e40cffa0e" }
 bluetooth-hci = { git = "https://github.com/micolous/bluetooth-hci.git", rev = "04f98f734b0b9f0304e433335357307f63f6bc26" }
-bardecoder = "0.4.0"
-image = "0.23"
+bardecoder = "=0.4.1"
+image = "=0.23.14"
 
 [build-dependencies]
 openssl = "0.10"

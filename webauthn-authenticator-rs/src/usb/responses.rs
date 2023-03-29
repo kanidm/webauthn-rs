@@ -382,7 +382,7 @@ mod tests {
 
         let frames: Vec<U2FHIDFrame> = d
             .iter()
-            .map(|f| <U2FHIDFrame>::try_from(f))
+            .map(<U2FHIDFrame>::try_from)
             .collect::<Result<Vec<U2FHIDFrame>, WebauthnCError>>()
             .unwrap();
 
