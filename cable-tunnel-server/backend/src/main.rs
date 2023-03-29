@@ -23,7 +23,10 @@ use tokio::{
 use tokio::{select, sync::RwLock};
 
 use tokio_tungstenite::WebSocketStream;
-use tungstenite::protocol::{frame::coding::CloseCode, CloseFrame, Message, Role, WebSocketConfig};
+use tungstenite::{
+    error::CapacityError,
+    protocol::{frame::coding::CloseCode, CloseFrame, Message, Role, WebSocketConfig},
+};
 
 use cable_tunnel_server_common::*;
 
@@ -51,36 +54,37 @@ pub struct Flags {
     #[clap(long, default_value = "127.0.0.1:8081", value_name = "ADDR")]
     bind_address: String,
 
-    /// If set, the routing ID to report on new tunnel requests. This is a 3
-    /// byte, base-16 encoded value (eg: `123456`).
+    /// The routing ID to report on new tunnel requests. This is a 3 byte,
+    /// base-16 encoded value (eg: `123456`).
     ///
-    /// Note: the routing ID provided in connect requests is never checked
-    /// against this value.
+    /// Note: all routing IDs will be accepted by the server for connect
+    /// requests, and are never checked against this value.
     #[clap(long, default_value = "000000", value_parser = parse_hex::<RoutingId>, value_name = "ID")]
     routing_id: RoutingId,
 
     /// If set, the required Origin for requests sent to the WebSocket server.
     ///
-    /// When not set, the tunnel server allows requests from any Origin.
+    /// When not set, the tunnel server allows requests from any Origin, which
+    /// could allow non-caBLE use of the server.
     #[clap(long)]
     origin: Option<String>,
 
-    /// Maximum amount of time a tunnel may be open for, in seconds.
+    /// Maximum amount of time a tunnel may be open for, in seconds. The timer
+    /// starts when the authenticator first connects, even if there is no peer.
     #[clap(long, default_value = "120", value_parser = parse_duration_secs, value_name = "SECONDS")]
     tunnel_ttl: Duration,
 
     /// Maximum number of messages that may be sent to a tunnel by each peer in
-    /// a session.
+    /// a session. Once this limit has been reached, the tunnel will be closed.
     #[clap(long, default_value = "16", value_name = "MESSAGES")]
     max_messages: u8,
 
     /// Maximum message length which may be sent to a tunnel by a peer. If a
-    /// peer sends a longer message, the connection will be closed.
+    /// peer sends a longer message, the connection and tunnels will be closed.
     #[clap(long, default_value = "16384", value_name = "BYTES")]
     max_length: usize,
 
-    /// Serving protocol to use.
-    #[clap(subcommand)]
+    #[clap(flatten)]
     protocol: ServerTransportProtocol,
 }
 
@@ -97,8 +101,12 @@ impl From<&Flags> for ServerState {
     }
 }
 
+/// A tunnel which is pending connection from an initiator.
 struct Tunnel {
+    /// A channel to allow the authenticator to receive messages from the
+    /// initiator.
     authenticator_rx: Rx,
+    /// A channel to allow the initiator to send messages to the authenticator.
     initiator_tx: Tx,
 }
 
@@ -122,6 +130,8 @@ enum CableError {
     RemotePeerErrorFrame,
     #[error("Remote peer abnormally disconnected")]
     RemotePeerAbnormallyDisconnected,
+    #[error("Client sent a message which was too long")]
+    MessageTooLong,
     #[error("Client sent too many messages")]
     TooManyMessages,
     #[error("Client sent unsupported message type")]
@@ -134,7 +144,14 @@ enum CableError {
 
 impl From<tungstenite::Error> for CableError {
     fn from(e: tungstenite::Error) -> Self {
-        Self::WebSocketError(e)
+        if matches!(
+            e,
+            tungstenite::Error::Capacity(CapacityError::MessageTooLong { .. })
+        ) {
+            Self::MessageTooLong
+        } else {
+            Self::WebSocketError(e)
+        }
     }
 }
 
@@ -144,6 +161,7 @@ impl CableError {
         let code = match self {
             RemotePeerErrorFrame => CloseCode::Policy,
             RemotePeerAbnormallyDisconnected => CloseCode::Away,
+            MessageTooLong => CloseCode::Size,
             TooManyMessages => CloseCode::Policy,
             UnsupportedMessageType => CloseCode::Unsupported,
             TtlExceeded => CloseCode::Policy,
@@ -248,7 +266,7 @@ async fn connect_stream(
                             return Err(CableError::TooManyMessages);
                         }
 
-                        info!("{addr}: message {message_count}: {}", hex::encode(&msg));
+                        trace!("{addr}: message {message_count}: {}", hex::encode(&msg));
                         match tx.try_send(Message::Binary(msg)) {
                             Err(TrySendError::Closed(_)) =>
                                 return Err(CableError::RemotePeerAbnormallyDisconnected),
@@ -383,12 +401,17 @@ async fn handle_request(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn StdError>> {
-    tracing_subscriber::fmt::init();
+    setup_logging();
     let flags = Flags::parse();
     let server_state = ServerState::from(&flags);
     let bind_address: SocketAddr = flags.bind_address.parse().expect("invalid --bind-address");
+    let tls_acceptor = flags.protocol.tls_acceptor()?;
+    info!(
+        "Starting webauthn-rs cable-tunnel-server-backend at {}",
+        flags.protocol.uri(&bind_address)?
+    );
 
-    run_server(bind_address, flags.protocol, server_state, handle_request).await?;
+    run_server(bind_address, tls_acceptor, server_state, handle_request).await?;
 
     Ok(())
 }

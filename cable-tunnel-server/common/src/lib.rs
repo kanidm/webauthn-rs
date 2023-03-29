@@ -14,7 +14,9 @@ use hyper::{
     HeaderMap, Method, Request, Response, StatusCode, Uri,
 };
 use tokio::net::TcpListener;
+use tokio_native_tls::TlsAcceptor;
 use tokio_tungstenite::MaybeTlsStream;
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 use tungstenite::handshake::server::create_response;
 
 #[macro_use]
@@ -310,7 +312,7 @@ pub fn copy_response_empty_body<T>(r: &Response<T>) -> Response<Empty<Bytes>> {
 /// Runs a HTTP server for the caBLE WebSockets tunnel.
 pub async fn run_server<F, R, ResBody, T>(
     bind_address: SocketAddr,
-    protocol: ServerTransportProtocol,
+    tls_acceptor: Option<TlsAcceptor>,
     server_state: T,
     mut request_handler: F,
 ) -> Result<(), Box<dyn StdError>>
@@ -324,9 +326,7 @@ where
 {
     let server_state = Arc::new(server_state);
     let tcp = TcpListener::bind(&bind_address).await?;
-    let tls_acceptor = protocol.tls_acceptor()?.map(Arc::new);
-    let uri = protocol.uri(&bind_address)?;
-    info!("Started server at {uri}");
+    let tls_acceptor = tls_acceptor.map(Arc::new);
 
     loop {
         let (stream, remote_addr) = match tcp.accept().await {
@@ -361,6 +361,21 @@ where
             }
         });
     }
+}
+
+/// Sets up logging for cable-tunnel-server binaries.
+pub fn setup_logging() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .with_thread_ids(true)
+        .with_file(true)
+        .with_line_number(true)
+        .compact()
+        .init();
 }
 
 #[cfg(test)]

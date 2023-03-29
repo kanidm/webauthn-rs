@@ -2,6 +2,11 @@
 
 **Warning:** This is still a work in progress, and not yet fully implemented.
 
+However, you can run a single-task tunnel service with the `backend` alone:
+[see `./backend/README.md` for instructions][0].
+
+[0]: ./backend/README.md
+
 ## Background
 
 To facilitate two-way communication between an initiator (browser) and

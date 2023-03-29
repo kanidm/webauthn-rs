@@ -47,12 +47,12 @@ pub struct Flags {
 
     /// If set, the required Origin for requests sent to the WebSocket server.
     ///
-    /// When not set, the tunnel server allows requests from any Origin.
+    /// When not set, the tunnel server allows requests from any Origin, which
+    /// could allow non-caBLE use of the server.
     #[clap(long)]
     origin: Option<String>,
 
-    /// Serving protocol to use.
-    #[clap(subcommand)]
+    #[clap(flatten)]
     protocol: ServerTransportProtocol,
 }
 
@@ -61,7 +61,10 @@ impl From<&Flags> for ServerState {
         Self {
             origin: f.origin.to_owned(),
             tls_domain: f.backend_options.domain.to_owned(),
-            backend_connector: f.backend_options.tls_connector().expect("Cannot setup TLS connector"),
+            backend_connector: f
+                .backend_options
+                .tls_connector()
+                .expect("Cannot setup TLS connector"),
             backends: RwLock::new(HashMap::new()),
         }
     }
@@ -274,27 +277,32 @@ async fn handle_request(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn StdError>> {
-    tracing_subscriber::fmt::init();
+    setup_logging();
     let flags = Flags::parse();
     let server_state = ServerState::from(&flags);
     let bind_address: SocketAddr = flags.bind_address.parse().expect("invalid --bind-address");
 
     // TODO: implement properly
-    let backend_address: SocketAddr = flags.backend_address.parse().expect("invalid --backend-address");
-    assert_ne!(bind_address, backend_address, "--bind-address cannot not be the same as --backend--address");
+    let backend_address: SocketAddr = flags
+        .backend_address
+        .parse()
+        .expect("invalid --backend-address");
+    assert_ne!(
+        bind_address, backend_address,
+        "--bind-address cannot not be the same as --backend--address"
+    );
     server_state
         .backends
         .write()
         .await
         .insert(ROUTING_ID, backend_address);
+    let tls_acceptor = flags.protocol.tls_acceptor()?;
+    info!(
+        "Starting webauthn-rs cable-tunnel-server-frontend at {}",
+        flags.protocol.uri(&bind_address)?
+    );
 
-    run_server(
-        bind_address,
-        flags.protocol,
-        server_state,
-        handle_request,
-    )
-    .await?;
+    run_server(bind_address, tls_acceptor, server_state, handle_request).await?;
 
     Ok(())
 }
