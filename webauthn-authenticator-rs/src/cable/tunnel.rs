@@ -19,7 +19,10 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, http::HeaderValue, Message},
 };
-use tokio_tungstenite::{tungstenite::http::Uri, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{
+    tungstenite::http::{uri::Builder, Uri},
+    MaybeTlsStream, WebSocketStream,
+};
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use crate::{
@@ -59,37 +62,48 @@ const TUNNEL_SERVER_ID_OFFSET: usize = TUNNEL_SERVER_SALT.len() - 3;
 const TUNNEL_SERVER_TLDS: [&str; 4] = [".com", ".org", ".net", ".info"];
 const BASE32_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz234567";
 
+#[cfg(feature = "cable-localhost-tunnel")]
+const CABLE_LOCAL_TUNNEL: Option<&str> = Some("localhost:8080");
+#[cfg(not(feature = "cable-localhost-tunnel"))]
+const CABLE_LOCAL_TUNNEL: Option<&str> = None;
+
 /// Decodes a `domain_id` into an actual domain name.
 ///
 /// See Chromium's `tunnelserver::DecodeDomain`.
-pub fn get_domain(domain_id: u16) -> Option<String> {
-    if domain_id < 256 {
-        return match ASSIGNED_DOMAINS.get(usize::from(domain_id)) {
-            Some(d) => Some(d.to_string()),
+pub fn get_domain(domain_id: u16) -> Option<Builder> {
+    let domain = if domain_id < 256 {
+        match ASSIGNED_DOMAINS.get(usize::from(domain_id)) {
+            Some(d) => d.to_string(),
             None => {
                 warn!("Invalid tunnel server ID {:04x}", domain_id);
-                None
+                return None;
             }
-        };
+        }
+    } else {
+        let mut buf = TUNNEL_SERVER_SALT.to_vec();
+        buf[TUNNEL_SERVER_ID_OFFSET..TUNNEL_SERVER_ID_OFFSET + 2]
+            .copy_from_slice(&domain_id.to_le_bytes());
+        let digest = compute_sha256(&buf);
+        let mut result = u64::from_le_bytes(digest[..8].try_into().ok()?);
+
+        let tld = TUNNEL_SERVER_TLDS[(result & 3) as usize];
+
+        let mut domain = String::from("cable.");
+        result >>= 2;
+        while result != 0 {
+            domain.push(char::from_u32(BASE32_CHARS[(result & 31) as usize].into())?);
+            result >>= 5;
+        }
+        domain.push_str(tld);
+        domain
+    };
+
+    if let Some(t) = CABLE_LOCAL_TUNNEL {
+        warn!("Using ws://{t} as caBLE tunnel server rather than wss://{domain}");
+        return Some(Uri::builder().scheme("ws").authority(t));
     }
 
-    let mut buf = TUNNEL_SERVER_SALT.to_vec();
-    buf[TUNNEL_SERVER_ID_OFFSET..TUNNEL_SERVER_ID_OFFSET + 2]
-        .copy_from_slice(&domain_id.to_le_bytes());
-    let digest = compute_sha256(&buf);
-    let mut result = u64::from_le_bytes(digest[..8].try_into().ok()?);
-
-    let tld = TUNNEL_SERVER_TLDS[(result & 3) as usize];
-
-    let mut o = String::from("cable.");
-    result >>= 2;
-    while result != 0 {
-        o.push(char::from_u32(BASE32_CHARS[(result & 31) as usize].into())?);
-        result >>= 5;
-    }
-    o.push_str(tld);
-
-    Some(o)
+    Some(Uri::builder().scheme("wss").authority(domain))
 }
 
 /// Websocket tunnel to a caBLE authenticator.
@@ -124,7 +138,7 @@ impl Tunnel {
 
         trace!(?request);
         let (stream, response) = connect_async(request).await.map_err(|e| {
-            error!("websocket error: {:?}", e);
+            error!("websocket error: {uri}: {e:?}");
             WebauthnCError::Internal
         })?;
 
@@ -459,26 +473,40 @@ mod test {
 
     #[test]
     fn check_known_tunnel_server_domains() {
-        assert_eq!(get_domain(0), Some(String::from("cable.ua5v.com")));
-        assert_eq!(get_domain(1), Some(String::from("cable.auth.com")));
         assert_eq!(
-            get_domain(266),
-            Some(String::from("cable.wufkweyy3uaxb.com"))
+            get_domain(0).unwrap().path_and_query("/").build().unwrap(),
+            "wss://cable.ua5v.com/"
+        );
+        assert_eq!(
+            get_domain(1).unwrap().path_and_query("/").build().unwrap(),
+            "wss://cable.auth.com/"
+        );
+        assert_eq!(
+            get_domain(266)
+                .unwrap()
+                .path_and_query("/")
+                .build()
+                .unwrap(),
+            "wss://cable.wufkweyy3uaxb.com/"
         );
 
-        assert_eq!(get_domain(255), None);
+        assert!(get_domain(255).is_none());
 
         // 🦀 = \u{1f980}
         assert_eq!(
-            get_domain(0xf980),
-            Some(String::from("cable.my4kstlhndi4c.net"))
+            get_domain(0xf980)
+                .unwrap()
+                .path_and_query("/")
+                .build()
+                .unwrap(),
+            "wss://cable.my4kstlhndi4c.net"
         )
     }
 
     #[test]
     fn check_all_hashed_tunnel_servers() {
         for x in 256..u16::MAX {
-            assert_ne!(get_domain(x), None);
+            assert!(get_domain(x).is_some());
         }
     }
 }

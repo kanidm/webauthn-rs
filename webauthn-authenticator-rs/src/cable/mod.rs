@@ -20,6 +20,10 @@
 //!   (`wss://cable.ua5v.com`), and an algorithm to generate tunnel server
 //!   domain names from a hash to allow for future expansion.
 //!
+//!   You can also build the library with the `cable-localhost-tunnel` feature,
+//!   which causes it to always connect to `ws://localhost:8080` (over HTTP)
+//!   instead of the *proper* tunnel server over HTTPS.
+//!
 //! This module implements both the [initator][connect_cable_authenticator] and
 //! [authenticator][share_cable_authenticator] side of caBLE, provided
 //! [you have appropriate hardware](#requirements).

@@ -49,6 +49,9 @@ pub mod tokio_tungstenite {
     pub mod tungstenite {
         pub mod http {
             pub struct Uri {}
+            pub mod uri {
+                pub struct Builder {}
+            }
         }
     }
     pub struct MaybeTlsStream<T> {}

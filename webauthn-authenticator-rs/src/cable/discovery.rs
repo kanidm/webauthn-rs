@@ -11,7 +11,7 @@ use openssl::{
     sign::Signer,
 };
 use std::mem::size_of;
-use tokio_tungstenite::tungstenite::http::Uri;
+use tokio_tungstenite::tungstenite::http::{uri::Builder, Uri};
 
 use crate::{
     cable::{btle::*, handshake::*, tunnel::get_domain, CableRequestType, Psk},
@@ -176,9 +176,7 @@ impl Discovery {
         get_domain(domain_id)
             .and_then(|domain| {
                 let tunnel_id = hex::encode_upper(self.derive_tunnel_id().ok()?);
-                Uri::builder()
-                    .scheme("wss")
-                    .authority(domain)
+                domain
                     .path_and_query(format!("/cable/new/{}", tunnel_id))
                     .build()
                     .ok()
@@ -339,7 +337,7 @@ impl Eid {
     }
 
     /// Gets the tunnel server domain for this [Eid].
-    fn get_domain(&self) -> Option<String> {
+    fn get_domain(&self) -> Option<Builder> {
         get_domain(self.tunnel_server_id)
     }
 
@@ -353,9 +351,7 @@ impl Eid {
             let routing_id = hex::encode_upper(self.routing_id);
             let tunnel_id = hex::encode_upper(tunnel_id);
 
-            Uri::builder()
-                .scheme("wss")
-                .authority(domain)
+            domain
                 .path_and_query(format!("/cable/connect/{}/{}", routing_id, tunnel_id))
                 .build()
                 .ok()
