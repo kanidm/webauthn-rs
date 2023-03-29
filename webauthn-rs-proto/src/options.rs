@@ -33,7 +33,7 @@ pub type CredentialID = Base64UrlSafeData;
 /// that is is NOT possible assert verification has been bypassed or not from the server
 /// viewpoint, and to the user it may create confusion about when verification is or is
 /// not required.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 #[allow(non_camel_case_types)]
 #[serde(rename_all = "lowercase")]
 pub enum UserVerificationPolicy {
@@ -42,17 +42,12 @@ pub enum UserVerificationPolicy {
     /// usable with this policy.
     Required,
     /// TO FILL IN
+    #[default]
     #[serde(rename = "preferred")]
     Preferred,
     /// TO FILL IN
     #[serde(rename = "discouraged")]
     Discouraged_DO_NOT_USE,
-}
-
-impl Default for UserVerificationPolicy {
-    fn default() -> Self {
-        UserVerificationPolicy::Preferred
-    }
 }
 
 /// Relying Party Entity
