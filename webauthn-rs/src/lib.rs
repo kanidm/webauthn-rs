@@ -425,7 +425,6 @@ impl Webauthn {
     ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
         let attestation = AttestationConveyancePreference::None;
         let credential_algorithms = self.algorithms.clone();
-        let resident_key = None;
         let require_resident_key = false;
         let authenticator_attachment = None;
         let policy = Some(UserVerificationPolicy::Preferred);
@@ -457,7 +456,6 @@ impl Webauthn {
                 exclude_credentials,
                 extensions,
                 credential_algorithms,
-                resident_key,
                 require_resident_key,
                 authenticator_attachment,
                 reject_passkeys,
@@ -687,7 +685,6 @@ impl Webauthn {
         });
 
         let credential_algorithms = self.algorithms.clone();
-        let resident_key = None;
         let require_resident_key = false;
         let policy = if self.user_presence_only_security_keys {
             Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
@@ -706,7 +703,6 @@ impl Webauthn {
                 exclude_credentials,
                 extensions,
                 credential_algorithms,
-                resident_key,
                 require_resident_key,
                 ui_hint_authenticator_attachment,
                 reject_passkeys,
@@ -933,7 +929,6 @@ impl Webauthn {
         }
 
         let credential_algorithms = self.algorithms.clone();
-        let resident_key = None;
         let require_resident_key = false;
         let policy = Some(UserVerificationPolicy::Required);
         let reject_passkeys = true;
@@ -963,7 +958,6 @@ impl Webauthn {
                 exclude_credentials,
                 extensions,
                 credential_algorithms,
-                resident_key,
                 require_resident_key,
                 ui_hint_authenticator_attachment,
                 reject_passkeys,
@@ -1129,7 +1123,6 @@ impl Webauthn {
 
         let attestation = AttestationConveyancePreference::Direct;
         let credential_algorithms = self.algorithms.clone();
-        let resident_key = Some(ResidentKeyRequirement::Required);
         let require_resident_key = true;
         let policy = Some(UserVerificationPolicy::Required);
         let reject_passkeys = true;
@@ -1161,7 +1154,6 @@ impl Webauthn {
                 exclude_credentials,
                 extensions,
                 credential_algorithms,
-                resident_key,
                 require_resident_key,
                 ui_hint_authenticator_attachment,
                 reject_passkeys,

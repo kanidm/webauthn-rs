@@ -184,7 +184,6 @@ async fn main() {
             None,
             None,
             COSEAlgorithm::secure_algs(),
-            None,
             false,
             None,
             false,
