@@ -112,8 +112,9 @@ pub struct AuthenticationSuccess {
     pub extensions: AuthenticationExtensions,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub enum CTestAttestState {
+    #[default]
     NotTested,
     Passed {
         rs: RegistrationSuccess,
@@ -130,12 +131,6 @@ pub enum CTestAttestState {
         ccr: Option<CreationChallengeResponse>,
         rpkc: Option<RegisterPublicKeyCredential>,
     },
-}
-
-impl Default for CTestAttestState {
-    fn default() -> Self {
-        CTestAttestState::NotTested
-    }
 }
 
 impl CTestAttestState {
