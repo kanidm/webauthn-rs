@@ -5,15 +5,15 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-cable-tunnel-server-common = { path = "../common" }
+cable-tunnel-server-common.workspace = true
 
-clap = { version = "^3.2", features = ["derive", "env"] }
-hex = "0.4.3"
-http-body-util = "=0.1.0-rc.2"
-hyper = { version = "=1.0.0-rc.3", default-features = false, features = ["client", "http1", "server"] }
-tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
-tokio-native-tls = "^0.3.1"
-tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }
-tungstenite = { version = "^0.18.0", default-features = false }
+clap.workspace = true
+hex.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["client", "server"] }
+tokio.workspace = true
+tokio-native-tls.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tungstenite.workspace = true
