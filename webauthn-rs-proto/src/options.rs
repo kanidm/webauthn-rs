@@ -205,6 +205,8 @@ pub enum AuthenticatorAttachment {
 pub enum ResidentKeyRequirement {
     /// <https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-discouraged>
     Discouraged,
+    /// ⚠️  In all major browsers preferred is identical in behaviour to required.
+    /// You should use required instead.
     /// <https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-preferred>
     Preferred,
     /// <https://www.w3.org/TR/webauthn-2/#dom-residentkeyrequirement-required>
