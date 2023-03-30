@@ -14,14 +14,13 @@ use hyper::{
     upgrade::Upgraded,
     Request, Response, StatusCode,
 };
-
 use tokio::{
-    sync::mpsc::{channel, error::TrySendError, Receiver, Sender},
-    time::error::Elapsed,
+    select,
+    sync::{
+        mpsc::{channel, error::TrySendError, Receiver, Sender},
+        RwLock,
+    },
 };
-
-use tokio::{select, sync::RwLock};
-
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{
     error::CapacityError,
@@ -51,7 +50,7 @@ struct ServerState {
 #[clap(about = "caBLE tunnel server backend")]
 pub struct Flags {
     /// Bind address and port for the server.
-    #[clap(long, default_value = "127.0.0.1:8081", value_name = "ADDR")]
+    #[clap(long, default_value = "127.0.0.1:8080", value_name = "ADDR")]
     bind_address: String,
 
     /// The routing ID to report on new tunnel requests. This is a 3 byte,
@@ -121,22 +120,22 @@ impl Tunnel {
 
 const PEER_DISCONNECTED_FRAME: CloseFrame = CloseFrame {
     code: CloseCode::Normal,
-    reason: Cow::Borrowed("Remote peer cleanly disconnected"),
+    reason: Cow::Borrowed("remote peer cleanly disconnected"),
 };
 
 #[derive(thiserror::Error, Debug)]
 enum CableError {
-    #[error("Remote peer sent erroneous frame")]
+    #[error("remote peer sent erroneous frame")]
     RemotePeerErrorFrame,
-    #[error("Remote peer abnormally disconnected")]
+    #[error("remote peer abnormally disconnected")]
     RemotePeerAbnormallyDisconnected,
-    #[error("Client sent a message which was too long")]
+    #[error("client sent a message which was too long")]
     MessageTooLong,
-    #[error("Client sent too many messages")]
+    #[error("client sent too many messages")]
     TooManyMessages,
-    #[error("Client sent unsupported message type")]
+    #[error("client sent unsupported message type")]
     UnsupportedMessageType,
-    #[error("Tunnel TTL exceeded")]
+    #[error("tunnel TTL exceeded")]
     TtlExceeded,
     #[error("WebSocket error: {0}")]
     WebSocketError(tungstenite::Error),
@@ -179,10 +178,13 @@ impl CableError {
     fn peer_message(&self) -> Option<Message> {
         use CableError::*;
         let f = match self {
-            RemotePeerAbnormallyDisconnected => return None,
+            // Remote peer is already gone, don't notify.
+            RemotePeerErrorFrame | RemotePeerAbnormallyDisconnected => return None,
 
+            // Other errors should notify peer
             TtlExceeded => TtlExceeded.close_reason(),
             TooManyMessages => TooManyMessages.close_reason(),
+            WebSocketError(tungstenite::Error::ConnectionClosed) => Some(PEER_DISCONNECTED_FRAME),
             WebSocketError(_) => RemotePeerAbnormallyDisconnected.close_reason(),
             _ => RemotePeerErrorFrame.close_reason(),
         };
@@ -191,17 +193,17 @@ impl CableError {
     }
 }
 
-async fn connect_stream(
+#[instrument(level = "info", skip_all, err, fields(addr = addr.to_string()))]
+async fn handle_websocket(
     state: Arc<ServerState>,
     mut ws_stream: WebSocketStream<Upgraded>,
     tx: Tx,
     mut rx: Rx,
     addr: SocketAddr,
 ) -> Result<(), CableError> {
-    info!("{addr}: WebSocket connected");
     let mut message_count = 0u8;
 
-    let r = match tokio::time::timeout(state.tunnel_ttl, async {
+    let r = tokio::time::timeout(state.tunnel_ttl, async {
         loop {
             select! {
                 r = rx.recv() => match r {
@@ -209,7 +211,7 @@ async fn connect_stream(
                         // A message was received from the remote peer, send it onward.
                         match msg {
                             Message::Close(reason) => {
-                                info!("{addr}: client closing message: {reason:?}");
+                                info!("remote peer closed connection: {reason:?}");
                                 ws_stream.close(reason).await?;
                                 return Ok(());
                             }
@@ -227,20 +229,20 @@ async fn connect_stream(
                 r = ws_stream.next() => match r {
                     None => {
                         // Stream ended
-                        error!("{addr}: client disconnected");
+                        info!("client disconnected");
                         tx.try_send(Message::Close(Some(PEER_DISCONNECTED_FRAME.clone()))).ok();
                         return Ok(());
                     },
                     Some(Err(e)) => {
                         // Websocket protocol error
-                        error!("{addr}: reading websocket: {e}");
+                        error!("reading websocket: {e}");
                         return Err(e.into());
                     },
                     Some(Ok(msg)) => {
                         // A message was received from the local peer, validate it and
                         // send it onward
                         if msg.is_close() {
-                            info!("{addr}: closing connection");
+                            info!("closing connection");
                             tx.try_send(Message::Close(Some(PEER_DISCONNECTED_FRAME.clone()))).ok();
                             ws_stream.close(None).await?;
                             return Ok(());
@@ -266,7 +268,7 @@ async fn connect_stream(
                             return Err(CableError::TooManyMessages);
                         }
 
-                        trace!("{addr}: message {message_count}: {}", hex::encode(&msg));
+                        trace!("message {message_count}: {}", hex::encode(&msg));
                         match tx.try_send(Message::Binary(msg)) {
                             Err(TrySendError::Closed(_)) =>
                                 return Err(CableError::RemotePeerAbnormallyDisconnected),
@@ -280,37 +282,32 @@ async fn connect_stream(
         }
     })
     .await
-    {
-        Err(e) => {
-            let _: Elapsed = e;
-            // Timeout elapsed
-            Err(CableError::TtlExceeded)
-        }
-        Ok(o) => o,
-    };
+    // Convert Elapsed into TtlExceeded
+    .unwrap_or(Err(CableError::TtlExceeded));
 
     if let Err(e) = &r {
         // An error result indicates that no Close message has been sent
         // already, and we may need to notify the peer. Sending messages or
         // closing may fail at this stage, but we don't care.
-        error!("{addr}: {e}");
         if let Some(msg) = e.peer_message() {
             tx.try_send(msg).ok();
         }
         ws_stream.close(e.close_reason()).await.ok();
     }
 
-    info!("{addr}: Closing connection");
     r
 }
 
+#[instrument(level = "info", skip_all, fields(
+    req.method = req.method().to_string(),
+    req.path = req.uri().path(),
+))]
 async fn handle_request(
     state: Arc<ServerState>,
     addr: SocketAddr,
     req: Request<Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    info!("{addr}: {} {}", req.method(), req.uri().path());
-    trace!("Request data: {req:?}");
+    trace!("request payload: {req:?}");
     let mut req = req.map(|_| ());
 
     let (mut res, mut path) = match Router::route(&req, &state.origin) {
@@ -346,7 +343,7 @@ async fn handle_request(
             {
                 let mut lock = state.peer_map.write().await;
                 if lock.contains_key(&path.tunnel_id) {
-                    error!("{addr}: tunnel already exists: {path}");
+                    error!("tunnel already exists: {path}");
                     return Ok(Response::builder()
                         .status(StatusCode::CONFLICT)
                         .body(Bytes::new().into())
@@ -362,7 +359,7 @@ async fn handle_request(
             if let Some(c) = state.peer_map.write().await.remove(&path.tunnel_id) {
                 (c.initiator_tx, c.authenticator_rx)
             } else {
-                error!("{addr}: no peer available for tunnel: {path}");
+                error!("no peer available for tunnel: {path}");
                 return Ok(Response::builder()
                     .status(StatusCode::NOT_FOUND)
                     .body(Bytes::new().into())
@@ -383,10 +380,10 @@ async fn handle_request(
             Ok(upgraded) => {
                 let ws_stream =
                     WebSocketStream::from_raw_socket(upgraded, Role::Server, config).await;
-                connect_stream(ss, ws_stream, tx, rx, addr).await.ok();
+                handle_websocket(ss, ws_stream, tx, rx, addr).await.ok();
             }
             Err(e) => {
-                error!("{addr}: upgrade error: {e}");
+                error!("upgrade error: {e}");
             }
         }
 

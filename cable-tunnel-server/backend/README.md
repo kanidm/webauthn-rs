@@ -2,21 +2,21 @@
 
 This binary provides a caBLE tunnel server backend.
 
-The backend is capable of:
+The backend is capable of running in two configurations:
 
-* running in a single-task configuration, with no frontends.
+* a single-task configuration, with no frontends.
 
   In this configuration, caBLE [Routing IDs][background] are ignored, and it is
   presumed all incoming requests can be served out of a single running task.
 
-* running in a multi-task configuration, with many frontend tasks.
+* a multi-task configuration, with many frontend tasks.
 
   In this configuration, the backend presumes it has frontend tasks in front of
   it to [handle caBLE Routing IDs][background]. However, the frontend is not yet
   fully implemented.
 
 Backend tasks are entirely stateless, and do not communicate with one another.
-Each tunnel exists within one and only one backend task.
+Each tunnel exists within one (*and only one*) backend task.
 
 [background]: ../README.md#background
 

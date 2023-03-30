@@ -16,7 +16,8 @@ use hyper::{
 use tokio::net::TcpListener;
 use tokio_native_tls::TlsAcceptor;
 use tokio_tungstenite::MaybeTlsStream;
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use tracing::Instrument;
+use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
 use tungstenite::handshake::server::create_response;
 
 #[macro_use]
@@ -341,25 +342,30 @@ where
             service_fn(move |req| request_handler(server_state.clone(), remote_addr, req));
         let tls_acceptor = tls_acceptor.clone();
 
-        tokio::task::spawn(async move {
-            let stream = match tls_acceptor {
-                None => MaybeTlsStream::Plain(stream),
-                Some(tls_acceptor) => match tls_acceptor.accept(stream).await {
-                    Ok(o) => MaybeTlsStream::NativeTls(o),
-                    Err(e) => {
-                        error!("tls_acceptor.accept: {e}");
-                        return;
-                    }
-                },
-            };
+        let span = info_span!("handle_connection", addr = remote_addr.to_string());
+        tokio::task::spawn(
+            async move {
+                let stream = match tls_acceptor {
+                    None => MaybeTlsStream::Plain(stream),
+                    Some(tls_acceptor) => match tls_acceptor.accept(stream).await {
+                        Ok(o) => MaybeTlsStream::NativeTls(o),
+                        Err(e) => {
+                            error!("tls_acceptor.accept: {e}");
+                            return;
+                        }
+                    },
+                };
 
-            let conn = hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
-            let conn = conn.with_upgrades();
+                let conn =
+                    hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
+                let conn = conn.with_upgrades();
 
-            if let Err(e) = conn.await {
-                error!("Connection error: {e}");
+                if let Err(e) = conn.await {
+                    error!("connection error: {e}");
+                }
             }
-        });
+            .instrument(span),
+        );
     }
 }
 
@@ -371,9 +377,10 @@ pub fn setup_logging() {
                 .with_default_directive(LevelFilter::INFO.into())
                 .from_env_lossy(),
         )
+        .with_span_events(FmtSpan::CLOSE | FmtSpan::NEW)
         .with_thread_ids(true)
-        .with_file(true)
-        .with_line_number(true)
+        // .with_file(true)
+        // .with_line_number(true)
         .compact()
         .init();
 }
