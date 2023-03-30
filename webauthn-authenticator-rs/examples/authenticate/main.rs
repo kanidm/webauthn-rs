@@ -141,9 +141,9 @@ impl Provider {
                     .unwrap(),
             ),
             #[cfg(feature = "u2fhid")]
-            Provider::Mozilla => Box::new(webauthn_authenticator_rs::u2fhid::U2FHid::default()),
+            Provider::Mozilla => Box::<webauthn_authenticator_rs::u2fhid::U2FHid>::default(),
             #[cfg(feature = "win10")]
-            Provider::Win10 => Box::new(webauthn_authenticator_rs::win10::Win10::default()),
+            Provider::Win10 => Box::<webauthn_authenticator_rs::win10::Win10>::default(),
         }
     }
 }

@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(expected_protocols, a1.protocols);
         assert_eq!(None, a1.command_chaining);
         assert_eq!(None, a1.extended_lc);
-        assert_eq!(false, a1.storage_card);
+        assert!(!a1.storage_card);
 
         let i2 = [0x3b, 0x84, 0x80, 0x01, 0x80, 0x71, 0xc0, 0x21, 0x15];
         let a2 = Atr::try_from(&i2[..]).expect("short caps atr2");
@@ -333,7 +333,7 @@ mod tests {
         assert_eq!(expected_protocols, a2.protocols);
         assert_eq!(None, a2.command_chaining);
         assert_eq!(None, a2.extended_lc);
-        assert_eq!(false, a2.storage_card);
+        assert!(!a2.storage_card);
     }
 
     #[test]

@@ -357,12 +357,13 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
 }
 
 /// The result state of an extension as returned from the authenticator.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub enum ExtnState<T>
 where
     T: Clone + std::fmt::Debug,
 {
     /// This extension was not requested, and so no result was provided.
+    #[default]
     NotRequested,
     /// The extension was requested, and the authenticator did NOT act on it.
     Ignored,
@@ -373,15 +374,6 @@ where
     /// ⚠️  WARNING: The data in this extension is not signed cryptographically, and can not be
     /// trusted for security assertions. It MAY be used for UI/UX hints.
     Unsigned(T),
-}
-
-impl<T> Default for ExtnState<T>
-where
-    T: Clone + std::fmt::Debug,
-{
-    fn default() -> Self {
-        ExtnState::NotRequested
-    }
 }
 
 /// The set of extensions that were registered by this credential.
