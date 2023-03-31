@@ -2,7 +2,7 @@ use std::{
     collections::HashMap, convert::Infallible, error::Error as StdError, net::SocketAddr, sync::Arc,
 };
 
-use clap::Parser;
+use clap::{ArgAction, Parser, ValueHint};
 
 use http_body_util::Full;
 use hyper::{
@@ -29,6 +29,7 @@ struct ServerState {
     backend_connector: Option<TlsConnector>,
 
     backends: RwLock<HashMap<RoutingId, SocketAddr>>,
+    debug_handler: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -36,11 +37,11 @@ struct ServerState {
 pub struct Flags {
     /// Bind address and port for the server.
     #[clap(long, default_value = "127.0.0.1:8080", value_name = "ADDR")]
-    bind_address: String,
+    bind_address: SocketAddr,
 
     // Address for the service backend.
     #[clap(long, default_value = "127.0.0.1:8081", value_name = "ADDR")]
-    backend_address: String,
+    backend_address: SocketAddr,
 
     #[clap(flatten)]
     backend_options: BackendClientOptions,
@@ -49,11 +50,15 @@ pub struct Flags {
     ///
     /// When not set, the tunnel server allows requests from any Origin, which
     /// could allow non-caBLE use of the server.
-    #[clap(long)]
+    #[clap(long, value_hint = ValueHint::Hostname)]
     origin: Option<String>,
 
     #[clap(flatten)]
     protocol: ServerTransportProtocol,
+
+    /// Disables the `/debug` handler on the HTTP server.
+    #[clap(long = "no-debug-handler", action = ArgAction::SetFalse)]
+    debug_handler: bool,
 }
 
 impl From<&Flags> for ServerState {
@@ -66,17 +71,22 @@ impl From<&Flags> for ServerState {
                 .tls_connector()
                 .expect("Cannot setup TLS connector"),
             backends: RwLock::new(HashMap::new()),
+            debug_handler: f.debug_handler,
         }
     }
 }
 
+#[instrument(level = "info", skip_all, fields(
+    req.method = req.method().to_string(),
+    req.path = req.uri().path(),
+    backend,
+))]
 async fn handle_request(
     state: Arc<ServerState>,
-    addr: SocketAddr,
+    _: SocketAddr,
     req: Request<Incoming>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    info!("{addr}: {} {}", req.method(), req.uri().path());
-    trace!("Request data: {req:?}");
+    trace!("request payload: {req:?}");
 
     // Drop the request body from future manipulation, because we never use it.
     let mut req = req.map(|_| ());
@@ -87,22 +97,28 @@ async fn handle_request(
         Router::Static(res) => return Ok(res),
         Router::Websocket(_, path) => path,
         Router::Debug => {
-            let backends_read = state.backends.read().await;
-            let backends_info: String = backends_read
-                .iter()
-                .map(|(k, v)| format!("backends[{}] = {v}\n", hex::encode_upper(k)))
-                .collect();
-            let debug = format!(
-                "server_state.strong_count = {}\nbackends.capacity = {}\nbackends.len = {}\n{}",
-                Arc::strong_count(&state),
-                backends_read.capacity(),
-                backends_read.len(),
-                backends_info,
-            );
-            let mut res = Response::new(Bytes::from(debug).into());
-            res.headers_mut()
-                .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
-            return Ok(res);
+            return Ok(if state.debug_handler {
+                let backends_read = state.backends.read().await;
+                let backends_info: String = backends_read
+                    .iter()
+                    .map(|(k, v)| format!("backends[{}] = {v}\n", hex::encode_upper(k)))
+                    .collect();
+                let debug = format!(
+                    "server_state.strong_count = {}\nbackends.capacity = {}\nbackends.len = {}\n{}",
+                    Arc::strong_count(&state),
+                    backends_read.capacity(),
+                    backends_read.len(),
+                    backends_info,
+                );
+
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, HeaderValue::from_static("text/plain"))
+                    .body(Bytes::from(debug).into())
+                    .unwrap()
+            } else {
+                empty_response(StatusCode::NOT_FOUND)
+            });
         }
     };
 
@@ -115,18 +131,15 @@ async fn handle_request(
     {
         // The request has been forwarded by us once before. Refuse to get into
         // a loop.
-        error!("{addr}: request seems to be previously forwarded - refusing to get in a loop!");
-        return Ok(Response::builder()
-            .status(StatusCode::LOOP_DETECTED)
-            .body(Default::default())
-            .unwrap());
+        error!("request seems to be previously forwarded - refusing to get in a loop!");
+        return Ok(empty_response(StatusCode::LOOP_DETECTED));
     }
     // TODO: add standard proxy forwarding headers
 
     // Get the backend address, and set the Routing ID header in the request
     let backend = match &mut path.method {
         CableMethod::New => {
-            // TODO
+            // TODO: select a backend
             path.routing_id.copy_from_slice(&ROUTING_ID);
             let headers = backend_req.headers_mut();
 
@@ -150,26 +163,21 @@ async fn handle_request(
             match state.backends.read().await.get(&path.routing_id) {
                 Some(a) => a.to_owned(),
                 None => {
-                    error!("{addr}: unknown routing ID: {path}",);
-                    return Ok(Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body(Default::default())
-                        .unwrap());
+                    error!("unknown routing ID");
+                    return Ok(empty_response(StatusCode::NOT_FOUND));
                 }
             }
         }
     };
+    tracing::Span::current().record("backend", backend.to_string());
 
     // Connect to the backend task
-    info!("{addr}: connecting to backend {backend}");
+    info!("connecting to backend");
     let backend_socket = match TcpStream::connect(backend).await {
         Ok(s) => s,
         Err(e) => {
-            error!("{addr}: unable to reach backend {backend}: {e}");
-            return Ok(Response::builder()
-                .status(StatusCode::GATEWAY_TIMEOUT)
-                .body(Default::default())
-                .unwrap());
+            error!("unable to reach backend: {e}");
+            return Ok(empty_response(StatusCode::GATEWAY_TIMEOUT));
         }
     };
 
@@ -180,15 +188,12 @@ async fn handle_request(
             let backend_ip = backend.ip().to_string();
             let domain = state.tls_domain.as_deref().unwrap_or(backend_ip.as_str());
 
-            trace!("{addr}: TLS handshake with {backend} using domain {domain}");
+            trace!("TLS handshake with backend using domain {domain}");
             match tls_connector.connect(domain, backend_socket).await {
                 Ok(o) => MaybeTlsStream::NativeTls(o),
                 Err(e) => {
-                    error!("tls_connector.connect: {e}");
-                    return Ok(Response::builder()
-                        .status(StatusCode::BAD_GATEWAY)
-                        .body(Default::default())
-                        .unwrap());
+                    error!("TLS handshake with backend failed: {e}");
+                    return Ok(empty_response(StatusCode::BAD_GATEWAY));
                 }
             }
         }
@@ -197,18 +202,15 @@ async fn handle_request(
     let (mut sender, conn) = match hyper::client::conn::http1::handshake(backend_socket).await {
         Ok(v) => v,
         Err(e) => {
-            error!("{addr}: unable to handshake with backend {backend}: {e}");
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Default::default())
-                .unwrap());
+            error!("unable to handshake with backend: {e}");
+            return Ok(empty_response(StatusCode::BAD_GATEWAY));
         }
     };
 
     // Spawn a task to poll the connection and drive the HTTP state
     tokio::task::spawn(async move {
         if let Err(e) = conn.await {
-            error!("{addr}: backend connection failed: {e:?}");
+            error!("backend connection failed: {e:?}");
         }
     });
 
@@ -216,23 +218,17 @@ async fn handle_request(
     let mut backend_res = match sender.send_request(backend_req).await {
         Ok(r) => r,
         Err(e) => {
-            error!("{addr}: unable to send request to backend {backend}: {e}");
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(Default::default())
-                .unwrap());
+            error!("unable to send request to backend: {e}");
+            return Ok(empty_response(StatusCode::BAD_GATEWAY));
         }
     };
 
     if backend_res.status() != StatusCode::SWITCHING_PROTOCOLS {
         error!(
-            "{addr}: backend {backend} returned unexpected status: {}",
+            "backend returned unexpected status: {}",
             backend_res.status()
         );
-        return Ok(Response::builder()
-            .status(backend_res.status())
-            .body(Default::default())
-            .unwrap());
+        return Ok(empty_response(backend_res.status()));
     }
 
     // Copy the response for the client
@@ -245,7 +241,7 @@ async fn handle_request(
         let mut backend_upgraded = match hyper::upgrade::on(&mut backend_res).await {
             Ok(u) => u,
             Err(e) => {
-                error!("{addr}: failure upgrading connection to backend {backend}: {e}");
+                error!("failure upgrading connection to backend: {e}");
                 return;
             }
         };
@@ -254,7 +250,7 @@ async fn handle_request(
         let mut client_upgraded = match hyper::upgrade::on(&mut req).await {
             Ok(u) => u,
             Err(e) => {
-                error!("{addr}: failure upgrading connection to client: {e}");
+                error!("failure upgrading connection to client: {e}");
                 return;
             }
         };
@@ -262,10 +258,10 @@ async fn handle_request(
         // Connect the two streams together directly.
         match tokio::io::copy_bidirectional(&mut backend_upgraded, &mut client_upgraded).await {
             Ok((backend_bytes, client_bytes)) => {
-                info!("{addr}: connection closed, backend sent {backend_bytes} bytes, client sent {client_bytes} bytes");
+                info!("connection closed, backend sent {backend_bytes} bytes, client sent {client_bytes} bytes");
             }
             Err(e) => {
-                error!("{addr}: connection error: {e}");
+                error!("connection error: {e}");
                 backend_upgraded.shutdown().await.ok();
                 client_upgraded.shutdown().await.ok();
             }
@@ -280,29 +276,30 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     setup_logging();
     let flags = Flags::parse();
     let server_state = ServerState::from(&flags);
-    let bind_address: SocketAddr = flags.bind_address.parse().expect("invalid --bind-address");
 
     // TODO: implement properly
-    let backend_address: SocketAddr = flags
-        .backend_address
-        .parse()
-        .expect("invalid --backend-address");
     assert_ne!(
-        bind_address, backend_address,
+        flags.bind_address, flags.backend_address,
         "--bind-address cannot not be the same as --backend--address"
     );
     server_state
         .backends
         .write()
         .await
-        .insert(ROUTING_ID, backend_address);
+        .insert(ROUTING_ID, flags.backend_address);
     let tls_acceptor = flags.protocol.tls_acceptor()?;
     info!(
         "Starting webauthn-rs cable-tunnel-server-frontend at {}",
-        flags.protocol.uri(&bind_address)?
+        flags.protocol.uri(&flags.bind_address)?
     );
 
-    run_server(bind_address, tls_acceptor, server_state, handle_request).await?;
+    run_server(
+        flags.bind_address,
+        tls_acceptor,
+        server_state,
+        handle_request,
+    )
+    .await?;
 
     Ok(())
 }

@@ -3,7 +3,7 @@ use std::{
     net::SocketAddr, sync::Arc, time::Duration,
 };
 
-use clap::Parser;
+use clap::{ArgAction, Parser, ValueHint};
 
 use futures::{SinkExt, StreamExt};
 use http_body_util::Full;
@@ -44,6 +44,7 @@ struct ServerState {
     origin: Option<String>,
     routing_id: RoutingId,
     tunnel_ttl: Duration,
+    debug_handler: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -51,7 +52,7 @@ struct ServerState {
 pub struct Flags {
     /// Bind address and port for the server.
     #[clap(long, default_value = "127.0.0.1:8080", value_name = "ADDR")]
-    bind_address: String,
+    bind_address: SocketAddr,
 
     /// The routing ID to report on new tunnel requests. This is a 3 byte,
     /// base-16 encoded value (eg: `123456`).
@@ -65,7 +66,7 @@ pub struct Flags {
     ///
     /// When not set, the tunnel server allows requests from any Origin, which
     /// could allow non-caBLE use of the server.
-    #[clap(long)]
+    #[clap(long, value_hint = ValueHint::Hostname)]
     origin: Option<String>,
 
     /// Maximum amount of time a tunnel may be open for, in seconds. The timer
@@ -85,6 +86,10 @@ pub struct Flags {
 
     #[clap(flatten)]
     protocol: ServerTransportProtocol,
+
+    /// Disables the `/debug` handler on the HTTP server.
+    #[clap(long = "no-debug-handler", action = ArgAction::SetFalse)]
+    debug_handler: bool,
 }
 
 impl From<&Flags> for ServerState {
@@ -96,6 +101,7 @@ impl From<&Flags> for ServerState {
             origin: f.origin.to_owned(),
             routing_id: f.routing_id,
             tunnel_ttl: f.tunnel_ttl,
+            debug_handler: f.debug_handler,
         }
     }
 }
@@ -314,17 +320,22 @@ async fn handle_request(
         Router::Static(res) => return Ok(res),
         Router::Websocket(res, path) => (res, path),
         Router::Debug => {
-            let peer_map_read = state.peer_map.read().await;
-            let debug = format!(
-                "server_state.strong_count = {}\npeer_map.capacity = {}\npeer_map.len = {}\n",
-                Arc::strong_count(&state),
-                peer_map_read.capacity(),
-                peer_map_read.len(),
-            );
-            let mut res = Response::new(Bytes::from(debug).into());
-            res.headers_mut()
-                .insert(CONTENT_TYPE, HeaderValue::from_static("text/plain"));
-            return Ok(res);
+            return Ok(if state.debug_handler {
+                let peer_map_read = state.peer_map.read().await;
+                let debug = format!(
+                    "server_state.strong_count = {}\npeer_map.capacity = {}\npeer_map.len = {}\n",
+                    Arc::strong_count(&state),
+                    peer_map_read.capacity(),
+                    peer_map_read.len(),
+                );
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, HeaderValue::from_static("text/plain"))
+                    .body(Bytes::from(debug).into())
+                    .unwrap()
+            } else {
+                empty_response(StatusCode::NOT_FOUND)
+            });
         }
     };
 
@@ -344,10 +355,7 @@ async fn handle_request(
                 let mut lock = state.peer_map.write().await;
                 if lock.contains_key(&path.tunnel_id) {
                     error!("tunnel already exists: {path}");
-                    return Ok(Response::builder()
-                        .status(StatusCode::CONFLICT)
-                        .body(Bytes::new().into())
-                        .unwrap());
+                    return Ok(empty_response(StatusCode::CONFLICT));
                 }
                 lock.insert(path.tunnel_id, tunnel);
             }
@@ -360,10 +368,7 @@ async fn handle_request(
                 (c.initiator_tx, c.authenticator_rx)
             } else {
                 error!("no peer available for tunnel: {path}");
-                return Ok(Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Bytes::new().into())
-                    .unwrap());
+                return Ok(empty_response(StatusCode::NOT_FOUND));
             }
         }
     };
@@ -401,14 +406,19 @@ async fn main() -> Result<(), Box<dyn StdError>> {
     setup_logging();
     let flags = Flags::parse();
     let server_state = ServerState::from(&flags);
-    let bind_address: SocketAddr = flags.bind_address.parse().expect("invalid --bind-address");
     let tls_acceptor = flags.protocol.tls_acceptor()?;
     info!(
         "Starting webauthn-rs cable-tunnel-server-backend at {}",
-        flags.protocol.uri(&bind_address)?
+        flags.protocol.uri(&flags.bind_address)?
     );
 
-    run_server(bind_address, tls_acceptor, server_state, handle_request).await?;
+    run_server(
+        flags.bind_address,
+        tls_acceptor,
+        server_state,
+        handle_request,
+    )
+    .await?;
 
     Ok(())
 }

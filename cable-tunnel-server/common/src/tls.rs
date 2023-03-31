@@ -1,6 +1,6 @@
 use std::{fs::read, net::SocketAddr, path::PathBuf};
 
-use clap::Args;
+use clap::{Args, ValueHint};
 use hyper::{http::uri::Builder, Uri};
 use tokio_native_tls::{
     native_tls::{self, Certificate, Identity, Protocol},
@@ -45,11 +45,11 @@ pub struct ServerTransportProtocol {
     insecure_http_server: bool,
 
     /// Path to the server's public key (certificate) in PEM format.
-    #[clap(long, value_name = "PEM")]
+    #[clap(long, value_name = "PEM", value_hint = ValueHint::FilePath)]
     tls_public_key: Option<PathBuf>,
 
     /// Path to the server's private key in PEM format.
-    #[clap(long, value_name = "PEM")]
+    #[clap(long, value_name = "PEM", value_hint = ValueHint::FilePath)]
     tls_private_key: Option<PathBuf>,
 }
 
@@ -111,12 +111,12 @@ pub struct BackendClientOptions {
 
     /// Public key of the root CA to trust when connecting to a backend task,
     /// instead of using the system's built-in certificate trust store.
-    #[clap(long, value_name = "PEM")]
+    #[clap(long, value_name = "PEM", value_hint = ValueHint::FilePath)]
     trusted_ca: Option<PathBuf>,
 
     /// If set, use this domain name to validate the server-provided certificate
     /// against, rather than the IP of the backend.
-    #[clap(long, value_name = "DOMAIN")]
+    #[clap(long, value_name = "DOMAIN", value_hint = ValueHint::Hostname)]
     pub domain: Option<String>,
 }
 

@@ -1,3 +1,8 @@
+//! Common components for webauthn-rs' caBLE tunnel server.
+//!
+//! **Important**: this library is an internal implementation detail of
+//! webauthn-rs' caBLE tunnel server, and has no guarantees of API stability
+//! whatsoever. It is **not** intended for use outside of that context.
 use std::{
     convert::Infallible, error::Error as StdError, fmt::Display, future::Future, mem::size_of,
     net::SocketAddr, num::ParseIntError, sync::Arc, time::Duration,
@@ -200,23 +205,21 @@ impl Router {
         let path = match req.uri().path() {
             "/" => return Self::Static(Response::new(Bytes::from(INDEX).into())),
             "/favicon.ico" => {
-                let mut response = Response::new(Bytes::from(FAVICON).into());
-                response.headers_mut().insert(
-                    CONTENT_TYPE,
-                    HeaderValue::from_static("image/vnd.microsoft.icon"),
-                );
+                let response = Response::builder()
+                    .status(StatusCode::OK)
+                    .header(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("image/vnd.microsoft.icon"),
+                    )
+                    .body(Bytes::from(FAVICON).into())
+                    .unwrap();
 
                 return Self::Static(response);
             }
             "/debug" => return Self::Debug,
             path => match CablePath::try_from(path) {
                 Err(()) => {
-                    return Self::Static(
-                        Response::builder()
-                            .status(StatusCode::NOT_FOUND)
-                            .body(Default::default())
-                            .unwrap(),
-                    );
+                    return Self::Static(empty_response(StatusCode::NOT_FOUND));
                 }
                 Ok(p) => p,
             },
@@ -225,13 +228,8 @@ impl Router {
         let mut res = match create_response(req) {
             Ok(r) => r,
             Err(e) => {
-                error!("Bad request for WebSocket: {e}");
-                return Self::Static(
-                    Response::builder()
-                        .status(StatusCode::BAD_REQUEST)
-                        .body(Default::default())
-                        .unwrap(),
-                );
+                error!("bad request for WebSocket: {e}");
+                return Self::Static(empty_response(StatusCode::BAD_REQUEST));
             }
         };
 
@@ -244,13 +242,8 @@ impl Router {
             .map(|v| v.eq_ignore_ascii_case(CABLE_PROTOCOL))
             .unwrap_or_default()
         {
-            error!("Unsupported or missing WebSocket protocol");
-            return Self::Static(
-                Response::builder()
-                    .status(StatusCode::BAD_REQUEST)
-                    .body(Default::default())
-                    .unwrap(),
-            );
+            error!("unsupported or missing WebSocket protocol");
+            return Self::Static(empty_response(StatusCode::BAD_REQUEST));
         }
 
         // Check the origin header
@@ -267,13 +260,8 @@ impl Router {
                 })
                 .unwrap_or_default()
             {
-                error!("Incorrect or missing Origin header");
-                return Self::Static(
-                    Response::builder()
-                        .status(StatusCode::FORBIDDEN)
-                        .body(Default::default())
-                        .unwrap(),
-                );
+                error!("incorrect or missing Origin header");
+                return Self::Static(empty_response(StatusCode::FORBIDDEN));
             }
         }
 
@@ -288,7 +276,15 @@ impl Router {
     }
 }
 
-/// Creates a copy of an existing HTTP request, discarding the body.
+/// Make a [Response] with a given [StatusCode] and empty body.
+pub fn empty_response<E: Into<StatusCode>, T: Default>(status: E) -> Response<T> {
+    Response::builder()
+        .status(status)
+        .body(Default::default())
+        .unwrap()
+}
+
+/// Create a copy of an existing HTTP [Request], discarding the body.
 pub fn copy_request_empty_body<T>(r: &Request<T>) -> Request<Empty<Bytes>> {
     let mut o = Request::builder().method(r.method()).uri(r.uri());
     {
@@ -299,7 +295,7 @@ pub fn copy_request_empty_body<T>(r: &Request<T>) -> Request<Empty<Bytes>> {
     o.body(Default::default()).unwrap()
 }
 
-/// Creates a copy of an existing HTTP response, discarding the body.
+/// Create a copy of an existing HTTP [Response], discarding the body.
 pub fn copy_response_empty_body<T>(r: &Response<T>) -> Response<Empty<Bytes>> {
     let mut o = Response::builder().status(r.status());
     {
@@ -310,7 +306,7 @@ pub fn copy_response_empty_body<T>(r: &Response<T>) -> Response<Empty<Bytes>> {
     o.body(Default::default()).unwrap()
 }
 
-/// Runs a HTTP server for the caBLE WebSockets tunnel.
+/// Run a HTTP server for the caBLE WebSocket tunnel.
 pub async fn run_server<F, R, ResBody, T>(
     bind_address: SocketAddr,
     tls_acceptor: Option<TlsAcceptor>,
