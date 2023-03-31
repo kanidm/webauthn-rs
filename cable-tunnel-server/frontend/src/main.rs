@@ -61,18 +61,17 @@ pub struct Flags {
     debug_handler: bool,
 }
 
-impl From<&Flags> for ServerState {
-    fn from(f: &Flags) -> Self {
-        Self {
+impl TryFrom<&Flags> for ServerState {
+    type Error = TlsConfigError;
+
+    fn try_from(f: &Flags) -> Result<Self, Self::Error> {
+        Ok(Self {
             origin: f.origin.to_owned(),
             tls_domain: f.backend_options.domain.to_owned(),
-            backend_connector: f
-                .backend_options
-                .tls_connector()
-                .expect("Cannot setup TLS connector"),
+            backend_connector: f.backend_options.tls_connector()?,
             backends: RwLock::new(HashMap::new()),
             debug_handler: f.debug_handler,
-        }
+        })
     }
 }
 
@@ -275,7 +274,7 @@ async fn handle_request(
 async fn main() -> Result<(), Box<dyn StdError>> {
     setup_logging();
     let flags = Flags::parse();
-    let server_state = ServerState::from(&flags);
+    let server_state = ServerState::try_from(&flags)?;
 
     // TODO: implement properly
     assert_ne!(

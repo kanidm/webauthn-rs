@@ -208,7 +208,7 @@ impl Router {
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::OK)
-                        .header(CONTENT_TYPE, HeaderValue::from_static("text/html"))
+                        .header(CONTENT_TYPE, "text/html")
                         .body(Bytes::from(INDEX).into())
                         .unwrap(),
                 )
@@ -217,10 +217,7 @@ impl Router {
                 return Self::Static(
                     Response::builder()
                         .status(StatusCode::OK)
-                        .header(
-                            CONTENT_TYPE,
-                            HeaderValue::from_static("image/vnd.microsoft.icon"),
-                        )
+                        .header(CONTENT_TYPE, "image/vnd.microsoft.icon")
                         .body(Bytes::from(FAVICON).into())
                         .unwrap(),
                 );
