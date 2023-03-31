@@ -93,7 +93,7 @@ async fn handle_request(
 
     // Use our usual routing logic for static files, except ignore the crafted
     // response for Websocket connections.
-    let mut path = match Router::route(&req, &state.origin) {
+    let mut path = match Router::route(&req, state.origin.as_deref()) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(_, path) => path,
         Router::Debug => {

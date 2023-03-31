@@ -316,7 +316,7 @@ async fn handle_request(
     trace!("request payload: {req:?}");
     let mut req = req.map(|_| ());
 
-    let (mut res, mut path) = match Router::route(&req, &state.origin) {
+    let (mut res, mut path) = match Router::route(&req, state.origin.as_deref()) {
         Router::Static(res) => return Ok(res),
         Router::Websocket(res, path) => (res, path),
         Router::Debug => {

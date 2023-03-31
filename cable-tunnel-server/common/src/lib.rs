@@ -34,7 +34,7 @@ pub use tls::*;
 pub type RoutingId = [u8; 3];
 pub type TunnelId = [u8; 16];
 
-pub const CABLE_PROTOCOL: &str = "fido.cable";
+pub const CABLE_PROTOCOL: HeaderValue = HeaderValue::from_static("fido.cable");
 pub const CABLE_ROUTING_ID_HEADER: &str = "X-caBLE-Routing-ID";
 
 pub const CABLE_NEW_PATH: &str = "/cable/new/";
@@ -178,6 +178,7 @@ impl TryFrom<&str> for CablePath {
 }
 
 /// HTTP router for a caBLE WebSocket tunnel server.
+#[derive(Debug)]
 pub enum Router {
     /// The web server should handle the request as a caBLE WebSocket
     /// connection.
@@ -191,7 +192,7 @@ pub enum Router {
 
 impl Router {
     /// Routes an incoming HTTP request.
-    pub fn route(req: &Request<()>, origin: &Option<String>) -> Self {
+    pub fn route(req: &Request<()>, origin: Option<&str>) -> Self {
         if req.method() != Method::GET {
             error!("method {} not allowed", req.method());
             let response = Response::builder()
@@ -203,18 +204,26 @@ impl Router {
         }
 
         let path = match req.uri().path() {
-            "/" => return Self::Static(Response::new(Bytes::from(INDEX).into())),
+            "/" => {
+                return Self::Static(
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .header(CONTENT_TYPE, HeaderValue::from_static("text/html"))
+                        .body(Bytes::from(INDEX).into())
+                        .unwrap(),
+                )
+            }
             "/favicon.ico" => {
-                let response = Response::builder()
-                    .status(StatusCode::OK)
-                    .header(
-                        CONTENT_TYPE,
-                        HeaderValue::from_static("image/vnd.microsoft.icon"),
-                    )
-                    .body(Bytes::from(FAVICON).into())
-                    .unwrap();
-
-                return Self::Static(response);
+                return Self::Static(
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .header(
+                            CONTENT_TYPE,
+                            HeaderValue::from_static("image/vnd.microsoft.icon"),
+                        )
+                        .body(Bytes::from(FAVICON).into())
+                        .unwrap(),
+                );
             }
             "/debug" => return Self::Debug,
             path => match CablePath::try_from(path) {
@@ -238,8 +247,7 @@ impl Router {
         if !req
             .headers()
             .get(SEC_WEBSOCKET_PROTOCOL)
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v.eq_ignore_ascii_case(CABLE_PROTOCOL))
+            .map(|v| v == CABLE_PROTOCOL)
             .unwrap_or_default()
         {
             error!("unsupported or missing WebSocket protocol");
@@ -266,13 +274,19 @@ impl Router {
         }
 
         // We have the correct protocol, include in the response
-        res.headers_mut().append(
-            SEC_WEBSOCKET_PROTOCOL,
-            HeaderValue::from_static(CABLE_PROTOCOL),
-        );
+        res.headers_mut()
+            .append(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL);
         let res = res.map(|_| Default::default());
 
         Router::Websocket(res, path)
+    }
+
+    #[cfg(test)]
+    pub(self) fn static_response(self) -> Option<Response<Full<Bytes>>> {
+        match self {
+            Self::Static(r) => Some(r),
+            _ => None,
+        }
     }
 }
 
@@ -383,12 +397,13 @@ pub fn setup_logging() {
 
 #[cfg(test)]
 mod tests {
+    use http_body_util::BodyExt;
+    use tungstenite::client::IntoClientRequest;
+
     use super::*;
 
     #[test]
     fn parse_urls() {
-        let _ = tracing_subscriber::fmt::try_init();
-
         // Parse valid paths in upper case
         assert_eq!(
             CablePath::new(*b"hello, webauthn!"),
@@ -472,5 +487,196 @@ mod tests {
 
         // Should be rejected by length limits
         assert!(CablePath::try_from(include_str!("lib.rs")).is_err());
+    }
+
+    async fn check_index_response(response: Response<Full<Bytes>>) {
+        assert_eq!(StatusCode::OK, response.status());
+        assert_eq!(
+            "text/html",
+            HeaderValue::to_str(response.headers().get(CONTENT_TYPE).unwrap()).unwrap()
+        );
+        assert!(response.body().size_hint().exact().unwrap() > 16);
+        assert_eq!(
+            INDEX,
+            response
+                .into_body()
+                .frame()
+                .await
+                .unwrap()
+                .unwrap()
+                .into_data()
+                .unwrap()
+        );
+    }
+
+    async fn check_favicon_response(response: Response<Full<Bytes>>) {
+        assert_eq!(StatusCode::OK, response.status());
+        assert_eq!(
+            "image/vnd.microsoft.icon",
+            HeaderValue::to_str(response.headers().get(CONTENT_TYPE).unwrap()).unwrap()
+        );
+        assert!(response.body().size_hint().exact().unwrap() > 16);
+        assert_eq!(
+            FAVICON,
+            response
+                .into_body()
+                .frame()
+                .await
+                .unwrap()
+                .unwrap()
+                .into_data()
+                .unwrap()
+        );
+    }
+
+    fn check_error_response(response: Response<Full<Bytes>>, expected_status: StatusCode) {
+        assert_eq!(expected_status, response.status());
+        assert_eq!(0, response.body().size_hint().exact().unwrap());
+    }
+
+    fn check_websocket_response(response: &Response<Full<Bytes>>) -> bool {
+        assert_eq!(StatusCode::SWITCHING_PROTOCOLS, response.status());
+        assert_eq!(0, response.body().size_hint().exact().unwrap());
+        assert_eq!(
+            "fido.cable",
+            HeaderValue::to_str(response.headers().get(SEC_WEBSOCKET_PROTOCOL).unwrap()).unwrap()
+        );
+        true
+    }
+
+    const TEST_ORIGINS: [Option<&str>; 3] =
+        [None, Some("cable.example.com"), Some("cable.example.net")];
+
+    #[tokio::test]
+    async fn static_router() -> Result<(), Box<dyn StdError>> {
+        // Index handler, without origin
+        let request = Request::get("https://cable.example.com/").body(())?;
+
+        for router_origin in TEST_ORIGINS {
+            check_index_response(
+                Router::route(&request, router_origin)
+                    .static_response()
+                    .ok_or("expected static response")?,
+            )
+            .await;
+        }
+
+        // Index handler, with origin
+        let request = Request::get("https://cable.example.com/")
+            .header(ORIGIN, "cable.example.com")
+            .body(())?;
+
+        for router_origin in TEST_ORIGINS {
+            check_index_response(
+                Router::route(&request, router_origin)
+                    .static_response()
+                    .ok_or("expected static response")?,
+            )
+            .await;
+        }
+
+        // Favicon handler, without origin
+        let request = Request::get("https://cable.example.com/favicon.ico").body(())?;
+
+        for router_origin in TEST_ORIGINS {
+            check_favicon_response(
+                Router::route(&request, router_origin)
+                    .static_response()
+                    .ok_or("expected static response")?,
+            )
+            .await;
+        }
+
+        // Favicon handler, with origin
+        let request = Request::get("https://cable.example.com/favicon.ico")
+            .header(ORIGIN, "cable.example.com")
+            .body(())?;
+
+        for router_origin in TEST_ORIGINS {
+            check_favicon_response(
+                Router::route(&request, router_origin)
+                    .static_response()
+                    .ok_or("expected static response")?,
+            )
+            .await;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn debug_router() -> Result<(), Box<dyn StdError>> {
+        // Debug handler, without origin
+        let request = Request::get("https://cable.example.com/debug").body(())?;
+
+        for router_origin in TEST_ORIGINS {
+            assert!(matches!(
+                Router::route(&request, router_origin),
+                Router::Debug
+            ));
+        }
+
+        // Debug handler, with origin
+        let request = Request::get("https://cable.example.com/debug")
+            .header(ORIGIN, "cable.example.com")
+            .body(())?;
+
+        for router_origin in TEST_ORIGINS {
+            assert!(matches!(
+                Router::route(&request, router_origin),
+                Router::Debug
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn websocket_router() -> Result<(), Box<dyn StdError>> {
+        // Make WebSocket request missing caBLE headers
+        let request = "wss://cable.example.com/cable/new/68656C6C6F2C20776562617574686E21"
+            .into_client_request()?;
+        check_error_response(
+            Router::route(&request, None)
+                .static_response()
+                .ok_or("expected static response")?,
+            StatusCode::BAD_REQUEST,
+        );
+
+        // With caBLE headers, but no Origin
+        let mut request = "wss://cable.example.com/cable/new/68656C6C6F2C20776562617574686E21"
+            .into_client_request()?;
+        request
+            .headers_mut()
+            .insert(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL);
+        matches!(
+            Router::route(&request, None),
+            Router::Websocket(_, p) if p == CablePath::new(*b"hello, webauthn!")
+        );
+        check_error_response(
+            Router::route(&request, Some("cable.example.com"))
+                .static_response()
+                .ok_or("expected static response")?,
+            StatusCode::FORBIDDEN,
+        );
+
+        // With caBLE headers and Origin
+        let mut request = "wss://cable.example.com/cable/new/68656C6C6F2C20776562617574686E21"
+            .into_client_request()?;
+        let headers = request.headers_mut();
+        headers.insert(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL);
+        headers.insert(ORIGIN, HeaderValue::from_static("cable.example.com"));
+
+        for router_origin in [None, Some("cable.example.com")] {
+            matches!(
+                Router::route(&request, router_origin),
+                Router::Websocket(r, p) if p == CablePath::new(*b"hello, webauthn!") && check_websocket_response(&r)
+            );
+        }
+        matches!(
+            Router::route(&request, Some("cable.example.net")),
+            Router::Websocket(r, p) if p == CablePath::new(*b"hello, webauthn!") && check_websocket_response(&r)
+        );
+
+        Ok(())
     }
 }
