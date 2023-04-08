@@ -20,7 +20,7 @@ cable = ["bluetooth", "hex", "tokio", "tokio-tungstenite", "qrcode"]
 
 # Always connect to a caBLE tunnel server at ws://localhost:8080, rather than
 # the true tunnel server URL. Only useful for testing.
-cable-localhost-tunnel = []
+cable-override-tunnel = []
 
 nfc = ["pcsc"]
 usb = ["hidapi"]

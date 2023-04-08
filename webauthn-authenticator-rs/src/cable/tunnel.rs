@@ -19,10 +19,7 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, http::HeaderValue, Message},
 };
-use tokio_tungstenite::{
-    tungstenite::http::{uri::Builder, Uri},
-    MaybeTlsStream, WebSocketStream,
-};
+use tokio_tungstenite::{tungstenite::http::Uri, MaybeTlsStream, WebSocketStream};
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use crate::{
@@ -42,6 +39,7 @@ use crate::{
     transport::Token,
     ui::UiCallback,
     util::compute_sha256,
+    pub_if_cable_override_tunnel,
 };
 
 /// Manually-assigned domains.
@@ -62,48 +60,37 @@ const TUNNEL_SERVER_ID_OFFSET: usize = TUNNEL_SERVER_SALT.len() - 3;
 const TUNNEL_SERVER_TLDS: [&str; 4] = [".com", ".org", ".net", ".info"];
 const BASE32_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz234567";
 
-#[cfg(feature = "cable-localhost-tunnel")]
-const CABLE_LOCAL_TUNNEL: Option<&str> = Some("localhost:8080");
-#[cfg(not(feature = "cable-localhost-tunnel"))]
-const CABLE_LOCAL_TUNNEL: Option<&str> = None;
-
 /// Decodes a `domain_id` into an actual domain name.
 ///
 /// See Chromium's `tunnelserver::DecodeDomain`.
-pub fn get_domain(domain_id: u16) -> Option<Builder> {
-    let domain = if domain_id < 256 {
-        match ASSIGNED_DOMAINS.get(usize::from(domain_id)) {
-            Some(d) => d.to_string(),
+pub fn get_domain(domain_id: u16) -> Option<String> {
+    if domain_id < 256 {
+        return match ASSIGNED_DOMAINS.get(usize::from(domain_id)) {
+            Some(d) => Some(d.to_string()),
             None => {
                 warn!("Invalid tunnel server ID {:04x}", domain_id);
-                return None;
+                None
             }
-        }
-    } else {
-        let mut buf = TUNNEL_SERVER_SALT.to_vec();
-        buf[TUNNEL_SERVER_ID_OFFSET..TUNNEL_SERVER_ID_OFFSET + 2]
-            .copy_from_slice(&domain_id.to_le_bytes());
-        let digest = compute_sha256(&buf);
-        let mut result = u64::from_le_bytes(digest[..8].try_into().ok()?);
-
-        let tld = TUNNEL_SERVER_TLDS[(result & 3) as usize];
-
-        let mut domain = String::from("cable.");
-        result >>= 2;
-        while result != 0 {
-            domain.push(char::from_u32(BASE32_CHARS[(result & 31) as usize].into())?);
-            result >>= 5;
-        }
-        domain.push_str(tld);
-        domain
-    };
-
-    if let Some(t) = CABLE_LOCAL_TUNNEL {
-        warn!("Using ws://{t} as caBLE tunnel server rather than wss://{domain}");
-        return Some(Uri::builder().scheme("ws").authority(t));
+        };
     }
 
-    Some(Uri::builder().scheme("wss").authority(domain))
+    let mut buf = TUNNEL_SERVER_SALT.to_vec();
+    buf[TUNNEL_SERVER_ID_OFFSET..TUNNEL_SERVER_ID_OFFSET + 2]
+        .copy_from_slice(&domain_id.to_le_bytes());
+    let digest = compute_sha256(&buf);
+    let mut result = u64::from_le_bytes(digest[..8].try_into().ok()?);
+
+    let tld = TUNNEL_SERVER_TLDS[(result & 3) as usize];
+
+    let mut o = String::from("cable.");
+    result >>= 2;
+    while result != 0 {
+        o.push(char::from_u32(BASE32_CHARS[(result & 31) as usize].into())?);
+        result >>= 5;
+    }
+    o.push_str(tld);
+
+    Some(o)
 }
 
 /// Websocket tunnel to a caBLE authenticator.
@@ -239,68 +226,91 @@ impl Tunnel {
         ui: &impl UiCallback,
     ) -> Result<Tunnel, WebauthnCError> {
         let uri = discovery.get_new_tunnel_uri(tunnel_server_id)?;
-        ui.cable_status_update(CableState::ConnectingToTunnelServer);
-        let (mut stream, routing_id) = Self::connect(&uri).await?;
-
-        let eid = if let Some(routing_id) = routing_id {
-            Eid::new(
-                tunnel_server_id,
-                routing_id.try_into().map_err(|_| {
-                    error!("Incorrect routing-id header length");
-                    WebauthnCError::Internal
-                })?,
-            )?
-        } else {
-            error!("Missing or invalid routing-id header");
-            return Err(WebauthnCError::Internal);
-        };
-
-        let psk = discovery.derive_psk(&eid)?;
-        let encrypted_eid = discovery.encrypt_advert(&eid)?;
-        advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid)?;
-
-        // Wait for initial message from initiator
-        trace!("Advertising started, waiting for initiator...");
-        ui.cable_status_update(CableState::WaitingForInitiatorConnection);
-        let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
-        trace!("<<< {:?}", resp);
-
-        advertiser.stop_advertising()?;
-        ui.cable_status_update(CableState::Handshaking);
-        let resp = if let Message::Binary(v) = resp {
-            v
-        } else {
-            error!("Unexpected websocket response type");
-            return Err(WebauthnCError::Unknown);
-        };
-
-        let (mut crypter, response) =
-            CableNoise::build_responder(None, psk, Some(peer_identity), &resp)?;
-        trace!("Sending response to initiator challenge");
-        trace!(">!> {:02x?}", response);
-        stream.send(Message::Binary(response)).await?;
-
-        // Send post-handshake message
-        let phm = CablePostHandshake {
-            info: info.to_owned(),
-            linking_info: None,
-        };
-        trace!("Sending post-handshake message");
-        trace!(">>> {:02x?}", &phm);
-        let phm = serde_cbor::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
-        crypter.use_new_construction();
-
-        let mut t = Self {
-            // psk,
-            stream,
-            crypter,
+        Tunnel::connect_authenticator_with_url(
+            discovery,
+            tunnel_server_id,
+            uri,
+            peer_identity,
             info,
-        };
+            advertiser,
+            ui,
+        )
+        .await
+    }
 
-        t.send_raw(&phm).await?;
+    pub_if_cable_override_tunnel! {
+        async fn connect_authenticator_with_url(
+            discovery: &Discovery,
+            tunnel_server_id: u16,
+            uri: Uri,
+            peer_identity: &EcKeyRef<Public>,
+            info: GetInfoResponse,
+            advertiser: &mut impl Advertiser,
+            ui: &impl UiCallback,
+        ) -> Result<Tunnel, WebauthnCError> {
+            ui.cable_status_update(CableState::ConnectingToTunnelServer);
+            let (mut stream, routing_id) = Self::connect(&uri).await?;
 
-        // Now we're ready for our first command
-        Ok(t)
+            let eid = if let Some(routing_id) = routing_id {
+                Eid::new(
+                    tunnel_server_id,
+                    routing_id.try_into().map_err(|_| {
+                        error!("Incorrect routing-id header length");
+                        WebauthnCError::Internal
+                    })?,
+                )?
+            } else {
+                error!("Missing or invalid routing-id header");
+                return Err(WebauthnCError::Internal);
+            };
+
+            let psk = discovery.derive_psk(&eid)?;
+            let encrypted_eid = discovery.encrypt_advert(&eid)?;
+            advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid)?;
+
+            // Wait for initial message from initiator
+            trace!("Advertising started, waiting for initiator...");
+            ui.cable_status_update(CableState::WaitingForInitiatorConnection);
+            let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
+            trace!("<<< {:?}", resp);
+
+            advertiser.stop_advertising()?;
+            ui.cable_status_update(CableState::Handshaking);
+            let resp = if let Message::Binary(v) = resp {
+                v
+            } else {
+                error!("Unexpected websocket response type");
+                return Err(WebauthnCError::Unknown);
+            };
+
+            let (mut crypter, response) =
+                CableNoise::build_responder(None, psk, Some(peer_identity), &resp)?;
+            trace!("Sending response to initiator challenge");
+            trace!(">!> {:02x?}", response);
+            stream.send(Message::Binary(response)).await?;
+
+            // Send post-handshake message
+            let phm = CablePostHandshake {
+                info: info.to_owned(),
+                linking_info: None,
+            };
+            trace!("Sending post-handshake message");
+            trace!(">>> {:02x?}", &phm);
+            let phm = serde_cbor::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
+            crypter.use_new_construction();
+
+            let mut t = Self {
+                // psk,
+                stream,
+                crypter,
+                info,
+            };
+
+            t.send_raw(&phm).await?;
+
+            // Now we're ready for our first command
+            Ok(t)
+        }
     }
 
     /// Establishes a [CtapAuthenticator] connection for communicating with a
@@ -473,40 +483,26 @@ mod test {
 
     #[test]
     fn check_known_tunnel_server_domains() {
+        assert_eq!(get_domain(0), Some(String::from("cable.ua5v.com")));
+        assert_eq!(get_domain(1), Some(String::from("cable.auth.com")));
         assert_eq!(
-            get_domain(0).unwrap().path_and_query("/").build().unwrap(),
-            "wss://cable.ua5v.com/"
-        );
-        assert_eq!(
-            get_domain(1).unwrap().path_and_query("/").build().unwrap(),
-            "wss://cable.auth.com/"
-        );
-        assert_eq!(
-            get_domain(266)
-                .unwrap()
-                .path_and_query("/")
-                .build()
-                .unwrap(),
-            "wss://cable.wufkweyy3uaxb.com/"
+            get_domain(266),
+            Some(String::from("cable.wufkweyy3uaxb.com"))
         );
 
-        assert!(get_domain(255).is_none());
+        assert_eq!(get_domain(255), None);
 
         // 🦀 = \u{1f980}
         assert_eq!(
-            get_domain(0xf980)
-                .unwrap()
-                .path_and_query("/")
-                .build()
-                .unwrap(),
-            "wss://cable.my4kstlhndi4c.net"
+            get_domain(0xf980),
+            Some(String::from("cable.my4kstlhndi4c.net"))
         )
     }
 
     #[test]
     fn check_all_hashed_tunnel_servers() {
         for x in 256..u16::MAX {
-            assert!(get_domain(x).is_some());
+            assert_ne!(get_domain(x), None);
         }
     }
 }

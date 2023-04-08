@@ -295,6 +295,7 @@ mod btle;
 mod discovery;
 mod framing;
 mod handshake;
+mod macros;
 mod noise;
 mod tunnel;
 
