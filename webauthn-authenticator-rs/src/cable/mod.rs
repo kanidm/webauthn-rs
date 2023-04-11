@@ -290,12 +290,14 @@
 //!
 //! [^qr]: Most mobile device camera apps have an integrated QR code scanner.
 #[allow(rustdoc::private_intra_doc_links)]
+#[cfg(doc)]
+use crate::stubs::*;
+
 mod base10;
 mod btle;
 mod discovery;
 mod framing;
 mod handshake;
-mod macros;
 mod noise;
 mod tunnel;
 
@@ -303,6 +305,7 @@ use std::collections::BTreeMap;
 
 pub use base10::DecodeError;
 pub use btle::Advertiser;
+use tokio_tungstenite::tungstenite::http::uri::Builder;
 
 use crate::{
     authenticator_hashed::{
@@ -366,9 +369,43 @@ impl CableRequestType {
 /// On some platforms, Bluetooth access requires additional permissions. If this
 /// is not available, this returns [WebauthnCError::PermissionDenied]. See
 /// [this module's documentation][self] for more information.
+#[inline]
 pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
     request_type: CableRequestType,
     ui_callback: &'a U,
+) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
+    connect_cable_authenticator_impl(request_type, ui_callback, None).await
+}
+
+#[cfg(feature = "cable-override-tunnel")]
+/// Connect to an authenticator using caBLE, overriding the WebSocket tunnel
+/// protocol and domain.
+///
+/// ## Warning
+///
+/// This is intended for testing purposes only, and **is incompatible with other
+/// caBLE implementations**. It also allows connecting to tunnel servers over
+/// unencrypted HTTP.
+///
+/// Use [`connect_cable_authenticator()`] instead.
+///
+/// This is intended to allow a caBLE tunnel server developer to test their code
+/// locally, without needing to register an appropriate domain name, set up DNS,
+/// or get a TLS certificate.
+///
+/// This is only available with the `cable-override-tunnel` feature.
+pub async fn connect_cable_authenticator_with_tunnel_uri<'a, U: UiCallback + 'a>(
+    request_type: CableRequestType,
+    ui_callback: &'a U,
+    connect_uri: Builder,
+) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
+    connect_cable_authenticator_impl(request_type, ui_callback, Some(connect_uri)).await
+}
+
+async fn connect_cable_authenticator_impl<'a, U: UiCallback + 'a>(
+    request_type: CableRequestType,
+    ui_callback: &'a U,
+    connect_uri: Option<Builder>,
 ) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
     // TODO: it may be better to return a caBLE-specific authenticator object,
     // rather than CtapAuthenticator, because the device will close the
@@ -394,9 +431,18 @@ pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
 
     let psk = disco.derive_psk(&eid)?;
 
-    let connect_url = disco.get_connect_uri(&eid)?;
+    let tunnel_id = disco.derive_tunnel_id()?;
+    let connect_uri = match connect_uri {
+        Some(u) => eid.build_connect_uri(u, tunnel_id),
+        None => eid.get_connect_uri(tunnel_id),
+    }
+    .ok_or_else(|| {
+        error!("unknown WebSocket tunnel URL for {:?}", eid);
+        WebauthnCError::NotSupported
+    })?;
+
     let tun = Tunnel::connect_initiator(
-        &connect_url,
+        &connect_uri,
         psk,
         disco.local_identity.as_ref(),
         ui_callback,
@@ -423,7 +469,76 @@ pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
 ///   example which uses a Bluetooth HCI controller connected to a serial UART.
 ///
 /// * `ui_callback` trait for prompting for user interaction where needed.
+#[inline]
 pub async fn share_cable_authenticator<'a, U>(
+    backend: &mut impl AuthenticatorBackendHashedClientData,
+    info: GetInfoResponse,
+    url: &str,
+    tunnel_server_id: u16,
+    advertiser: &mut impl Advertiser,
+    ui_callback: &'a U,
+    close_after_one_command: bool,
+) -> Result<(), WebauthnCError>
+where
+    U: UiCallback + 'a,
+{
+    share_cable_authenticator_impl(
+        backend,
+        info,
+        url,
+        tunnel_server_id,
+        advertiser,
+        ui_callback,
+        close_after_one_command,
+        None,
+    )
+    .await
+}
+
+#[cfg(feature = "cable-override-tunnel")]
+/// Share an authenticator using caBLE, overriding the WebSocket tunnel URI.
+///
+/// ## Warning
+///
+/// This is intended for testing purposes only, and **is incompatible with other
+/// caBLE implementations**. It also allows connecting to tunnel servers over
+/// unencrypted HTTP.
+///
+/// Use [`share_cable_authenticator()`] instead.
+///
+/// This is intended to allow a caBLE tunnel server developer to test their code
+/// locally, without needing to register an appropriate domain name, set up DNS,
+/// or get a TLS certificate.
+///
+/// This is only available with the `cable-override-tunnel` feature.
+#[inline]
+pub async fn share_cable_authenticator_with_tunnel_uri<'a, U>(
+    backend: &mut impl AuthenticatorBackendHashedClientData,
+    info: GetInfoResponse,
+    url: &str,
+    tunnel_server_id: u16,
+    advertiser: &mut impl Advertiser,
+    ui_callback: &'a U,
+    close_after_one_command: bool,
+    tunnel_uri: Builder,
+) -> Result<(), WebauthnCError>
+where
+    U: UiCallback + 'a,
+{
+    share_cable_authenticator_impl(
+        backend,
+        info,
+        url,
+        tunnel_server_id,
+        advertiser,
+        ui_callback,
+        close_after_one_command,
+        Some(tunnel_uri),
+    )
+    .await
+}
+
+async fn share_cable_authenticator_impl<'a, U>(
     backend: &mut impl AuthenticatorBackendHashedClientData,
     mut info: GetInfoResponse,
     url: &str,
@@ -431,6 +546,7 @@ pub async fn share_cable_authenticator<'a, U>(
     advertiser: &mut impl Advertiser,
     ui_callback: &'a U,
     close_after_one_command: bool,
+    tunnel_uri: Option<Builder>,
 ) -> Result<(), WebauthnCError>
 where
     U: UiCallback + 'a,
@@ -453,7 +569,13 @@ where
     let handshake = HandshakeV2::from_qr_url(url)?;
     let discovery = handshake.to_discovery()?;
 
+    let tunnel_uri = match tunnel_uri {
+        Some(u) => discovery.build_new_tunnel_uri(u)?,
+        None => discovery.get_new_tunnel_uri(tunnel_server_id)?,
+    };
+
     let mut tunnel = Tunnel::connect_authenticator(
+        &tunnel_uri,
         &discovery,
         tunnel_server_id,
         &handshake.peer_identity,

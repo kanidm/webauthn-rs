@@ -39,7 +39,6 @@ use crate::{
     transport::Token,
     ui::UiCallback,
     util::compute_sha256,
-    pub_if_cable_override_tunnel,
 };
 
 /// Manually-assigned domains.
@@ -218,6 +217,7 @@ impl Tunnel {
     }
 
     pub async fn connect_authenticator(
+        uri: &Uri,
         discovery: &Discovery,
         tunnel_server_id: u16,
         peer_identity: &EcKeyRef<Public>,
@@ -225,92 +225,68 @@ impl Tunnel {
         advertiser: &mut impl Advertiser,
         ui: &impl UiCallback,
     ) -> Result<Tunnel, WebauthnCError> {
-        let uri = discovery.get_new_tunnel_uri(tunnel_server_id)?;
-        Tunnel::connect_authenticator_with_url(
-            discovery,
-            tunnel_server_id,
-            uri,
-            peer_identity,
+        ui.cable_status_update(CableState::ConnectingToTunnelServer);
+        let (mut stream, routing_id) = Self::connect(uri).await?;
+
+        let eid = if let Some(routing_id) = routing_id {
+            Eid::new(
+                tunnel_server_id,
+                routing_id.try_into().map_err(|_| {
+                    error!("Incorrect routing-id header length");
+                    WebauthnCError::Internal
+                })?,
+            )?
+        } else {
+            error!("Missing or invalid routing-id header");
+            return Err(WebauthnCError::Internal);
+        };
+
+        let psk = discovery.derive_psk(&eid)?;
+        let encrypted_eid = discovery.encrypt_advert(&eid)?;
+        advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid)?;
+
+        // Wait for initial message from initiator
+        trace!("Advertising started, waiting for initiator...");
+        ui.cable_status_update(CableState::WaitingForInitiatorConnection);
+        let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
+        trace!("<<< {:?}", resp);
+
+        advertiser.stop_advertising()?;
+        ui.cable_status_update(CableState::Handshaking);
+        let resp = if let Message::Binary(v) = resp {
+            v
+        } else {
+            error!("Unexpected websocket response type");
+            return Err(WebauthnCError::Unknown);
+        };
+
+        let (mut crypter, response) =
+            CableNoise::build_responder(None, psk, Some(peer_identity), &resp)?;
+        trace!("Sending response to initiator challenge");
+        trace!(">!> {:02x?}", response);
+        stream.send(Message::Binary(response)).await?;
+
+        // Send post-handshake message
+        let phm = CablePostHandshake {
+            info: info.to_owned(),
+            linking_info: None,
+        };
+        trace!("Sending post-handshake message");
+        trace!(">>> {:02x?}", &phm);
+        let phm = serde_cbor::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
+        crypter.use_new_construction();
+
+        let mut t = Self {
+            // psk,
+            stream,
+            crypter,
             info,
-            advertiser,
-            ui,
-        )
-        .await
-    }
+        };
 
-    pub_if_cable_override_tunnel! {
-        async fn connect_authenticator_with_url(
-            discovery: &Discovery,
-            tunnel_server_id: u16,
-            uri: Uri,
-            peer_identity: &EcKeyRef<Public>,
-            info: GetInfoResponse,
-            advertiser: &mut impl Advertiser,
-            ui: &impl UiCallback,
-        ) -> Result<Tunnel, WebauthnCError> {
-            ui.cable_status_update(CableState::ConnectingToTunnelServer);
-            let (mut stream, routing_id) = Self::connect(&uri).await?;
+        t.send_raw(&phm).await?;
 
-            let eid = if let Some(routing_id) = routing_id {
-                Eid::new(
-                    tunnel_server_id,
-                    routing_id.try_into().map_err(|_| {
-                        error!("Incorrect routing-id header length");
-                        WebauthnCError::Internal
-                    })?,
-                )?
-            } else {
-                error!("Missing or invalid routing-id header");
-                return Err(WebauthnCError::Internal);
-            };
-
-            let psk = discovery.derive_psk(&eid)?;
-            let encrypted_eid = discovery.encrypt_advert(&eid)?;
-            advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid)?;
-
-            // Wait for initial message from initiator
-            trace!("Advertising started, waiting for initiator...");
-            ui.cable_status_update(CableState::WaitingForInitiatorConnection);
-            let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
-            trace!("<<< {:?}", resp);
-
-            advertiser.stop_advertising()?;
-            ui.cable_status_update(CableState::Handshaking);
-            let resp = if let Message::Binary(v) = resp {
-                v
-            } else {
-                error!("Unexpected websocket response type");
-                return Err(WebauthnCError::Unknown);
-            };
-
-            let (mut crypter, response) =
-                CableNoise::build_responder(None, psk, Some(peer_identity), &resp)?;
-            trace!("Sending response to initiator challenge");
-            trace!(">!> {:02x?}", response);
-            stream.send(Message::Binary(response)).await?;
-
-            // Send post-handshake message
-            let phm = CablePostHandshake {
-                info: info.to_owned(),
-                linking_info: None,
-            };
-            trace!("Sending post-handshake message");
-            trace!(">>> {:02x?}", &phm);
-            let phm = serde_cbor::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
-            crypter.use_new_construction();
-
-            let mut t = Self {
-                // psk,
-                stream,
-                crypter,
-                info,
-            };
-
-            t.send_raw(&phm).await?;
-
-            // Now we're ready for our first command
-            Ok(t)
-        }
+        // Now we're ready for our first command
+        Ok(t)
     }
 
     /// Establishes a [CtapAuthenticator] connection for communicating with a

@@ -16,7 +16,7 @@ use tokio_tungstenite::tungstenite::http::{uri::Builder, Uri};
 use crate::{
     cable::{btle::*, handshake::*, tunnel::get_domain, CableRequestType, Psk},
     crypto::{decrypt, encrypt, hkdf_sha_256, public_key_from_private, regenerate},
-    error::WebauthnCError, pub_if_cable_override_tunnel,
+    error::WebauthnCError,
 };
 
 type BleAdvert = [u8; size_of::<CableEid>() + 4];
@@ -159,16 +159,6 @@ impl Discovery {
         Ok(psk)
     }
 
-    /// Gets the Websocket connection URI which the platform will use to connect
-    /// to the authenticator.
-    pub fn get_connect_uri(&self, eid: &Eid) -> Result<Uri, WebauthnCError> {
-        let tunnel_id = self.derive_tunnel_id()?;
-        eid.get_connect_uri(tunnel_id).ok_or_else(|| {
-            error!("Unknown WebSocket tunnel URL for {:?}", eid);
-            WebauthnCError::NotSupported
-        })
-    }
-
     /// Gets the WebSocket connection URI which the authenticator will use to
     /// connect to the initiator.
     pub fn get_new_tunnel_uri(&self, domain_id: u16) -> Result<Uri, WebauthnCError> {
@@ -180,25 +170,22 @@ impl Discovery {
         }
     }
 
-    pub_if_cable_override_tunnel! {
-        /// Builds a WebSocket connection URI which the authenticator will use
-        /// to connect to the initiator.
-        ///
-        /// This method is an internal implementation detail, and can be made
-        /// public with the `cable_new_tunnel_uri` feature for testing. For all
-        /// other purposes, use [`get_new_tunnel_uri`][Self::get_new_tunnel_uri]
-        /// instead.
-        fn build_new_tunnel_uri(&self, builder: Builder) -> Result<Uri, WebauthnCError> {
-            // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=170;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
-            let tunnel_id = hex::encode_upper(self.derive_tunnel_id()?);
-            builder
-                .path_and_query(format!("/cable/new/{}", tunnel_id))
-                .build()
-                .map_err(|e| {
-                    error!("cannot build WebSocket tunnel URI: {e}");
-                    WebauthnCError::Internal
-                })
-        }
+    /// Builds a WebSocket connection URI which the authenticator will use
+    /// to connect to the initiator, using a [Builder] to provide the protocol
+    /// and scheme.
+    ///
+    /// This method is an internal implementation detail. Use
+    /// [`get_new_tunnel_uri`][Self::get_new_tunnel_uri] instead.
+    pub(super) fn build_new_tunnel_uri(&self, builder: Builder) -> Result<Uri, WebauthnCError> {
+        // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=170;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
+        let tunnel_id = hex::encode_upper(self.derive_tunnel_id()?);
+        builder
+            .path_and_query(format!("/cable/new/{}", tunnel_id))
+            .build()
+            .map_err(|e| {
+                error!("cannot build WebSocket tunnel URI: {e}");
+                WebauthnCError::Internal
+            })
     }
 }
 
@@ -363,30 +350,28 @@ impl Eid {
     /// connect to the authenticator.
     ///
     /// `tunnel_id` is provided by [Discovery::derive_tunnel_id].
-    fn get_connect_uri(&self, tunnel_id: TunnelId) -> Option<Uri> {
+    pub fn get_connect_uri(&self, tunnel_id: TunnelId) -> Option<Uri> {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=179;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
         self.get_domain_builder()
             .and_then(|builder| self.build_connect_uri(builder, tunnel_id))
     }
 
-    pub_if_cable_override_tunnel! {
-        /// Builds a WebSocket connection URI which the initiator will use to
-        /// connect to the authenticator.
-        ///
-        /// This method is an internal implementation detail, and can be made
-        /// public with the `cable_new_tunnel_uri` feature for testing. For all
-        /// other purposes, use [`get_connect_uri`][Self::get_connect_uri]
-        /// instead.
-        fn build_connect_uri(&self, builder: Builder, tunnel_id: TunnelId) -> Option<Uri> {
-            // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=179;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
-            let routing_id = hex::encode_upper(self.routing_id);
-            let tunnel_id = hex::encode_upper(tunnel_id);
+    /// Builds a WebSocket connection URI which the initiator will use to
+    /// connect to the authenticator.
+    ///
+    /// This method is an internal implementation detail, and can be made
+    /// public with the `cable_new_tunnel_uri` feature for testing. For all
+    /// other purposes, use [`get_connect_uri`][Self::get_connect_uri]
+    /// instead.
+    pub(super) fn build_connect_uri(&self, builder: Builder, tunnel_id: TunnelId) -> Option<Uri> {
+        // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=179;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
+        let routing_id = hex::encode_upper(self.routing_id);
+        let tunnel_id = hex::encode_upper(tunnel_id);
 
-            builder
-                .path_and_query(format!("/cable/connect/{}/{}", routing_id, tunnel_id))
-                .build()
-                .ok()
-        }
+        builder
+            .path_and_query(format!("/cable/connect/{}/{}", routing_id, tunnel_id))
+            .build()
+            .ok()
     }
 
     // TODO: needed for pairing
@@ -416,7 +401,7 @@ mod test {
             9, 139, 115, 107, 54, 169, 140, 185, 164, 47, //
             // Routing ID
             9, 10, 11, //
-            // Tunnel ID
+            // Tunnel server ID
             255, 1,
         ];
         let expected = Eid {
@@ -467,9 +452,17 @@ mod test {
                 .unwrap()
                 .to_string()
         );
+
+        let builder = Builder::new().scheme("ws").authority("localhost:8080");
+        assert_eq!(
+            "ws://localhost:8080/cable/new/3EEF97097986413B059EAA2A30D653D4",
+            d.build_new_tunnel_uri(builder).unwrap().to_string()
+        );
+
+        let tunnel_id = d.derive_tunnel_id().unwrap();
         assert_eq!(
             "wss://cable.my4kstlhndi4c.net/cable/connect/090A0B/3EEF97097986413B059EAA2A30D653D4",
-            d.get_connect_uri(&c).unwrap().to_string()
+            c.get_connect_uri(tunnel_id.to_owned()).unwrap().to_string()
         );
 
         // Changing the tunnel server ID should work too
@@ -477,14 +470,29 @@ mod test {
         google_eid.tunnel_server_id = 0;
         assert_eq!(
             "wss://cable.ua5v.com/cable/connect/090A0B/3EEF97097986413B059EAA2A30D653D4",
-            d.get_connect_uri(&google_eid).unwrap().to_string()
+            google_eid
+                .get_connect_uri(tunnel_id.to_owned())
+                .unwrap()
+                .to_string()
         );
 
         let mut apple_eid = c;
         apple_eid.tunnel_server_id = 1;
         assert_eq!(
             "wss://cable.auth.com/cable/connect/090A0B/3EEF97097986413B059EAA2A30D653D4",
-            d.get_connect_uri(&apple_eid).unwrap().to_string()
+            apple_eid
+                .get_connect_uri(tunnel_id.to_owned())
+                .unwrap()
+                .to_string()
+        );
+
+        // Providing a custom builder
+        let builder = Builder::new().scheme("ws").authority("localhost:8080");
+        assert_eq!(
+            "ws://localhost:8080/cable/connect/090A0B/3EEF97097986413B059EAA2A30D653D4",
+            c.build_connect_uri(builder, tunnel_id.to_owned())
+                .unwrap()
+                .to_string()
         );
 
         // Changing bits fails
@@ -552,7 +560,9 @@ mod test {
         assert_eq!(expected, r);
         assert_eq!(
             "wss://cable.ua5v.com/cable/connect/026555/367CBBF5F5085DF4098476AFE4B9B1D2",
-            discovery.get_connect_uri(&r).unwrap().to_string()
+            r.get_connect_uri(discovery.derive_tunnel_id().unwrap())
+                .unwrap()
+                .to_string()
         );
     }
 }
