@@ -150,6 +150,10 @@ pub mod prelude {
         CredentialID, ParsedAttestation, ParsedAttestationData, PublicKeyCredential,
         RegisterPublicKeyCredential, RequestChallengeResponse,
     };
+    pub use webauthn_rs_core::proto::{
+        COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, COSEOKPKey, COSERSAKey,
+        ECDSACurve, EDDSACurve,
+    };
     pub use webauthn_rs_core::AttestationFormat;
 }
 

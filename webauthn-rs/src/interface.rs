@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use webauthn_rs_core::interface::{
     AttestationCaList, AuthenticationResult, AuthenticationState, RegistrationState,
 };
-use webauthn_rs_core::proto::{COSEAlgorithm, Credential, CredentialID, ParsedAttestation};
+use webauthn_rs_core::proto::{
+    COSEAlgorithm, COSEKey, Credential, CredentialID, ParsedAttestation,
+};
 
 /// An in progress registration session for a [Passkey].
 ///
@@ -66,6 +68,11 @@ impl Passkey {
     /// Retrieve the type of cryptographic algorithm used by this key
     pub fn cred_algorithm(&self) -> &COSEAlgorithm {
         &self.cred.cred.type_
+    }
+
+    /// Retrieve a reference to this Passkey's credential public key.
+    pub fn get_public_key(&self) -> &COSEKey {
+        &self.cred.cred
     }
 
     /// Post authentication, update this credentials properties.
