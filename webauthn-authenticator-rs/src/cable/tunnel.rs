@@ -477,7 +477,7 @@ mod test {
 
     #[test]
     fn check_all_hashed_tunnel_servers() {
-        for x in 256..u16::MAX {
+        for x in 256..=u16::MAX {
             assert_ne!(get_domain(x), None);
         }
     }

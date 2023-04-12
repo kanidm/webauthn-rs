@@ -91,3 +91,7 @@ image = ">= 0.23.14, < 0.24"
 
 [build-dependencies]
 openssl.workspace = true
+
+[[example]]
+name = "cable_domain"
+required-features = ["cable"]
