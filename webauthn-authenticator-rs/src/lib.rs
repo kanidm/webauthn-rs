@@ -103,19 +103,19 @@ pub mod types;
 pub mod ui;
 mod util;
 
-#[cfg(any(doc, feature = "cable"))]
+#[cfg(any(all(doc, not(doctest)), feature = "cable"))]
 pub mod cable;
 
-#[cfg(any(doc, feature = "nfc"))]
+#[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
 pub mod nfc;
 
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub mod usb;
 
-#[cfg(any(doc, feature = "u2fhid"))]
+#[cfg(any(all(doc, not(doctest)), feature = "u2fhid"))]
 pub mod u2fhid;
 
-#[cfg(any(doc, feature = "win10"))]
+#[cfg(any(all(doc, not(doctest)), feature = "win10"))]
 pub mod win10;
 
 #[cfg(doc)]

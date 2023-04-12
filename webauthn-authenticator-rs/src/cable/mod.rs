@@ -465,16 +465,22 @@ async fn connect_cable_authenticator_impl<'a, U: UiCallback + 'a>(
 /// The [`Default`] options should be suitable for most use cases:
 ///
 /// ```
+/// # #[cfg(feature = "cable")]
+/// # {
 /// # use webauthn_authenticator_rs::cable::ShareCableAuthenticatorOptions;
 /// let opts = ShareCableAuthenticatorOptions::default();
+/// # }
 /// ```
 ///
 /// You can customise options using a builder pattern:
 ///
 /// ```
+/// # #[cfg(feature = "cable")]
+/// # {
 /// # use webauthn_authenticator_rs::cable::ShareCableAuthenticatorOptions;
 /// let opts = ShareCableAuthenticatorOptions::default()
 ///     .tunnel_server_id(0);
+/// # }
 /// ```
 ///
 /// [0]: share_cable_authenticator

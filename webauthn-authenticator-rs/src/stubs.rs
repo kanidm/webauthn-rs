@@ -31,7 +31,7 @@ pub mod pcsc {
     pub struct ReaderState {}
 }
 
-#[cfg(not(any(test, doctest, feature = "cable")))]
+#[cfg(not(feature = "cable"))]
 pub mod tokio {
     pub mod net {
         pub struct TcpStream {}
