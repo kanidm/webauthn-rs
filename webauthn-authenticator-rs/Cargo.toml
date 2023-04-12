@@ -18,9 +18,11 @@ bluetooth = ["btleplug"]
 # caBLE / hybrid authenticator
 cable = ["bluetooth", "hex", "tokio", "tokio-tungstenite", "qrcode"]
 
-# Always connect to a caBLE tunnel server at ws://localhost:8080, rather than
-# the true tunnel server URL. Only useful for testing.
-cable-override-tunnel = []
+# Add APIs which allow overriding the caBLE tunnel server protocol and domain.
+#
+# This feature is intended to help someone developing their own caBLE tunnel
+# server, and most library users should not need this!
+cable-override-tunnel = ["cable"]
 
 nfc = ["pcsc"]
 usb = ["hidapi"]
