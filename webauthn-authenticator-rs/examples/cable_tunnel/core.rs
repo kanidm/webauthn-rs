@@ -14,9 +14,13 @@ use serialport_hci::{
     SerialController,
 };
 use std::{fmt::Debug, fs::OpenOptions, time::Duration};
+use tokio_tungstenite::tungstenite::http::{
+    uri::{Builder, Parts},
+    Uri,
+};
 
 use webauthn_authenticator_rs::{
-    cable::{share_cable_authenticator, Advertiser},
+    cable::{share_cable_authenticator, Advertiser, ShareCableAuthenticatorOptions},
     ctap2::CtapAuthenticator,
     error::WebauthnCError,
     softtoken::SoftTokenFile,
@@ -85,6 +89,15 @@ pub struct CliParser {
     /// tokens, so only use this if your initator is running on another device!
     #[clap(long)]
     pub softtoken_path: Option<String>,
+
+    #[cfg(feature = "cable-override-tunnel")]
+    /// Overrides the WebSocket tunnel protocol and domain,
+    /// eg: ws://localhost:8080
+    ///
+    /// The initiator will need the same override set, as setting this
+    /// option makes the library incompatible with other caBLE implementations.
+    #[clap(long)]
+    pub tunnel_uri: Option<String>,
 }
 
 struct SerialHciAdvertiser {
@@ -198,6 +211,19 @@ pub(super) async fn main() {
 
     let mut advertiser = SerialHciAdvertiser::new(&opt.serial_port, opt.baud_rate);
     let ui = Cli {};
+    let options = ShareCableAuthenticatorOptions::default().tunnel_server_id(opt.tunnel_server_id);
+
+    #[cfg(feature = "cable-override-tunnel")]
+    let options = if let Some(u) = opt.tunnel_uri {
+        let parts: Parts = u.parse::<Uri>().unwrap().into_parts();
+        let builder = Builder::new()
+            .scheme(parts.scheme.unwrap())
+            .authority(parts.authority.unwrap());
+
+        options.tunnel_uri(builder)
+    } else {
+        options
+    };
 
     if let Some(p) = opt.softtoken_path {
         // Use a SoftToken
@@ -214,10 +240,9 @@ pub(super) async fn main() {
             &mut softtoken,
             info,
             cable_url.trim(),
-            opt.tunnel_server_id,
             &mut advertiser,
             &ui,
-            true,
+            options,
         )
         .await
         .unwrap();
@@ -232,10 +257,9 @@ pub(super) async fn main() {
             &mut authenticator,
             info,
             cable_url.trim(),
-            opt.tunnel_server_id,
             &mut advertiser,
             &ui,
-            true,
+            options,
         )
         .await
         .unwrap();

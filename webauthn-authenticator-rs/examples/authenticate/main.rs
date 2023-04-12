@@ -7,6 +7,10 @@ use std::io::{stdin, stdout, Write};
 use clap::clap_derive::ValueEnum;
 use clap::{Args, Parser, Subcommand};
 use futures::executor::block_on;
+#[cfg(feature = "cable")]
+use tokio_tungstenite::tungstenite::http::uri::Builder;
+#[cfg(feature = "cable-override-tunnel")]
+use tokio_tungstenite::tungstenite::http::{uri::Parts, Uri};
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
 use webauthn_authenticator_rs::prelude::Url;
 #[cfg(feature = "cable")]
@@ -79,6 +83,36 @@ pub struct SoftTokenOpt {
     pub path: Option<String>,
 }
 
+#[cfg(feature = "cable")]
+#[derive(Debug, Args, Clone)]
+pub struct CableOpt {
+    #[cfg(feature = "cable-override-tunnel")]
+    /// Overrides the WebSocket tunnel protocol and domain,
+    /// eg: ws://localhost:8080
+    ///
+    /// The authenticator will need the same override set, as setting this
+    /// option makes the library incompatible with other caBLE implementations.
+    #[clap(long)]
+    pub tunnel_uri: Option<String>,
+}
+
+#[cfg(feature = "cable")]
+impl CableOpt {
+    fn get_cable_tunnel_uri(&self) -> Option<Builder> {
+        #[cfg(feature = "cable-override-tunnel")]
+        if let Some(u) = &self.tunnel_uri {
+            let parts: Parts = u.parse::<Uri>().unwrap().into_parts();
+            return Some(
+                Builder::new()
+                    .scheme(parts.scheme.unwrap())
+                    .authority(parts.authority.unwrap()),
+            );
+        }
+
+        None
+    }
+}
+
 #[derive(Debug, Clone, Subcommand)]
 enum Provider {
     /// Software token provider
@@ -94,7 +128,7 @@ enum Provider {
     ///
     /// This requires Bluetooth permission - see the
     /// [webauthn_authenticator_rs::cable] documentation for more information.
-    Cable,
+    Cable(CableOpt),
 
     #[cfg(feature = "u2fhid")]
     /// Mozilla webauthn-authenticator-rs provider, supporting USB HID only.
@@ -128,9 +162,16 @@ impl Provider {
             }
             Provider::Ctap => Box::new(select_transport(ui)),
             #[cfg(feature = "cable")]
-            Provider::Cable => Box::new(
-                webauthn_authenticator_rs::cable::connect_cable_authenticator(request_type, ui)
-                    .await
+            Provider::Cable(o) => Box::new(
+                if let Some(connect_uri) = o.get_cable_tunnel_uri() {
+                    #[cfg(not(feature = "cable-override-tunnel"))]
+                    unreachable!();
+
+                    #[cfg(feature = "cable-override-tunnel")]
+                    webauthn_authenticator_rs::cable::connect_cable_authenticator_with_tunnel_uri(request_type, ui, connect_uri).await
+                } else {
+                    webauthn_authenticator_rs::cable::connect_cable_authenticator(request_type, ui).await
+                }
                     .map_err(|e| {
                         if e == WebauthnCError::PermissionDenied {
                             println!("Permission denied: please grant Bluetooth permissions to your terminal app.");

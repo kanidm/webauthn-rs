@@ -175,7 +175,7 @@ impl Discovery {
     /// and scheme.
     ///
     /// This method is an internal implementation detail. Use
-    /// [`get_new_tunnel_uri`][Self::get_new_tunnel_uri] instead.
+    /// [`get_new_tunnel_uri()`][Self::get_new_tunnel_uri] instead.
     pub(super) fn build_new_tunnel_uri(&self, builder: Builder) -> Result<Uri, WebauthnCError> {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=170;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
         let tunnel_id = hex::encode_upper(self.derive_tunnel_id()?);
@@ -203,7 +203,7 @@ pub struct Eid {
     pub routing_id: RoutingId,
 
     /// An authenticator-provided nonce which is used to derive further secrets
-    /// during the [CableNoise][super::cable::CableNoise] handshake.
+    /// during the [CableNoise][super::noise::CableNoise] handshake.
     pub nonce: BleNonce,
 }
 
@@ -359,10 +359,8 @@ impl Eid {
     /// Builds a WebSocket connection URI which the initiator will use to
     /// connect to the authenticator.
     ///
-    /// This method is an internal implementation detail, and can be made
-    /// public with the `cable_new_tunnel_uri` feature for testing. For all
-    /// other purposes, use [`get_connect_uri`][Self::get_connect_uri]
-    /// instead.
+    /// This method is an internal implementation detail. Use
+    /// [`get_connect_uri()`][Self::get_connect_uri] instead.
     pub(super) fn build_connect_uri(&self, builder: Builder, tunnel_id: TunnelId) -> Option<Uri> {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=179;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
         let routing_id = hex::encode_upper(self.routing_id);
