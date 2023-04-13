@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, 1.63.0]
+        rust_version: [stable, 1.66.0]
         features:
           - ""
           - --features cable
@@ -30,7 +30,7 @@ jobs:
             rust_version: stable
         exclude:
           - os: windows-latest
-            rust_version: 1.63.0
+            rust_version: 1.66.0
 
     name: Build and Test
     runs-on: ${{ matrix.os }}
