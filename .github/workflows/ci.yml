@@ -39,6 +39,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
+          components: clippy, rustfmt
 
       - if: runner.os != 'windows'
         run: |
