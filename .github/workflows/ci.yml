@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, 1.57.0]
+        rust_version: [stable, 1.66.0]
         features:
           - ""
           - --features cable
@@ -30,15 +30,16 @@ jobs:
             rust_version: stable
         exclude:
           - os: windows-latest
-            rust_version: 1.45.0
+            rust_version: 1.66.0
 
     name: Build and Test
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
+          components: clippy, rustfmt
 
       - if: runner.os != 'windows'
         run: |
@@ -71,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
       - run: |

@@ -3,6 +3,7 @@ name = "webauthn-rs-proto"
 version = "0.5.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
+rust-version = "1.66.0"
 description = "Webauthn Specification Bindings"
 repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
