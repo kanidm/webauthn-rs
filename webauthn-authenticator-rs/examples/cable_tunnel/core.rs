@@ -14,6 +14,7 @@ use serialport_hci::{
     SerialController,
 };
 use std::{fmt::Debug, fs::OpenOptions, time::Duration};
+#[cfg(feature = "cable-override-tunnel")]
 use tokio_tungstenite::tungstenite::http::{
     uri::{Builder, Parts},
     Uri,
