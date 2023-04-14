@@ -143,6 +143,25 @@ fn value_to_set_string(v: Value, loc: &str) -> Option<BTreeSet<String>> {
     }
 }
 
+fn value_to_set_u64(v: Value, loc: &str) -> Option<BTreeSet<u64>> {
+    if let Value::Array(v) = v {
+        let mut x = BTreeSet::new();
+        for i in v.into_iter() {
+            if let Value::Integer(i) = i {
+                if let Ok(i) = u64::try_from(i) {
+                    x.insert(i);
+                    continue;
+                }
+            }
+            error!("Invalid value inside {}: {:?}", loc, i);
+        }
+        Some(x)
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
+}
+
 fn value_to_vec(v: Value, loc: &str) -> Option<Vec<Value>> {
     if let Value::Array(v) = v {
         Some(v)
@@ -184,6 +203,26 @@ pub(crate) fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {
 pub(crate) fn value_to_u64(v: &Value, loc: &str) -> Option<u64> {
     if let Value::Integer(i) = v {
         u64::try_from(*i)
+            .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
+            .ok()
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
+}
+
+fn value_to_i128(v: Value, loc: &str) -> Option<i128> {
+    if let Value::Integer(i) = v {
+        Some(i)
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
+}
+
+fn value_to_usize(v: Value, loc: &str) -> Option<usize> {
+    if let Value::Integer(i) = v {
+        usize::try_from(i)
             .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
             .ok()
     } else {
