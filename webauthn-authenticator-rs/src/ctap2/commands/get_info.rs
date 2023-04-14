@@ -352,21 +352,18 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
         let certifications = raw
             .remove(&0x13)
             .and_then(|v| value_to_map(v, "0x13"))
-            .and_then(|v| {
+            .map(|v| {
                 let mut x = BTreeMap::new();
                 for (ka, va) in v.into_iter() {
-                    match (ka, va) {
-                        (Value::Text(s), Value::Integer(i)) => {
-                            if let Ok(i) = u8::try_from(i) {
-                                x.insert(s, i);
-                                continue;
-                            }
+                    if let (Value::Text(s), Value::Integer(i)) = (ka, va) {
+                        if let Ok(i) = u8::try_from(i) {
+                            x.insert(s, i);
+                            continue;
                         }
-                        _ => (),
                     }
                     error!("Invalid value inside 0x13");
                 }
-                Some(x)
+                x
             });
 
         let remaining_discoverable_credentials =

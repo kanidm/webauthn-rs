@@ -1,6 +1,7 @@
 //! CTAP 2 commands.
 use serde::Serialize;
 use serde_cbor::{ser::to_vec_packed, Value};
+use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod bio_enrollment;
@@ -211,18 +212,20 @@ pub(crate) fn value_to_u64(v: &Value, loc: &str) -> Option<u64> {
     }
 }
 
-fn value_to_i128(v: Value, loc: &str) -> Option<i128> {
+fn value_to_i128(v: impl Borrow<Value>, loc: &str) -> Option<i128> {
+    let v = v.borrow();
     if let Value::Integer(i) = v {
-        Some(i)
+        Some(*i)
     } else {
         error!("Invalid type for {}: {:?}", loc, v);
         None
     }
 }
 
-fn value_to_usize(v: Value, loc: &str) -> Option<usize> {
+fn value_to_usize(v: impl Borrow<Value>, loc: &str) -> Option<usize> {
+    let v = v.borrow();
     if let Value::Integer(i) = v {
-        usize::try_from(i)
+        usize::try_from(*i)
             .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
             .ok()
     } else {
