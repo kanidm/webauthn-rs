@@ -29,7 +29,7 @@ pub type CredentialID = Base64UrlSafeData;
 /// credentials define which UserVerificationPolicy is issued during authentications.
 ///
 /// **IMPORTANT** - Due to limitations in the webauthn specification, CTAP devices, and browser
-/// implementations the only secure chouce is *required*.
+/// implementations the only secure choice is *required*.
 ///
 /// > ⚠️  **WARNING** - discouraged is marked with a warning, as in some cases, some authenticators
 /// > will FORCE verification during registration but NOT during authentication. This means
