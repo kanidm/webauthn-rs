@@ -31,7 +31,7 @@ pub mod pcsc {
     pub struct ReaderState {}
 }
 
-#[cfg(not(any(test, doctest, feature = "cable")))]
+#[cfg(not(feature = "cable"))]
 pub mod tokio {
     pub mod net {
         pub struct TcpStream {}
@@ -49,6 +49,9 @@ pub mod tokio_tungstenite {
     pub mod tungstenite {
         pub mod http {
             pub struct Uri {}
+            pub mod uri {
+                pub struct Builder {}
+            }
         }
     }
     pub struct MaybeTlsStream<T> {}

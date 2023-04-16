@@ -17,6 +17,13 @@ bluetooth = ["btleplug"]
 
 # caBLE / hybrid authenticator
 cable = ["bluetooth", "hex", "tokio", "tokio-tungstenite", "qrcode"]
+
+# Add APIs which allow overriding the caBLE tunnel server protocol and domain.
+#
+# This feature is intended to help someone developing their own caBLE tunnel
+# server, and most library users should not need this!
+cable-override-tunnel = ["cable"]
+
 nfc = ["pcsc"]
 usb = ["hidapi"]
 win10 = ["windows"]

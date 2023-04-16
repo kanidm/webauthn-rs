@@ -20,6 +20,10 @@
 //!   (`wss://cable.ua5v.com`), and an algorithm to generate tunnel server
 //!   domain names from a hash to allow for future expansion.
 //!
+//!   You can also build the library with the `cable-override-tunnel` feature,
+//!   which allows it to connect to an arbitrary tunnel server over HTTP
+//!   (`ws://`) or HTTPS (`wss://`), instead of the *proper* tunnel server.
+//!
 //! This module implements both the [initator][connect_cable_authenticator] and
 //! [authenticator][share_cable_authenticator] side of caBLE, provided
 //! [you have appropriate hardware](#requirements).
@@ -286,6 +290,9 @@
 //!
 //! [^qr]: Most mobile device camera apps have an integrated QR code scanner.
 #[allow(rustdoc::private_intra_doc_links)]
+#[cfg(doc)]
+use crate::stubs::*;
+
 mod base10;
 mod btle;
 mod discovery;
@@ -298,6 +305,7 @@ use std::collections::BTreeMap;
 
 pub use base10::DecodeError;
 pub use btle::Advertiser;
+use tokio_tungstenite::tungstenite::http::uri::Builder;
 
 use crate::{
     authenticator_hashed::{
@@ -361,9 +369,46 @@ impl CableRequestType {
 /// On some platforms, Bluetooth access requires additional permissions. If this
 /// is not available, this returns [WebauthnCError::PermissionDenied]. See
 /// [this module's documentation][self] for more information.
+#[inline]
 pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
     request_type: CableRequestType,
     ui_callback: &'a U,
+) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
+    connect_cable_authenticator_impl(request_type, ui_callback, None).await
+}
+
+#[cfg(any(doc, feature = "cable-override-tunnel"))]
+/// Connect to an authenticator using caBLE, overriding the WebSocket tunnel
+/// protocol and domain.
+///
+/// This is intended to allow a caBLE tunnel server developer to test their code
+/// locally, without needing to register an appropriate domain name, set up DNS,
+/// or get a TLS certificate.
+///
+/// This is only available with the `cable-override-tunnel` feature, and can
+/// only used with an authenticator with the same override in place (see
+/// [`ShareCableAuthenticatorOptions::tunnel_uri()`]).
+///
+/// ## Warning
+///
+/// This is **incompatible with other caBLE implementations**, and also allows
+/// connecting to tunnel servers over unencrypted HTTP.
+///
+/// Use [`connect_cable_authenticator()`] instead.
+#[inline]
+pub async fn connect_cable_authenticator_with_tunnel_uri<'a, U: UiCallback + 'a>(
+    request_type: CableRequestType,
+    ui_callback: &'a U,
+    connect_uri: Builder,
+) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
+    connect_cable_authenticator_impl(request_type, ui_callback, Some(connect_uri)).await
+}
+
+#[doc(hidden)]
+async fn connect_cable_authenticator_impl<'a, U: UiCallback + 'a>(
+    request_type: CableRequestType,
+    ui_callback: &'a U,
+    connect_uri: Option<Builder>,
 ) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
     // TODO: it may be better to return a caBLE-specific authenticator object,
     // rather than CtapAuthenticator, because the device will close the
@@ -389,9 +434,18 @@ pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
 
     let psk = disco.derive_psk(&eid)?;
 
-    let connect_url = disco.get_connect_uri(&eid)?;
+    let tunnel_id = disco.derive_tunnel_id()?;
+    let connect_uri = match connect_uri {
+        Some(u) => eid.build_connect_uri(u, tunnel_id),
+        None => eid.get_connect_uri(tunnel_id),
+    }
+    .ok_or_else(|| {
+        error!("unknown WebSocket tunnel URL for {:?}", eid);
+        WebauthnCError::NotSupported
+    })?;
+
     let tun = Tunnel::connect_initiator(
-        &connect_url,
+        &connect_uri,
         psk,
         disco.local_identity.as_ref(),
         ui_callback,
@@ -404,28 +458,121 @@ pub async fn connect_cable_authenticator<'a, U: UiCallback + 'a>(
     })
 }
 
+/// Options for [sharing an authenticator over caBLE][0].
+///
+/// ## Examples
+///
+/// The [`Default`] options should be suitable for most use cases:
+///
+/// ```
+/// # #[cfg(feature = "cable")]
+/// # {
+/// # use webauthn_authenticator_rs::cable::ShareCableAuthenticatorOptions;
+/// let opts = ShareCableAuthenticatorOptions::default();
+/// # }
+/// ```
+///
+/// You can customise options using a builder pattern:
+///
+/// ```
+/// # #[cfg(feature = "cable")]
+/// # {
+/// # use webauthn_authenticator_rs::cable::ShareCableAuthenticatorOptions;
+/// let opts = ShareCableAuthenticatorOptions::default()
+///     .tunnel_server_id(0);
+/// # }
+/// ```
+///
+/// [0]: share_cable_authenticator
+#[non_exhaustive]
+#[derive(Debug, Default)]
+pub struct ShareCableAuthenticatorOptions {
+    #[doc(hidden)]
+    tunnel_server_id: u16,
+    #[doc(hidden)]
+    stay_open_after_one_command: bool,
+    #[doc(hidden)]
+    tunnel_uri: Option<Builder>,
+}
+
+impl ShareCableAuthenticatorOptions {
+    /// The [well-known tunnel server][0] to connect to.
+    ///
+    /// By default, this is set to `0` (Google Chrome's tunnel server).
+    ///
+    /// [0]: tunnel::get_domain
+    pub fn tunnel_server_id(mut self, v: u16) -> Self {
+        self.tunnel_server_id = v;
+        self
+    }
+
+    /// By default (`false`), the library (like other caBLE implementations)
+    /// will automatically close the connection after the first `MakeCredential`
+    /// or `GetAssertion` command.
+    ///
+    /// If set to `true`, [`share_cable_authenticator()`] will instead allow
+    /// multiple `MakeCredential` or `GetAssertion` commands to be sent.
+    /// Commands are still limited to those declared in the `FIDO:/` URL's
+    /// [CableRequestType].
+    pub fn stay_open_after_one_command(mut self, v: bool) -> Self {
+        self.stay_open_after_one_command = v;
+        self
+    }
+
+    #[cfg(any(doc, feature = "cable-override-tunnel"))]
+    /// Override the WebSocket tunnel server protocol and hostname.
+    ///
+    /// This is intended to allow a tunnel server developer to test their code
+    /// locally, without needing to register an appropriate domain name, set up
+    /// DNS, or get a TLS certificate.
+    ///
+    /// This option is *only* available with the `cable-override-tunnel`
+    /// feature, and can only be used with an initiator with the same override
+    /// in place (see [`connect_cable_authenticator_with_tunnel_uri()`])
+    ///
+    /// ## Warning
+    ///
+    /// Setting this option **is incompatible with other caBLE
+    /// implementations**, as it will continue to broadcast advertisements with
+    /// the provided [`tunnel_server_id`].
+    ///
+    /// This also allows connecting to tunnel servers over unencrypted HTTP.
+    ///
+    /// [`tunnel_server_id`]: Self::tunnel_server_id
+    pub fn tunnel_uri(mut self, v: Builder) -> Self {
+        self.tunnel_uri = Some(v);
+        self
+    }
+}
+
 /// Share an authenicator using caBLE.
 ///
 /// * `backend` is a [AuthenticatorBackendHashedClientData] implementation.
 ///
-/// * `url` is a `FIDO:/` URL from the initator's QR code.
+/// * `info` is the [GetInfoResponse] from the authenticator.
 ///
-/// * `tunnel_server_id` is the well-known tunnel server to use. Set this to 0
-///   to use Google's tunnel server.
+///   This can be passed through as-is from a physical authenticator: this
+///   function will update it appropriately for caBLE (eg: removing PIN/UV
+///   support flags).
+///
+/// * `url` is the `FIDO:/` URL from the initiator's QR code.
 ///
 /// * `advertiser` is reference to an [Advertiser] for starting and stopping
 ///   Bluetooth Low Energy advertisements. See `examples/cable_tunnel` for an
 ///   example which uses a Bluetooth HCI controller connected to a serial UART.
 ///
 /// * `ui_callback` trait for prompting for user interaction where needed.
+///
+/// * `options` is a [ShareCableAuthenticatorOptions] with additional options,
+///   though using [`Default::default()`] should be sufficient.
+#[inline]
 pub async fn share_cable_authenticator<'a, U>(
     backend: &mut impl AuthenticatorBackendHashedClientData,
     mut info: GetInfoResponse,
     url: &str,
-    tunnel_server_id: u16,
     advertiser: &mut impl Advertiser,
     ui_callback: &'a U,
-    close_after_one_command: bool,
+    options: ShareCableAuthenticatorOptions,
 ) -> Result<(), WebauthnCError>
 where
     U: UiCallback + 'a,
@@ -448,9 +595,15 @@ where
     let handshake = HandshakeV2::from_qr_url(url)?;
     let discovery = handshake.to_discovery()?;
 
+    let tunnel_uri = match options.tunnel_uri {
+        Some(u) => discovery.build_new_tunnel_uri(u)?,
+        None => discovery.get_new_tunnel_uri(options.tunnel_server_id)?,
+    };
+
     let mut tunnel = Tunnel::connect_authenticator(
+        &tunnel_uri,
         &discovery,
-        tunnel_server_id,
+        options.tunnel_server_id,
         &handshake.peer_identity,
         info,
         advertiser,
@@ -516,7 +669,7 @@ where
             })
             .await?;
 
-        if close_after_one_command {
+        if !options.stay_open_after_one_command {
             tunnel.send(SHUTDOWN_COMMAND).await?;
             break;
         }

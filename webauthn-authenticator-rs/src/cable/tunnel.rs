@@ -124,7 +124,7 @@ impl Tunnel {
 
         trace!(?request);
         let (stream, response) = connect_async(request).await.map_err(|e| {
-            error!("websocket error: {:?}", e);
+            error!("websocket error: {uri}: {e:?}");
             WebauthnCError::Internal
         })?;
 
@@ -217,6 +217,7 @@ impl Tunnel {
     }
 
     pub async fn connect_authenticator(
+        uri: &Uri,
         discovery: &Discovery,
         tunnel_server_id: u16,
         peer_identity: &EcKeyRef<Public>,
@@ -224,9 +225,8 @@ impl Tunnel {
         advertiser: &mut impl Advertiser,
         ui: &impl UiCallback,
     ) -> Result<Tunnel, WebauthnCError> {
-        let uri = discovery.get_new_tunnel_uri(tunnel_server_id)?;
         ui.cable_status_update(CableState::ConnectingToTunnelServer);
-        let (mut stream, routing_id) = Self::connect(&uri).await?;
+        let (mut stream, routing_id) = Self::connect(uri).await?;
 
         let eid = if let Some(routing_id) = routing_id {
             Eid::new(
