@@ -26,7 +26,7 @@ impl CBORCommand for GetInfoRequest {
 /// `authenticatorGetInfo` response type.
 ///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorGetInfo>
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[serde(try_from = "BTreeMap<u32, Value>", into = "BTreeMap<u32, Value>")]
 pub struct GetInfoResponse {
     /// All CTAP protocol versions which the token supports.
@@ -50,20 +50,34 @@ pub struct GetInfoResponse {
     pub transports: Option<Vec<String>>,
     /// List of supported algorithms for credential generation.
     pub algorithms: Option<Value>,
+    pub max_serialized_large_blob_array: Option<usize>,
+    pub force_pin_change: bool,
     /// Current minimum PIN length, in Unicode code points.
     ///
     /// Use [get_min_pin_length][Self::get_min_pin_length] to get a default
     /// value for when this is not present.
     pub min_pin_length: Option<usize>,
+    pub firmware_version: Option<i128>,
+    pub max_cred_blob_length: Option<usize>,
+    pub max_rpids_for_set_min_pin_length: Option<u32>,
+    pub preferred_platform_uv_attempts: Option<u32>,
+    pub uv_modality: Option<u32>,
+    pub certifications: Option<BTreeMap<String, u8>>,
+    pub remaining_discoverable_credentials: Option<u32>,
+    pub vendor_prototype_config_commands: Option<BTreeSet<u64>>,
 }
 
 impl fmt::Display for GetInfoResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "versions: ")?;
-        for v in self.versions.iter() {
-            write!(f, "{v} ")?;
+        if self.versions.is_empty() {
+            writeln!(f, "N/A")?;
+        } else {
+            for v in self.versions.iter() {
+                write!(f, "{v} ")?;
+            }
+            writeln!(f)?;
         }
-        writeln!(f)?;
 
         write!(f, "extensions: ")?;
         for e in self.extensions.iter().flatten() {
@@ -82,44 +96,95 @@ impl fmt::Display for GetInfoResponse {
         }
         writeln!(f)?;
 
-        if let Some(mms) = self.max_msg_size {
-            writeln!(f, "max message size: {mms}")?;
-        } else {
-            writeln!(f, "max message size: N/A")?;
+        if let Some(v) = self.max_msg_size {
+            writeln!(f, "max message size: {v}")?;
         }
 
-        write!(f, "pin_protocols: ")?;
-        for e in self.pin_protocols.iter().flatten() {
-            write!(f, "{e} ")?;
-        }
-        writeln!(f)?;
-
-        if let Some(mms) = self.max_cred_count_in_list {
-            writeln!(f, "max cred count in list: {mms}")?;
+        write!(f, "PIN protocols: ")?;
+        if !self
+            .pin_protocols
+            .as_ref()
+            .map(|v| !v.is_empty())
+            .unwrap_or_default()
+        {
+            writeln!(f, "N/A")?;
         } else {
-            writeln!(f, "max cred count in list: N/A")?;
+            for e in self.pin_protocols.iter().flatten() {
+                write!(f, "{e} ")?;
+            }
+            writeln!(f)?;
         }
 
-        if let Some(mms) = self.max_cred_id_len {
-            writeln!(f, "max cred id len: {mms}")?;
-        } else {
-            writeln!(f, "max cred id len: N/A")?;
+        if let Some(v) = self.max_cred_count_in_list {
+            writeln!(f, "max cred count in list: {v}")?;
+        }
+
+        if let Some(v) = self.max_cred_id_len {
+            writeln!(f, "max cred ID length: {v}")?;
         }
 
         write!(f, "transports: ")?;
-        for e in self.transports.iter().flatten() {
-            write!(f, "{e} ")?;
-        }
-        writeln!(f)?;
-
-        // ???
-        writeln!(f, "algorithms: {:?}", self.algorithms)?;
-
-        if let Some(mms) = self.min_pin_length {
-            writeln!(f, "min pin len: {mms}")
+        if !self
+            .transports
+            .as_ref()
+            .map(|v| !v.is_empty())
+            .unwrap_or_default()
+        {
+            writeln!(f, "N/A")?;
         } else {
-            writeln!(f, "min pin len: N/A")
+            for v in self.transports.iter().flatten() {
+                write!(f, "{v} ")?;
+            }
+            writeln!(f)?;
         }
+
+        if let Some(v) = &self.algorithms {
+            writeln!(f, "algorithms: {:?}", v)?;
+        }
+
+        if let Some(v) = self.max_serialized_large_blob_array {
+            writeln!(f, "max serialized large blob array: {v}")?;
+        }
+
+        writeln!(f, "force PIN change: {:?}", self.force_pin_change)?;
+
+        if let Some(v) = self.min_pin_length {
+            writeln!(f, "minimum PIN length: {v}")?;
+        }
+
+        if let Some(v) = self.firmware_version {
+            writeln!(f, "firmware version: 0x{v:X}")?;
+        }
+
+        if let Some(v) = self.max_cred_blob_length {
+            writeln!(f, "max cred blob length: {v}")?;
+        }
+
+        if let Some(v) = self.max_rpids_for_set_min_pin_length {
+            writeln!(f, "max RPIDs for set minimum PIN length: {v}")?;
+        }
+
+        if let Some(v) = self.preferred_platform_uv_attempts {
+            writeln!(f, "preferred platform UV attempts: {v}")?;
+        }
+
+        if let Some(v) = self.uv_modality {
+            writeln!(f, "UV modality: 0x{v:X}")?;
+        }
+
+        if let Some(v) = &self.certifications {
+            writeln!(f, "certifications: {v:?}")?;
+        }
+
+        if let Some(v) = self.remaining_discoverable_credentials {
+            writeln!(f, "remaining discoverable credentials: {v}")?;
+        }
+
+        if let Some(v) = &self.vendor_prototype_config_commands {
+            writeln!(f, "vendor prototype config commands: {v:x?}")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -209,7 +274,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
     type Error = &'static str;
 
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        // trace!("raw = {:?}", raw);
+        trace!("raw = {:?}", raw);
         let versions = raw
             .remove(&0x01)
             .and_then(|v| value_to_set_string(v, "0x01"))
@@ -261,47 +326,51 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
             .and_then(|v| value_to_vec_string(v, "0x09"));
 
         let algorithms = raw.remove(&0x0A);
-        // .map(|v| );
 
-        let min_pin_length = raw
-            .remove(&0x0d)
-            .and_then(|v| value_to_u32(&v, "0x0d"))
-            .map(|v| v as usize);
+        let max_serialized_large_blob_array =
+            raw.remove(&0x0b).and_then(|v| value_to_usize(v, "0x0b"));
 
-        /*
-        let max_ser_large_blob = raw.keys.remove(&0x0B)
-            .map(|v| );
+        let force_pin_change = raw
+            .remove(&0x0c)
+            .and_then(|v| value_to_bool(&v, "0x0c"))
+            .unwrap_or_default();
 
-        let force_pin_change = raw.keys.remove(&0x0C)
-            .map(|v| );
+        let min_pin_length = raw.remove(&0x0d).and_then(|v| value_to_usize(v, "0x0d"));
 
-        let min_pin_len = raw.keys.remove(&0x0D)
-            .map(|v| );
+        let firmware_version = raw.remove(&0x0e).and_then(|v| value_to_i128(v, "0x0e"));
 
-        let firmware_version = raw.keys.remove(&0x0E)
-            .map(|v| );
+        let max_cred_blob_length = raw.remove(&0x0f).and_then(|v| value_to_usize(v, "0x0f"));
 
-        let max_cred_blob_len = raw.keys.remove(&0x0F)
-            .map(|v| );
+        let max_rpids_for_set_min_pin_length =
+            raw.remove(&0x10).and_then(|v| value_to_u32(&v, "0x10"));
 
-        let max_rpid_for_set_min_pin_len = raw.keys.remove(&0x10)
-            .map(|v| );
+        let preferred_platform_uv_attempts =
+            raw.remove(&0x11).and_then(|v| value_to_u32(&v, "0x11"));
 
-        let preferred_plat_uv_attempts = raw.keys.remove(&0x11)
-            .map(|v| );
+        let uv_modality = raw.remove(&0x12).and_then(|v| value_to_u32(&v, "0x12"));
 
-        let uv_modality = raw.keys.remove(&0x12)
-            .map(|v| );
+        let certifications = raw
+            .remove(&0x13)
+            .and_then(|v| value_to_map(v, "0x13"))
+            .map(|v| {
+                let mut x = BTreeMap::new();
+                for (ka, va) in v.into_iter() {
+                    if let (Value::Text(s), Value::Integer(i)) = (ka, va) {
+                        if let Ok(i) = u8::try_from(i) {
+                            x.insert(s, i);
+                            continue;
+                        }
+                    }
+                    error!("Invalid value inside 0x13");
+                }
+                x
+            });
 
-        let certifications = raw.keys.remove(&0x13)
-            .map(|v| );
+        let remaining_discoverable_credentials =
+            raw.remove(&0x14).and_then(|v| value_to_u32(&v, "0x14"));
 
-        let remaining_discoverable_credentials = raw.keys.remove(&0x14)
-            .map(|v| );
-
-        let vendor_prototype_config_cmds = raw.keys.remove(&0x15)
-            .map(|v| );
-        */
+        let vendor_prototype_config_commands =
+            raw.remove(&0x15).and_then(|v| value_to_set_u64(v, "0x15"));
 
         Ok(GetInfoResponse {
             versions,
@@ -314,20 +383,17 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
             max_cred_id_len,
             transports,
             algorithms,
-            min_pin_length,
-            /*
-            max_ser_large_blob,
+            max_serialized_large_blob_array,
             force_pin_change,
-            min_pin_len,
+            min_pin_length,
             firmware_version,
-            max_cred_blob_len,
-            max_rpid_for_set_min_pin_len,
-            preferred_plat_uv_attempts,
+            max_cred_blob_length,
+            max_rpids_for_set_min_pin_length,
+            preferred_platform_uv_attempts,
             uv_modality,
             certifications,
             remaining_discoverable_credentials,
-            vendor_prototype_config_cmds,
-            */
+            vendor_prototype_config_commands,
         })
     }
 }
@@ -345,7 +411,17 @@ impl From<GetInfoResponse> for BTreeMap<u32, Value> {
             max_cred_id_len,
             transports,
             algorithms,
+            max_serialized_large_blob_array,
+            force_pin_change,
             min_pin_length,
+            firmware_version,
+            max_cred_blob_length,
+            max_rpids_for_set_min_pin_length,
+            preferred_platform_uv_attempts,
+            uv_modality,
+            certifications,
+            remaining_discoverable_credentials,
+            vendor_prototype_config_commands,
         } = value;
 
         let mut o = BTreeMap::from([(
@@ -411,8 +487,58 @@ impl From<GetInfoResponse> for BTreeMap<u32, Value> {
             o.insert(0x0a, algorithms);
         }
 
+        if let Some(v) = max_serialized_large_blob_array {
+            o.insert(0x0b, Value::Integer((v as u32).into()));
+        }
+
+        if force_pin_change {
+            o.insert(0x0c, Value::Bool(true));
+        }
+
         if let Some(min_pin_length) = min_pin_length {
-            o.insert(0x0d, Value::Integer((min_pin_length as u32).into()));
+            o.insert(0x0d, Value::Integer((min_pin_length as u64).into()));
+        }
+
+        if let Some(v) = firmware_version {
+            o.insert(0x0e, Value::Integer(v));
+        }
+
+        if let Some(v) = max_cred_blob_length {
+            o.insert(0x0f, Value::Integer((v as u64).into()));
+        }
+
+        if let Some(v) = max_rpids_for_set_min_pin_length {
+            o.insert(0x10, Value::Integer(v.into()));
+        }
+
+        if let Some(v) = preferred_platform_uv_attempts {
+            o.insert(0x11, Value::Integer(v.into()));
+        }
+
+        if let Some(v) = uv_modality {
+            o.insert(0x12, Value::Integer(v.into()));
+        }
+
+        if let Some(v) = certifications {
+            o.insert(
+                0x13,
+                Value::Map(
+                    v.into_iter()
+                        .map(|(k, v)| (Value::Text(k), Value::Integer(v.into())))
+                        .collect(),
+                ),
+            );
+        }
+
+        if let Some(v) = remaining_discoverable_credentials {
+            o.insert(0x14, Value::Integer(v.into()));
+        }
+
+        if let Some(v) = vendor_prototype_config_commands {
+            o.insert(
+                0x15,
+                Value::Array(v.into_iter().map(|v| Value::Integer(v.into())).collect()),
+            );
         }
 
         o
@@ -475,6 +601,109 @@ mod tests {
         assert!(a.max_cred_id_len == Some(128));
 
         assert!(a.transports == Some(vec!["nfc".to_string(), "usb".to_string()]));
+    }
+
+    #[test]
+    fn token2_nfc() {
+        let _ = tracing_subscriber::fmt().try_init();
+
+        let raw_apdu = vec![
+            178, 1, 132, 102, 85, 50, 70, 95, 86, 50, 104, 70, 73, 68, 79, 95, 50, 95, 48, 104, 70,
+            73, 68, 79, 95, 50, 95, 49, 108, 70, 73, 68, 79, 95, 50, 95, 49, 95, 80, 82, 69, 2,
+            133, 104, 99, 114, 101, 100, 66, 108, 111, 98, 107, 99, 114, 101, 100, 80, 114, 111,
+            116, 101, 99, 116, 107, 104, 109, 97, 99, 45, 115, 101, 99, 114, 101, 116, 108, 108,
+            97, 114, 103, 101, 66, 108, 111, 98, 75, 101, 121, 108, 109, 105, 110, 80, 105, 110,
+            76, 101, 110, 103, 116, 104, 3, 80, 171, 50, 240, 198, 34, 57, 175, 187, 196, 112, 210,
+            239, 78, 37, 77, 183, 4, 172, 98, 114, 107, 245, 98, 117, 112, 245, 100, 112, 108, 97,
+            116, 244, 104, 97, 108, 119, 97, 121, 115, 85, 118, 244, 104, 99, 114, 101, 100, 77,
+            103, 109, 116, 245, 105, 97, 117, 116, 104, 110, 114, 67, 102, 103, 245, 105, 99, 108,
+            105, 101, 110, 116, 80, 105, 110, 245, 106, 108, 97, 114, 103, 101, 66, 108, 111, 98,
+            115, 245, 110, 112, 105, 110, 85, 118, 65, 117, 116, 104, 84, 111, 107, 101, 110, 245,
+            111, 115, 101, 116, 77, 105, 110, 80, 73, 78, 76, 101, 110, 103, 116, 104, 245, 112,
+            109, 97, 107, 101, 67, 114, 101, 100, 85, 118, 78, 111, 116, 82, 113, 100, 245, 117,
+            99, 114, 101, 100, 101, 110, 116, 105, 97, 108, 77, 103, 109, 116, 80, 114, 101, 118,
+            105, 101, 119, 245, 5, 25, 6, 0, 6, 130, 2, 1, 7, 8, 8, 24, 96, 9, 130, 99, 117, 115,
+            98, 99, 110, 102, 99, 10, 129, 162, 99, 97, 108, 103, 38, 100, 116, 121, 112, 101, 106,
+            112, 117, 98, 108, 105, 99, 45, 107, 101, 121, 11, 25, 8, 0, 12, 244, 13, 4, 14, 25, 1,
+            0, 15, 24, 32, 16, 6, 19, 161, 100, 70, 73, 68, 79, 1, 20, 24, 50,
+        ];
+        let a = <GetInfoResponse as CBORResponse>::try_from(raw_apdu.as_slice())
+            .expect("Falied to decode apdu");
+
+        // info!(?a);
+        assert_eq!(a.versions.len(), 4);
+        assert!(a.versions.contains("U2F_V2"));
+        assert!(a.versions.contains("FIDO_2_0"));
+        assert!(a.versions.contains("FIDO_2_1_PRE"));
+        assert!(a.versions.contains("FIDO_2_1"));
+
+        assert_eq!(
+            a.extensions,
+            Some(vec![
+                "credBlob".to_string(),
+                "credProtect".to_string(),
+                "hmac-secret".to_string(),
+                "largeBlobKey".to_string(),
+                "minPinLength".to_string()
+            ])
+        );
+
+        assert_eq!(
+            a.aaguid,
+            Some(uuid!("ab32f0c6-2239-afbb-c470-d2ef4e254db7"))
+        );
+
+        assert_eq!(a.get_option("alwaysUv"), Some(false));
+        assert_eq!(a.get_option("authnrCfg"), Some(true));
+        assert!(a.supports_config());
+        assert_eq!(a.get_option("clientPin"), Some(true));
+        assert_eq!(a.get_option("credMgmt"), Some(true));
+        assert_eq!(a.get_option("credentialMgmtPreview"), Some(true));
+        assert_eq!(a.get_option("largeBlobs"), Some(true));
+        assert_eq!(a.get_option("makeCredUvNotRqd"), Some(true));
+        assert!(a.make_cred_uv_not_required());
+        assert_eq!(a.get_option("pinUvAuthToken"), Some(true));
+        assert_eq!(a.get_option("plat"), Some(false));
+        assert_eq!(a.get_option("rk"), Some(true));
+        assert_eq!(a.get_option("setMinPINLength"), Some(true));
+        assert_eq!(a.get_option("up"), Some(true));
+
+        assert!(a.ctap21_biometrics().is_none());
+        assert!(a.ctap21pre_biometrics().is_none());
+        assert!(!a.supports_enterprise_attestation());
+        assert!(!a.user_verification_configured());
+
+        assert_eq!(a.max_msg_size, Some(1536));
+        assert_eq!(a.pin_protocols, Some(vec![2, 1]));
+        assert_eq!(a.max_cred_count_in_list, Some(8));
+        assert_eq!(a.max_cred_id_len, Some(96));
+        assert_eq!(
+            a.transports,
+            Some(vec!["usb".to_string(), "nfc".to_string()])
+        );
+        assert_eq!(
+            a.get_transports(),
+            Some(vec![
+                AuthenticatorTransport::Usb,
+                AuthenticatorTransport::Nfc
+            ])
+        );
+
+        assert_eq!(a.max_serialized_large_blob_array, Some(2048));
+        assert!(!a.force_pin_change);
+        assert_eq!(a.min_pin_length, Some(4));
+        assert_eq!(a.get_min_pin_length(), 4);
+        assert_eq!(a.firmware_version, Some(0x100));
+        assert_eq!(a.max_cred_blob_length, Some(32));
+        assert_eq!(a.max_rpids_for_set_min_pin_length, Some(6));
+        assert!(a.preferred_platform_uv_attempts.is_none());
+        assert!(a.uv_modality.is_none());
+        assert_eq!(
+            a.certifications,
+            Some(BTreeMap::from([("FIDO".to_string(), 1)]))
+        );
+        assert_eq!(a.remaining_discoverable_credentials, Some(50));
+        assert!(a.vendor_prototype_config_commands.is_none());
     }
 
     #[test]

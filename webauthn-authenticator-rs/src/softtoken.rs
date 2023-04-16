@@ -256,16 +256,9 @@ impl SoftToken {
     pub fn get_info(&self) -> GetInfoResponse {
         GetInfoResponse {
             versions: BTreeSet::from(["FIDO_2_0".to_string()]),
-            extensions: None,
             aaguid: Some(AAGUID),
-            options: None,
-            max_msg_size: None,
-            pin_protocols: None,
-            max_cred_count_in_list: None,
-            max_cred_id_len: None,
             transports: Some(vec!["internal".to_string()]),
-            algorithms: None,
-            min_pin_length: None,
+            ..Default::default()
         }
     }
 
