@@ -1,3 +1,8 @@
+//! Derives caBLE tunnel server hostnames.
+//!
+//! ```sh
+//! cargo run --example cable_domain --features cable -- --help
+//! ```
 use clap::{ArgGroup, CommandFactory, Parser, ValueHint};
 use std::net::ToSocketAddrs;
 use webauthn_authenticator_rs::cable::get_domain;
