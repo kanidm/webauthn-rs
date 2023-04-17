@@ -303,8 +303,7 @@ mod tunnel;
 
 use std::collections::BTreeMap;
 
-pub use base10::DecodeError;
-pub use btle::Advertiser;
+pub use self::{base10::DecodeError, btle::Advertiser, tunnel::get_domain};
 use tokio_tungstenite::tungstenite::http::uri::Builder;
 
 use crate::{
