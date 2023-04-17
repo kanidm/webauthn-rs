@@ -3,9 +3,9 @@
 This binary provides a caBLE tunnel server, which is intended for
 *non-production use only*.
 
-The `backend` is capable of running in two configurations:
+The `backend` can run in two configurations:
 
-* a single-task configuration, with no frontends.
+* a single-task configuration, directly serving requests with no frontend.
 
   In this configuration, caBLE [Routing IDs][background] are ignored, and it is
   presumed all incoming requests can be served out of a single running task.
@@ -16,8 +16,9 @@ The `backend` is capable of running in two configurations:
   it to [handle caBLE Routing IDs][background]. However, the frontend is not yet
   fully implemented.
 
-`backend` tasks are entirely stateless, and do not communicate with one another.
-Each tunnel exists within one (*and only one*) `backend` task.
+The `backend` is stateless, and is not capable of communicating with other
+tasks on its own. Each tunnel exists within one (*and only one*) `backend` task,
+and `backend` tasks never process caBLE [Routing IDs][background].
 
 [background]: ../README.md#background
 
@@ -43,7 +44,7 @@ The server is configured with command-line flags, which can be seen by running
 the server with `--help`.
 
 To run the server at http://127.0.0.1:8080 (for testing with
-`webauthn-authenticator-rs` built with the `cable-localhost-tunnel` feature):
+`webauthn-authenticator-rs` built with the `cable-override-tunnel` feature):
 
 ```sh
 ./cable-tunnel-server-backend \
@@ -61,14 +62,13 @@ To run the server with HTTPS and strict `Origin` header checks:
     --origin cable.example.com
 ```
 
-> **Important:** caBLE has an algorithm for generating tunnel server domain
-> names -- you cannot host the service on arbitrary domain names of your
-> choosing.
+> **Important:** caBLE has an algorithm to deriving tunnel server domain names
+> -- you cannot host the service on arbitrary domain names of your choosing.
 >
-> See [`cable::tunnel::get_domain()` in `webauthn-authenticator-rs`][get_domain]
-> for more details.
+> Run [`webauthn-authenticator-rs`' `cable_domain` example][cable_domain] to
+> derive hostnames at the command line.
 
-[get_domain]: ../../webauthn-authenticator-rs/src/cable/tunnel.rs
+[cable_domain]: ../../webauthn-authenticator-rs/example/cable_domain.rs
 
 ## Logging
 

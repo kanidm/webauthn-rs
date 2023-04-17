@@ -17,9 +17,9 @@ To facilitate two-way communication between an initiator (browser) and
 authenticator (mobile phone), caBLE uses a WebSocket tunnel server. There are
 tunnel servers run by Apple (`cable.auth.com`) and Google (`cable.ua5v.com`),
 and a facility to procedurally generate new tunnel server domain names
-([see `cable::tunnel::get_domain()` in `webauthn-authenticator-rs`][1]).
+([run `webauthn-authenticator-rs`' `cable_domain` example][1]).
 
-[1]: ../webauthn-authenticator-rs/src/cable/tunnel.rs
+[1]: ../webauthn-authenticator-rs/examples/cable_tunnel.rs
 
 As far as the tunnel server is concerned, what happens is:
 
