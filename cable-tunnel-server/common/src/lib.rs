@@ -34,7 +34,7 @@ pub use tls::*;
 pub type RoutingId = [u8; 3];
 pub type TunnelId = [u8; 16];
 
-pub const CABLE_PROTOCOL: HeaderValue = HeaderValue::from_static("fido.cable");
+pub static CABLE_PROTOCOL: HeaderValue = HeaderValue::from_static("fido.cable");
 pub const CABLE_ROUTING_ID_HEADER: &str = "X-caBLE-Routing-ID";
 
 pub const CABLE_NEW_PATH: &str = "/cable/new/";
@@ -272,7 +272,7 @@ impl Router {
 
         // We have the correct protocol, include in the response
         res.headers_mut()
-            .append(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL);
+            .append(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL.to_owned());
         let res = res.map(|_| Default::default());
 
         Router::Websocket(res, path)
