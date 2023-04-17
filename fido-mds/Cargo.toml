@@ -3,6 +3,7 @@ name = "fido-mds"
 version = "0.5.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
+rust-version = "1.66.0"
 description = "Fido Metadata Service parser"
 repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
@@ -13,12 +14,12 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64 = "0.21"
-compact_jwt = "^0.2.3"
+base64.workspace = true
+compact_jwt.workspace = true
+openssl.workspace = true
 peg = "0.8.1"
-openssl = { version = "0.10" }
-serde = { version = "^1.0.141", features = ["derive"] }
-serde_json = "^1.0.79"
-tracing = "^0.1.35"
-uuid = { version = "1", features = ["v4", "serde"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v4", "serde"] }
 

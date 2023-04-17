@@ -3,6 +3,7 @@ name = "fido-mds-tool"
 version = "0.5.0-dev"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
+rust-version = "1.66.0"
 description = "Fido Metadata Service parsing tool"
 repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
@@ -13,10 +14,7 @@ license = "MPL-2.0"
 [dependencies]
 fido-mds = { version = "0.5.0-dev", path = "../fido-mds" }
 
-clap = { version = "^3.2", features = ["derive", "env"] }
-
-tracing = "^0.1.35"
-tracing-subscriber = { version = "^0.3.14", features = ["env-filter", "fmt"] }
-uuid = "1"
-
-
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true

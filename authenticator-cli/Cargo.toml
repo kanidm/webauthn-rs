@@ -2,6 +2,7 @@
 name = "authenticator-cli"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.66.0"
 repository = "https://github.com/kanidm/webauthn-rs"
 license = "MPL-2.0"
 readme = "README.md"
@@ -10,9 +11,9 @@ description = "Webauthn Authenticator Management Tool"
 [dependencies]
 
 authenticator = { version = "0.3.2-dev.1", default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
-clap = { version = "^3.0", features = ["derive"] }
+clap.workspace = true
 
-tracing = "0.1"
-tracing-subscriber = { version = "0.3.11", features = ["env-filter", "fmt"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 tracing-log = { version = "0.1.3" }
 
