@@ -1,8 +1,15 @@
 [package]
 name = "cable-tunnel-server-frontend"
 version = "0.1.0"
+authors = ["Michael Farrell <micolous+git@gmail.com>"]
+categories = ["authentication"]
+description = "webauthn-rs caBLE tunnel server frontend"
 edition = "2021"
+keywords = ["cable", "hybrid", "fido", "webauthn"]
 license = "MPL-2.0"
+readme = "README.md"
+repository = "https://github.com/kanidm/webauthn-rs/"
+rust-version = "1.66.0"
 
 [dependencies]
 cable-tunnel-server-common.workspace = true
