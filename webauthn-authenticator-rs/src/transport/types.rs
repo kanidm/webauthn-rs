@@ -1,28 +1,28 @@
 use crate::error::{CtapError, WebauthnCError};
 
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 use super::iso7816::ISO7816ResponseAPDU;
 
 pub const TYPE_INIT: u8 = 0x80;
 pub const U2FHID_PING: u8 = TYPE_INIT | 0x01;
 pub const U2FHID_MSG: u8 = TYPE_INIT | 0x03;
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_INIT: u8 = TYPE_INIT | 0x06;
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_CBOR: u8 = TYPE_INIT | 0x10;
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11;
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b;
 pub const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f;
 
 /// Type for parsing all responses from a BTLE or USB FIDO token.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Response {
-    #[cfg(any(doc, feature = "usb"))]
+    #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
     Init(crate::usb::InitResponse),
     Ping(Vec<u8>),
-    #[cfg(any(doc, feature = "usb"))]
+    #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
     Msg(ISO7816ResponseAPDU),
     Cbor(CBORResponse),
     Error(U2FError),
