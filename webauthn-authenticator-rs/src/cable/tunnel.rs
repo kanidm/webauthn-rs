@@ -63,31 +63,31 @@ const BASE32_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz234567";
 ///
 /// Returns a hostname (eg: `cable.ua5v.com`) on success, or `None` if
 /// `domain_id` is unknown.
-/// 
+///
 /// **Reference:** [Chromium's `tunnelserver::DecodeDomain`][0]
-/// 
+///
 /// ## Example
-/// 
+///
 /// ```
 /// use webauthn_authenticator_rs::cable::get_domain;
 ///
 /// // Known static assignment
 /// assert_eq!(get_domain(0).unwrap(), "cable.ua5v.com");
-/// 
+///
 /// // Unknown static assignment
 /// assert_eq!(get_domain(255), None);
-/// 
+///
 /// // Hostname derived from checksum
 /// assert_eq!(get_domain(266).unwrap(), "cable.wufkweyy3uaxb.com");
 /// ```
 ///
 /// **Tip:** The `cable_domain` example derives tunnel server hostnames at the
 /// command line. For more information, run:
-/// 
+///
 /// ```sh
 /// cargo run --example cable_domain --features cable -- --help
 /// ```
-/// 
+///
 /// [0]: https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc?q=symbol%3A%5Cbdevice%3A%3Acablev2%3A%3Atunnelserver%3A%3ADecodeDomain%5Cb%20case%3Ayes
 pub fn get_domain(domain_id: u16) -> Option<String> {
     if domain_id < 256 {
