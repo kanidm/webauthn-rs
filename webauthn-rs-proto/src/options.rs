@@ -28,37 +28,42 @@ pub type CredentialID = Base64UrlSafeData;
 /// verification state of the credential in the persisted credential. These persisted
 /// credentials define which UserVerificationPolicy is issued during authentications.
 ///
-/// **IMPORTANT** - Due to limitations in the webauthn specification, CTAP devices, and browser
+/// **IMPORTANT** - Due to limitations of the webauthn specification, CTAP devices, and browser
 /// implementations the only secure choice is *required*.
 ///
-/// > ⚠️  **WARNING** - discouraged is marked with a warning, as in some cases, some authenticators
-/// > will FORCE verification during registration but NOT during authentication. This means
-/// > that is is NOT possible assert verification has been bypassed or not from the server
-/// > viewpoint, and to the user it may create confusion about when verification is or is
-/// > not required leading users to not trust UV is effective.
+/// > ⚠️  **WARNING** - discouraged is marked with a warning, as some authenticators
+/// > will FORCE verification during registration but NOT during authentication.
+/// > This makes it impossible for a relying party to *consistently* enforce user verification,
+/// > which can confuse users and lead them to distrust user verification is being enforced.
 ///
 /// > ⚠️  **WARNING** - preferred can lead to authentication errors in some cases due to browser
-/// > peripheral exchange attacks. Webauthn RS is not vulnerable to these attacks due to our
+/// > peripheral exchange allowing authentication verification bypass. Webauthn RS is not vulnerable
+/// > to these bypasses due to our
 /// > tracking of UV during registration through authentication, however preferred can cause
 /// > legitimate credentials to not prompt for UV correctly due to browser perhipheral exchange
-/// > attacks leading Webauthn RS to deny them in what should otherwise be legitimate operations.
+/// > leading Webauthn RS to deny them in what should otherwise be legitimate operations.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(non_camel_case_types)]
 #[serde(rename_all = "lowercase")]
 pub enum UserVerificationPolicy {
-    /// Require User Verification bit to be set, and fail the registration or authentication
-    /// if false. If the authenticator is not able to perform verification, it may not be
+    /// Require user verification bit to be set, and fail the registration or authentication
+    /// if false. If the authenticator is not able to perform verification, it will not be
     /// usable with this policy.
+    ///
+    /// This policy is the default as it is the only secure and consistent user verification option.
     #[serde(rename = "required")]
     #[default]
     Required,
-    /// Prefer uv if possible, but ignore if not present. In other webauthn deployments this is bypassable
-    /// as it implies the library will not check uv is set correctly for this credential. Webauthn-RS
-    /// is *not* vulnerable to this as we check the uv state always based on it's presence at registration.
+    /// Prefer UV if possible, but ignore if not present. In other webauthn deployments this is bypassable
+    /// as it implies the library will not check UV is set correctly for this credential. Webauthn-RS
+    /// is *not* vulnerable to this as we check the UV state always based on it's presence at registration.
+    ///
+    /// However, in some cases use of this policy can lead to some credentials failing to verify
+    /// correctly due to browser peripheral exchange bypasses.
     #[serde(rename = "preferred")]
     Preferred,
-    /// Discourage - but do not prevent - userverification from being supplied. Many CTAP devices
-    /// will attempt uv during registration but not authentication leading to user confusion.
+    /// Discourage - but do not prevent - user verification from being supplied. Many CTAP devices
+    /// will attempt UV during registration but not authentication leading to user confusion.
     #[serde(rename = "discouraged")]
     Discouraged_DO_NOT_USE,
 }

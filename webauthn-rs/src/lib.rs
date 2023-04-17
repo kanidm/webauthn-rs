@@ -48,15 +48,15 @@
 //!
 //! Tutorials and examples on how to use this library in your website project is on the project github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
 //!
-//! # What is a 'Passkey'?
+//! # What is a "Passkey"?
 //!
 //! Like all good things - "it depends". Mostly it depends who you ask, and at what time they adopted
 //! the terminology. There are at least four definitions that we are aware of. A passkey is:
 //!
 //! * any possible webauthn authenticator - security key, tpm, touch id, etc
-//! * a platform authenticator - built into a device such as touch id, tpm, etc.
+//! * a platform authenticator - built into a device such as touch id, tpm, etc
 //! * a synchronised credential - backed by a cloud keychain like Apple iCloud
-//! * a resident key - stored in the device locally allowing usernameless flows
+//! * a resident key - a stored, discoverable credential allowing usernameless flows
 //!
 //! The issue is each of these definitions have different pros/cons and different implications. For
 //! example, passkeys as resident keys means you can accidentally brick many ctap2.0 devices by exhausting
@@ -64,8 +64,8 @@
 //! Passkeys as synced credentials means only certain devices with specific browser combinations can
 //! use them.
 //!
-//! In this library we choose to define passkey's as "any possible authenticator". If the device
-//! opportunistically creates rk (such as Apple iOS) then in the future we *may* allow usernameless
+//! In this library we chose to define passkey's as "any possible authenticator". If the device
+//! opportunistically creates rk (such as Apple iCloud Keychain) then in the future we *may* allow usernameless
 //! flows once we are satisfied with the state of these ui's in browsers.
 //!
 //! # Features
@@ -197,7 +197,7 @@ impl<'a> WebauthnBuilder<'a> {
     /// # Safety
     ///
     /// rp_id is what Credentials (Authenticators) bind themself to - rp_id can NOT be changed
-    /// without breaking all of your users associated credentials in the future!
+    /// without breaking all of your users' associated credentials in the future!
     ///
     /// # Examples
     ///
@@ -347,9 +347,9 @@ impl<'a> WebauthnBuilder<'a> {
 ///
 ///
 /// __I want users to have their identites stored on their devices, and for them to authenticate with
-/// strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types*__
+/// strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types__
 ///
-/// This authenticator type consumes resources of the users devices, and may result in failures or device
+/// This authenticator type consumes limited storage space on users' authenticators, and may result in failures or device
 /// bricking.
 /// You **MUST** only use it in tightly controlled environments where you supply devices to your
 /// users.
@@ -413,7 +413,7 @@ impl Webauthn {
     /// on the server the `PasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// Subsequently you need to call [`finish_passkey_registration`](Webauthn::finish_passkey_registration)
+    /// Finally you need to call [`finish_passkey_registration`](Webauthn::finish_passkey_registration)
     /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasskeyRegistration] VALUE SERVER SIDE.
@@ -522,7 +522,7 @@ impl Webauthn {
     /// The server must persist the [PasskeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// Subsequently you need to call [`finish_passkey_authentication`](Webauthn::finish_passkey_authentication)
+    /// Finally you need to call [`finish_passkey_authentication`](Webauthn::finish_passkey_authentication)
     /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasskeyAuthentication] VALUE SERVER SIDE.
@@ -620,7 +620,7 @@ impl Webauthn {
     /// on the server the [SecurityKeyRegistration] which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// Subsequently you need to call [`finish_securitykey_registration`](Webauthn::finish_securitykey_registration)
+    /// Finally you need to call [`finish_securitykey_registration`](Webauthn::finish_securitykey_registration)
     /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyRegistration] VALUE SERVER SIDE.
@@ -789,8 +789,7 @@ impl Webauthn {
     /// The server must persist the [SecurityKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-
-    /// Subsequently you need to call [`finish_securitykey_authentication`](Webauthn::finish_securitykey_authentication)
+    /// Finally you need to call [`finish_securitykey_authentication`](Webauthn::finish_securitykey_authentication)
     /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyAuthentication] VALUE SERVER SIDE.
@@ -904,7 +903,7 @@ impl Webauthn {
     /// on the server the `PasswordlessKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// Subsequently you need to call [`finish_passwordlesskey_registration`](Webauthn::finish_passwordlesskey_registration)
+    /// Finally you need to call [`finish_passwordlesskey_registration`](Webauthn::finish_passwordlesskey_registration)
     /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyRegistration] VALUE SERVER SIDE.
@@ -1047,7 +1046,7 @@ impl Webauthn {
     /// The server must persist the [PasswordlessKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// Subsequently you need to call [`finish_passwordlesskey_authentication`](Webauthn::finish_passwordlesskey_authentication)
+    /// Finally you need to call [`finish_passwordlesskey_authentication`](Webauthn::finish_passwordlesskey_authentication)
     /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyAuthentication] VALUE SERVER SIDE.
