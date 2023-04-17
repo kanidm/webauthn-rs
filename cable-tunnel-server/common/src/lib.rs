@@ -644,7 +644,7 @@ mod tests {
             .into_client_request()?;
         request
             .headers_mut()
-            .insert(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL);
+            .insert(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL.to_owned());
         matches!(
             Router::route(&request, None),
             Router::Websocket(_, p) if p == CablePath::new(*b"hello, webauthn!")
@@ -660,7 +660,7 @@ mod tests {
         let mut request = "wss://cable.example.com/cable/new/68656C6C6F2C20776562617574686E21"
             .into_client_request()?;
         let headers = request.headers_mut();
-        headers.insert(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL);
+        headers.insert(SEC_WEBSOCKET_PROTOCOL, CABLE_PROTOCOL.to_owned());
         headers.insert(ORIGIN, HeaderValue::from_static("cable.example.com"));
 
         for router_origin in [None, Some("cable.example.com")] {
