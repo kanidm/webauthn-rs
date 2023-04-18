@@ -62,13 +62,13 @@ To run the server with HTTPS and strict `Origin` header checks:
     --origin cable.example.com
 ```
 
-> **Important:** caBLE has an algorithm to deriving tunnel server domain names
-> -- you cannot host the service on arbitrary domain names of your choosing.
+> **Important:** caBLE has an algorithm to deriving tunnel server domain names –
+> you cannot host the service on an arbitrary domain name of your choosing.
 >
 > Run [`webauthn-authenticator-rs`' `cable_domain` example][cable_domain] to
 > derive hostnames at the command line.
 
-[cable_domain]: ../../webauthn-authenticator-rs/example/cable_domain.rs
+[cable_domain]: ../../webauthn-authenticator-rs/examples/cable_domain.rs
 
 ## Logging
 
