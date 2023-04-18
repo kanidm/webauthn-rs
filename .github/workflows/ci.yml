@@ -4,9 +4,62 @@ name: CI
 
 env:
   VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - run: cargo fmt --check
+
   build_and_test:
+    name: Other build/test
+    strategy:
+      fail-fast: false
+      matrix:
+        rust_version: [stable, 1.66.0]
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust_version }}
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.3
+
+      - if: runner.os != 'windows'
+        run: |
+          sudo apt-get update && \
+          sudo apt-get -y install libudev-dev
+
+      - if: runner.os == 'windows'
+        uses: johnwason/vcpkg-action@v4
+        with:
+          pkgs: openssl
+          triplet: x64-windows-static-md
+          token: ${{ github.token }}
+      - run: cargo build --workspace --exclude webauthn-authenticator-rs
+
+      # Don't run clippy on Windows, we only need to run it on Linux
+      - if: runner.os != 'windows'
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs --all-targets
+
+      - run: cargo test --workspace --exclude webauthn-authenticator-rs
+
+  authenticator:
+    name: webauthn-authenticator-rs test
     strategy:
       fail-fast: false
       matrix:
@@ -32,14 +85,14 @@ jobs:
           - os: windows-latest
             rust_version: 1.66.0
 
-    name: Build and Test
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
-          components: clippy, rustfmt
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.3
 
       - if: runner.os != 'windows'
         run: |
@@ -58,10 +111,14 @@ jobs:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
-      - run: cargo build --release ${{ matrix.features }}
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets ${{ matrix.features }}
-      - run: cargo test --all ${{ matrix.features }}
+      - run: cargo build -p webauthn-authenticator-rs ${{ matrix.features }}
+
+      # Don't run clippy on Windows unless it is using a Windows-specific
+      # feature which wasn't checked on Linux.
+      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
+
+      - run: cargo test -p webauthn-authenticator-rs ${{ matrix.features }}
 
   docs:
     name: Documentation
@@ -75,6 +132,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
+      - uses: mozilla-actions/sccache-action@v0.0.3
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
