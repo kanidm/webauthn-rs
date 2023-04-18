@@ -48,6 +48,26 @@
 //!
 //! Tutorials and examples on how to use this library in your website project is on the project github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
 //!
+//! # What is a "Passkey"?
+//!
+//! Like all good things - "it depends". Mostly it depends who you ask, and at what time they adopted
+//! the terminology. There are at least four definitions that we are aware of. A passkey is:
+//!
+//! * any possible webauthn authenticator - security key, tpm, touch id, etc
+//! * a platform authenticator - built into a device such as touch id, tpm, etc
+//! * a synchronised credential - backed by a cloud keychain like Apple iCloud
+//! * a resident key - a stored, discoverable credential allowing usernameless flows
+//!
+//! The issue is each of these definitions have different pros/cons and different implications. For
+//! example, passkeys as resident keys means you can accidentally brick many ctap2.0 devices by exhausting
+//! their storage. Passkeys as platform authenticators means only certain devices can use them.
+//! Passkeys as synced credentials means only certain devices with specific browser combinations can
+//! use them.
+//!
+//! In this library we chose to define passkey's as "any possible authenticator". If the device
+//! opportunistically creates rk (such as Apple iCloud Keychain) then in the future we *may* allow usernameless
+//! flows once we are satisfied with the state of these ui's in browsers.
+//!
 //! # Features
 //!
 //! This library supports some optional features that you may wish to use. These are all
@@ -87,7 +107,7 @@
 //!
 //! However, you should be aware that manipulating the internals of a [Credential] may affect the usage
 //! of that [Credential] in certain use cases. You should be careful when enabling this feature that
-//! you do not change [Credential] values.
+//! you do not change internal [Credential] values.
 //!
 //! ## User-Presence only SecurityKeys
 //!
@@ -101,7 +121,8 @@
 //! on registration, but will then not prompt for this during usage. Some user surveys have shown
 //! this to confuse users to why the UV is not requested, and it can lower trust in these tokens
 //! when they are elevated to be self-contained MFA as the user believes these UV prompts to be
-//! unreliable and not verified correctly. In these cases you MUST communicate to the user that
+//! unreliable and not verified correctly - in other words it trains users to believe that these
+//! prompts do nothing and have no effect. In these cases you MUST communicate to the user that
 //! the UV *may* occur on registration and then will not occur again, and that is *by design*.
 //!
 //! If in doubt, do not enable this feature.
@@ -176,7 +197,7 @@ impl<'a> WebauthnBuilder<'a> {
     /// # Safety
     ///
     /// rp_id is what Credentials (Authenticators) bind themself to - rp_id can NOT be changed
-    /// without potentially breaking all of your associated credentials in the future!
+    /// without breaking all of your users' associated credentials in the future!
     ///
     /// # Examples
     ///
@@ -248,9 +269,9 @@ impl<'a> WebauthnBuilder<'a> {
         self
     }
 
-    /// Set an origin to be considered valid in Webauthn operations. A common example of this is
+    /// Set extra origins to be considered valid in Webauthn operations. A common example of this is
     /// enabling use with iOS or Android native "webauthn-like" APIs, which return different
-    /// origins than a web browser would.
+    /// app-specific origins than a web browser would.
     pub fn append_allowed_origin(mut self, origin: &Url) -> Self {
         self.allowed_origins.push(origin.to_owned());
         self
@@ -276,7 +297,7 @@ impl<'a> WebauthnBuilder<'a> {
     }
 
     /// Complete the construction of the [Webauthn] instance. If an invalid configuration setting
-    /// is found, an Error may be returned.
+    /// is found, an Error will be returned.
     ///
     /// # Examples
     ///
@@ -311,36 +332,38 @@ impl<'a> WebauthnBuilder<'a> {
 /// authenticating credentials for users. Depending on your needs, you'll want to allow users
 /// to register and authenticate with different kinds of authenticators.
 ///
-/// *I just want to replace passwords with strong cryptographic authentication, and I don't have other requirements*
+/// __I just want to replace passwords with strong cryptographic authentication, and I don't have other requirements__
 ///
-/// --> You should use `start_passkey_registration`
+/// > You should use [`start_passkey_registration`](Webauthn::start_passkey_registration)
 ///
 ///
-/// *I want to replace passwords with strong multi-factor cryptographic authentication, limited to
-/// a known set of controlled and trusted authenticator types*
+/// __I want to replace passwords with strong multi-factor cryptographic authentication, limited to
+/// a known set of controlled and trusted authenticator types__
 ///
 /// This type requires `preview-features` enabled as the current form of the Attestation CA List
 /// may change in the future.
 ///
-/// --> You should use `start_passwordlesskey_registration`
+/// > You should use [`start_passwordlesskey_registration`](Webauthn::start_passwordlesskey_registration)
 ///
 ///
-/// *I want users to have their identites stored on their devices, and for them to authenticate with
-///  strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types*
+/// __I want users to have their identites stored on their devices, and for them to authenticate with
+/// strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types__
 ///
-/// This authenticator type consumes resources of the users devices, and may result in failures,
-/// so you should only use it in tightly controlled environments where you supply devices to your
+/// This authenticator type consumes limited storage space on users' authenticators, and may result in failures or device
+/// bricking.
+/// You **MUST** only use it in tightly controlled environments where you supply devices to your
 /// users.
 ///
-/// --> You should use `start_devicekey_registration` (still in development)
+/// > You should use [`start_devicekey_registration`](Webauthn::start_devicekey_registration) (still in development)
 ///
 ///
-/// *I want a security token along with an external password to create multi-factor authentication*
+/// __I want a security token along with an external password to create multi-factor authentication__
 ///
-/// If possible, consider `start_passkey_registration` OR `start_passwordlesskey_registration`
-/// instead - it's likely to provide a better user experience than security keys as MFA!
+/// If possible, consider [`start_passkey_registration`](Webauthn::start_passkey_registration) OR
+/// [`start_passwordlesskey_registration`](Webauthn::start_passwordlesskey_registration)
+/// instead - it's likely to provide a better user experience over security keys as MFA!
 ///
-/// --> If you really want a security key, you should use `start_securitykey_registration`
+/// > If you really want a security key, you should use [`start_securitykey_registration`](Webauthn::start_securitykey_registration)
 ///
 #[derive(Debug)]
 pub struct Webauthn {
@@ -355,11 +378,11 @@ impl Webauthn {
         self.core.get_allowed_origins()
     }
 
-    /// Initiate the registration of a new pass key for a user. A pass key is any cryptographic
+    /// Initiate the registration of a new passkey for a user. A passkey is any cryptographic
     /// authenticator acting as a single factor of authentication, far stronger than a password
     /// or email-reset link.
     ///
-    /// Some examples of pass keys include Yubikeys, TouchID, FaceID, Windows Hello and others.
+    /// Some examples of passkeys include Yubikeys, TouchID, FaceID, Windows Hello and others.
     ///
     /// The keys *may* exist and 'roam' between multiple devices. For example, Apple allows Passkeys
     /// to sync between devices owned by the same Apple account. This can affect your risk model
@@ -376,7 +399,7 @@ impl Webauthn {
     /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
     /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
     /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
-    /// present to allow client work flows to display human friendly identifiers.
+    /// present to allow client facing work flows to display human friendly identifiers.
     ///
     /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
     /// You *should* provide the list of credentials that are already registered to this user's account
@@ -389,6 +412,9 @@ impl Webauthn {
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the `PasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
+    ///
+    /// Finally you need to call [`finish_passkey_registration`](Webauthn::finish_passkey_registration)
+    /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasskeyRegistration] VALUE SERVER SIDE.
     ///
@@ -477,9 +503,9 @@ impl Webauthn {
     /// # Returns
     ///
     /// The returned `Passkey` must be associated to the users account, and is used for future
-    /// authentications via `start_passkey_authentication`.
+    /// authentications via [`start_passkey_authentication`](Webauthn::start_passkey_authentication).
     ///
-    /// You MUST assert that the registered credential id has not previously been registered.
+    /// You MUST assert that the registered `CredentialID` has not previously been registered.
     /// to any other account.
     pub fn finish_passkey_registration(
         &self,
@@ -495,6 +521,9 @@ impl Webauthn {
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the [PasskeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
+    ///
+    /// Finally you need to call [`finish_passkey_authentication`](Webauthn::finish_passkey_authentication)
+    /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasskeyAuthentication] VALUE SERVER SIDE.
     ///
@@ -551,9 +580,9 @@ impl Webauthn {
     /// authenticator acting as a single factor of authentication to supplement a password or some
     /// other authentication factor.
     ///
-    /// Some examples of security keys include Yubikeys, Solokeys, and others.
+    /// Some examples of security keys include Yubikeys, Feitian ePass, and others.
     ///
-    /// We don't recommend this over Passkeys or PasswordlessKeys, as today in Webauthn most devices
+    /// We don't recommend this over [Passkey] or [PasswordlessKey], as today in Webauthn most devices
     /// due to their construction require userVerification to be maintained for user trust. What this
     /// means is that most users will require a password, their security key, and a pin or biometric
     /// on the security key for a total of three factors. This adds friction to the user experience
@@ -590,6 +619,9 @@ impl Webauthn {
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the [SecurityKeyRegistration] which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
+    ///
+    /// Finally you need to call [`finish_securitykey_registration`](Webauthn::finish_securitykey_registration)
+    /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyRegistration] VALUE SERVER SIDE.
     ///
@@ -732,9 +764,9 @@ impl Webauthn {
     /// # Returns
     ///
     /// The returned [SecurityKey] must be associated to the users account, and is used for future
-    /// authentications via [crate::Webauthn::start_securitykey_authentication].
+    /// authentications via (`start_securitykey_authentication`)[crate::Webauthn::start_securitykey_authentication].
     ///
-    /// You MUST assert that the registered credential id has not previously been registered.
+    /// You MUST assert that the registered [CredentialID] has not previously been registered.
     /// to any other account.
     ///
     /// # Verifying specific device models
@@ -752,10 +784,13 @@ impl Webauthn {
             .map(|cred| SecurityKey { cred })
     }
 
-    /// Given a set of `SecurityKey`'s, begin an authentication of the user. This returns
+    /// Given a set of [SecurityKey], begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the [SecurityKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
+    ///
+    /// Finally you need to call [`finish_securitykey_authentication`](Webauthn::finish_securitykey_authentication)
+    /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [SecurityKeyAuthentication] VALUE SERVER SIDE.
     ///
@@ -867,6 +902,9 @@ impl Webauthn {
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
     /// on the server the `PasswordlessKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
+    ///
+    /// Finally you need to call [`finish_passwordlesskey_registration`](Webauthn::finish_passwordlesskey_registration)
+    /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyRegistration] VALUE SERVER SIDE.
     ///
@@ -1007,6 +1045,9 @@ impl Webauthn {
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
     /// The server must persist the [PasswordlessKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
+    ///
+    /// Finally you need to call [`finish_passwordlesskey_authentication`](Webauthn::finish_passwordlesskey_authentication)
+    /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyAuthentication] VALUE SERVER SIDE.
     ///
