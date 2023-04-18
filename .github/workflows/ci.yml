@@ -6,6 +6,18 @@ env:
   VCPKG_ROOT: "${{ github.workspace }}/vcpkg"
 
 jobs:
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - run: cargo fmt --check
+
   build_and_test:
     name: Other build/test
     strategy:
@@ -22,7 +34,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
-          components: clippy, rustfmt
+          components: clippy
 
       - if: runner.os != 'windows'
         run: |
@@ -36,8 +48,11 @@ jobs:
           triplet: x64-windows-static-md
           token: ${{ github.token }}
       - run: cargo build --workspace --exclude webauthn-authenticator-rs --release
-      - run: cargo fmt --workspace --exclude webauthn-authenticator-rs --check
-      - run: cargo clippy --workspace --exclude webauthn-authenticator-rs --all-targets
+
+      # Don't run clippy on Windows, we only need to run it on Linux
+      - if: runner.os != 'windows'
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs --all-targets
+
       - run: cargo test --workspace --exclude webauthn-authenticator-rs --all
 
   authenticator:
@@ -73,7 +88,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
-          components: clippy, rustfmt
+          components: clippy
 
       - if: runner.os != 'windows'
         run: |
@@ -93,8 +108,12 @@ jobs:
           triplet: x64-windows-static-md
           token: ${{ github.token }}
       - run: cargo build -p webauthn-authenticator-rs --release ${{ matrix.features }}
-      - run: cargo fmt -p webauthn-authenticator-rs --check
-      - run: cargo clippy -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
+
+      # Don't run clippy on Windows unless it is using a Windows-specific
+      # feature which wasn't checked on Linux.
+      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
+
       - run: cargo test -p webauthn-authenticator-rs --all ${{ matrix.features }}
 
   docs:
