@@ -72,6 +72,10 @@ pub enum WebauthnCError {
     /// authenticator. You may need to set a PIN, or use a different
     /// authenticator.
     UserVerificationRequired,
+    /// The library is in an unexpected state. This could indicate that
+    /// something has not been initialised correctly, or that the authenticator
+    /// is sending unexpected messages.
+    UnexpectedState,
 }
 
 #[cfg(feature = "nfc")]
@@ -130,7 +134,7 @@ impl From<tokio_tungstenite::tungstenite::error::Error> for WebauthnCError {
     }
 }
 
-#[cfg(feature = "bluetooth")]
+#[cfg(feature = "btleplug")]
 impl From<btleplug::Error> for WebauthnCError {
     fn from(v: btleplug::Error) -> Self {
         use btleplug::Error::*;

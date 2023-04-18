@@ -446,7 +446,7 @@ impl Token for NFCCard {
         AuthenticatorTransport::Nfc
     }
 
-    fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&self) -> Result<(), WebauthnCError> {
         // There does not appear to be a "cancel" command over NFC.
         Ok(())
     }

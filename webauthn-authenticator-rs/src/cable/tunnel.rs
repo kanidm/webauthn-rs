@@ -414,7 +414,7 @@ impl Token for Tunnel {
         Ok(data)
     }
 
-    fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&self) -> Result<(), WebauthnCError> {
         // There is no way to cancel transactions without closing in caBLE
         Ok(())
     }

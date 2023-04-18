@@ -1,8 +1,15 @@
 //! All [Response] frame types, used by FIDO tokens over USB HID.
-use crate::error::{CtapError, WebauthnCError};
+use crate::error::WebauthnCError;
 use crate::transport::iso7816::ISO7816ResponseAPDU;
+use crate::transport::types::{
+    CBORResponse, U2FError, TYPE_INIT, U2FHID_CBOR, U2FHID_ERROR, U2FHID_KEEPALIVE, U2FHID_MSG,
+    U2FHID_PING,
+};
 use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;
+
+const CAPABILITY_CBOR: u8 = 0x04;
+const CAPABILITY_NMSG: u8 = 0x08;
 
 /// Response type [U2FHID_INIT]
 #[derive(Debug, PartialEq, Eq)]
@@ -11,11 +18,11 @@ pub struct InitResponse {
     /// Allocated channel identifier
     pub cid: u32,
     /// U2F protocol version (2)
-    protocol_version: u8,
-    device_version_major: u8,
-    device_version_minor: u8,
-    device_version_build: u8,
-    capabilities: u8,
+    pub protocol_version: u8,
+    pub device_version_major: u8,
+    pub device_version_minor: u8,
+    pub device_version_build: u8,
+    pub capabilities: u8,
 }
 
 impl InitResponse {
@@ -57,110 +64,6 @@ impl TryFrom<&[u8]> for InitResponse {
     }
 }
 
-/// CTAPv2 CBOR message
-#[derive(Debug, PartialEq, Eq)]
-pub struct CBORResponse {
-    /// Status code
-    pub status: CtapError,
-    /// Data payload
-    pub data: Vec<u8>,
-}
-
-impl TryFrom<&[u8]> for CBORResponse {
-    type Error = WebauthnCError;
-    fn try_from(d: &[u8]) -> Result<Self, Self::Error> {
-        if d.is_empty() {
-            return Err(WebauthnCError::MessageTooShort);
-        }
-        Ok(Self {
-            status: d[0].into(),
-            data: d[1..].to_vec(),
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum KeepAliveStatus {
-    Processing,
-    UserPresenceNeeded,
-    Unknown(u8),
-}
-
-impl From<u8> for KeepAliveStatus {
-    fn from(v: u8) -> Self {
-        use KeepAliveStatus::*;
-        match v {
-            1 => Processing,
-            2 => UserPresenceNeeded,
-            v => Unknown(v),
-        }
-    }
-}
-
-impl From<&[u8]> for KeepAliveStatus {
-    fn from(d: &[u8]) -> Self {
-        if !d.is_empty() {
-            Self::from(d[0])
-        } else {
-            Self::Unknown(0)
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum U2FError {
-    None,
-    InvalidCommand,
-    InvalidParameter,
-    InvalidMessageLength,
-    InvalidMessageSequencing,
-    MessageTimeout,
-    ChannelBusy,
-    ChannelRequiresLock,
-    SyncCommandFailed,
-    Unspecified,
-    Unknown,
-}
-
-impl From<u8> for U2FError {
-    fn from(v: u8) -> Self {
-        match v {
-            0x00 => U2FError::None,
-            0x01 => U2FError::InvalidCommand,
-            0x02 => U2FError::InvalidParameter,
-            0x03 => U2FError::InvalidMessageLength,
-            0x04 => U2FError::InvalidMessageSequencing,
-            0x05 => U2FError::MessageTimeout,
-            0x06 => U2FError::ChannelBusy,
-            0x0a => U2FError::ChannelRequiresLock,
-            0x0b => U2FError::SyncCommandFailed,
-            0x7f => U2FError::Unspecified,
-            _ => U2FError::Unknown,
-        }
-    }
-}
-
-impl From<&[u8]> for U2FError {
-    fn from(d: &[u8]) -> Self {
-        if !d.is_empty() {
-            U2FError::from(d[0])
-        } else {
-            U2FError::Unknown
-        }
-    }
-}
-
-/// Type for parsing all responses from a FIDO token.
-#[derive(Debug, PartialEq, Eq)]
-pub enum Response {
-    Init(InitResponse),
-    Msg(ISO7816ResponseAPDU),
-    Cbor(CBORResponse),
-    Error(U2FError),
-    KeepAlive(KeepAliveStatus),
-    Unknown,
-}
-
 /// Parser for a response [U2FHIDFrame].
 ///
 /// The frame must be complete (ie: all fragments received) before parsing.
@@ -176,6 +79,7 @@ impl TryFrom<&U2FHIDFrame> for Response {
         let b = &f.data[..];
         Ok(match f.cmd {
             U2FHID_INIT => InitResponse::try_from(b).map(Response::Init)?,
+            U2FHID_PING => Response::Ping(b.to_vec()),
             U2FHID_MSG => ISO7816ResponseAPDU::try_from(b).map(Response::Msg)?,
             U2FHID_CBOR => CBORResponse::try_from(b).map(Response::Cbor)?,
             U2FHID_KEEPALIVE => Response::KeepAlive(KeepAliveStatus::from(b)),

@@ -36,11 +36,11 @@
 //!
 //! * [CTAP 2.0, 2.1 and 2.1-PRE protocol implementation][crate::ctap2]
 //! * [caBLE][] (with `--features cable`)
-//! * [Mozilla Authenticator][] (with `--features u2fhid`)
 //! * [NFC][] via PC/SC API (with `--features nfc`)
 //! * [SoftPasskey][] (for testing)
 //! * [SoftToken][] (for testing)
 //! * [USB HID][] (with `--features usb`)
+//! * [Mozilla Authenticator][] (with `--features u2fhid`)
 //! * [Windows 10][] WebAuthn API (with `--features win10`)
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/

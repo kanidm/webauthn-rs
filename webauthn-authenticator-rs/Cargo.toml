@@ -13,11 +13,8 @@ repository = "https://github.com/kanidm/webauthn-rs"
 nfc_raw_transmit = ["nfc"]
 u2fhid = ["authenticator"]
 
-# BTLE authenticators are not yet supported - this is currently only for caBLE
-bluetooth = ["btleplug"]
-
 # caBLE / hybrid authenticator
-cable = ["bluetooth", "hex", "tokio", "tokio-tungstenite", "qrcode"]
+cable = ["btleplug", "hex", "tokio", "tokio-tungstenite", "qrcode"]
 
 # Add APIs which allow overriding the caBLE tunnel server protocol and domain.
 #

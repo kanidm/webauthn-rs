@@ -230,7 +230,14 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
     ///
     /// Returns `None` if we don't support any version of CTAP which the token supports.
     pub async fn new(mut token: T, ui_callback: &'a U) -> Option<CtapAuthenticator<'a, T, U>> {
-        token.init().await.ok()?;
+        token
+            .init()
+            .await
+            .map_err(|e| {
+                error!("Error initialising token: {e:?}");
+                e
+            })
+            .ok()?;
         let info = token.transmit(GetInfoRequest {}, ui_callback).await.ok()?;
 
         Self::new_with_info(info, token, ui_callback)

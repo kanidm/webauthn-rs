@@ -15,10 +15,10 @@ mod framing;
 mod responses;
 
 use crate::error::WebauthnCError;
+use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT};
 use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
-use crate::usb::responses::*;
 use async_trait::async_trait;
 
 #[cfg(doc)]
@@ -33,22 +33,14 @@ use std::thread;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
+pub(crate) use self::responses::InitResponse;
+
 // u2f_hid.h
 const FIDO_USAGE_PAGE: u16 = 0xf1d0;
 const FIDO_USAGE_U2FHID: u16 = 0x01;
 const HID_RPT_SIZE: usize = 64;
 const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
 const U2FHID_TRANS_TIMEOUT: i32 = 3000;
-
-const TYPE_INIT: u8 = 0x80;
-const U2FHID_MSG: u8 = TYPE_INIT | 0x03;
-const U2FHID_INIT: u8 = TYPE_INIT | 0x06;
-const U2FHID_CBOR: u8 = TYPE_INIT | 0x10;
-const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11;
-const U2FHID_KEEPALIVE: u8 = TYPE_INIT | 0x3b;
-const U2FHID_ERROR: u8 = TYPE_INIT | 0x3f;
-const CAPABILITY_CBOR: u8 = 0x04;
-const CAPABILITY_NMSG: u8 = 0x08;
 
 const CID_BROADCAST: u32 = 0xffffffff;
 
@@ -296,7 +288,7 @@ impl Token for USBToken {
         AuthenticatorTransport::Usb
     }
 
-    fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&self) -> Result<(), WebauthnCError> {
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CANCEL,
