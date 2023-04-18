@@ -7,6 +7,41 @@ env:
 
 jobs:
   build_and_test:
+    name: Other build/test
+    strategy:
+      fail-fast: false
+      matrix:
+        rust_version: [stable, 1.66.0]
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust_version }}
+          components: clippy, rustfmt
+
+      - if: runner.os != 'windows'
+        run: |
+          sudo apt-get update && \
+          sudo apt-get -y install libudev-dev
+
+      - if: runner.os == 'windows'
+        uses: johnwason/vcpkg-action@v4
+        with:
+          pkgs: openssl
+          triplet: x64-windows-static-md
+          token: ${{ github.token }}
+      - run: cargo build --workspace --exclude webauthn-authenticator-rs --release
+      - run: cargo fmt --workspace --exclude webauthn-authenticator-rs --check
+      - run: cargo clippy --workspace --exclude webauthn-authenticator-rs --all-targets
+      - run: cargo test --workspace --exclude webauthn-authenticator-rs --all
+
+  authenticator:
+    name: webauthn-authenticator-rs test
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +67,6 @@ jobs:
           - os: windows-latest
             rust_version: 1.66.0
 
-    name: Build and Test
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -58,10 +92,10 @@ jobs:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
-      - run: cargo build --release ${{ matrix.features }}
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets ${{ matrix.features }}
-      - run: cargo test --all ${{ matrix.features }}
+      - run: cargo build -p webauthn-authenticator-rs --release ${{ matrix.features }}
+      - run: cargo fmt -p webauthn-authenticator-rs --check
+      - run: cargo clippy -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
+      - run: cargo test -p webauthn-authenticator-rs --all ${{ matrix.features }}
 
   docs:
     name: Documentation
