@@ -53,7 +53,10 @@ jobs:
       - run: cargo build --workspace --exclude webauthn-authenticator-rs
 
       # Don't run clippy on Windows, we only need to run it on Linux
-      - if: runner.os != 'windows'
+      #
+      # FIXME: clippy in rust 1.69.0 fails a clap macro expansion
+      # https://github.com/rust-lang/rust-clippy/issues/10421
+      - if: runner.os != 'windows' && matrix.rust_version != 'stable'
         run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs --all-targets
 
       - run: cargo test --workspace --exclude webauthn-authenticator-rs
@@ -115,7 +118,10 @@ jobs:
 
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
-      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+      #
+      # FIXME: clippy in rust 1.69.0 fails a clap macro expansion
+      # https://github.com/rust-lang/rust-clippy/issues/10421
+      - if: (contains(matrix.features, 'windows') || runner.os != 'windows') && matrix.rust_version != 'stable'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
 
       - run: cargo test -p webauthn-authenticator-rs ${{ matrix.features }}
