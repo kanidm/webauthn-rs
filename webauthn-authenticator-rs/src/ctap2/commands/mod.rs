@@ -9,6 +9,7 @@ mod bio_enrollment;
 mod client_pin;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod config;
+mod credential_management;
 mod get_assertion;
 mod get_info;
 mod make_credential;
@@ -21,6 +22,7 @@ pub use self::bio_enrollment::*;
 pub use self::client_pin::*;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::config::*;
+pub use self::credential_management::*;
 pub use self::get_assertion::*;
 pub use self::get_info::*;
 pub use self::make_credential::*;
