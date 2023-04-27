@@ -58,6 +58,16 @@ jobs:
 
       - run: cargo test --workspace --exclude webauthn-authenticator-rs
 
+      # Some clap errors manifest as panics at runtime. Running tools with
+      # --help should be enough to find an issue.
+      - run: cargo run --bin cable-tunnel-server-backend -- --help
+      - run: cargo run --bin cable-tunnel-server-frontend -- --help
+      # fido-key-manager requires elevation on Windows, which cargo can't
+      # handle.
+      - if: runner.os != 'windows'
+        run: cargo run --bin fido-key-manager -- --help
+      - run: cargo run --bin fido-mds-tool -- --help
+
   authenticator:
     name: webauthn-authenticator-rs test
     strategy:
@@ -120,6 +130,15 @@ jobs:
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
 
       - run: cargo test -p webauthn-authenticator-rs ${{ matrix.features }}
+
+      # Some clap errors manifest as panics at runtime. Running tools with
+      # --help should be enough to find an issue.
+      - run: cargo run --example authenticate ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'cable')
+        run: cargo run --example cable_domain ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'cable')
+        run: cargo run --example cable_tunnel ${{ matrix.features }} -- --help
+      - run: cargo run --example softtoken ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
