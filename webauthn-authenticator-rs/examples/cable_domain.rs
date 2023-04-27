@@ -23,7 +23,7 @@ rather than an error."
 #[clap(group(
     ArgGroup::new("ids")
         .required(true)
-        .args(&["tunnel-server-ids", "all"])
+        .args(&["tunnel_server_ids", "all"])
 ))]
 pub struct CliParser {
     /// One or more tunnel server IDs.
