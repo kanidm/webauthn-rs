@@ -14,6 +14,7 @@ members = [
     "cable-tunnel-server/backend",
     "cable-tunnel-server/common",
     "cable-tunnel-server/frontend",
+    "fido-key-manager",
     # Authenticator CLI,
     "authenticator-cli",
     # Tutorial / Example sites.
@@ -37,6 +38,7 @@ exclude = [
 [workspace.dependencies]
 base64urlsafedata = { path = "./base64urlsafedata" }
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs" }
 webauthn-rs = { path = "./webauthn-rs" }
 webauthn-rs-core = { path = "./webauthn-rs-core" }
 webauthn-rs-proto = { path = "./webauthn-rs-proto" }

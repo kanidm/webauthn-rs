@@ -1,3 +1,8 @@
+#[cfg(not(any(feature = "nfc", feature = "usb")))]
+compile_error!(
+    "you must build this tool with either the 'nfc' or 'usb' feature for it to do something useful"
+);
+
 extern crate tracing;
 
 use std::io::{stdin, stdout, Write};
