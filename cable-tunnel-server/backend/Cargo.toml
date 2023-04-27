@@ -1,0 +1,29 @@
+[package]
+name = "cable-tunnel-server-backend"
+version = "0.1.0"
+authors = ["Michael Farrell <micolous+git@gmail.com>"]
+categories = ["authentication"]
+description = "webauthn-rs caBLE tunnel server backend"
+edition = "2021"
+keywords = ["cable", "hybrid", "fido", "webauthn"]
+license = "MPL-2.0"
+readme = "README.md"
+repository = "https://github.com/kanidm/webauthn-rs/"
+rust-version = "1.66.0"
+
+[dependencies]
+cable-tunnel-server-common.workspace = true
+
+clap.workspace = true
+futures.workspace = true
+hex.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["server"] }
+thiserror.workspace = true
+tokio.workspace = true
+tokio-native-tls.workspace = true
+tokio-tungstenite.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tungstenite.workspace = true
