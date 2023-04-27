@@ -133,12 +133,12 @@ jobs:
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
-      - run: cargo run --example authenticate ${{ matrix.features }} -- --help
+      - run: cargo run -p webauthn-authenticator-rs --example authenticate ${{ matrix.features }} -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run --example cable_domain ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example cable_domain ${{ matrix.features }} -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run --example cable_tunnel ${{ matrix.features }} -- --help
-      - run: cargo run --example softtoken ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel ${{ matrix.features }} -- --help
+      - run: cargo run -p webauthn-authenticator-rs --example softtoken ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
