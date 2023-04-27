@@ -38,7 +38,7 @@ use webauthn_authenticator_rs::{
 #[clap(group(
     ArgGroup::new("url")
         .required(true)
-        .args(&["cable-url", "qr-image"])
+        .args(&["cable_url", "qr_image"])
 ))]
 pub struct CliParser {
     /// Serial port where Bluetooth HCI controller is connected to.
