@@ -10,6 +10,7 @@ members = [
     "webauthn-rs",
     # Authenticator interactions
     "webauthn-authenticator-rs",
+    "fido-key-manager",
     # Authenticator CLI,
     "authenticator-cli",
     # Tutorial / Example sites.
@@ -32,6 +33,7 @@ exclude = [
 
 [workspace.dependencies]
 base64urlsafedata = { path = "./base64urlsafedata" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs" }
 webauthn-rs = { path = "./webauthn-rs" }
 webauthn-rs-core = { path = "./webauthn-rs-core" }
 webauthn-rs-proto = { path = "./webauthn-rs-proto" }
