@@ -93,3 +93,7 @@ openssl.workspace = true
 [[example]]
 name = "cable_domain"
 required-features = ["cable"]
+
+[[example]]
+name = "cable_tunnel"
+required-features = ["cable"]
