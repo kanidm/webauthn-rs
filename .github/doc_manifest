@@ -7,6 +7,7 @@ fido_mds/index.html
 fido_mds_tool/index.html
 
 webauthn_authenticator_rs/index.html
+webauthn_authenticator_rs/bluetooth/index.html
 webauthn_authenticator_rs/cable/index.html
 webauthn_authenticator_rs/nfc/index.html
 webauthn_authenticator_rs/usb/index.html

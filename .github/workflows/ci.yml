@@ -69,11 +69,12 @@ jobs:
         rust_version: [stable, 1.66.0]
         features:
           - ""
+          - --features bluetooth
           - --features cable
           - --features nfc
           - --features usb
-          - --features nfc,usb
-          - --features cable,nfc,usb
+          - --features bluetooth,nfc,usb
+          - --features cable,bluetooth,nfc,usb
         os:
           - ubuntu-latest
           - windows-latest
@@ -82,7 +83,7 @@ jobs:
             features: --features win10
             rust_version: stable
           - os: windows-latest
-            features: --features cable,nfc,usb,win10
+            features: --features cable,bluetooth,nfc,usb,win10
             rust_version: stable
         exclude:
           - os: windows-latest
@@ -105,7 +106,7 @@ jobs:
         run: sudo apt-get -y install libpcsclite-dev
       - if: contains(matrix.features, 'usb') && runner.os != 'windows'
         run: sudo apt-get -y install libusb-1.0-0-dev
-      - if: contains(matrix.features, 'cable') && runner.os != 'windows'
+      - if: (contains(matrix.features, 'bluetooth') || contains(matrix.features, 'cable'))  && runner.os != 'windows'
         run: sudo apt-get -y install libdbus-1-dev
 
       - if: runner.os == 'windows'

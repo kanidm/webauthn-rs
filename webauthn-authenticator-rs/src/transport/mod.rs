@@ -3,7 +3,7 @@
 //! See [crate::ctap2] for a higher-level abstraction over this API.
 mod any;
 pub mod iso7816;
-#[cfg(any(doc, feature = "usb"))]
+#[cfg(any(doc, feature = "bluetooth", feature = "usb"))]
 pub(crate) mod types;
 
 pub use crate::transport::any::{AnyToken, AnyTransport};
