@@ -3,7 +3,7 @@
 //! ```sh
 //! cargo run --example cable_domain --features cable -- --help
 //! ```
-use clap::{ArgGroup, CommandFactory, Parser, ValueHint};
+use clap::{ArgGroup, CommandFactory, Parser, ValueHint, error::ErrorKind};
 use std::net::ToSocketAddrs;
 use webauthn_authenticator_rs::cable::get_domain;
 
@@ -55,7 +55,7 @@ pub struct CliParser {
 fn resolver(hostname: &str) -> Option<String> {
     (hostname, 443).to_socket_addrs().ok().and_then(|addrs| {
         let mut o: String = addrs
-            .map(|addr| format!("{},", addr.ip().to_string()))
+            .map(|addr| format!("{},", addr.ip()))
             .collect();
         o.pop();
 
@@ -97,7 +97,7 @@ fn main() {
             Some(d) => println!("{d}"),
             None => CliParser::command()
                 .error(
-                    clap::ErrorKind::ValueValidation,
+                    ErrorKind::ValueValidation,
                     format!("unknown tunnel server ID: {domain_id}"),
                 )
                 .exit(),
