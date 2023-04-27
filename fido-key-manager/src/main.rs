@@ -69,8 +69,8 @@ pub struct RenameFingerprintOpt {
 
 #[derive(Debug, Args)]
 pub struct RemoveFingerprintOpt {
-    /// The template ID
-    #[clap(min_values(1), required(true))]
+    /// The template ID(s) to remove
+    #[clap(required = true)]
     pub id: Vec<String>,
 }
 

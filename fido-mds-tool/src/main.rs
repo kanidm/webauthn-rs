@@ -26,7 +26,7 @@ pub struct CommonOpt {
     #[clap(short, long)]
     pub debug: bool,
     /// Path to the MDS file
-    #[clap(parse(from_os_str), short = 'p', long = "path")]
+    #[clap(short, long)]
     pub path: PathBuf,
 }
 
