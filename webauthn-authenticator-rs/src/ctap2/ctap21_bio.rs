@@ -12,12 +12,12 @@ use unicode_normalization::UnicodeNormalization;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use webauthn_rs_proto::UserVerificationPolicy;
 
+use crate::ui::UiCallback;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::{
     error::{CtapError, WebauthnCError},
     transport::Token,
 };
-use crate::ui::UiCallback;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use super::{

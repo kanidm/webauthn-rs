@@ -1,5 +1,5 @@
+use crate::types::{CableRequestType, CableState, EnrollSampleStatus};
 use std::fmt::Debug;
-use crate::types::{CableRequestType, CableState,EnrollSampleStatus};
 
 #[cfg(any(all(doc, not(doctest)), feature = "ui-cli"))]
 mod cli;

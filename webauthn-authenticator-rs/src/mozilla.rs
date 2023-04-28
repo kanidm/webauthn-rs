@@ -1,5 +1,5 @@
 //! Authenticator implementation using Mozilla's `authenticator-rs` library.
-//! 
+//!
 //! This library only supports USB HID devices.
 #[cfg(doc)]
 use crate::stubs::*;

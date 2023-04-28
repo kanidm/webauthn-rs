@@ -81,7 +81,7 @@
 //!
 //! * `webauthn-authenticator-rs/examples/authenticate.rs` works with any
 //!   [crate::AuthenticatorBackend], including [CtapAuthenticator].
-//! 
+//!
 //! * `fido-key-manager` will connect to a key, pull hardware information, and
 //!   let you reconfigure the key (reset, PIN, fingerprints, etc.)
 //!

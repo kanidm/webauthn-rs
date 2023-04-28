@@ -158,7 +158,10 @@ pub mod softtoken;
 pub mod usb;
 
 #[cfg(any(all(doc, not(doctest)), feature = "u2fhid"))]
-#[deprecated(since = "0.5.0", note = "The 'u2fhid' feature and module have been renamed to 'mozilla'.")]
+#[deprecated(
+    since = "0.5.0",
+    note = "The 'u2fhid' feature and module have been renamed to 'mozilla'."
+)]
 /// Mozilla `authenticator-rs` backend. Renamed to [MozillaAuthenticator][crate::mozilla::MozillaAuthenticator].
 pub mod u2fhid {
     pub use crate::mozilla::MozillaAuthenticator as U2FHid;

@@ -1,7 +1,7 @@
 use crate::ui::*;
-use std::io::{stderr, Write};
 #[cfg(feature = "qrcode")]
 use qrcode::{render::unicode::Dense1x2, QrCode};
+use std::io::{stderr, Write};
 
 /// Basic CLI [UiCallback] implementation, available with `--features ui-cli`.
 ///

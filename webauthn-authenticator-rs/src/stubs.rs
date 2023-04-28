@@ -96,7 +96,6 @@ pub mod openssl {
         pub struct EcPoint {}
         pub struct EcPointRef {}
         pub enum PointConversionForm {}
-
     }
     pub mod hash {
         pub struct MessageDigest {}
@@ -118,7 +117,9 @@ pub mod openssl {
         pub enum Nid {}
     }
     pub mod rand {
-        pub fn rand_bytes() { unimplemented!() }
+        pub fn rand_bytes() {
+            unimplemented!()
+        }
     }
     pub mod sha {
         pub struct Sha256 {}
@@ -127,8 +128,12 @@ pub mod openssl {
         pub struct Signer {}
     }
     pub mod symm {
-        pub fn decrypt_aead() { unimplemented!() }
-        pub fn encrypt_aead() { unimplemented!() }
+        pub fn decrypt_aead() {
+            unimplemented!()
+        }
+        pub fn encrypt_aead() {
+            unimplemented!()
+        }
         pub struct Cipher {}
         pub struct Crypter {}
         pub enum Mode {}

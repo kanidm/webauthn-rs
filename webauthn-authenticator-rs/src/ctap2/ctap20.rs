@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, fmt::Debug};
 
+#[cfg(feature = "ctap2-management")]
+use crate::util::check_pin;
 use crate::{
     authenticator_hashed::AuthenticatorBackendHashedClientData,
     ctap2::{commands::*, pin_uv::*},
@@ -7,9 +9,6 @@ use crate::{
     transport::Token,
     ui::UiCallback,
 };
-#[cfg(feature = "ctap2-management")]
-use crate::util::check_pin;
-
 
 use base64urlsafedata::Base64UrlSafeData;
 use futures::executor::block_on;
