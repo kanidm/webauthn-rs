@@ -85,8 +85,8 @@ jobs:
           - softpasskey
           - softtoken
           - usb
-          - bluetooth,nfc,usb
-          - cable,bluetooth,nfc,softpasskey,softtoken,usb
+          - bluetooth,nfc,usb,ctap2-management
+          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb,
         os:
           - ubuntu-latest
           - windows-latest
@@ -95,7 +95,7 @@ jobs:
             features: win10
             rust_version: stable
           - os: windows-latest
-            features: cable,bluetooth,nfc,softpasskey,softtoken,usb,win10
+            features: bluetooth,cable,ctap2-management,nfc,softpasskey,softtoken,usb,win10
             rust_version: stable
         exclude:
           - os: windows-latest
@@ -134,12 +134,16 @@ jobs:
 
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
-      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
-      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
+      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
-      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
+      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
