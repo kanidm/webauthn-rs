@@ -11,10 +11,26 @@ use openssl::{
     nid::Nid,
     pkey::{Id, PKey, Private, Public},
     pkey_ctx::PkeyCtx,
+    sha::Sha256,
     symm::{Cipher, Crypter, Mode},
 };
 
 use crate::error::WebauthnCError;
+
+pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    hasher.finish()
+}
+
+#[cfg(feature = "cable")]
+/// Computes the SHA256 of `a || b`.
+pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(a);
+    hasher.update(b);
+    hasher.finish()
+}
 
 /// Gets an [EcGroup] for P-256
 pub fn get_group() -> Result<EcGroup, WebauthnCError> {

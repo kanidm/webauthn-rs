@@ -1,28 +1,36 @@
-use std::collections::BTreeMap;
-
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "crypto",
+    feature = "ctap2",
+    feature = "win10"
+))]
 use base64urlsafedata::Base64UrlSafeData;
-use openssl::sha;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use unicode_normalization::UnicodeNormalization;
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "crypto",
+    feature = "ctap2",
+    feature = "win10"
+))]
 use url::Url;
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "crypto",
+    feature = "ctap2",
+    feature = "win10"
+))]
 use webauthn_rs_proto::CollectedClientData;
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::error::WebauthnCError;
 
-pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = sha::Sha256::new();
-    hasher.update(data);
-    hasher.finish()
-}
-
-#[cfg(any(doc, feature = "cable"))]
-/// Computes the SHA256 of `a || b`.
-pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
-    let mut hasher = sha::Sha256::new();
-    hasher.update(a);
-    hasher.update(b);
-    hasher.finish()
-}
-
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "crypto",
+    feature = "ctap2",
+    feature = "win10"
+))]
 pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
     // Let collectedClientData be a new CollectedClientData instance whose fields are:
     //    type
@@ -41,10 +49,16 @@ pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> Coll
         origin,
         token_binding: None,
         cross_origin: None,
-        unknown_keys: BTreeMap::new(),
+        unknown_keys: Default::default(),
     }
 }
 
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "crypto",
+    feature = "ctap2",
+    feature = "win10"
+))]
 pub fn get_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
     CollectedClientData {
         type_: "webauthn.get".to_string(),
@@ -52,10 +66,11 @@ pub fn get_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> Collected
         origin,
         token_binding: None,
         cross_origin: None,
-        unknown_keys: BTreeMap::new(),
+        unknown_keys: Default::default(),
     }
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 /// Normalises the PIN into Unicode Normal Form C, then ensures that the PIN
 /// is at least `min_length` Unicode codepoints, less than 64 bytes when encoded
 /// as UTF-8, and does not contain any null bytes (`\x00`).
@@ -80,7 +95,7 @@ pub fn check_pin(pin: &str, min_length: usize) -> Result<String, WebauthnCError>
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "ctap2-management"))]
 mod test {
     use super::*;
 

@@ -19,7 +19,7 @@ usb = ["webauthn-authenticator-rs/usb"]
 default = ["nfc", "usb"]
 
 [dependencies]
-webauthn-authenticator-rs.workspace = true
+webauthn-authenticator-rs = { workspace = true, features = ["ui-cli", "ctap2-management"] }
 
 clap.workspace = true
 tokio.workspace = true

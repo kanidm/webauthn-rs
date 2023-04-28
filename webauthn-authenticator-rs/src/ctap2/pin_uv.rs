@@ -1,7 +1,6 @@
 use crate::{
-    crypto::{decrypt, ecdh, encrypt, get_group, hkdf_sha_256, regenerate},
+    crypto::{compute_sha256, decrypt, ecdh, encrypt, get_group, hkdf_sha_256, regenerate},
     error::WebauthnCError,
-    util::compute_sha256,
 };
 use openssl::{
     bn,
@@ -183,6 +182,7 @@ impl PinUvPlatformInterface {
         })
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Generates a `setPin` command.
     pub fn set_pin_cmd(
         &self,
@@ -201,6 +201,7 @@ impl PinUvPlatformInterface {
         })
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Generates a `changePin` command.
     pub fn change_pin_cmd(
         &self,

@@ -1,12 +1,10 @@
 #[cfg(feature = "qrcode")]
 use qrcode::{render::unicode::Dense1x2, QrCode};
 use std::fmt::Debug;
+#[cfg(feature = "ui-cli")]
 use std::io::{stderr, Write};
 
-use crate::{
-    ctap2::EnrollSampleStatus,
-    types::{CableRequestType, CableState},
-};
+use crate::types::{CableRequestType, CableState, EnrollSampleStatus};
 
 pub trait UiCallback: Sync + Send + Debug {
     /// Prompts the user to enter their PIN.
@@ -41,14 +39,20 @@ pub trait UiCallback: Sync + Send + Debug {
     fn cable_status_update(&self, state: CableState);
 }
 
-/// Basic CLI [UiCallback] implementation.
+#[cfg(feature = "ui-cli")]
+/// Basic CLI [UiCallback] implementation, available with `--features ui-cli`.
 ///
 /// This gets input from `stdin` and sends messages to `stderr`.
 ///
-/// This is only intended for testing, and doesn't implement much functionality (like localization).
+/// This is only intended for testing, and doesn't implement much functionality
+/// (like localization).
+///
+/// **Tip**: to get QR codes for `cable` authenticators, enable the `qrcode`
+/// feature.
 #[derive(Debug)]
 pub struct Cli {}
 
+#[cfg(feature = "ui-cli")]
 impl UiCallback for Cli {
     fn request_pin(&self) -> Option<String> {
         rpassword::prompt_password_stderr("Enter PIN: ").ok()

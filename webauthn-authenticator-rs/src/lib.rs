@@ -29,25 +29,37 @@
 //! or use off-the-shelf microcontrollers which do not protect key material
 //! ([Level 1][cert]).
 //!
-//! ## Features and backends
+//! ## Features
 //!
 //! **Note:** these links may be broken unless you build the documentation with
 //! the appropriate `--features` flag listed inline.
+//!
+//! ### Backends
 //!
 //! * [CTAP 2.0, 2.1 and 2.1-PRE protocol implementation][crate::ctap2]
 //! * [Bluetooth][] (with `--features bluetooth`)
 //! * [caBLE][] (with `--features cable`)
 //! * [NFC][] via PC/SC API (with `--features nfc`)
-//! * [SoftPasskey][] (for testing)
-//! * [SoftToken][] (for testing)
+//! * [SoftPasskey][] (for testing, with `--features softpasskey`)
+//! * [SoftToken][] (for testing, with `--features softtoken`)
 //! * [USB HID][] (with `--features usb`)
 //! * [Mozilla Authenticator][] (with `--features u2fhid`)
 //! * [Windows 10][] WebAuthn API (with `--features win10`)
+//!
+//! ### Miscellaneous features
+//!
+//! * [Cli][] UI (with `--features ui-cli`)
+//! * [Override caBLE tunnel server URLs][cable-url]
+//!   (with `--features cable-override-tunnel`)
+//! * QR code display for the [Cli][] UI (with `--features qrcode`), recommended
+//!   for use if the `cable` and `ui-cli` features are both enabled
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
 //! [Bluetooth]: crate::bluetooth
 //! [cert]: https://fidoalliance.org/certification/authenticator-certification-levels/
 //! [caBLE]: crate::cable
+//! [cable-url]: crate::cable::connect_cable_authenticator_with_tunnel_uri
+//! [Cli]: crate::ui::Cli
 //! [Mozilla Authenticator]: crate::u2fhid
 //! [NFC]: crate::nfc
 //! [SoftPasskey]: crate::softpasskey
@@ -95,11 +107,13 @@ pub mod prelude {
 }
 
 mod authenticator_hashed;
+#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 mod crypto;
+
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
 pub mod ctap2;
 pub mod error;
-pub mod softpasskey;
-pub mod softtoken;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
 pub mod transport;
 pub mod types;
 pub mod ui;
@@ -114,6 +128,12 @@ pub mod cable;
 #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
 pub mod nfc;
 
+#[cfg(any(all(doc, not(doctest)), feature = "softpasskey"))]
+pub mod softpasskey;
+
+#[cfg(any(all(doc, not(doctest)), feature = "softtoken"))]
+pub mod softtoken;
+
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub mod usb;
 
@@ -127,6 +147,7 @@ pub mod win10;
 #[doc(hidden)]
 mod stubs;
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
 pub use crate::authenticator_hashed::{
     perform_auth_with_request, perform_register_with_request, AuthenticatorBackendHashedClientData,
 };

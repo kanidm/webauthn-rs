@@ -30,6 +30,7 @@ use crate::{
         noise::{CableNoise, Crypter},
         CableState, Psk,
     },
+    crypto::compute_sha256,
     ctap2::{
         commands::{value_to_vec_u8, GetInfoResponse},
         CBORResponse, CtapAuthenticator,
@@ -38,7 +39,6 @@ use crate::{
     prelude::WebauthnCError,
     transport::Token,
     ui::UiCallback,
-    util::compute_sha256,
 };
 
 /// Manually-assigned domains.

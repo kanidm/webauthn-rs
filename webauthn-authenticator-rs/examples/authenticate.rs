@@ -1,20 +1,26 @@
 #[macro_use]
 extern crate tracing;
 
+#[cfg(feature = "softtoken")]
 use std::fs::OpenOptions;
 use std::io::{stdin, stdout, Write};
 
 use clap::clap_derive::ValueEnum;
-use clap::{Args, Parser, Subcommand};
+#[cfg(any(feature = "cable", feature = "softtoken"))]
+use clap::Args;
+use clap::{Parser, Subcommand};
 #[cfg(feature = "cable")]
 use tokio_tungstenite::tungstenite::http::uri::Builder;
 #[cfg(feature = "cable-override-tunnel")]
 use tokio_tungstenite::tungstenite::http::{uri::Parts, Uri};
+#[cfg(feature = "ctap2")]
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
 use webauthn_authenticator_rs::prelude::Url;
 #[cfg(feature = "cable")]
 use webauthn_authenticator_rs::prelude::WebauthnCError;
+#[cfg(feature = "softtoken")]
 use webauthn_authenticator_rs::softtoken::{SoftToken, SoftTokenFile};
+#[cfg(feature = "ctap2")]
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::types::CableRequestType;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
@@ -53,6 +59,7 @@ impl From<UvPolicy> for UserVerificationPolicy {
     }
 }
 
+#[cfg(feature = "ctap2")]
 async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
     let mut reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
@@ -73,6 +80,7 @@ async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + 
     panic!("No tokens available!");
 }
 
+#[cfg(feature = "softtoken")]
 #[derive(Debug, Args, Clone)]
 pub struct SoftTokenOpt {
     /// Path to serialised key data, created by the softtoken example.
@@ -114,9 +122,11 @@ impl CableOpt {
 
 #[derive(Debug, Clone, Subcommand)]
 enum Provider {
+    #[cfg(feature = "softtoken")]
     /// Software token provider
     SoftToken(SoftTokenOpt),
 
+    #[cfg(feature = "ctap2")]
     /// CtapAuthenticator using Transport/Token backends (NFC, USB HID)
     ///
     /// Requires administrative permissions on Windows.
@@ -146,6 +156,7 @@ impl Provider {
         ui: &'a U,
     ) -> Box<dyn AuthenticatorBackend + 'a> {
         match self {
+            #[cfg(feature = "softtoken")]
             Provider::SoftToken(o) => {
                 if let Some(path) = &o.path {
                     let file = OpenOptions::new()
@@ -159,6 +170,7 @@ impl Provider {
                     Box::new(SoftToken::new().unwrap().0)
                 }
             }
+            #[cfg(feature = "ctap2")]
             Provider::Ctap => Box::new(select_transport(ui).await),
             #[cfg(feature = "cable")]
             Provider::Cable(o) => Box::new(

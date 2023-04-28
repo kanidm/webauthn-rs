@@ -17,7 +17,10 @@ use serialport_hci::{
     vendor::none::{Event, Vendor},
     SerialController,
 };
-use std::{fmt::Debug, fs::OpenOptions, time::Duration};
+
+#[cfg(feature = "softtoken")]
+use std::fs::OpenOptions;
+use std::{fmt::Debug, time::Duration};
 #[cfg(feature = "cable-override-tunnel")]
 use tokio_tungstenite::tungstenite::http::{
     uri::{Builder, Parts},
@@ -28,10 +31,12 @@ use webauthn_authenticator_rs::{
     cable::{share_cable_authenticator, Advertiser, ShareCableAuthenticatorOptions},
     ctap2::CtapAuthenticator,
     error::WebauthnCError,
-    softtoken::SoftTokenFile,
     transport::{AnyTransport, Transport},
     ui::Cli,
 };
+
+#[cfg(feature = "softtoken")]
+use webauthn_authenticator_rs::softtoken::SoftTokenFile;
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "caBLE tunneler tool")]
@@ -82,11 +87,12 @@ pub struct CliParser {
     #[clap(short, long)]
     pub qr_image: Option<String>,
 
+    #[cfg(feature = "softtoken")]
     /// Path to saved SoftToken.
     ///
     /// You can create a new SoftToken with the `softtoken` example:
     ///
-    /// cargo run --example softtoken -- create /tmp/softtoken.dat
+    /// cargo run --example softtoken --features softtoken -- create /tmp/softtoken.dat
     ///
     /// If this option is not specified, `cable_tunnel` will attempt to connect
     /// to the first supported physical token using AnyTransport. Most initators
@@ -232,6 +238,7 @@ async fn main() {
         options
     };
 
+    #[cfg(feature = "softtoken")]
     if let Some(p) = opt.softtoken_path {
         // Use a SoftToken
         let f = OpenOptions::new()
@@ -253,22 +260,23 @@ async fn main() {
         )
         .await
         .unwrap();
-    } else {
-        // Use a physical authenticator
-        let mut transport = AnyTransport::new().await.unwrap();
-        let token = transport.tokens().unwrap().pop().unwrap();
-        let mut authenticator = CtapAuthenticator::new(token, &ui).await.unwrap();
-        let info = authenticator.get_info().to_owned();
+        return;
+    }
 
-        share_cable_authenticator(
-            &mut authenticator,
-            info,
-            cable_url.trim(),
-            &mut advertiser,
-            &ui,
-            options,
-        )
-        .await
-        .unwrap();
-    };
+    // Use a physical authenticator
+    let mut transport = AnyTransport::new().await.unwrap();
+    let token = transport.tokens().unwrap().pop().unwrap();
+    let mut authenticator = CtapAuthenticator::new(token, &ui).await.unwrap();
+    let info = authenticator.get_info().to_owned();
+
+    share_cable_authenticator(
+        &mut authenticator,
+        info,
+        cable_url.trim(),
+        &mut advertiser,
+        &ui,
+        options,
+    )
+    .await
+    .unwrap();
 }

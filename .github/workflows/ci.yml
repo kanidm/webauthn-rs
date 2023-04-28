@@ -79,22 +79,23 @@ jobs:
       matrix:
         rust_version: [stable, 1.66.0]
         features:
-          - ""
-          - --features bluetooth
-          - --features cable
-          - --features nfc
-          - --features usb
-          - --features bluetooth,nfc,usb
-          - --features cable,bluetooth,nfc,usb
+          - bluetooth
+          - cable
+          - nfc
+          - softpasskey
+          - softtoken
+          - usb
+          - bluetooth,nfc,usb
+          - cable,bluetooth,nfc,softpasskey,softtoken,usb
         os:
           - ubuntu-latest
           - windows-latest
         include:
           - os: windows-latest
-            features: --features win10
+            features: win10
             rust_version: stable
           - os: windows-latest
-            features: --features cable,bluetooth,nfc,usb,win10
+            features: cable,bluetooth,nfc,softpasskey,softtoken,usb,win10
             rust_version: stable
         exclude:
           - os: windows-latest
@@ -120,29 +121,38 @@ jobs:
       - if: (contains(matrix.features, 'bluetooth') || contains(matrix.features, 'cable'))  && runner.os != 'windows'
         run: sudo apt-get -y install libdbus-1-dev
 
-      - if: runner.os == 'windows'
+      # Don't try to install OpenSSL when there's only the "win10" feature
+      # enabled. We should be able to operate without it.
+      - if: runner.os == 'windows' && matrix.features != 'win10'
         uses: johnwason/vcpkg-action@v4
         with:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
-      - run: cargo build -p webauthn-authenticator-rs ${{ matrix.features }}
+
+      - run: cargo build -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
       - if: contains(matrix.features, 'windows') || runner.os != 'windows'
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
+      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
+      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
-      - run: cargo test -p webauthn-authenticator-rs ${{ matrix.features }}
+      - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
-      - run: cargo run -p webauthn-authenticator-rs --example authenticate ${{ matrix.features }} -- --help
+      - run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_domain ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel ${{ matrix.features }} -- --help
-      - run: cargo run -p webauthn-authenticator-rs --example softtoken ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example cable_domain --features ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'cable')
+        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
+      - run: cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation

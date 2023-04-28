@@ -201,12 +201,15 @@ use self::ctap21_bio::BiometricAuthenticatorInfo;
 
 #[doc(inline)]
 pub use self::{
-    commands::{CBORCommand, CBORResponse, EnrollSampleStatus, GetInfoResponse},
+    commands::{CBORCommand, CBORResponse, GetInfoResponse},
     ctap20::Ctap20Authenticator,
     ctap21::Ctap21Authenticator,
-    ctap21_bio::BiometricAuthenticator,
     ctap21pre::Ctap21PreAuthenticator,
 };
+
+#[cfg(any(all(doc, not(doctest), feature = "ctap2-management")))]
+#[doc(inline)]
+pub use ctap21_bio::BiometricAuthenticator;
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///
@@ -292,6 +295,7 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         }
     }
 
+    #[cfg(any(all(doc, not(doctest), feature = "ctap2-management")))]
     /// Gets a mutable reference to a [BiometricAuthenticator] trait for the
     /// token, if it supports biometric commands.
     ///

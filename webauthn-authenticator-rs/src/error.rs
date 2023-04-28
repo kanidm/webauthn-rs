@@ -1,7 +1,5 @@
 use std::sync::PoisonError;
 
-use crate::transport::iso7816::Error;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum WebauthnCError {
     Json,
@@ -98,16 +96,19 @@ impl<T> From<PoisonError<T>> for WebauthnCError {
     }
 }
 
-impl From<Error> for WebauthnCError {
-    fn from(v: Error) -> Self {
+#[cfg(feature = "ctap2")]
+impl From<crate::transport::iso7816::Error> for WebauthnCError {
+    fn from(v: crate::transport::iso7816::Error) -> Self {
+        use crate::transport::iso7816::Error::*;
         match v {
-            Error::ResponseTooShort => WebauthnCError::MessageTooShort,
-            Error::DataTooLong => WebauthnCError::MessageTooLarge,
+            ResponseTooShort => WebauthnCError::MessageTooShort,
+            DataTooLong => WebauthnCError::MessageTooLarge,
             _ => WebauthnCError::Internal,
         }
     }
 }
 
+#[cfg(feature = "crypto")]
 impl From<openssl::error::ErrorStack> for WebauthnCError {
     fn from(v: openssl::error::ErrorStack) -> Self {
         Self::OpenSSL(v.to_string())

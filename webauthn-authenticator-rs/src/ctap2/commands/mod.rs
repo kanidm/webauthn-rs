@@ -4,21 +4,27 @@ use serde_cbor::{ser::to_vec_packed, Value};
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod bio_enrollment;
 mod client_pin;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod config;
 mod get_assertion;
 mod get_info;
 mod make_credential;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod reset;
 mod selection;
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::bio_enrollment::*;
 pub use self::client_pin::*;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::config::*;
 pub use self::get_assertion::*;
 pub use self::get_info::*;
 pub use self::make_credential::*;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::reset::*;
 pub use self::selection::*;
 use crate::error::WebauthnCError;

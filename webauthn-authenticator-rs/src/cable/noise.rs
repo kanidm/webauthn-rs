@@ -15,9 +15,10 @@ use openssl::{
 
 use crate::{
     cable::Psk,
-    crypto::{ecdh, hkdf_sha_256, point_to_bytes, public_key_from_bytes, regenerate},
+    crypto::{
+        compute_sha256_2, ecdh, hkdf_sha_256, point_to_bytes, public_key_from_bytes, regenerate,
+    },
     prelude::WebauthnCError,
-    util::compute_sha256_2,
 };
 
 const NOISE_KN_PROTOCOL: &[u8; 32] = b"Noise_KNpsk0_P256_AESGCM_SHA256\0";

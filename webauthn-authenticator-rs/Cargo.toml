@@ -11,11 +11,21 @@ repository = "https://github.com/kanidm/webauthn-rs"
 
 [features]
 nfc_raw_transmit = ["nfc"]
-u2fhid = ["authenticator"]
-bluetooth = ["btleplug", "tokio"]
+
+# Basic command line `UiCallback` implementation
+ui-cli = ["dep:rpassword"]
+
+# Add QR code support for `UiCallback`, useful with `cable` feature
+qrcode = ["dep:qrcode", "ui-cli"]
+
+crypto = ["dep:openssl"]
+
+# Authenticator transports
+u2fhid = ["dep:authenticator", "dep:rpassword"]
+bluetooth = ["btleplug", "ctap2", "tokio"]
 
 # caBLE / hybrid authenticator
-cable = ["btleplug", "hex", "tokio", "tokio-tungstenite", "qrcode"]
+cable = ["btleplug", "crypto", "ctap2", "hex", "tokio", "tokio-tungstenite"]
 
 # Add APIs which allow overriding the caBLE tunnel server protocol and domain.
 #
@@ -23,8 +33,12 @@ cable = ["btleplug", "hex", "tokio", "tokio-tungstenite", "qrcode"]
 # server, and most library users should not need this!
 cable-override-tunnel = ["cable"]
 
-nfc = ["pcsc"]
-usb = ["hidapi"]
+ctap2 = ["crypto"]
+ctap2-management = ["ctap2"]
+nfc = ["ctap2", "dep:pcsc"]
+softpasskey = ["crypto"]
+softtoken = ["crypto", "ctap2"]
+usb = ["ctap2", "hidapi"]
 win10 = ["windows"]
 
 default = []
@@ -44,8 +58,8 @@ uuid.workspace = true
 serde_json.workspace = true
 nom.workspace = true
 serde_cbor.workspace = true
-openssl.workspace = true
-rpassword = "5.0"
+openssl = { workspace = true, optional = true }
+rpassword = { version = "5.0", optional = true }
 
 # authenticator = { path = "../../../authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
 authenticator = { version = "0.3.2-dev.1", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
@@ -88,7 +102,11 @@ bardecoder = "=0.4.0"
 image = ">= 0.23.14, < 0.24"
 
 [build-dependencies]
-openssl.workspace = true
+openssl = { workspace = true, optional = true }
+
+[[example]]
+name = "authenticate"
+required-features = ["ui-cli"]
 
 [[example]]
 name = "cable_domain"
@@ -96,4 +114,8 @@ required-features = ["cable"]
 
 [[example]]
 name = "cable_tunnel"
-required-features = ["cable"]
+required-features = ["cable", "ui-cli"]
+
+[[example]]
+name = "softtoken"
+required-features = ["softtoken"]

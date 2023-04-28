@@ -3,10 +3,11 @@ use std::ops::{Deref, DerefMut};
 use crate::{transport::Token, ui::UiCallback};
 
 use super::{
-    commands::{GetInfoResponse, PrototypeBioEnrollmentRequest},
-    ctap21_bio::BiometricAuthenticatorInfo,
-    Ctap20Authenticator,
+    commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo, Ctap20Authenticator,
 };
+
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+use super::commands::PrototypeBioEnrollmentRequest;
 
 /// CTAP 2.1-PRE protocol implementation.
 ///
@@ -44,6 +45,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
 impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U>
     for Ctap21PreAuthenticator<'a, T, U>
 {
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     type RequestType = PrototypeBioEnrollmentRequest;
 
     #[inline]

@@ -1,16 +1,19 @@
 use std::ops::{Deref, DerefMut};
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use webauthn_rs_proto::UserVerificationPolicy;
 
 use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 
 use super::{
-    commands::{
-        BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, GetInfoResponse, Permissions,
-        SelectionRequest, SetMinPinLengthParams,
-    },
+    commands::{GetInfoResponse, SelectionRequest},
     ctap21_bio::BiometricAuthenticatorInfo,
     Ctap20Authenticator,
+};
+
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+use super::commands::{
+    BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, Permissions, SetMinPinLengthParams,
 };
 
 /// CTAP 2.1 protocol implementation.
@@ -74,6 +77,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         self.info.supports_config()
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     async fn config(
         &mut self,
         sub_command: ConfigSubCommand,
@@ -110,6 +114,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         self.refresh_info().await
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Toggles the state of the [Always Require User Verification][0] feature.
     ///
     /// This is only available on authenticators which
@@ -120,6 +125,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         self.config(ConfigSubCommand::ToggleAlwaysUv, true).await
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Sets a [minimum PIN length policy][0].
     ///
     /// This is only available on authenticators which
@@ -156,6 +162,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         self.info.supports_enterprise_attestation()
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Enables the [Enterprise Attestation][0] feature.
     ///
     /// This is only available on authenticators which support
@@ -173,6 +180,7 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
 }
 
 impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U> for Ctap21Authenticator<'a, T, U> {
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     type RequestType = BioEnrollmentRequest;
 
     #[inline]
