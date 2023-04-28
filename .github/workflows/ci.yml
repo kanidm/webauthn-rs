@@ -53,13 +53,20 @@ jobs:
       - run: cargo build --workspace --exclude webauthn-authenticator-rs
 
       # Don't run clippy on Windows, we only need to run it on Linux
-      #
-      # FIXME: clippy in rust 1.69.0 fails a clap macro expansion
-      # https://github.com/rust-lang/rust-clippy/issues/10421
-      - if: runner.os != 'windows' && matrix.rust_version != 'stable'
+      - if: runner.os != 'windows'
         run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs --all-targets
 
       - run: cargo test --workspace --exclude webauthn-authenticator-rs
+
+      # Some clap errors manifest as panics at runtime. Running tools with
+      # --help should be enough to find an issue.
+      - run: cargo run --bin cable-tunnel-server-backend -- --help
+      - run: cargo run --bin cable-tunnel-server-frontend -- --help
+      # fido-key-manager requires elevation on Windows, which cargo can't
+      # handle.
+      - if: runner.os != 'windows'
+        run: cargo run --bin fido-key-manager -- --help
+      - run: cargo run --bin fido-mds-tool -- --help
 
   authenticator:
     name: webauthn-authenticator-rs test
@@ -119,13 +126,19 @@ jobs:
 
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
-      #
-      # FIXME: clippy in rust 1.69.0 fails a clap macro expansion
-      # https://github.com/rust-lang/rust-clippy/issues/10421
-      - if: (contains(matrix.features, 'windows') || runner.os != 'windows') && matrix.rust_version != 'stable'
+      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
 
       - run: cargo test -p webauthn-authenticator-rs ${{ matrix.features }}
+
+      # Some clap errors manifest as panics at runtime. Running tools with
+      # --help should be enough to find an issue.
+      - run: cargo run -p webauthn-authenticator-rs --example authenticate ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'cable')
+        run: cargo run -p webauthn-authenticator-rs --example cable_domain ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'cable')
+        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel ${{ matrix.features }} -- --help
+      - run: cargo run -p webauthn-authenticator-rs --example softtoken ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation

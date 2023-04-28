@@ -41,7 +41,7 @@ impl From<native_tls::Error> for TlsConfigError {
 pub struct ServerTransportProtocol {
     /// Runs an unencrypted HTTP server, rather than HTTPS. This is not suitable
     /// for use with ordinary caBLE clients.
-    #[clap(long, conflicts_with_all(&["tls-public-key", "tls-private-key"]))]
+    #[clap(long, conflicts_with_all(&["tls_public_key", "tls_private_key"]))]
     insecure_http_server: bool,
 
     /// Path to the server's public key (certificate) in PEM format.
@@ -106,7 +106,7 @@ impl ServerTransportProtocol {
 #[derive(Debug, Clone, Args)]
 pub struct BackendClientOptions {
     /// Uses unencrypted HTTP to connect to backend tasks, rather than HTTPS.
-    #[clap(long, conflicts_with_all(&["trusted-ca", "domain"]))]
+    #[clap(long, conflicts_with_all(&["trusted_ca", "domain"]))]
     insecure_http_backend: bool,
 
     /// Public key of the root CA to trust when connecting to a backend task,

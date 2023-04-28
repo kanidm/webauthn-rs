@@ -3,7 +3,7 @@
 //! ```sh
 //! cargo run --example cable_domain --features cable -- --help
 //! ```
-use clap::{ArgGroup, CommandFactory, Parser, ValueHint};
+use clap::{error::ErrorKind, ArgGroup, CommandFactory, Parser, ValueHint};
 use std::net::ToSocketAddrs;
 use webauthn_authenticator_rs::cable::get_domain;
 
@@ -23,7 +23,7 @@ rather than an error."
 #[clap(group(
     ArgGroup::new("ids")
         .required(true)
-        .args(&["tunnel-server-ids", "all"])
+        .args(&["tunnel_server_ids", "all"])
 ))]
 pub struct CliParser {
     /// One or more tunnel server IDs.
@@ -54,9 +54,7 @@ pub struct CliParser {
 /// Returns [None] on resolution failure or no results.
 fn resolver(hostname: &str) -> Option<String> {
     (hostname, 443).to_socket_addrs().ok().and_then(|addrs| {
-        let mut o: String = addrs
-            .map(|addr| format!("{},", addr.ip().to_string()))
-            .collect();
+        let mut o: String = addrs.map(|addr| format!("{},", addr.ip())).collect();
         o.pop();
 
         if o.is_empty() {
@@ -97,7 +95,7 @@ fn main() {
             Some(d) => println!("{d}"),
             None => CliParser::command()
                 .error(
-                    clap::ErrorKind::ValueValidation,
+                    ErrorKind::ValueValidation,
                     format!("unknown tunnel server ID: {domain_id}"),
                 )
                 .exit(),

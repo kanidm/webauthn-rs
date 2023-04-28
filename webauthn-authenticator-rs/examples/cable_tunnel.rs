@@ -1,3 +1,7 @@
+//! `cable_tunnel` shares a [Token] over a caBLE connection.
+#[macro_use]
+extern crate tracing;
+
 use bluetooth_hci::{
     host::{
         uart::{CommandHeader, Hci as UartHci, Packet},
@@ -34,7 +38,7 @@ use webauthn_authenticator_rs::{
 #[clap(group(
     ArgGroup::new("url")
         .required(true)
-        .args(&["cable-url", "qr-image"])
+        .args(&["cable_url", "qr_image"])
 ))]
 pub struct CliParser {
     /// Serial port where Bluetooth HCI controller is connected to.
@@ -178,7 +182,9 @@ impl Advertiser for SerialHciAdvertiser {
 }
 
 #[tokio::main]
-pub(super) async fn main() {
+async fn main() {
+    let _ = tracing_subscriber::fmt::try_init();
+
     let opt = CliParser::parse();
     let cable_url = if let Some(u) = opt.cable_url {
         u

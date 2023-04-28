@@ -45,7 +45,7 @@ webauthn-rs-proto = { path = "./webauthn-rs-proto" }
 
 async-std = { version = "1.6", features = ["attributes"] }
 base64 = "0.21"
-clap = { version = "^3.2", features = ["derive", "env"] }
+clap = { version = "^4.2.4", features = ["derive", "env"] }
 compact_jwt = "0.2.3"
 futures = "^0.3.25"
 hex = "0.4.3"
