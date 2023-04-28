@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::stubs::*;
+
 use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::crypto::{compute_sha256, get_group};
 use crate::error::WebauthnCError;

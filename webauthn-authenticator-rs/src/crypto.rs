@@ -1,4 +1,6 @@
 //! Common cryptographic routines for FIDO2.
+#[cfg(doc)]
+use crate::stubs::*;
 
 #[cfg(any(doc, feature = "cable"))]
 use openssl::{

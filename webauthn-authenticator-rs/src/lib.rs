@@ -34,33 +34,50 @@
 //! **Note:** these links may be broken unless you build the documentation with
 //! the appropriate `--features` flag listed inline.
 //!
-//! ### Backends
+//! ### Transports and backends
 //!
-//! * [CTAP 2.0, 2.1 and 2.1-PRE protocol implementation][crate::ctap2]
-//! * [Bluetooth][] (with `--features bluetooth`)
-//! * [caBLE][] (with `--features cable`)
-//! * [NFC][] via PC/SC API (with `--features nfc`)
-//! * [SoftPasskey][] (for testing, with `--features softpasskey`)
-//! * [SoftToken][] (for testing, with `--features softtoken`)
-//! * [USB HID][] (with `--features usb`)
-//! * [Mozilla Authenticator][] (with `--features u2fhid`)
-//! * [Windows 10][] WebAuthn API (with `--features win10`)
+//! * `bluetooth`: [Bluetooth][] [^openssl]
+//! * `cable`: [caBLE / Hybrid Authenticator][cable] [^openssl]
+//!   * `cable-override-tunnel`: [Override caBLE tunnel server URLs][cable-url]
+//! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
+//! * `nfc`: [NFC][] via PC/SC API [^openssl]
+//! * `softpasskey`: [SoftPasskey][] (for testing) [^openssl]
+//! * `softtoken`: [SoftToken][] (for testing) [^openssl]
+//! * `usb`: [USB HID][] [^openssl]
+//! * `win10`: [Windows 10][] WebAuthn API
+//!
+//! [^openssl]: Feature requires OpenSSL.
 //!
 //! ### Miscellaneous features
 //!
-//! * [Cli][] UI (with `--features ui-cli`)
-//! * [Override caBLE tunnel server URLs][cable-url]
-//!   (with `--features cable-override-tunnel`)
-//! * QR code display for the [Cli][] UI (with `--features qrcode`), recommended
-//!   for use if the `cable` and `ui-cli` features are both enabled
+//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2]
+//!   [^openssl].
+//!
+//!   Automatically enabled by the `bluetooth`, `cable`, `ctap2-management`,
+//!   `nfc`, `softtoken` and `usb` features.
+//!
+//!   * `ctap2-management`: Adds support for configuring and managing CTAP 2.x
+//!     hardware authenticators to the [CTAP 2.x implementation][crate::ctap2].
+//!
+//! * `crypto`: Enables OpenSSL support [^openssl]. This allows the library to
+//!   avoid a hard dependency on OpenSSL on Windows, if only the `win10` backend
+//!   is enabled.
+//!
+//!   Automatically enabled by the `ctap2`, `softpasskey` and `softtoken`
+//!   features.
+//!
+//! * `qrcode`: QR code display for the [Cli][] UI, recommended for use if the
+//!   `cable` and `ui-cli` features are both enabled
+//!
+//! * `ui-cli`: [Cli][] UI
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
 //! [Bluetooth]: crate::bluetooth
 //! [cert]: https://fidoalliance.org/certification/authenticator-certification-levels/
-//! [caBLE]: crate::cable
+//! [cable]: crate::cable
 //! [cable-url]: crate::cable::connect_cable_authenticator_with_tunnel_uri
 //! [Cli]: crate::ui::Cli
-//! [Mozilla Authenticator]: crate::u2fhid
+//! [Mozilla Authenticator]: crate::mozilla
 //! [NFC]: crate::nfc
 //! [SoftPasskey]: crate::softpasskey
 //! [SoftToken]: crate::softtoken
@@ -125,6 +142,9 @@ pub mod bluetooth;
 #[cfg(any(all(doc, not(doctest)), feature = "cable"))]
 pub mod cable;
 
+#[cfg(any(all(doc, not(doctest)), feature = "mozilla"))]
+pub mod mozilla;
+
 #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
 pub mod nfc;
 
@@ -138,7 +158,11 @@ pub mod softtoken;
 pub mod usb;
 
 #[cfg(any(all(doc, not(doctest)), feature = "u2fhid"))]
-pub mod u2fhid;
+#[deprecated(since = "0.5.0", note = "The 'u2fhid' feature and module have been renamed to 'mozilla'.")]
+/// Mozilla `authenticator-rs` backend. Renamed to [MozillaAuthenticator][crate::mozilla::MozillaAuthenticator].
+pub mod u2fhid {
+    pub use crate::mozilla::MozillaAuthenticator as U2FHid;
+}
 
 #[cfg(any(all(doc, not(doctest)), feature = "win10"))]
 pub mod win10;

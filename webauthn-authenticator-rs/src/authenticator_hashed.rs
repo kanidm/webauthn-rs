@@ -16,7 +16,7 @@ use webauthn_rs_proto::{
     RegisterPublicKeyCredential,
 };
 
-#[cfg(feature = "ctap2")]
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
 use crate::ctap2::commands::{
     GetAssertionRequest, GetAssertionResponse, MakeCredentialRequest, MakeCredentialResponse,
 };

@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::stubs::*;
+
 use crate::{
     crypto::{compute_sha256, decrypt, ecdh, encrypt, get_group, hkdf_sha_256, regenerate},
     error::WebauthnCError,

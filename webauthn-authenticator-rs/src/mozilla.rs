@@ -1,4 +1,6 @@
-//! Authenticator implementation using Mozilla's authenticator-rs library.
+//! Authenticator implementation using Mozilla's `authenticator-rs` library.
+//! 
+//! This library only supports USB HID devices.
 #[cfg(doc)]
 use crate::stubs::*;
 
@@ -20,7 +22,7 @@ use webauthn_rs_proto::{
 
 use authenticator::{authenticatorservice::AuthenticatorService, StatusUpdate};
 
-#[cfg(feature = "u2fhid")]
+#[cfg(feature = "mozilla")]
 use authenticator::{
     authenticatorservice::{
         CtapVersion, GetAssertionExtensions, GetAssertionOptions, MakeCredentialsExtensions,
@@ -38,13 +40,13 @@ use authenticator::{
 use std::sync::mpsc::{channel, RecvError, Sender};
 use std::thread;
 
-pub struct U2FHid {
+pub struct MozillaAuthenticator {
     status_tx: Sender<StatusUpdate>,
     _thread_handle: thread::JoinHandle<()>,
     manager: AuthenticatorService,
 }
 
-impl U2FHid {
+impl MozillaAuthenticator {
     pub fn new() -> Self {
         let mut manager = AuthenticatorService::new(CtapVersion::CTAP2)
             .expect("The auth service should initialize safely");
@@ -109,7 +111,7 @@ impl U2FHid {
             }
         });
 
-        U2FHid {
+        MozillaAuthenticator {
             status_tx,
             _thread_handle,
             manager,
@@ -117,13 +119,13 @@ impl U2FHid {
     }
 }
 
-impl Default for U2FHid {
+impl Default for MozillaAuthenticator {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AuthenticatorBackend for U2FHid {
+impl AuthenticatorBackend for MozillaAuthenticator {
     fn perform_register(
         &mut self,
         origin: Url,
@@ -351,13 +353,13 @@ impl AuthenticatorBackend for U2FHid {
 
 #[cfg(test)]
 mod tests {
-    use crate::u2fhid::U2FHid;
+    use self::*;
     use crate::AuthenticatorBackend;
     use crate::Url;
     use webauthn_rs_core::WebauthnCore as Webauthn;
 
     #[test]
-    fn webauthn_authenticator_wan_u2fhid_interact() {
+    fn webauthn_authenticator_wan_mozilla_interact() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "https://localhost:8080/auth",
@@ -379,7 +381,7 @@ mod tests {
 
         info!("🍿 challenge -> {:x?}", chal);
 
-        let mut u = U2FHid::new();
+        let mut u = MozillaAuthenticator::new();
 
         let r = u
             .perform_register(

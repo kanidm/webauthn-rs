@@ -21,11 +21,13 @@ qrcode = ["dep:qrcode", "ui-cli"]
 crypto = ["dep:openssl"]
 
 # Authenticator transports
-u2fhid = ["dep:authenticator", "dep:rpassword"]
-bluetooth = ["btleplug", "ctap2", "tokio"]
+mozilla = ["dep:authenticator", "dep:rpassword"]
+u2fhid = ["mozilla"]
+
+bluetooth = ["dep:btleplug", "ctap2", "dep:tokio"]
 
 # caBLE / hybrid authenticator
-cable = ["btleplug", "crypto", "ctap2", "hex", "tokio", "tokio-tungstenite"]
+cable = ["dep:btleplug", "crypto", "ctap2", "dep:hex", "dep:tokio", "dep:tokio-tungstenite"]
 
 # Add APIs which allow overriding the caBLE tunnel server protocol and domain.
 #
@@ -38,8 +40,8 @@ ctap2-management = ["ctap2"]
 nfc = ["ctap2", "dep:pcsc"]
 softpasskey = ["crypto"]
 softtoken = ["crypto", "ctap2"]
-usb = ["ctap2", "hidapi"]
-win10 = ["windows"]
+usb = ["ctap2", "dep:hidapi"]
+win10 = ["dep:windows"]
 
 default = []
 

@@ -135,7 +135,7 @@ impl From<tokio_tungstenite::tungstenite::error::Error> for WebauthnCError {
     }
 }
 
-#[cfg(feature = "btleplug")]
+#[cfg(any(feature = "bluetooth", feature = "cable"))]
 impl From<btleplug::Error> for WebauthnCError {
     fn from(v: btleplug::Error) -> Self {
         use btleplug::Error::*;
