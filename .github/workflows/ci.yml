@@ -156,7 +156,8 @@ jobs:
         run: cargo run -p webauthn-authenticator-rs --example cable_domain --features ${{ matrix.features }} -- --help
       - if: contains(matrix.features, 'cable')
         run: cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
-      - run: cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'softtoken')
+        run: cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
