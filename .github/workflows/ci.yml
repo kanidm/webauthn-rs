@@ -86,7 +86,7 @@ jobs:
           - softtoken
           - usb
           - bluetooth,nfc,usb,ctap2-management
-          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb,
+          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb
         os:
           - ubuntu-latest
           - windows-latest
