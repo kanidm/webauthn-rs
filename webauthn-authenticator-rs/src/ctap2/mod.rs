@@ -233,7 +233,7 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         }
     }
 
-    #[cfg(any(all(doc, not(doctest), feature = "ctap2-management")))]
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Gets a mutable reference to a [BiometricAuthenticator] trait for the
     /// token, if it supports biometric commands.
     ///
