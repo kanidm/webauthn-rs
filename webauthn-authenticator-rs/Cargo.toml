@@ -18,7 +18,7 @@ ui-cli = ["dep:rpassword"]
 # Add QR code support for `UiCallback`, useful with `cable` feature
 qrcode = ["dep:qrcode", "ui-cli"]
 
-crypto = ["dep:openssl"]
+crypto = ["dep:openssl", "dep:webauthn-rs-core"]
 
 # Authenticator transports
 mozilla = ["dep:authenticator", "dep:rpassword"]
@@ -53,7 +53,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 base64urlsafedata.workspace = true
 webauthn-rs-proto.workspace = true
-webauthn-rs-core.workspace = true
+webauthn-rs-core = { workspace = true, optional = true }
 
 tracing.workspace = true
 url.workspace = true
@@ -109,7 +109,7 @@ openssl = { workspace = true, optional = true }
 
 [[example]]
 name = "authenticate"
-required-features = ["ui-cli"]
+required-features = ["crypto", "ui-cli"]
 
 [[example]]
 name = "cable_domain"
