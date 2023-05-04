@@ -123,8 +123,11 @@ jobs:
 
       # Don't try to install OpenSSL when there's only the "win10" feature
       # enabled. We should be able to operate without it.
-      - run: echo "HAS_OPENSSL=${{ runner.os != 'windows' || matrix.features != 'win10' }}" >> "$GITHUB_ENV"
-      - if: runner.os == 'windows' && env.HAS_OPENSSL
+      - name: Build using OpenSSL?
+        id: openssl
+        run: echo "use=${{ runner.os != 'windows' || matrix.features != 'win10' }}" >> "$GITHUB_OUTPUT"
+
+      - if: runner.os == 'windows' && steps.openssl.outputs.use
         uses: johnwason/vcpkg-action@v4
         with:
           pkgs: openssl
@@ -142,9 +145,9 @@ jobs:
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
       # "ctap2-management" requires OpenSSL.
-      - if: env.HAS_OPENSSL && (contains(matrix.features, 'win10') || runner.os != 'windows')
+      - if: steps.openssl.outputs.use && (contains(matrix.features, 'win10') || runner.os != 'windows')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
-      - if: env.HAS_OPENSSL && (contains(matrix.features, 'win10') || runner.os != 'windows')
+      - if: steps.openssl.outputs.use && (contains(matrix.features, 'win10') || runner.os != 'windows')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
@@ -153,7 +156,7 @@ jobs:
       # --help should be enough to find an issue.
 
       # authenticate example requires OpenSSL (via webauthn-rs-core)
-      - if: env.HAS_OPENSSL
+      - if: steps.openssl.outputs.use
         run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
 
       - if: contains(matrix.features, 'cable')
