@@ -102,8 +102,6 @@ jobs:
             rust_version: 1.66.0
 
     runs-on: ${{ matrix.os }}
-    env:
-      HAS_OPENSSL: ${{ runner.os != 'windows' || matrix.features != 'win10' }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
@@ -125,13 +123,13 @@ jobs:
 
       # Don't try to install OpenSSL when there's only the "win10" feature
       # enabled. We should be able to operate without it.
-      - if: runner.os == 'windows' && matrix.features != 'win10'
+      - run: echo "HAS_OPENSSL=${{ runner.os != 'windows' || matrix.features != 'win10' }}" >> "$GITHUB_ENV"
+      - if: runner.os == 'windows' && env.HAS_OPENSSL
         uses: johnwason/vcpkg-action@v4
         with:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
-
       - run: cargo build -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Don't run clippy on Windows unless it is using a Windows-specific
