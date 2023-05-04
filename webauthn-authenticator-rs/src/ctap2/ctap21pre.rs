@@ -3,11 +3,12 @@ use std::ops::{Deref, DerefMut};
 use crate::{transport::Token, ui::UiCallback};
 
 use super::{
-    commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo, Ctap20Authenticator,
+    commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo, Ctap20Authenticator,
 };
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
-use super::commands::PrototypeBioEnrollmentRequest;
+use super::commands::{PrototypeBioEnrollmentRequest, PrototypeCredentialManagementRequest};
 
 /// CTAP 2.1-PRE protocol implementation.
 ///
@@ -51,5 +52,17 @@ impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U>
     #[inline]
     fn biometrics(&self) -> Option<bool> {
         self.info.ctap21pre_biometrics()
+    }
+}
+
+impl<'a, T: Token, U: UiCallback> CredentialManagementAuthenticatorInfo<U>
+    for Ctap21PreAuthenticator<'a, T, U>
+{
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+    type RequestType = PrototypeCredentialManagementRequest;
+
+    #[inline]
+    fn supports_credential_management(&self) -> bool {
+        self.info.ctap21pre_credential_management()
     }
 }

@@ -1,10 +1,15 @@
 //! `authenticatorCredentialManagement` commands.
 //!
 
-use std::{fmt::Debug, time::Duration};
-use num_traits::cast::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use serde_cbor::Value; 
+use serde_cbor::{
+    ser::to_vec_packed,
+    value::{from_value, to_value},
+    Value,
+};
+use std::fmt::Debug;
+use webauthn_rs_core::proto::COSEKey;
+use webauthn_rs_proto::{PublicKeyCredentialDescriptor, RelyingParty, User};
 
 use super::*;
 
@@ -119,7 +124,9 @@ macro_rules! cred_struct {
 }
 
 /// Common functionality for CTAP 2.1 and 2.1-PRE `CredentialManegement` request types.
-pub trait CredentialManagementRequestTrait: CBORCommand<Response = CredentialManagementResponse> {
+pub trait CredentialManagementRequestTrait:
+    CBORCommand<Response = CredentialManagementResponse>
+{
     /// Creates a new [CredentialManagementRequest] from the given [CredSubCommand].
     fn new(
         s: CredSubCommand,
@@ -137,14 +144,13 @@ pub trait CredentialManagementRequestTrait: CBORCommand<Response = CredentialMan
 pub enum CredSubCommand {
     #[default]
     Unknown,
-    GetCredsMetadata, // 1 empty
+    GetCredsMetadata,  // 1 empty
     EnumerateRPsBegin, // 2 empty
-    EnumerateRPsGetNextRP,  
-    EnumerateCredentialsBegin, // 4 map
+    EnumerateRPsGetNextRP,
+    EnumerateCredentialsBegin(/* rpIdHash */ Vec<u8>), // 4 map
     EnumerateCredentialsGetNextCredential,
-    DeleteCredential,  // 6 map
-    UpdateUserInformation,// 7 map
-
+    DeleteCredential(PublicKeyCredentialDescriptor), // 6 map
+    UpdateUserInformation(PublicKeyCredentialDescriptor, User), // 7 map
 }
 
 impl From<&CredSubCommand> for u8 {
@@ -155,10 +161,10 @@ impl From<&CredSubCommand> for u8 {
             GetCredsMetadata => 0x01,
             EnumerateRPsBegin => 0x02,
             EnumerateRPsGetNextRP => 0x03,
-            EnumerateCredentialsBegin => 0x04,
+            EnumerateCredentialsBegin(_) => 0x04,
             EnumerateCredentialsGetNextCredential => 0x05,
-            DeleteCredential => 0x06,
-            UpdateUserInformation => 0x07,
+            DeleteCredential(_) => 0x06,
+            UpdateUserInformation(_, _) => 0x07,
         }
     }
 }
@@ -167,29 +173,23 @@ impl From<CredSubCommand> for Option<BTreeMap<Value, Value>> {
     fn from(c: CredSubCommand) -> Self {
         use CredSubCommand::*;
         match c {
-            Unknown | GetCredsMetadata | EnumerateRPsBegin | EnumerateRPsGetNextRP | EnumerateCredentialsGetNextCredential => None,
-            // TODO
-            EnumerateCredentialsBegin => todo!(),
-            DeleteCredential => todo!(),
-            UpdateUserInformation => todo!(),
-            
-            
-            // FingerprintEnrollBegin(timeout) => Some(BTreeMap::from([(
-            //     Value::Integer(0x03),
-            //     Value::Integer(timeout.as_millis() as i128),
-            // )])),
-            // FingerprintEnrollCaptureNextSample(id, timeout) => Some(BTreeMap::from([
-            //     (Value::Integer(0x01), Value::Bytes(id)),
-            //     (
-            //         Value::Integer(0x03),
-            //         Value::Integer(timeout.as_millis() as i128),
-            //     ),
-            // ])),
-            // FingerprintEnumerateEnrollments => None,
-            // FingerprintSetFriendlyName(t) => t.try_into().ok(),
-            // FingerprintRemoveEnrollment(id) => {
-            //     Some(BTreeMap::from([(Value::Integer(0x01), Value::Bytes(id))]))
-            // }
+            Unknown
+            | GetCredsMetadata
+            | EnumerateRPsBegin
+            | EnumerateRPsGetNextRP
+            | EnumerateCredentialsGetNextCredential => None,
+            EnumerateCredentialsBegin(rp_id_hash) => Some(BTreeMap::from([(
+                Value::Integer(0x01),
+                Value::Bytes(rp_id_hash),
+            )])),
+            DeleteCredential(credential_id) => Some(BTreeMap::from([(
+                Value::Integer(0x02),
+                to_value(&credential_id).ok()?,
+            )])),
+            UpdateUserInformation(credential_id, user) => Some(BTreeMap::from([
+                (Value::Integer(0x02), to_value(&credential_id).ok()?),
+                (Value::Integer(0x03), to_value(&user).ok()?),
+            ])),
         }
     }
 }
@@ -204,24 +204,42 @@ impl CredSubCommand {
         o.push(subcommand);
         if let Some(p) = sub_command_params
             .as_ref()
-            .and_then(|p| serde_cbor::to_vec(p).ok())
+            .and_then(|p| to_vec_packed(p).ok())
         {
             o.extend_from_slice(p.as_slice())
         }
 
         o
     }
+
+    pub fn needs_auth(&self) -> bool {
+        use CredSubCommand::*;
+        !matches!(self, EnumerateRPsGetNextRP | EnumerateCredentialsGetNextCredential)
+    }
 }
 
-/// `authenticatorBioEnrollment` response type.
+/// `authenticatorCredentialManagement` response type.
 ///
 /// References:
-/// * <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorBioEnrollment>
-/// * <https://fidoalliance.org/specs/fido2/vendor/BioEnrollmentPrototype.pdf>
+/// * <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorCredentialManagement>
+/// * <https://fidoalliance.org/specs/fido2/vendor/CredentialManagementPrototype.pdf>
 #[derive(Deserialize, Debug, Default, PartialEq, Eq)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct CredentialManagementResponse {
-
+    /// Number of existing discoverable credentials present on the authenticator.
+    pub existing_resident_credentials_count: Option<u32>,
+    /// Maximum possible number of remaining discoverable credentials which can
+    /// be created on the authenticator.
+    pub max_possible_remaining_resident_credentials_count: Option<u32>,
+    pub rp: Option<RelyingParty>,
+    pub rp_id_hash: Option<Vec<u8>>,
+    pub total_rps: Option<u32>,
+    pub user: Option<User>,
+    pub credential_id: Option<PublicKeyCredentialDescriptor>,
+    pub public_key: Option<COSEKey>,
+    pub total_credentials: Option<u32>,
+    pub cred_protect: Option<u32>,
+    pub large_blob_key: Option<Vec<u8>>,
 }
 
 impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
@@ -229,45 +247,49 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
         trace!(?raw);
         Ok(Self {
-            // modality: raw
-            //     .remove(&0x01)
-            //     .and_then(|v| value_to_u32(&v, "0x01"))
-            //     .and_then(Modality::from_u32),
-            // fingerprint_kind: raw
-            //     .remove(&0x02)
-            //     .and_then(|v| value_to_u32(&v, "0x02"))
-            //     .and_then(FingerprintKind::from_u32),
-            // max_capture_samples_required_for_enroll: raw
-            //     .remove(&0x03)
-            //     .and_then(|v| value_to_u32(&v, "0x03")),
-            // template_id: raw.remove(&0x04).and_then(|v| value_to_vec_u8(v, "0x04")),
-            // last_enroll_sample_status: raw
-            //     .remove(&0x05)
-            //     .and_then(|v| value_to_u32(&v, "0x05"))
-            //     .and_then(EnrollSampleStatus::from_u32),
-            // remaining_samples: raw.remove(&0x06).and_then(|v| value_to_u32(&v, "0x06")),
-            // template_infos: raw
-            //     .remove(&0x07)
-            //     .and_then(|v| {
-            //         if let Value::Array(v) = v {
-            //             let mut infos = vec![];
-            //             for i in v {
-            //                 if let Value::Map(i) = i {
-            //                     if let Ok(i) = TemplateInfo::try_from(i) {
-            //                         infos.push(i)
-            //                     }
-            //                 }
-            //             }
-            //             Some(infos)
-            //         } else {
-            //             None
-            //         }
-            //     })
-            //     .unwrap_or_default(),
-            // max_template_friendly_name: raw
-            //     .remove(&0x08)
-            //     .and_then(|v| value_to_u32(&v, "0x08"))
-            //     .map(|v| v as usize),
+            existing_resident_credentials_count: raw
+                .remove(&0x01)
+                .and_then(|v| value_to_u32(&v, "0x01")),
+            max_possible_remaining_resident_credentials_count: raw
+                .remove(&0x02)
+                .and_then(|v| value_to_u32(&v, "0x02")),
+            rp: if let Some(v) = raw.remove(&0x03) {
+                Some(from_value(v).map_err(|e| {
+                    error!("parsing rp: {e:?}");
+                    "parsing rp"
+                })?)
+            } else {
+                None
+            },
+            rp_id_hash: raw.remove(&0x04).and_then(|v| value_to_vec_u8(v, "0x04")),
+            total_rps: raw.remove(&0x05).and_then(|v| value_to_u32(&v, "0x05")),
+            user: if let Some(v) = raw.remove(&0x06) {
+                Some(from_value(v).map_err(|e| {
+                    error!("Mapping user: {e:?}");
+                    "parsing user"
+                })?)
+            } else {
+                None
+            },
+            credential_id: if let Some(v) = raw.remove(&0x07) {
+                Some(from_value(v).map_err(|e| {
+                    error!("Mapping credentialID: {e:?}");
+                    "parsing credentialID"
+                })?)
+            } else {
+                None
+            },
+            public_key: if let Some(v) = raw.remove(&0x09) {
+                Some(from_value(v).map_err(|e| {
+                    error!("Mapping publicKey: {e:?}");
+                    "parsing publicKey"
+                })?)
+            } else {
+                None
+            },
+            total_credentials: raw.remove(&0x09).and_then(|v| value_to_u32(&v, "0x09")),
+            cred_protect: raw.remove(&0x0A).and_then(|v| value_to_u32(&v, "0x0A")),
+            large_blob_key: raw.remove(&0x0B).and_then(|v| value_to_vec_u8(v, "0x0B"))
         })
     }
 }
@@ -285,6 +307,5 @@ cred_struct! {
     /// CTAP 2.1-PRE prototype `authenticatorCredentialManagement` command (`0x41`).
     ///
     /// [ref]: https://fidoalliance.org/specs/fido2/vendor/CredentialManagementPrototype.pdf
-    pub struct PrototypeCredentialManagementRequest = 0x40
+    pub struct PrototypeCredentialManagementRequest = 0x41
 }
-

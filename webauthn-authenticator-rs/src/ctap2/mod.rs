@@ -120,6 +120,7 @@ mod ctap20;
 #[doc(hidden)]
 mod ctap21;
 mod ctap21_bio;
+mod ctap21_cred;
 #[doc(hidden)]
 mod ctap21pre;
 mod pin_uv;
@@ -147,7 +148,10 @@ pub use self::{
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 #[doc(inline)]
-pub use ctap21_bio::BiometricAuthenticator;
+pub use self::{
+    ctap21_bio::BiometricAuthenticator,
+    ctap21_cred::{CredentialManagementAuthenticator, CredentialManagementAuthenticatorInfo},
+};
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///
@@ -242,6 +246,24 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         match self {
             Self::Fido21(a) => a.supports_biometrics().then_some(a),
             Self::Fido21Pre(a) => a.supports_biometrics().then_some(a),
+            _ => None,
+        }
+    }
+
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+    pub fn supports_credential_management(&self) -> bool {
+        match self {
+            Self::Fido21(a) => a.supports_credential_management(),
+            Self::Fido21Pre(a) => a.supports_credential_management(),
+            _ => false,
+        }
+    }
+    
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+    pub fn credential_management(&mut self) -> Option<&mut dyn CredentialManagementAuthenticator> {
+        match self {
+            Self::Fido21(a) => a.supports_credential_management().then_some(a),
+            Self::Fido21Pre(a) => a.supports_credential_management().then_some(a),
             _ => None,
         }
     }

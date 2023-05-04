@@ -268,6 +268,19 @@ impl GetInfoResponse {
     pub fn make_cred_uv_not_required(&self) -> bool {
         self.get_option("makeCredUvNotRqd").unwrap_or_default()
     }
+
+    /// Returns `true` if the authenticator supports CTAP 2.1 credential
+    /// management.
+    pub fn ctap21_credential_management(&self) -> bool {
+        self.get_option("credMgmt").unwrap_or_default()
+
+    }
+
+    /// Returns `true` if the authenticator supports CTAP 2.1-PRE credential
+    /// management.
+    pub fn ctap21pre_credential_management(&self) -> bool {
+        self.get_option("credentialMgmtPreview").unwrap_or_default()
+    }
 }
 
 impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {

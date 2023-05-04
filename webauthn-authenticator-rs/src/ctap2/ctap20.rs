@@ -261,7 +261,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         }
 
         let requires_pin = (permissions.intersects(Permissions::BIO_ENROLLMENT) && !uv_bio_enroll)
-            || (permissions.intersects(Permissions::AUTHENTICATOR_CONFIGURATION) && !uv_acfg);
+            || (permissions.intersects(Permissions::AUTHENTICATOR_CONFIGURATION) && !uv_acfg)
+            || permissions.intersects(Permissions::CREDENTIAL_MANAGEMENT);
         trace!("Permissions: {permissions:?}, uvBioEnroll: {uv_bio_enroll:?}, uvAcfg: {uv_acfg:?}, requiresPin: {requires_pin:?}");
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-platf-actions
         // 1. If the authenticator is protected by some form of user

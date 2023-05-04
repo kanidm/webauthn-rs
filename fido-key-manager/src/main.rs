@@ -110,6 +110,8 @@ pub enum Opt {
     SetPin(SetPinOpt),
     /// Changes a PIN on a FIDO token which already has a PIN set.
     ChangePin(ChangePinOpt),
+    GetCredentialMetadata,
+    ListRps,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -360,6 +362,49 @@ async fn main() {
                 .change_pin(&o.old_pin, &o.new_pin)
                 .await
                 .expect("Error changing PIN");
+        }
+
+        Opt::GetCredentialMetadata => {
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter(|t| t.supports_credential_management())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting credential management"
+            );
+
+            let (creds, remain) = tokens[0]
+                .credential_management()
+                .unwrap()
+                .get_credentials_metadata()
+                .await
+                .expect("Error getting credential metadata");
+            println!("{creds} discoverable credential(s), {remain} maximum slot(s) free");
+        }
+
+        Opt::ListRps => {
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter(|t| t.supports_credential_management())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting credential management"
+            );
+
+            let rps = tokens[0]
+                .credential_management()
+                .unwrap()
+                .enumerate_rps()
+                .await
+                .expect("Error enumerating RPs");
+            println!("{} RP(s):", rps.len());
+            for (rp, hash) in rps.iter() {
+                println!("* RP: {rp:?}, hash: {hash:?}");
+            }
         }
     }
 }

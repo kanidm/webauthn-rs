@@ -8,12 +8,14 @@ use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 use super::{
     commands::{GetInfoResponse, SelectionRequest},
     ctap21_bio::BiometricAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo,
     Ctap20Authenticator,
 };
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use super::commands::{
-    BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, Permissions, SetMinPinLengthParams,
+    BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, CredentialManagementRequest,
+    Permissions, SetMinPinLengthParams,
 };
 
 /// CTAP 2.1 protocol implementation.
@@ -186,5 +188,18 @@ impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U> for Ctap21Authen
     #[inline]
     fn biometrics(&self) -> Option<bool> {
         self.info.ctap21_biometrics()
+    }
+}
+
+impl<'a, T: Token, U: UiCallback> CredentialManagementAuthenticatorInfo<U>
+    for Ctap21Authenticator<'a, T, U>
+{
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+    type RequestType = CredentialManagementRequest;
+    // HACK: type RequestType = super::commands::PrototypeCredentialManagementRequest;
+
+    #[inline]
+    fn supports_credential_management(&self) -> bool {
+        self.info.ctap21_credential_management()
     }
 }

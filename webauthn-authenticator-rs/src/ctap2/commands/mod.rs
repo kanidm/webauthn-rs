@@ -22,6 +22,7 @@ pub use self::bio_enrollment::*;
 pub use self::client_pin::*;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::config::*;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::credential_management::*;
 pub use self::get_assertion::*;
 pub use self::get_info::*;
