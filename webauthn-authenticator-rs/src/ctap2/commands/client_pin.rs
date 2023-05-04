@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::stubs::*;
+
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;

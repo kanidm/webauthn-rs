@@ -151,3 +151,14 @@ pub mod openssl {
         pub struct X509ReqBuilder {}
     }
 }
+
+#[cfg(not(feature = "crypto"))]
+pub mod webauthn_rs_core {
+    pub mod proto {
+        pub struct COSEEC2Key {}
+        pub struct COSEKey {}
+        pub enum COSEKeyType {}
+        pub enum COSEKeyTypeId {}
+        pub enum ECDSACurve {}
+    }
+}

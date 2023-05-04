@@ -102,6 +102,8 @@ jobs:
             rust_version: 1.66.0
 
     runs-on: ${{ matrix.os }}
+    env:
+      HAS_OPENSSL: runner.os != 'windows' || matrix.features != 'win10'
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
@@ -137,12 +139,14 @@ jobs:
       - if: contains(matrix.features, 'win10') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
       - if: contains(matrix.features, 'win10') || runner.os != 'windows'
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
-      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
       - if: contains(matrix.features, 'win10') || runner.os != 'windows'
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
-      - if: contains(matrix.features, 'win10') || runner.os != 'windows'
+
+      # "ctap2-management" requires OpenSSL.
+      - if: env.HAS_OPENSSL && (contains(matrix.features, 'win10') || runner.os != 'windows')
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
+      - if: env.HAS_OPENSSL && (contains(matrix.features, 'win10') || runner.os != 'windows')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
@@ -151,7 +155,7 @@ jobs:
       # --help should be enough to find an issue.
 
       # authenticate example requires OpenSSL (via webauthn-rs-core)
-      - if: runner.os != 'windows' || matrix.features != 'win10'
+      - if: env.HAS_OPENSSL
         run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
 
       - if: contains(matrix.features, 'cable')
