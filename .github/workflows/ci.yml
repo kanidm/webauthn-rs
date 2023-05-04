@@ -152,7 +152,7 @@ jobs:
       # --help should be enough to find an issue.
 
       # authenticate example requires OpenSSL (via webauthn-rs-core)
-      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+      - if: runner.os != 'windows' || matrix.features != 'win10'
         run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
 
       - if: contains(matrix.features, 'cable')
