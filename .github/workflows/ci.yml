@@ -103,7 +103,7 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     env:
-      HAS_OPENSSL: runner.os != 'windows' || matrix.features != 'win10'
+      HAS_OPENSSL: ${{ runner.os != 'windows' || matrix.features != 'win10' }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
