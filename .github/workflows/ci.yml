@@ -42,6 +42,8 @@ jobs:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
 
       - if: runner.os != 'windows'
         run: |
@@ -109,6 +111,8 @@ jobs:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
 
       - if: runner.os != 'windows'
         run: |
@@ -129,6 +133,7 @@ jobs:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
+
       - run: cargo build -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Don't run clippy on Windows unless it is using a Windows-specific
@@ -140,7 +145,8 @@ jobs:
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
-      # "ctap2-management" requires OpenSSL.
+      # "ctap2-management" requires OpenSSL, which we won't have if built with
+      # only "win10" feature on Windows.
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
@@ -151,10 +157,13 @@ jobs:
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
 
-      # authenticate example requires OpenSSL (via webauthn-rs-core)
+      # authenticate example requires OpenSSL (via webauthn-rs-core), so don't
+      # run if features == 'win10'.
       - if: runner.os != 'windows' || matrix.features != 'win10'
         run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
 
+      # caBLE-specific examples. The "cable" feature requires OpenSSL, so this
+      # always OK to run on Windows.
       - if: contains(matrix.features, 'cable')
         run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
       - if: contains(matrix.features, 'cable')
@@ -162,6 +171,7 @@ jobs:
       - if: contains(matrix.features, 'cable')
         run: cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
 
+      # SoftToken-specific examples.
       - if: contains(matrix.features, 'softtoken')
         run: cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
 
@@ -178,6 +188,8 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
       - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
