@@ -139,7 +139,7 @@ enum Provider {
     /// [webauthn_authenticator_rs::cable] documentation for more information.
     Cable(CableOpt),
 
-    #[cfg(feature = "u2fhid")]
+    #[cfg(feature = "mozilla")]
     /// Mozilla webauthn-authenticator-rs provider, supporting USB HID only.
     Mozilla,
 
@@ -192,8 +192,8 @@ impl Provider {
                     })
                     .unwrap(),
             ),
-            #[cfg(feature = "u2fhid")]
-            Provider::Mozilla => Box::<webauthn_authenticator_rs::u2fhid::U2FHid>::default(),
+            #[cfg(feature = "mozilla")]
+            Provider::Mozilla => Box::<webauthn_authenticator_rs::mozilla::MozillaAuthenticator>::default(),
             #[cfg(feature = "win10")]
             Provider::Win10 => Box::<webauthn_authenticator_rs::win10::Win10>::default(),
         }

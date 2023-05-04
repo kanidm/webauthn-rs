@@ -8,7 +8,7 @@
 #[cfg(not(doc))]
 compile_error!("Documentation stubs must only be included with #[cfg(doc)]");
 
-#[cfg(not(feature = "u2fhid"))]
+#[cfg(not(feature = "mozilla"))]
 pub mod authenticator {
     pub mod authenticatorservice {
         pub struct AuthenticatorService {}
