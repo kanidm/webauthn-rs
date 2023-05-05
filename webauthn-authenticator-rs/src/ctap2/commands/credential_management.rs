@@ -9,7 +9,7 @@ use serde_cbor::{
 };
 use std::fmt::Debug;
 use webauthn_rs_core::proto::COSEKey;
-use webauthn_rs_proto::AuthenticatorTransport;
+use webauthn_rs_proto::{AuthenticatorTransport, CredentialProtectionPolicy};
 
 use crate::crypto::SHA256Hash;
 
@@ -330,7 +330,7 @@ pub struct DiscoverableCredential {
     pub user: Option<UserCM>,
     pub credential_id: Option<PublicKeyCredentialDescriptorCM>,
     pub public_key: Option<COSEKey>,
-    pub cred_protect: Option<u32>,
+    pub cred_protect: Option<CredentialProtectionPolicy>,
     pub large_blob_key: Option<Vec<u8>>,
 }
 
@@ -364,7 +364,10 @@ impl TryFrom<BTreeMap<u32, Value>> for DiscoverableCredential {
             } else {
                 None
             },
-            cred_protect: raw.remove(&0x0A).and_then(|v| value_to_u32(&v, "0x0A")),
+            cred_protect: raw
+                .remove(&0x0A)
+                .and_then(|v| value_to_u8(&v, "0x0A"))
+                .and_then(|v| CredentialProtectionPolicy::try_from(v).ok()),
             large_blob_key: raw.remove(&0x0B).and_then(|v| value_to_vec_u8(v, "0x0B")),
         })
     }

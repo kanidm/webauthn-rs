@@ -10,11 +10,15 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
+use openssl::sha::Sha256;
 
-use webauthn_authenticator_rs::ctap2::{select_one_token, CtapAuthenticator};
-use webauthn_authenticator_rs::transport::*;
-use webauthn_authenticator_rs::ui::Cli;
-use webauthn_authenticator_rs::SHA256Hash;
+use webauthn_authenticator_rs::{
+    ctap2::{select_one_token, CtapAuthenticator},
+    transport::*,
+    ui::Cli,
+    SHA256Hash,
+};
+use webauthn_rs_core::interface::COSEKeyType;
 
 /// Parses a Base-16 encoded string.
 ///
@@ -87,14 +91,13 @@ pub struct RemoveFingerprintOpt {
 }
 
 #[derive(Debug, Args)]
-#[clap(group(
-    ArgGroup::new("rp")
-        .required(true)
-        .args(&["rpid", "hash"])
-))]
 pub struct ListCredentialsOpt {
-    #[clap(long, value_name = "RPID")]
+    /// List credentials for a relying party ID (eg: "example.com")
+    #[clap(long, value_name = "RPID", conflicts_with = "hash")]
     pub rpid: Option<String>,
+
+    /// List credentials for the SHA-256 hash of a relying party ID
+    /// (eg: "a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce1947")
     #[clap(long, value_parser = parse_hex::<SHA256Hash>, value_name = "HASH")]
     pub hash: Option<SHA256Hash>,
 }
@@ -136,7 +139,9 @@ pub enum Opt {
     /// Changes a PIN on a FIDO token which already has a PIN set.
     ChangePin(ChangePinOpt),
     GetCredentialMetadata,
-    ListRps,
+    /// List all discoverable credentials on this token. If neither filtering
+    /// option is specified, shows a list of all RPs with discoverable
+    /// credentials on this token.
     ListCredentials(ListCredentialsOpt),
 }
 
@@ -410,29 +415,6 @@ async fn main() {
             println!("{creds} discoverable credential(s), {remain} maximum slot(s) free");
         }
 
-        Opt::ListRps => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_credential_management())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting credential management"
-            );
-
-            let rps = tokens[0]
-                .credential_management()
-                .unwrap()
-                .enumerate_rps()
-                .await
-                .expect("Error enumerating RPs");
-            println!("{} RP(s):", rps.len());
-            for (rp, hash) in rps.iter() {
-                println!("* {}: {rp:?}", hex::encode(hash));
-            }
-        }
-
         Opt::ListCredentials(o) => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
@@ -444,24 +426,83 @@ async fn main() {
                 "Expected exactly one authenticator supporting credential management"
             );
 
-            let rp_id_hash = if let Some(_rpid) = o.rpid {
-                todo!()
+            let cm = tokens[0].credential_management().unwrap();
+
+            let rp_id_hash = if let Some(rpid) = o.rpid {
+                let mut h = Sha256::new();
+                h.update(rpid.as_bytes());
+                let h = h.finish();
+                h
             } else if let Some(hash) = o.hash {
                 hash
             } else {
-                unreachable!()
+                let rps = cm.enumerate_rps().await.expect("Error enumerating RPs");
+                println!("{} RP(s):", rps.len());
+                for (rp, hash) in rps {
+                    print!("* {}: {}", hex::encode(hash), rp.id.unwrap_or_default());
+                    if let Some(name) = &rp.name {
+                        println!(" ({})", name);
+                    } else {
+                        println!();
+                    }
+                }
+                return;
             };
 
-            let creds = tokens[0]
-                .credential_management()
-                .unwrap()
+            let creds = cm
                 .enumerate_credentials_by_hash(rp_id_hash)
                 .await
                 .expect("Error listing credentials");
 
-            println!("{} credential(s):", creds.len());
-            for cred in creds.iter() {
-                println!("* {cred:?}");
+            println!(
+                "{} credential(s) for {}:",
+                creds.len(),
+                hex::encode(rp_id_hash)
+            );
+            for (i, cred) in creds.iter().enumerate() {
+                println!("Credential #{}:", i + 1);
+                if let Some(cred_id) = &cred.credential_id {
+                    println!("  ID: {}", hex::encode(&cred_id.id));
+                    if !cred_id.transports.is_empty() {
+                        println!("  Transports: {:?}", cred_id.transports);
+                    }
+                }
+                if let Some(user) = &cred.user {
+                    println!("  User info:");
+                    println!("    User ID: {}", hex::encode(&user.id));
+                    if let Some(name) = &user.name {
+                        println!("    Name: {}", name);
+                    }
+                    if let Some(display_name) = &user.display_name {
+                        println!("    Display name: {}", display_name);
+                    }
+                }
+
+                if let Some(public_key) = &cred.public_key {
+                    println!("  Public key algorithm: {:?}", public_key.type_);
+                    match &public_key.key {
+                        COSEKeyType::EC_OKP(okp) => {
+                            println!("  Octet key pair, curve {:?}", okp.curve);
+                            println!("    X-coordinate: {}", hex::encode(&okp.x));
+                        }
+                        COSEKeyType::EC_EC2(ec) => {
+                            println!("  Elliptic curve key, curve {:?}", ec.curve);
+                            println!("    X-coordinate: {}", hex::encode(&ec.x.0));
+                            println!("    Y-coordinate: {}", hex::encode(&ec.y.0));
+                        }
+                        COSEKeyType::RSA(rsa) => {
+                            println!("  RSA modulus: {}", hex::encode(&rsa.n.0));
+                            println!("    Exponent: {}", hex::encode(&rsa.e));
+                        }
+                    }
+                }
+                if let Some(policy) = &cred.cred_protect {
+                    println!("  Credential protection policy: {:?}", policy);
+                }
+
+                if let Some(key) = &cred.large_blob_key {
+                    println!("  Large blob key: {}", hex::encode(key));
+                }
             }
         }
     }

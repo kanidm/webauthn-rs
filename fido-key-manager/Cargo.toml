@@ -23,9 +23,11 @@ webauthn-authenticator-rs = { workspace = true, features = ["ui-cli", "ctap2-man
 
 clap.workspace = true
 hex.workspace = true
+openssl.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+webauthn-rs-core.workspace = true
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
