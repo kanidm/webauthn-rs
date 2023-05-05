@@ -7,10 +7,11 @@ use async_trait::async_trait;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use webauthn_rs_proto::UserVerificationPolicy;
 
-use crate::{crypto::SHA256Hash, ui::UiCallback};
+use crate::ui::UiCallback;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::{
+    crypto::SHA256Hash,
     ctap2::{
         commands::{
             CredSubCommand, CredentialManagementRequestTrait, CredentialManagementResponse,

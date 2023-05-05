@@ -273,7 +273,6 @@ impl GetInfoResponse {
     /// management.
     pub fn ctap21_credential_management(&self) -> bool {
         self.get_option("credMgmt").unwrap_or_default()
-
     }
 
     /// Returns `true` if the authenticator supports CTAP 2.1-PRE credential

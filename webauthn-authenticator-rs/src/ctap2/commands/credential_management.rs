@@ -324,7 +324,6 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
 
 crate::deserialize_cbor!(CredentialManagementResponse);
 
-
 #[derive(Deserialize, Debug, Default, PartialEq, Eq)]
 #[serde(try_from = "BTreeMap<u32, Value>")]
 pub struct DiscoverableCredential {
@@ -341,7 +340,7 @@ impl TryFrom<BTreeMap<u32, Value>> for DiscoverableCredential {
         Ok(Self {
             user: if let Some(v) = raw.remove(&0x06) {
                 Some(from_value(v).map_err(|e| {
-                    error!("Mapping user: {e:?}");
+                    error!("parsing user: {e:?}");
                     "parsing user"
                 })?)
             } else {
@@ -349,16 +348,17 @@ impl TryFrom<BTreeMap<u32, Value>> for DiscoverableCredential {
             },
             credential_id: if let Some(v) = raw.remove(&0x07) {
                 Some(from_value(v).map_err(|e| {
-                    error!("Mapping credentialID: {e:?}");
+                    error!("parsing credentialID: {e:?}");
                     "parsing credentialID"
                 })?)
             } else {
                 None
             },
-            // TODO: fix me
-            public_key: if let Some(v) = raw.remove(&0x09) {
-                Some(from_value(v).map_err(|e| {
-                    error!("Mapping publicKey: {e:?}");
+            public_key: if let Some(v) = raw.remove(&0x08) {
+                // publicKey is a Map<u32, Value>, need to use
+                // `impl TryFrom<&Value> for COSEKey`
+                Some(COSEKey::try_from(&v).map_err(|e| {
+                    error!("parsing publicKey: {e:?}");
                     "parsing publicKey"
                 })?)
             } else {
@@ -382,4 +382,63 @@ cred_struct! {
     ///
     /// [ref]: https://fidoalliance.org/specs/fido2/vendor/CredentialManagementPrototype.pdf
     pub struct PrototypeCredentialManagementRequest = 0x41
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn get_cred_metadata() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let c = CredentialManagementRequest::new(
+            CredSubCommand::GetCredsMetadata,
+            Some(2),
+            Some(vec![
+                19, 215, 242, 231, 160, 185, 97, 120, 57, 179, 251, 191, 194, 249, 12, 236, 94,
+                192, 198, 192, 65, 84, 114, 116, 34, 86, 172, 110, 215, 158, 250, 93,
+            ]),
+        );
+
+        assert_eq!(
+            vec![
+                0x0a, 163, 1, 1, 3, 2, 4, 88, 32, 19, 215, 242, 231, 160, 185, 97, 120, 57, 179,
+                251, 191, 194, 249, 12, 236, 94, 192, 198, 192, 65, 84, 114, 116, 34, 86, 172, 110,
+                215, 158, 250, 93
+            ],
+            c.cbor().expect("encode error")
+        );
+
+        let c = PrototypeCredentialManagementRequest::new(
+            CredSubCommand::GetCredsMetadata,
+            Some(1),
+            Some(vec![
+                19, 215, 242, 231, 160, 185, 97, 120, 57, 179, 251, 191, 194, 249, 12, 236, 94,
+                192, 198, 192, 65, 84, 114, 116, 34, 86, 172, 110, 215, 158, 250, 93,
+            ]),
+        );
+
+        assert_eq!(
+            vec![
+                0x41, 163, 1, 1, 3, 1, 4, 88, 32, 19, 215, 242, 231, 160, 185, 97, 120, 57, 179,
+                251, 191, 194, 249, 12, 236, 94, 192, 198, 192, 65, 84, 114, 116, 34, 86, 172, 110,
+                215, 158, 250, 93
+            ],
+            c.cbor().expect("encode error")
+        );
+
+        let r = [162, 1, 3, 2, 22];
+        let a = <CredentialManagementResponse as CBORResponse>::try_from(r.as_slice())
+            .expect("Failed to decode message");
+
+        assert_eq!(
+            CredentialManagementResponse {
+                existing_resident_credentials_count: Some(3),
+                max_possible_remaining_resident_credentials_count: Some(22),
+                ..Default::default()
+            },
+            a
+        )
+    }
 }
