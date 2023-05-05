@@ -9,7 +9,9 @@ use serde_cbor::{
 };
 use std::fmt::Debug;
 use webauthn_rs_core::proto::COSEKey;
-use webauthn_rs_proto::{PublicKeyCredentialDescriptor, RelyingParty, User};
+use webauthn_rs_proto::AuthenticatorTransport;
+
+use crate::crypto::SHA256Hash;
 
 use super::*;
 
@@ -147,10 +149,10 @@ pub enum CredSubCommand {
     GetCredsMetadata,  // 1 empty
     EnumerateRPsBegin, // 2 empty
     EnumerateRPsGetNextRP,
-    EnumerateCredentialsBegin(/* rpIdHash */ Vec<u8>), // 4 map
+    EnumerateCredentialsBegin(/* rpIdHash */ SHA256Hash), // 4 map
     EnumerateCredentialsGetNextCredential,
-    DeleteCredential(PublicKeyCredentialDescriptor), // 6 map
-    UpdateUserInformation(PublicKeyCredentialDescriptor, User), // 7 map
+    DeleteCredential(PublicKeyCredentialDescriptorCM), // 6 map
+    UpdateUserInformation(PublicKeyCredentialDescriptorCM, UserCM), // 7 map
 }
 
 impl From<&CredSubCommand> for u8 {
@@ -180,7 +182,7 @@ impl From<CredSubCommand> for Option<BTreeMap<Value, Value>> {
             | EnumerateCredentialsGetNextCredential => None,
             EnumerateCredentialsBegin(rp_id_hash) => Some(BTreeMap::from([(
                 Value::Integer(0x01),
-                Value::Bytes(rp_id_hash),
+                Value::Bytes(rp_id_hash.to_vec()),
             )])),
             DeleteCredential(credential_id) => Some(BTreeMap::from([(
                 Value::Integer(0x02),
@@ -214,8 +216,60 @@ impl CredSubCommand {
 
     pub fn needs_auth(&self) -> bool {
         use CredSubCommand::*;
-        !matches!(self, EnumerateRPsGetNextRP | EnumerateCredentialsGetNextCredential)
+        !matches!(
+            self,
+            EnumerateRPsGetNextRP | EnumerateCredentialsGetNextCredential
+        )
     }
+}
+
+/// Abridged form of [RelyingParty][] for credential management.
+///
+/// > `PublicKeyCredentialRpEntity`, where the `id` field *should* be included,
+/// > and other fields *may* be included.
+///
+/// [RelyingParty]: webauthn_rs_proto:RelyingParty
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RelyingPartyCM {
+    /// The name of the relying party.
+    pub name: Option<String>,
+    /// The id of the relying party.
+    pub id: Option<String>,
+    // Note: "icon" is deprecated: https://github.com/w3c/webauthn/pull/1337
+}
+
+/// User Entity
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserCM {
+    /// The user's id. This MUST be a unique id, and
+    /// must NOT contain personally identifying information, as this value can NEVER
+    /// be changed. If in doubt, use a UUID.
+    #[serde(with = "serde_bytes")]
+    pub id: Vec<u8>,
+    /// A detailed name for the account, such as an email address. This value
+    /// **can** change, so **must not** be used as a primary key.
+    pub name: Option<String>,
+    /// The user's preferred name for display. This value **can** change, so
+    /// **must not** be used as a primary key.
+    pub display_name: Option<String>,
+    // Note: "icon" is deprecated: https://github.com/w3c/webauthn/pull/1337
+}
+
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicKeyCredentialDescriptorCM {
+    /// The type of credential
+    #[serde(rename = "type")]
+    pub type_: String,
+    /// The credential id.
+    #[serde(with = "serde_bytes")]
+    pub id: Vec<u8>,
+    /// The allowed transports for this credential. Note this is a hint, and is NOT
+    /// enforced.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transports: Vec<AuthenticatorTransport>,
 }
 
 /// `authenticatorCredentialManagement` response type.
@@ -231,15 +285,11 @@ pub struct CredentialManagementResponse {
     /// Maximum possible number of remaining discoverable credentials which can
     /// be created on the authenticator.
     pub max_possible_remaining_resident_credentials_count: Option<u32>,
-    pub rp: Option<RelyingParty>,
-    pub rp_id_hash: Option<Vec<u8>>,
+    pub rp: Option<RelyingPartyCM>,
+    pub rp_id_hash: Option<SHA256Hash>,
     pub total_rps: Option<u32>,
-    pub user: Option<User>,
-    pub credential_id: Option<PublicKeyCredentialDescriptor>,
-    pub public_key: Option<COSEKey>,
+    pub discoverable_credential: DiscoverableCredential,
     pub total_credentials: Option<u32>,
-    pub cred_protect: Option<u32>,
-    pub large_blob_key: Option<Vec<u8>>,
 }
 
 impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
@@ -261,8 +311,34 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
             } else {
                 None
             },
-            rp_id_hash: raw.remove(&0x04).and_then(|v| value_to_vec_u8(v, "0x04")),
+            rp_id_hash: raw
+                .remove(&0x04)
+                .and_then(|v| value_to_vec_u8(v, "0x04"))
+                .and_then(|v| v.try_into().ok()),
             total_rps: raw.remove(&0x05).and_then(|v| value_to_u32(&v, "0x05")),
+            total_credentials: raw.remove(&0x09).and_then(|v| value_to_u32(&v, "0x09")),
+            discoverable_credential: DiscoverableCredential::try_from(raw)?,
+        })
+    }
+}
+
+crate::deserialize_cbor!(CredentialManagementResponse);
+
+
+#[derive(Deserialize, Debug, Default, PartialEq, Eq)]
+#[serde(try_from = "BTreeMap<u32, Value>")]
+pub struct DiscoverableCredential {
+    pub user: Option<UserCM>,
+    pub credential_id: Option<PublicKeyCredentialDescriptorCM>,
+    pub public_key: Option<COSEKey>,
+    pub cred_protect: Option<u32>,
+    pub large_blob_key: Option<Vec<u8>>,
+}
+
+impl TryFrom<BTreeMap<u32, Value>> for DiscoverableCredential {
+    type Error = &'static str;
+    fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
+        Ok(Self {
             user: if let Some(v) = raw.remove(&0x06) {
                 Some(from_value(v).map_err(|e| {
                     error!("Mapping user: {e:?}");
@@ -279,6 +355,7 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
             } else {
                 None
             },
+            // TODO: fix me
             public_key: if let Some(v) = raw.remove(&0x09) {
                 Some(from_value(v).map_err(|e| {
                     error!("Mapping publicKey: {e:?}");
@@ -287,14 +364,11 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
             } else {
                 None
             },
-            total_credentials: raw.remove(&0x09).and_then(|v| value_to_u32(&v, "0x09")),
             cred_protect: raw.remove(&0x0A).and_then(|v| value_to_u32(&v, "0x0A")),
-            large_blob_key: raw.remove(&0x0B).and_then(|v| value_to_vec_u8(v, "0x0B"))
+            large_blob_key: raw.remove(&0x0B).and_then(|v| value_to_vec_u8(v, "0x0B")),
         })
     }
 }
-
-crate::deserialize_cbor!(CredentialManagementResponse);
 
 cred_struct! {
     /// CTAP 2.1 `authenticatorCredentialManagement` command (`0x0a`).

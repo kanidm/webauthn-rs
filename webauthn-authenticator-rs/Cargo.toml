@@ -35,7 +35,7 @@ cable = ["dep:btleplug", "crypto", "ctap2", "dep:hex", "dep:tokio", "dep:tokio-t
 # server, and most library users should not need this!
 cable-override-tunnel = ["cable"]
 
-ctap2 = ["crypto", "dep:hex"]
+ctap2 = ["crypto", "dep:hex", "dep:serde_bytes"]
 ctap2-management = ["ctap2"]
 nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
@@ -61,6 +61,7 @@ uuid.workspace = true
 serde_json.workspace = true
 nom.workspace = true
 serde_cbor.workspace = true
+serde_bytes = { version = "0.11", optional = true }
 openssl = { workspace = true, optional = true }
 rpassword = { version = "5.0", optional = true }
 

@@ -5,22 +5,22 @@ use std::ops::{Deref, DerefMut};
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use async_trait::async_trait;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
-use webauthn_rs_proto::{RelyingParty, UserVerificationPolicy};
+use webauthn_rs_proto::UserVerificationPolicy;
 
-use crate::ui::UiCallback;
+use crate::{crypto::SHA256Hash, ui::UiCallback};
+
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::{
+    ctap2::{
+        commands::{
+            CredSubCommand, CredentialManagementRequestTrait, CredentialManagementResponse,
+            DiscoverableCredential, Permissions, RelyingPartyCM,
+        },
+        ctap20::AuthSession,
+        Ctap20Authenticator,
+    },
     error::{CtapError, WebauthnCError},
     transport::Token,
-};
-
-#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
-use super::{
-    commands::{
-        CredSubCommand, CredentialManagementRequestTrait, CredentialManagementResponse, Permissions,
-    },
-    ctap20::AuthSession,
-    Ctap20Authenticator,
 };
 
 /// Trait to provide a [CredentialManagementAuthenticator] implementation.
@@ -144,7 +144,12 @@ pub trait CredentialManagementAuthenticator {
 
     async fn get_credentials_metadata(&mut self) -> Result<(u32, u32), WebauthnCError>;
 
-    async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingParty, Vec<u8>)>, WebauthnCError>;
+    async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingPartyCM, SHA256Hash)>, WebauthnCError>;
+
+    async fn enumerate_credentials_by_hash(
+        &mut self,
+        rp_id_hash: SHA256Hash,
+    ) -> Result<Vec<DiscoverableCredential>, WebauthnCError>;
 }
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
@@ -188,7 +193,7 @@ where
         ))
     }
 
-    async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingParty, Vec<u8>)>, WebauthnCError> {
+    async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingPartyCM, SHA256Hash)>, WebauthnCError> {
         self.check_credential_management_support()?;
         let r = self
             .cred_mgmt(CredSubCommand::EnumerateRPsBegin, false)
@@ -205,9 +210,11 @@ where
         if let (Some(rp), Some(rp_id_hash)) = (r.rp, r.rp_id_hash) {
             o.push((rp, rp_id_hash));
         }
-        
+
         for _ in 1..total_rps {
-            let r = self.cred_mgmt(CredSubCommand::EnumerateRPsGetNextRP, false).await?;
+            let r = self
+                .cred_mgmt(CredSubCommand::EnumerateRPsGetNextRP, false)
+                .await?;
             if let (Some(rp), Some(rp_id_hash)) = (r.rp, r.rp_id_hash) {
                 o.push((rp, rp_id_hash));
             } else {
@@ -215,10 +222,36 @@ where
             }
         }
 
-
         Ok(o)
     }
 
+    async fn enumerate_credentials_by_hash(
+        &mut self,
+        rp_id_hash: SHA256Hash,
+    ) -> Result<Vec<DiscoverableCredential>, WebauthnCError> {
+        let r = self
+            .cred_mgmt(CredSubCommand::EnumerateCredentialsBegin(rp_id_hash), false)
+            .await;
+
+        // If no credentials exist on the authenticator...
+        if matches!(r, Err(WebauthnCError::Ctap(CtapError::Ctap2NoCredentials))) {
+            return Ok(Vec::new());
+        }
+        let r = r?;
+
+        let total_creds = u32::max(1, r.total_credentials.unwrap_or_default());
+        let mut o = Vec::with_capacity(total_creds as usize);
+        o.push(r.discoverable_credential);
+
+        for _ in 1..total_creds {
+            let r = self
+                .cred_mgmt(CredSubCommand::EnumerateCredentialsGetNextCredential, false)
+                .await?;
+            o.push(r.discoverable_credential);
+        }
+
+        Ok(o)
+    }
 
     // async fn check_friendly_name(
     //     &mut self,

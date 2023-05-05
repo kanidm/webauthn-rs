@@ -5,6 +5,7 @@ compile_error!(
 
 extern crate tracing;
 
+use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 
@@ -13,6 +14,17 @@ use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 use webauthn_authenticator_rs::ctap2::{select_one_token, CtapAuthenticator};
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::ui::Cli;
+use webauthn_authenticator_rs::SHA256Hash;
+
+/// Parses a Base-16 encoded string.
+///
+/// This function is intended for use as a `clap` `value_parser`.
+pub fn parse_hex<T>(i: &str) -> Result<T, FromHexError>
+where
+    T: FromHex<Error = FromHexError>,
+{
+    FromHex::from_hex(i)
+}
 
 #[derive(Debug, Args)]
 pub struct SetPinOpt {
@@ -74,6 +86,19 @@ pub struct RemoveFingerprintOpt {
     pub id: Vec<String>,
 }
 
+#[derive(Debug, Args)]
+#[clap(group(
+    ArgGroup::new("rp")
+        .required(true)
+        .args(&["rpid", "hash"])
+))]
+pub struct ListCredentialsOpt {
+    #[clap(long, value_name = "RPID")]
+    pub rpid: Option<String>,
+    #[clap(long, value_parser = parse_hex::<SHA256Hash>, value_name = "HASH")]
+    pub hash: Option<SHA256Hash>,
+}
+
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
@@ -112,6 +137,7 @@ pub enum Opt {
     ChangePin(ChangePinOpt),
     GetCredentialMetadata,
     ListRps,
+    ListCredentials(ListCredentialsOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -403,7 +429,39 @@ async fn main() {
                 .expect("Error enumerating RPs");
             println!("{} RP(s):", rps.len());
             for (rp, hash) in rps.iter() {
-                println!("* RP: {rp:?}, hash: {hash:?}");
+                println!("* {}: {rp:?}", hex::encode(hash));
+            }
+        }
+
+        Opt::ListCredentials(o) => {
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter(|t| t.supports_credential_management())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting credential management"
+            );
+
+            let rp_id_hash = if let Some(rpid) = o.rpid {
+                todo!()
+            } else if let Some(hash) = o.hash {
+                hash
+            } else {
+                unreachable!()
+            };
+
+            let creds = tokens[0]
+                .credential_management()
+                .unwrap()
+                .enumerate_credentials_by_hash(rp_id_hash)
+                .await
+                .expect("Error listing credentials");
+
+            println!("{} credential(s):", creds.len());
+            for cred in creds.iter() {
+                println!("* {cred:?}");
             }
         }
     }
