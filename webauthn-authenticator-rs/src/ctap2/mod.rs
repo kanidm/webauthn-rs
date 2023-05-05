@@ -258,7 +258,7 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
             _ => false,
         }
     }
-    
+
     #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     pub fn credential_management(&mut self) -> Option<&mut dyn CredentialManagementAuthenticator> {
         match self {

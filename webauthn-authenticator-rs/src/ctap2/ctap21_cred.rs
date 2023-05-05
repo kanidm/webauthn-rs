@@ -200,17 +200,31 @@ where
             .cred_mgmt(CredSubCommand::EnumerateRPsBegin, false)
             .await;
 
-        // If no credentials exist on the authenticator...
+        // "If no discoverable credentials exist on the authenticator, return
+        // CTAP2_ERR_NO_CREDENTIALS."
         if matches!(r, Err(WebauthnCError::Ctap(CtapError::Ctap2NoCredentials))) {
             return Ok(Vec::new());
         }
         let r = r?;
 
-        let total_rps = u32::max(1, r.total_rps.unwrap_or_default());
+        // Feitian doesn't return an error when there are zero keys, and instead
+        // sends an empty CredentialManagementResponse (ie: no fields set), so
+        // we can't require that total_rps is set.
+        //
+        // Token2 and Yubikey also doesn't return an error when there are zero
+        // keys, but at least sets `total_rps = 0`.
+        let total_rps = r.total_rps.unwrap_or_default();
         let mut o = Vec::with_capacity(total_rps as usize);
+
+        if total_rps == 0 {
+            return Ok(o);
+        }
+
         if let (Some(rp), Some(rp_id_hash)) = (r.rp, r.rp_id_hash) {
             o.push((rp, rp_id_hash));
-        }
+        } else {
+            return Err(WebauthnCError::MissingRequiredField);
+        };
 
         for _ in 1..total_rps {
             let r = self
@@ -234,14 +248,20 @@ where
             .cred_mgmt(CredSubCommand::EnumerateCredentialsBegin(rp_id_hash), false)
             .await;
 
-        // If no credentials exist on the authenticator...
+        // "If no discoverable credentials for this RP ID hash exist on this
+        // authenticator, return CTAP2_ERR_NO_CREDENTIALS."
         if matches!(r, Err(WebauthnCError::Ctap(CtapError::Ctap2NoCredentials))) {
             return Ok(Vec::new());
         }
         let r = r?;
 
-        let total_creds = u32::max(1, r.total_credentials.unwrap_or_default());
+        let total_creds = r.total_credentials.unwrap_or_default();
         let mut o = Vec::with_capacity(total_creds as usize);
+
+        if total_creds == 0 {
+            return Ok(o);
+        }
+
         o.push(r.discoverable_credential);
 
         for _ in 1..total_creds {
@@ -253,197 +273,4 @@ where
 
         Ok(o)
     }
-
-    // async fn check_friendly_name(
-    //     &mut self,
-    //     friendly_name: String,
-    // ) -> Result<String, WebauthnCError> {
-    //     let ui = self.ui_callback;
-    //     let r = self
-    //         .token
-    //         .transmit(R::GET_FINGERPRINT_SENSOR_INFO, ui)
-    //         .await?;
-
-    //     // Normalise into Normal Form C
-    //     let friendly_name = friendly_name.nfc().collect::<String>();
-    //     if friendly_name.as_bytes().len() > r.get_max_template_friendly_name() {
-    //         return Err(WebauthnCError::FriendlyNameTooLong);
-    //     }
-
-    //     Ok(friendly_name)
-    // }
-
-    // async fn get_fingerprint_sensor_info(
-    //     &mut self,
-    // ) -> Result<BioEnrollmentResponse, WebauthnCError> {
-    //     self.check_fingerprint_support().await?;
-    //     let ui = self.ui_callback;
-    //     self.token
-    //         .transmit(R::GET_FINGERPRINT_SENSOR_INFO, ui)
-    //         .await
-    // }
-
-    // async fn enroll_fingerprint(
-    //     &mut self,
-    //     timeout: Duration,
-    //     friendly_name: Option<String>,
-    // ) -> Result<Vec<u8>, WebauthnCError> {
-    //     self.check_fingerprint_support().await?;
-    //     let friendly_name = match friendly_name {
-    //         Some(n) => Some(self.check_friendly_name(n).await?),
-    //         None => None,
-    //     };
-
-    //     let session = self
-    //         .get_pin_uv_auth_session(
-    //             Permissions::BIO_ENROLLMENT,
-    //             None,
-    //             UserVerificationPolicy::Required,
-    //         )
-    //         .await?;
-
-    //     let mut r = self
-    //         .bio_with_session(BioSubCommand::FingerprintEnrollBegin(timeout), &session)
-    //         .await?;
-
-    //     trace!("began enrollment: {:?}", r);
-    //     let id = r.template_id.ok_or(WebauthnCError::MissingRequiredField)?;
-
-    //     let mut remaining_samples = r
-    //         .remaining_samples
-    //         .ok_or(WebauthnCError::MissingRequiredField)?;
-    //     while remaining_samples > 0 {
-    //         self.ui_callback
-    //             .fingerprint_enrollment_feedback(remaining_samples, r.last_enroll_sample_status);
-
-    //         r = self
-    //             .bio_with_session(
-    //                 BioSubCommand::FingerprintEnrollCaptureNextSample(id.clone(), timeout),
-    //                 &session,
-    //             )
-    //             .await?;
-
-    //         remaining_samples = r
-    //             .remaining_samples
-    //             .ok_or(WebauthnCError::MissingRequiredField)?;
-    //     }
-
-    //     // Now it's enrolled, give it a name.
-    //     if friendly_name.is_some() {
-    //         self.bio_with_session(
-    //             BioSubCommand::FingerprintSetFriendlyName(TemplateInfo {
-    //                 id: id.clone(),
-    //                 friendly_name,
-    //             }),
-    //             &session,
-    //         )
-    //         .await?;
-    //     }
-
-    //     // This may have been the first enrolled fingerprint.
-    //     self.refresh_info().await?;
-
-    //     Ok(id)
-    // }
-
-    // async fn list_fingerprints(&mut self) -> Result<Vec<TemplateInfo>, WebauthnCError> {
-    //     self.check_fingerprint_support().await?;
-    //     if !self.configured_biometrics() {
-    //         // Fingerprint authentication is supported, but not configured, ie:
-    //         // there are no enrolled fingerprints and don't need to ask.
-    //         //
-    //         // When there is no PIN or UV auth available, then `bio()` would
-    //         // throw UserVerificationRequired; so we short-cut this to be nice.
-    //         trace!("Fingerprint authentication is supported but not configured, ie: there no enrolled fingerprints, skipping request.");
-    //         return Ok(vec![]);
-    //     }
-
-    //     // works without authentication if alwaysUv = false?
-    //     let templates = self
-    //         .bio(BioSubCommand::FingerprintEnumerateEnrollments)
-    //         .await;
-
-    //     match templates {
-    //         Ok(templates) => Ok(templates.template_infos),
-    //         Err(e) => {
-    //             if let WebauthnCError::Ctap(e) = &e {
-    //                 if matches!(e, CtapError::Ctap2InvalidOption) {
-    //                     // "If there are no enrollments existing on
-    //                     // authenticator, it returns CTAP2_ERR_INVALID_OPTION."
-    //                     // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enumerateEnrollments
-    //                     return Ok(vec![]);
-    //                 }
-    //             }
-
-    //             Err(e)
-    //         }
-    //     }
-    // }
-
-    // async fn rename_fingerprint(
-    //     &mut self,
-    //     id: Vec<u8>,
-    //     friendly_name: String,
-    // ) -> Result<(), WebauthnCError> {
-    //     self.check_fingerprint_support().await?;
-    //     if !self.configured_biometrics() {
-    //         // "If there are no enrollments existing on authenticator for the
-    //         // passed templateId, it returns CTAP2_ERR_INVALID_OPTION."
-    //         trace!("Fingerprint authentication is supported but not configured, ie: there no enrolled fingerprints, skipping request.");
-    //         return Err(CtapError::Ctap2InvalidOption.into());
-    //     }
-
-    //     let friendly_name = Some(self.check_friendly_name(friendly_name).await?);
-    //     self.bio(BioSubCommand::FingerprintSetFriendlyName(TemplateInfo {
-    //         id,
-    //         friendly_name,
-    //     }))
-    //     .await?;
-    //     Ok(())
-    // }
-
-    // async fn remove_fingerprint(&mut self, id: Vec<u8>) -> Result<(), WebauthnCError> {
-    //     self.check_fingerprint_support().await?;
-    //     if !self.configured_biometrics() {
-    //         // "If there are no enrollments existing on authenticator for the
-    //         // passed templateId, it returns CTAP2_ERR_INVALID_OPTION."
-    //         trace!("Fingerprint authentication is supported but not configured, ie: there no enrolled fingerprints, skipping request.");
-    //         return Err(CtapError::Ctap2InvalidOption.into());
-    //     }
-
-    //     self.bio(BioSubCommand::FingerprintRemoveEnrollment(id))
-    //         .await?;
-
-    //     // The previous command could have removed the last enrolled
-    //     // fingerprint.
-    //     self.refresh_info().await?;
-    //     Ok(())
-    // }
-
-    // async fn remove_fingerprints(&mut self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError> {
-    //     self.check_fingerprint_support().await?;
-    //     if !self.configured_biometrics() {
-    //         // "If there are no enrollments existing on authenticator for the
-    //         // passed templateId, it returns CTAP2_ERR_INVALID_OPTION."
-    //         trace!("Fingerprint authentication is supported but not configured, ie: there no enrolled fingerprints, skipping request.");
-    //         return Err(CtapError::Ctap2InvalidOption.into());
-    //     }
-
-    //     let session = self
-    //         .get_pin_uv_auth_session(
-    //             Permissions::BIO_ENROLLMENT,
-    //             None,
-    //             UserVerificationPolicy::Required,
-    //         )
-    //         .await?;
-
-    //     for id in ids {
-    //         self.bio_with_session(BioSubCommand::FingerprintRemoveEnrollment(id), &session)
-    //             .await?;
-    //     }
-
-    //     // The previous command could have removed all enrolled fingerprints.
-    //     self.refresh_info().await?;
-    //     Ok(())
-    // }
 }

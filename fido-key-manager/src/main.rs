@@ -444,7 +444,7 @@ async fn main() {
                 "Expected exactly one authenticator supporting credential management"
             );
 
-            let rp_id_hash = if let Some(rpid) = o.rpid {
+            let rp_id_hash = if let Some(_rpid) = o.rpid {
                 todo!()
             } else if let Some(hash) = o.hash {
                 hash
