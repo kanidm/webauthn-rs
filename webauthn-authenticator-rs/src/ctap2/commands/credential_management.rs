@@ -272,6 +272,16 @@ pub struct PublicKeyCredentialDescriptorCM {
     pub transports: Vec<AuthenticatorTransport>,
 }
 
+impl From<Vec<u8>> for PublicKeyCredentialDescriptorCM {
+    fn from(id: Vec<u8>) -> Self {
+        Self {
+            type_: "public-key".to_string(),
+            id,
+            transports: Vec::new(),
+        }
+    }
+}
+
 /// `authenticatorCredentialManagement` response type.
 ///
 /// References:

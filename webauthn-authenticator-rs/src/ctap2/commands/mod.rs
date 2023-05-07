@@ -198,6 +198,18 @@ fn value_to_vec_u32(v: Value, loc: &str) -> Option<Vec<u32>> {
     })
 }
 
+#[cfg(feature = "ctap2-management")]
+pub(crate) fn value_to_u8(v: &Value, loc: &str) -> Option<u8> {
+    if let Value::Integer(i) = v {
+        u8::try_from(*i)
+            .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
+            .ok()
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
+}
+
 pub(crate) fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {
     if let Value::Integer(i) = v {
         u32::try_from(*i)

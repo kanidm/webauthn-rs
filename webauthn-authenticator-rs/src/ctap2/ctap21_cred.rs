@@ -15,7 +15,7 @@ use crate::{
     ctap2::{
         commands::{
             CredSubCommand, CredentialManagementRequestTrait, CredentialManagementResponse,
-            DiscoverableCredential, Permissions, RelyingPartyCM,
+            DiscoverableCredential, Permissions, PublicKeyCredentialDescriptorCM, RelyingPartyCM,
         },
         ctap20::AuthSession,
         Ctap20Authenticator,
@@ -46,7 +46,6 @@ where
     async fn cred_mgmt(
         &mut self,
         sub_command: CredSubCommand,
-        needs_refresh: bool,
     ) -> Result<CredentialManagementResponse, WebauthnCError>;
 
     /// Send a [CredSubCommand] using a provided `pin_uv_auth_token` session.
@@ -71,7 +70,6 @@ where
     async fn cred_mgmt(
         &mut self,
         sub_command: CredSubCommand,
-        needs_refresh: bool,
     ) -> Result<CredentialManagementResponse, WebauthnCError> {
         let (pin_uv_auth_proto, pin_uv_auth_param) = if sub_command.needs_auth() {
             self.get_pin_uv_auth_token(
@@ -94,9 +92,7 @@ where
                 ui,
             )
             .await?;
-        if needs_refresh {
-            self.refresh_info().await?;
-        }
+
         Ok(r)
     }
 
@@ -137,10 +133,10 @@ where
 /// [Ctap21PreAuthenticator]: super::Ctap21PreAuthenticator
 #[async_trait]
 pub trait CredentialManagementAuthenticator {
-    /// Checks that the device supports fingerprints.
+    /// Checks that the device supports credential management.
     ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support
-    /// fingerprint authentication.
+    /// credential management.
     fn check_credential_management_support(&mut self) -> Result<(), WebauthnCError>;
 
     async fn get_credentials_metadata(&mut self) -> Result<(u32, u32), WebauthnCError>;
@@ -151,6 +147,18 @@ pub trait CredentialManagementAuthenticator {
         &mut self,
         rp_id_hash: SHA256Hash,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError>;
+
+    /// Deletes a credential from an authenticator.
+    ///
+    /// ## Note
+    ///
+    /// This function does not provide a "permissions RP ID" with the request,
+    /// as it only works correctly with authenticators supporting the
+    /// `pinUvAuthToken` feature.
+    async fn delete_credential(
+        &mut self,
+        credential_id: PublicKeyCredentialDescriptorCM,
+    ) -> Result<(), WebauthnCError>;
 }
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
@@ -183,9 +191,7 @@ where
     async fn get_credentials_metadata(&mut self) -> Result<(u32, u32), WebauthnCError> {
         self.check_credential_management_support()?;
 
-        let r = self
-            .cred_mgmt(CredSubCommand::GetCredsMetadata, false)
-            .await?;
+        let r = self.cred_mgmt(CredSubCommand::GetCredsMetadata).await?;
 
         Ok((
             r.existing_resident_credentials_count.unwrap_or_default(),
@@ -196,9 +202,7 @@ where
 
     async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingPartyCM, SHA256Hash)>, WebauthnCError> {
         self.check_credential_management_support()?;
-        let r = self
-            .cred_mgmt(CredSubCommand::EnumerateRPsBegin, false)
-            .await;
+        let r = self.cred_mgmt(CredSubCommand::EnumerateRPsBegin).await;
 
         // "If no discoverable credentials exist on the authenticator, return
         // CTAP2_ERR_NO_CREDENTIALS."
@@ -228,7 +232,7 @@ where
 
         for _ in 1..total_rps {
             let r = self
-                .cred_mgmt(CredSubCommand::EnumerateRPsGetNextRP, false)
+                .cred_mgmt(CredSubCommand::EnumerateRPsGetNextRP)
                 .await?;
             if let (Some(rp), Some(rp_id_hash)) = (r.rp, r.rp_id_hash) {
                 o.push((rp, rp_id_hash));
@@ -244,8 +248,10 @@ where
         &mut self,
         rp_id_hash: SHA256Hash,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError> {
+        self.check_credential_management_support()?;
+
         let r = self
-            .cred_mgmt(CredSubCommand::EnumerateCredentialsBegin(rp_id_hash), false)
+            .cred_mgmt(CredSubCommand::EnumerateCredentialsBegin(rp_id_hash))
             .await;
 
         // "If no discoverable credentials for this RP ID hash exist on this
@@ -266,11 +272,22 @@ where
 
         for _ in 1..total_creds {
             let r = self
-                .cred_mgmt(CredSubCommand::EnumerateCredentialsGetNextCredential, false)
+                .cred_mgmt(CredSubCommand::EnumerateCredentialsGetNextCredential)
                 .await?;
             o.push(r.discoverable_credential);
         }
 
         Ok(o)
+    }
+
+    async fn delete_credential(
+        &mut self,
+        credential_id: PublicKeyCredentialDescriptorCM,
+    ) -> Result<(), WebauthnCError> {
+        self.check_credential_management_support()?;
+
+        self.cred_mgmt(CredSubCommand::DeleteCredential(credential_id))
+            .await
+            .map(|_| ())
     }
 }

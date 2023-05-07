@@ -102,6 +102,14 @@ pub struct ListCredentialsOpt {
     pub hash: Option<SHA256Hash>,
 }
 
+#[derive(Debug, Args)]
+pub struct DeleteCredentialOpt {
+    /// Credential ID to delete, encoded in base16
+    /// (eg: "a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce1947")
+    #[clap(required = true, action = ArgAction::Set, value_parser = parse_hex::<Vec<u8>>, value_name = "HASH")]
+    pub id: std::vec::Vec<u8>,
+}
+
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
@@ -143,6 +151,7 @@ pub enum Opt {
     /// option is specified, shows a list of all RPs with discoverable
     /// credentials on this token.
     ListCredentials(ListCredentialsOpt),
+    DeleteCredential(DeleteCredentialOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -504,6 +513,26 @@ async fn main() {
                     println!("  Large blob key: {}", hex::encode(key));
                 }
             }
+        }
+
+        Opt::DeleteCredential(o) => {
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter(|t| t.supports_credential_management())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting credential management"
+            );
+
+            println!("Deleting credential {}...", hex::encode(&o.id));
+            tokens[0]
+                .credential_management()
+                .unwrap()
+                .delete_credential(o.id.into())
+                .await
+                .expect("Error deleting credential");
         }
     }
 }
