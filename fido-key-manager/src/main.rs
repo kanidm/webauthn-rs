@@ -477,7 +477,7 @@ async fn main() {
 
             let cm = tokens[0].credential_management().unwrap();
 
-            let rp_id_hash = if let Some(rpid) = o.rpid {
+            let rp_id_hash = if let Some(rpid) = &o.rpid {
                 let mut h = Sha256::new();
                 h.update(rpid.as_bytes());
                 h.finish()
@@ -485,7 +485,7 @@ async fn main() {
                 hash
             } else {
                 let rps = cm.enumerate_rps().await.expect("Error enumerating RPs");
-                println!("{} RP(s):", rps.len());
+                println!("{} RP{}:", rps.len(), if rps.len() != 1 { "s" } else { "" });
                 for rp in rps {
                     print!(
                         "* {}: {}",
@@ -493,7 +493,7 @@ async fn main() {
                         rp.id.unwrap_or_default()
                     );
                     if let Some(name) = &rp.name {
-                        println!(" ({})", name);
+                        println!(" {:?}", name);
                     } else {
                         println!();
                     }
@@ -506,11 +506,19 @@ async fn main() {
                 .await
                 .expect("Error listing credentials");
 
-            println!(
-                "{} credential(s) for {}:",
+            print!(
+                "{} credential{} for ",
                 creds.len(),
-                hex::encode(rp_id_hash)
+                if creds.len() != 1 { "s" } else { "" }
             );
+
+            if let Some(rpid) = o.rpid {
+                println!("{rpid} ({}):", hex::encode(rp_id_hash));
+            } else {
+                println!("{}:", hex::encode(rp_id_hash));
+            }
+
+            let mut pii_warn = false;
             for (i, cred) in creds.iter().enumerate() {
                 println!("Credential #{}:", i + 1);
                 if let Some(cred_id) = &cred.credential_id {
@@ -519,11 +527,41 @@ async fn main() {
                 if let Some(user) = &cred.user {
                     println!("  User info:");
                     println!("    User ID: {}", hex::encode(&user.id));
+                    if let Ok(s) = std::str::from_utf8(&user.id) {
+                        // User IDs are supposed to be opaque byte sequences,
+                        // and NOT contain personally identifying information.
+                        // The fact we can decode it as UTF-8 is suspicious...
+                        println!("      As UTF-8: {s:?}");
+
+                        // Explicitly flag the issue if it matches one of the
+                        // other fields, because it means the RP has done
+                        // something extremely bad.
+                        if user
+                            .name
+                            .as_ref()
+                            .map(|name| name.eq_ignore_ascii_case(s))
+                            .unwrap_or_default()
+                        {
+                            println!("      User ID = name, which is PII!");
+                            pii_warn = true;
+                        }
+
+                        if user
+                            .display_name
+                            .as_ref()
+                            .map(|name| name.eq_ignore_ascii_case(s))
+                            .unwrap_or_default()
+                        {
+                            println!("      User ID = display name, which is PII!");
+                            pii_warn = true;
+                        }
+                    }
+
                     if let Some(name) = &user.name {
-                        println!("    Name: {}", name);
+                        println!("    Name: {:?}", name);
                     }
                     if let Some(display_name) = &user.display_name {
-                        println!("    Display name: {}", display_name);
+                        println!("    Display name: {:?}", display_name);
                     }
                 }
 
@@ -552,6 +590,35 @@ async fn main() {
                 if let Some(key) = &cred.large_blob_key {
                     println!("  Large blob key: {}", hex::encode(key));
                 }
+            }
+
+            if pii_warn {
+                let p = if creds.len() == 1 {
+                    "this credential"
+                } else {
+                    "these credentials"
+                };
+                println!();
+                println!(
+                    "The relying party which created {p} has included PII \
+                    (personally-identifying information) in the user ID, which \
+                    is *explicitly forbidden* by the WebAuthn specification \
+                    for privacy reasons."
+                );
+                println!();
+                println!(
+                    "Please inform the relying party that they have a privacy \
+                    bug they need to fix."
+                );
+                println!();
+                println!(
+                    "More information can be found in these sections of the \
+                    WebAuthn specification:"
+                );
+                println!(" * https://w3c.github.io/webauthn/#dom-publickeycredentialuserentity-id");
+                println!(" * https://w3c.github.io/webauthn/#sctn-user-handle-privacy");
+                println!();
+                println!("Thank you!");
             }
         }
 
