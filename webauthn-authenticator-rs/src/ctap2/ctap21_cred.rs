@@ -1,4 +1,4 @@
-//! CTAP 2.1 Credential Management functionality.
+//! CTAP 2.1-PRE / 2.1 Credential Management functionality.
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use std::ops::{Deref, DerefMut};
 
@@ -15,7 +15,8 @@ use crate::{
     ctap2::{
         commands::{
             CredSubCommand, CredentialManagementRequestTrait, CredentialManagementResponse,
-            DiscoverableCredential, Permissions, PublicKeyCredentialDescriptorCM, RelyingPartyCM,
+            CredentialStorageMetadata, DiscoverableCredential, Permissions,
+            PublicKeyCredentialDescriptorCM, RelyingPartyCM,
         },
         ctap20::AuthSession,
         Ctap20Authenticator,
@@ -37,7 +38,7 @@ pub trait CredentialManagementAuthenticatorInfo<U: UiCallback>: Sync + Send {
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 /// Internal support methods for credential management.
 #[async_trait]
-trait CredentialManagementAuthenticatorSupport<T, U, R>
+pub(super) trait CredentialManagementAuthenticatorSupport<T, U, R>
 where
     T: CredentialManagementAuthenticatorInfo<U, RequestType = R>,
     U: UiCallback,
@@ -71,18 +72,15 @@ where
         &mut self,
         sub_command: CredSubCommand,
     ) -> Result<CredentialManagementResponse, WebauthnCError> {
-        let (pin_uv_auth_proto, pin_uv_auth_param) = if sub_command.needs_auth() {
-            self.get_pin_uv_auth_token(
+        let (pin_uv_auth_proto, pin_uv_auth_param) = self
+            .get_pin_uv_auth_token(
                 sub_command.prf().as_slice(),
                 Permissions::CREDENTIAL_MANAGEMENT,
                 None,
                 UserVerificationPolicy::Required,
             )
             .await?
-            .into_pin_uv_params()
-        } else {
-            (None, None)
-        };
+            .into_pin_uv_params();
 
         let ui = self.ui_callback;
         let r = self
@@ -103,8 +101,8 @@ where
     ) -> Result<CredentialManagementResponse, WebauthnCError> {
         let client_data_hash = sub_command.prf();
 
-        let (pin_uv_protocol, pin_uv_auth_param) = match (auth_session, sub_command.needs_auth()) {
-            (AuthSession::InterfaceToken(iface, pin_token), true) => {
+        let (pin_uv_protocol, pin_uv_auth_param) = match auth_session {
+            AuthSession::InterfaceToken(iface, pin_token) => {
                 let mut pin_uv_auth_param =
                     iface.authenticate(pin_token, client_data_hash.as_slice())?;
                 pin_uv_auth_param.truncate(16);
@@ -126,11 +124,18 @@ where
 }
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
-/// Biometric management commands for [Ctap21Authenticator][] and
-/// [Ctap21PreAuthenticator][].
+/// [CTAP 2.1] and [2.1-PRE] discoverable credential management commands.
 ///
-/// [Ctap21Authenticator]: super::Ctap21Authenticator
-/// [Ctap21PreAuthenticator]: super::Ctap21PreAuthenticator
+/// All methods return [`WebauthnCError::NotSupported`] if the authenticator
+/// does not support credential management.
+///
+/// ## See also
+///
+/// * [`Ctap21Authenticator::update_credential_user()`][update]
+///
+/// [CTAP 2.1]: super::Ctap21Authenticator
+/// [2.1-PRE]: super::Ctap21PreAuthenticator
+/// [update]: super::Ctap21Authenticator::update_credential_user
 #[async_trait]
 pub trait CredentialManagementAuthenticator {
     /// Checks that the device supports credential management.
@@ -139,22 +144,41 @@ pub trait CredentialManagementAuthenticator {
     /// credential management.
     fn check_credential_management_support(&mut self) -> Result<(), WebauthnCError>;
 
-    async fn get_credentials_metadata(&mut self) -> Result<(u32, u32), WebauthnCError>;
+    /// Gets metadata about the authenticator's discoverable credential storage.
+    ///
+    /// See [CredentialStorageMetadata] for more details.
+    async fn get_credentials_metadata(
+        &mut self,
+    ) -> Result<CredentialStorageMetadata, WebauthnCError>;
 
-    async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingPartyCM, SHA256Hash)>, WebauthnCError>;
+    /// Enumerates a list of all relying parties with discoverable credentials
+    /// stored on this authenticator.
+    async fn enumerate_rps(&mut self) -> Result<Vec<RelyingPartyCM>, WebauthnCError>;
 
+    /// Enumerates all discoverable credentials on the authenticator by SHA-256
+    /// hash of the relying party ID.
+    ///
+    /// ## Note
+    ///
+    /// This does not provide a "permissions RP ID" with the request, as it only
+    /// works correctly with authenticators supporting the `pinUvAuthToken`
+    /// feature.
     async fn enumerate_credentials_by_hash(
         &mut self,
         rp_id_hash: SHA256Hash,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError>;
 
-    /// Deletes a credential from an authenticator.
+    /// Deletes a discoverable credential from the authenticator.
     ///
     /// ## Note
     ///
-    /// This function does not provide a "permissions RP ID" with the request,
-    /// as it only works correctly with authenticators supporting the
-    /// `pinUvAuthToken` feature.
+    /// This does not provide a "permissions RP ID" with the request, as it only
+    /// works correctly with authenticators supporting the `pinUvAuthToken`
+    /// feature.
+    ///
+    /// ## Warning
+    ///
+    /// This does not garbage-collect associated large blob storage.
     async fn delete_credential(
         &mut self,
         credential_id: PublicKeyCredentialDescriptorCM,
@@ -188,19 +212,18 @@ where
         Ok(())
     }
 
-    async fn get_credentials_metadata(&mut self) -> Result<(u32, u32), WebauthnCError> {
+    async fn get_credentials_metadata(
+        &mut self,
+    ) -> Result<CredentialStorageMetadata, WebauthnCError> {
         self.check_credential_management_support()?;
 
         let r = self.cred_mgmt(CredSubCommand::GetCredsMetadata).await?;
 
-        Ok((
-            r.existing_resident_credentials_count.unwrap_or_default(),
-            r.max_possible_remaining_resident_credentials_count
-                .unwrap_or_default(),
-        ))
+        r.storage_metadata
+            .ok_or(WebauthnCError::MissingRequiredField)
     }
 
-    async fn enumerate_rps(&mut self) -> Result<Vec<(RelyingPartyCM, SHA256Hash)>, WebauthnCError> {
+    async fn enumerate_rps(&mut self) -> Result<Vec<RelyingPartyCM>, WebauthnCError> {
         self.check_credential_management_support()?;
         let r = self.cred_mgmt(CredSubCommand::EnumerateRPsBegin).await;
 
@@ -224,18 +247,17 @@ where
             return Ok(o);
         }
 
-        if let (Some(rp), Some(rp_id_hash)) = (r.rp, r.rp_id_hash) {
-            o.push((rp, rp_id_hash));
+        if let Some(rp) = r.rp {
+            o.push(rp);
         } else {
             return Err(WebauthnCError::MissingRequiredField);
         };
 
+        let ui = self.ui_callback;
         for _ in 1..total_rps {
-            let r = self
-                .cred_mgmt(CredSubCommand::EnumerateRPsGetNextRP)
-                .await?;
-            if let (Some(rp), Some(rp_id_hash)) = (r.rp, r.rp_id_hash) {
-                o.push((rp, rp_id_hash));
+            let r = self.token.transmit(R::ENUMERATE_RPS_GET_NEXT, ui).await?;
+            if let Some(rp) = r.rp {
+                o.push(rp);
             } else {
                 break;
             }
@@ -270,9 +292,11 @@ where
 
         o.push(r.discoverable_credential);
 
+        let ui = self.ui_callback;
         for _ in 1..total_creds {
             let r = self
-                .cred_mgmt(CredSubCommand::EnumerateCredentialsGetNextCredential)
+                .token
+                .transmit(R::ENUMERATE_CREDENTIALS_GET_NEXT, ui)
                 .await?;
             o.push(r.discoverable_credential);
         }

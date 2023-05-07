@@ -13,9 +13,14 @@ use super::{
 };
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
-use super::commands::{
-    BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, CredentialManagementRequest,
-    Permissions, SetMinPinLengthParams,
+use super::{
+    commands::{
+        BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, CredSubCommand,
+        CredentialManagementRequest, Permissions, PublicKeyCredentialDescriptorCM,
+        SetMinPinLengthParams, UserCM,
+    },
+    ctap21_cred::CredentialManagementAuthenticatorSupport,
+    CredentialManagementAuthenticator,
 };
 
 /// CTAP 2.1 protocol implementation.
@@ -179,6 +184,48 @@ impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
         self.config(ConfigSubCommand::EnableEnterpriseAttestation, false)
             .await
     }
+
+    /// Returns `true` if the authenticator supports
+    /// [CTAP 2.1 credential management][0].
+    ///
+    /// ## See also
+    ///
+    /// * [`CredentialManagementAuthenticator`][]
+    /// * [`update_credential_user`][Self::update_credential_user]
+    ///
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorCredentialManagement
+    #[inline]
+    pub fn supports_ctap21_credential_management(&self) -> bool {
+        self.info.ctap21_credential_management()
+    }
+
+    /// Updates user information for a discoverable credential.
+    ///
+    /// This is only available on authenticators which support
+    /// [CTAP 2.1 credential management][Self::supports_ctap21_credential_management],
+    /// otherwise it returns [`WebauthnCError::NotSupported`].
+    ///
+    /// ## Note
+    ///
+    /// This function does not provide a "permissions RP ID" with the request,
+    /// as it only works correctly with authenticators supporting the
+    /// `pinUvAuthToken` feature.
+    ///
+    /// ## See also
+    ///
+    /// * [`CredentialManagementAuthenticator`] trait
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+    pub async fn update_credential_user(
+        &mut self,
+        credential_id: PublicKeyCredentialDescriptorCM,
+        user: UserCM,
+    ) -> Result<(), WebauthnCError> {
+        self.check_credential_management_support()?;
+
+        self.cred_mgmt(CredSubCommand::UpdateUserInformation(credential_id, user))
+            .await
+            .map(|_| ())
+    }
 }
 
 impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U> for Ctap21Authenticator<'a, T, U> {
@@ -200,6 +247,6 @@ impl<'a, T: Token, U: UiCallback> CredentialManagementAuthenticatorInfo<U>
 
     #[inline]
     fn supports_credential_management(&self) -> bool {
-        self.info.ctap21_credential_management()
+        self.supports_ctap21_credential_management()
     }
 }

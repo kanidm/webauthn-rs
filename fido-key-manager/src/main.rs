@@ -8,6 +8,7 @@ extern crate tracing;
 use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
+use webauthn_authenticator_rs::ctap2::commands::UserCM;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 use openssl::sha::Sha256;
@@ -91,6 +92,9 @@ pub struct RemoveFingerprintOpt {
 }
 
 #[derive(Debug, Args)]
+#[clap(after_help = "\
+If no filtering options are specified, this command will show a list of all RPs
+with discoverable credentials.")]
 pub struct ListCredentialsOpt {
     /// List credentials for a relying party ID (eg: "example.com")
     #[clap(long, value_name = "RPID", conflicts_with = "hash")]
@@ -104,10 +108,40 @@ pub struct ListCredentialsOpt {
 
 #[derive(Debug, Args)]
 pub struct DeleteCredentialOpt {
-    /// Credential ID to delete, encoded in base16
-    /// (eg: "a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce1947")
+    /// Credential ID to delete.
     #[clap(required = true, action = ArgAction::Set, value_parser = parse_hex::<Vec<u8>>, value_name = "HASH")]
+    // Must use full `std::vec::Vec` syntax: https://docs.rs/clap/latest/clap/_derive/index.html#arg-types
     pub id: std::vec::Vec<u8>,
+}
+
+#[derive(Debug, Args)]
+#[clap(group(
+    ArgGroup::new("user_info")
+        .multiple(true)
+        .required(true)
+        .args(&["name", "display_name"])))]
+pub struct UpdateCredentialUserOpt {
+    /// Credential ID to update.
+    #[clap(required = true, action = ArgAction::Set, value_parser = parse_hex::<Vec<u8>>, value_name = "CRED_ID")]
+    pub credential_id: std::vec::Vec<u8>,
+
+    /// User ID to update.
+    #[clap(required = true, action = ArgAction::Set, value_parser = parse_hex::<Vec<u8>>, value_name = "USER_ID")]
+    pub user_id: std::vec::Vec<u8>,
+
+    /// Human-palatable identifier for the user account, such as a username,
+    /// email address or phone number.
+    ///
+    /// If this option is not specified, the existing name will be removed.
+    #[clap(long)]
+    pub name: Option<String>,
+
+    /// Human-palatable display name for the user account.
+    ///
+    /// If this option is not specified, the existing display name will be
+    /// removed.
+    #[clap(long, value_name = "NAME")]
+    pub display_name: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -146,12 +180,14 @@ pub enum Opt {
     SetPin(SetPinOpt),
     /// Changes a PIN on a FIDO token which already has a PIN set.
     ChangePin(ChangePinOpt),
+    /// Gets a token's discoverable credential storage metadata.
     GetCredentialMetadata,
-    /// List all discoverable credentials on this token. If neither filtering
-    /// option is specified, shows a list of all RPs with discoverable
-    /// credentials on this token.
+    /// Lists all discoverable credentials on this token.
     ListCredentials(ListCredentialsOpt),
+    /// Deletes a discoverable credential on this token.
     DeleteCredential(DeleteCredentialOpt),
+    /// Updates user information for a discoverable credential on this token.
+    UpdateCredentialUser(UpdateCredentialUserOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -415,13 +451,17 @@ async fn main() {
                 "Expected exactly one authenticator supporting credential management"
             );
 
-            let (creds, remain) = tokens[0]
+            let metadata = tokens[0]
                 .credential_management()
                 .unwrap()
                 .get_credentials_metadata()
                 .await
                 .expect("Error getting credential metadata");
-            println!("{creds} discoverable credential(s), {remain} maximum slot(s) free");
+            println!(
+                "{} discoverable credential(s), {} maximum slot(s) free",
+                metadata.existing_resident_credentials_count,
+                metadata.max_possible_remaining_resident_credentials_count,
+            );
         }
 
         Opt::ListCredentials(o) => {
@@ -440,15 +480,18 @@ async fn main() {
             let rp_id_hash = if let Some(rpid) = o.rpid {
                 let mut h = Sha256::new();
                 h.update(rpid.as_bytes());
-                let h = h.finish();
-                h
+                h.finish()
             } else if let Some(hash) = o.hash {
                 hash
             } else {
                 let rps = cm.enumerate_rps().await.expect("Error enumerating RPs");
                 println!("{} RP(s):", rps.len());
-                for (rp, hash) in rps {
-                    print!("* {}: {}", hex::encode(hash), rp.id.unwrap_or_default());
+                for rp in rps {
+                    print!(
+                        "* {}: {}",
+                        hex::encode(rp.hash.unwrap_or_default()),
+                        rp.id.unwrap_or_default()
+                    );
                     if let Some(name) = &rp.name {
                         println!(" ({})", name);
                     } else {
@@ -492,7 +535,7 @@ async fn main() {
                     match &public_key.key {
                         COSEKeyType::EC_OKP(okp) => {
                             println!("  Octet key pair, curve {:?}", okp.curve);
-                            println!("    X-coordinate: {}", hex::encode(&okp.x));
+                            println!("    X-coordinate: {}", hex::encode(okp.x));
                         }
                         COSEKeyType::EC_EC2(ec) => {
                             println!("  Elliptic curve key, curve {:?}", ec.curve);
@@ -501,7 +544,7 @@ async fn main() {
                         }
                         COSEKeyType::RSA(rsa) => {
                             println!("  RSA modulus: {}", hex::encode(&rsa.n.0));
-                            println!("    Exponent: {}", hex::encode(&rsa.e));
+                            println!("    Exponent: {}", hex::encode(rsa.e));
                         }
                     }
                 }
@@ -533,6 +576,36 @@ async fn main() {
                 .delete_credential(o.id.into())
                 .await
                 .expect("Error deleting credential");
+        }
+
+        Opt::UpdateCredentialUser(o) => {
+            let mut tokens: Vec<_> = tokens
+                .drain(..)
+                .filter_map(|t| match t {
+                    CtapAuthenticator::Fido21(a) => Some(a),
+                    _ => None,
+                })
+                .filter(|t| t.supports_ctap21_credential_management())
+                .collect();
+            assert_eq!(
+                tokens.len(),
+                1,
+                "Expected exactly one authenticator supporting CTAP 2.1 credential management"
+            );
+            let user = UserCM {
+                id: o.user_id,
+                name: o.name,
+                display_name: o.display_name,
+            };
+
+            println!(
+                "Updating user information for credential {}...",
+                hex::encode(&o.credential_id)
+            );
+            tokens[0]
+                .update_credential_user(o.credential_id.into(), user)
+                .await
+                .expect("Error updating credential");
         }
     }
 }

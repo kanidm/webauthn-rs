@@ -52,7 +52,7 @@ Command | Description | Requirements
 `selection` | request user presence on a connected authenticator | CTAP 2.1
 `set-pin` | sets a PIN on an authenticator which doesn't already have a PIN set
 `change-pin` | changes a PIN on an authenticator which has a PIN set
-`factory-reset` | resets an authenticators to factory defaults, deleting all key material
+`factory-reset` | resets an authenticator to factory defaults, deleting all key material
 `enable-enterprise-attestation` | enables the [Enterprise Attestation][] feature | CTAP 2.1
 `set-pin-policy` | set a [Minimum PIN Length][] policy, or force a PIN change before next use | CTAP 2.1
 `toggle-always-uv` | toggles the [Always Require User Verification][] feature | CTAP 2.1
@@ -61,6 +61,10 @@ Command | Description | Requirements
 `enroll-fingerprint` | enroll a new fingerprint | CTAP 2.1-PRE, fingerprint sensor
 `rename-fingerprint` | renames an enrolled fingerprint | CTAP 2.1-PRE, fingerprint sensor
 `remove-fingerprint` | removes an enrolled fingerprint | CTAP 2.1-PRE, fingerprint sensor
+`get-credential-metadata` | gets discoverable credential storage metadata | CTAP 2.1-PRE, credential management
+`list-credentials` | lists discoverable credentials | CTAP 2.1-PRE, credential management
+`delete-credential` | deletes a discoverable credential | CTAP 2.1-PRE, credential management
+`update-credential-user` | updates user information for a discoverable credential | CTAP 2.1, credential management
 
 [Always Require User Verification]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-alwaysUv
 [Enterprise Attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn
