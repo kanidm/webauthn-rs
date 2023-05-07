@@ -84,7 +84,7 @@ pub struct GetInfoResponse {
     /// fields) may be available from
     /// [`CredentialStorageMetadata::max_possible_remaining_resident_credentials_count`][1].
     ///
-    /// [0]: CredentialManagementAuthenticator
+    /// [0]: crate::ctap2::CredentialManagementAuthenticator
     /// [1]: super::CredentialStorageMetadata::max_possible_remaining_resident_credentials_count
     pub remaining_discoverable_credentials: Option<u32>,
 

@@ -9,6 +9,7 @@ mod bio_enrollment;
 mod client_pin;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod config;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod credential_management;
 mod get_assertion;
 mod get_info;

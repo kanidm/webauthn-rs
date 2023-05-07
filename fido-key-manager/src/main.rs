@@ -515,9 +515,6 @@ async fn main() {
                 println!("Credential #{}:", i + 1);
                 if let Some(cred_id) = &cred.credential_id {
                     println!("  ID: {}", hex::encode(&cred_id.id));
-                    if !cred_id.transports.is_empty() {
-                        println!("  Transports: {:?}", cred_id.transports);
-                    }
                 }
                 if let Some(user) = &cred.user {
                     println!("  User info:");

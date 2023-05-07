@@ -10,7 +10,7 @@ use serde_cbor::{
 };
 use std::fmt::Debug;
 use webauthn_rs_core::proto::COSEKey;
-use webauthn_rs_proto::{AuthenticatorTransport, CredentialProtectionPolicy};
+use webauthn_rs_proto::CredentialProtectionPolicy;
 
 use crate::crypto::SHA256Hash;
 
@@ -35,11 +35,15 @@ macro_rules! cred_struct {
         #[serde(into = "BTreeMap<u32, Value>")]
         pub struct $name {
             /// Action being requested
-            sub_command: Option<u8>,
+            sub_command: u8,
+            /// Parameters for the [`sub_command`][Self::sub_command].
+            /// 
+            /// **See also:** [CredSubCommand]
             sub_command_params: Option<BTreeMap<Value, Value>>,
             /// PIN / UV protocol version chosen by the platform
             pin_uv_protocol: Option<u32>,
-            /// Output of calling "Authenticate" on some context specific to [Self::sub_command]
+            /// Output of calling "Authenticate" on some context specific to
+            /// [`sub_command`][Self::sub_command].
             pin_uv_auth_param: Option<Vec<u8>>,
         }
 
@@ -50,14 +54,14 @@ macro_rules! cred_struct {
 
         impl CredentialManagementRequestTrait for $name {
             const ENUMERATE_RPS_GET_NEXT: Self = Self {
-                sub_command: Some(0x03),
+                sub_command: 0x03,
                 sub_command_params: None,
                 pin_uv_protocol: None,
                 pin_uv_auth_param: None,
             };
 
             const ENUMERATE_CREDENTIALS_GET_NEXT: Self = Self {
-                sub_command: Some(0x05),
+                sub_command: 0x05,
                 sub_command_params: None,
                 pin_uv_protocol: None,
                 pin_uv_auth_param: None,
@@ -72,7 +76,7 @@ macro_rules! cred_struct {
                 let sub_command_params = s.into();
 
                 Self {
-                    sub_command: Some(sub_command),
+                    sub_command,
                     sub_command_params,
                     pin_uv_protocol,
                     pin_uv_auth_param,
@@ -90,10 +94,7 @@ macro_rules! cred_struct {
                 } = value;
 
                 let mut keys = BTreeMap::new();
-
-                if let Some(v) = sub_command {
-                    keys.insert(0x01, Value::Integer(v.into()));
-                }
+                keys.insert(0x01, Value::Integer(sub_command.into()));
 
                 if let Some(v) = sub_command_params {
                     keys.insert(0x02, Value::Map(v));
@@ -126,10 +127,14 @@ pub trait CredentialManagementRequestTrait:
 
     /// Command to get the next RP while enumerating RPs with discoverable
     /// credentials on the authenticator.
+    /// 
+    /// **See also:** [`CredSubCommand::EnumerateRPsBegin`]
     const ENUMERATE_RPS_GET_NEXT: Self;
 
     /// Command to get the next credential while enumerating discoverable
     /// credentials on the authenticator for an RP.
+    /// 
+    /// **See also:** [`CredSubCommand::EnumerateCredentialsBegin`]
     const ENUMERATE_CREDENTIALS_GET_NEXT: Self;
 }
 
@@ -261,17 +266,17 @@ pub struct RelyingPartyCM {
     /// The relying party ID, typically a domain name.
     ///
     /// This *should* be included by all authenticators, but the value
-    /// [may be truncated][0].
+    /// [may be truncated][0] (so [`hash`][Self::hash] might not be
+    /// `sha256(id)`).
     ///
     /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#rpid-truncation
     pub id: Option<String>,
 
-    /// The SHA256 hash of the [*untruncated*][0] [relying party ID][Self::id].
+    /// The SHA-256 hash of the [*untruncated*][0] [relying party ID][Self::id].
     ///
     /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#rpid-truncation
     #[serde(skip)]
     pub hash: Option<SHA256Hash>,
-    // Note: "icon" is deprecated:
 }
 
 /// User entity
@@ -308,10 +313,6 @@ pub struct PublicKeyCredentialDescriptorCM {
     /// The credential id.
     #[serde(with = "serde_bytes")]
     pub id: Vec<u8>,
-    /// The allowed transports for this credential. Note this is a hint, and is NOT
-    /// enforced.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub transports: Vec<AuthenticatorTransport>,
 }
 
 impl From<Vec<u8>> for PublicKeyCredentialDescriptorCM {
@@ -319,7 +320,6 @@ impl From<Vec<u8>> for PublicKeyCredentialDescriptorCM {
         Self {
             type_: "public-key".to_string(),
             id,
-            transports: Vec::new(),
         }
     }
 }
