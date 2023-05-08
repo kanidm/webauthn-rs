@@ -247,7 +247,7 @@ impl CredSubCommand {
     ///
     /// See [EnumerateCredentialsBegin][0] for enumerating credentials by the
     /// SHA-256 hash of the relying party ID.
-    /// 
+    ///
     /// [0]: CredSubCommand::EnumerateCredentialsBegin
     #[inline]
     pub fn enumerate_credentials_by_rpid(rp_id: &str) -> Self {
