@@ -220,7 +220,7 @@ impl BluetoothToken {
     /// Sends a single [BtleFrame] to the device, without fragmentation.
     async fn send_one(&self, frame: BtleFrame) -> Result<(), WebauthnCError> {
         let d = frame.as_vec(self.checked_mtu()?)?;
-        trace!(">>> {:02x?}", d);
+        trace!(">>> {}", hex::encode(&d));
         self.device
             .write(
                 self.control_point
@@ -269,7 +269,7 @@ impl Token for BluetoothToken {
             let mut c = Vec::new();
 
             while let Some(data) = stream.next().await {
-                trace!("<<< {:02x?}", data.value);
+                trace!("<<< {}", hex::encode(&data.value));
                 if data.uuid != FIDO_STATUS {
                     trace!("Ignoring notification for unknown UUID: {:?}", data.uuid);
                     continue;

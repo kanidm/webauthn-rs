@@ -35,7 +35,7 @@ cable = ["dep:btleplug", "crypto", "ctap2", "dep:hex", "dep:tokio", "dep:tokio-t
 # server, and most library users should not need this!
 cable-override-tunnel = ["cable"]
 
-ctap2 = ["crypto"]
+ctap2 = ["crypto", "dep:hex"]
 ctap2-management = ["ctap2"]
 nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken

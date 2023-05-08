@@ -275,7 +275,6 @@ impl CableNoise {
     /// `SymmetricState.DecryptAndHash(ciphertext)`
     fn decrypt_and_hash(&mut self, ct: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         let pt = self.cipher_state.decrypt(ct, Some(&self.h))?;
-        trace!("decrypted: {:?}", pt);
         self.mix_hash(ct);
         Ok(pt)
     }

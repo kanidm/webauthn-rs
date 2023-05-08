@@ -180,15 +180,18 @@ impl Tunnel {
         ui.cable_status_update(CableState::Handshaking);
         let (noise, handshake_message) =
             CableNoise::build_initiator(Some(local_identity), psk, None)?;
-        trace!(">>> {:02x?}", &handshake_message);
+        trace!("Sending initial handshake...");
+        trace!(">!> {}", hex::encode(&handshake_message));
         stream.send(Message::Binary(handshake_message)).await?;
 
         // Handshake sent, get response
         ui.cable_status_update(CableState::WaitingForAuthenticatorResponse);
+        trace!("Waiting for handshake response...");
         let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
-        trace!("<<< {:?}", resp);
+
         ui.cable_status_update(CableState::Handshaking);
         let mut crypter = if let Message::Binary(v) = resp {
+            trace!("<!< {}", hex::encode(&v));
             noise.process_response(&v)?
         } else {
             error!("Unexpected websocket response type");
@@ -199,20 +202,18 @@ impl Tunnel {
         ui.cable_status_update(CableState::WaitingForAuthenticatorResponse);
         trace!("Waiting for post-handshake message...");
         let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
-        trace!("Post-handshake message:");
-        trace!("<<< {:?}", resp);
         ui.cable_status_update(CableState::Handshaking);
 
         let v = if let Message::Binary(v) = resp {
+            trace!("<!< {}", hex::encode(&v));
             v
         } else {
             error!("Unexpected websocket response type");
             return Err(WebauthnCError::Unknown);
         };
 
-        trace!("decrypted:");
         let decrypted = crypter.decrypt(&v)?;
-        trace!("<<< {:?}", decrypted);
+        trace!("<<< {}", hex::encode(&decrypted));
 
         // If Chromium on Android uses caBLE v2.0 if the supports_linking field
         // is missing, or v2.1 if it is present (even if false)[0]. When using
@@ -276,11 +277,11 @@ impl Tunnel {
         trace!("Advertising started, waiting for initiator...");
         ui.cable_status_update(CableState::WaitingForInitiatorConnection);
         let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
-        trace!("<<< {:?}", resp);
 
         advertiser.stop_advertising()?;
         ui.cable_status_update(CableState::Handshaking);
         let resp = if let Message::Binary(v) = resp {
+            trace!("<!< {}", hex::encode(&v));
             v
         } else {
             error!("Unexpected websocket response type");
@@ -290,7 +291,7 @@ impl Tunnel {
         let (mut crypter, response) =
             CableNoise::build_responder(None, psk, Some(peer_identity), &resp)?;
         trace!("Sending response to initiator challenge");
-        trace!(">!> {:02x?}", response);
+        trace!(">!> {}", hex::encode(&response));
         stream.send(Message::Binary(response)).await?;
 
         // Send post-handshake message
@@ -298,8 +299,7 @@ impl Tunnel {
             info: info.to_owned(),
             linking_info: None,
         };
-        trace!("Sending post-handshake message");
-        trace!(">>> {:02x?}", &phm);
+        trace!("Post-handshake message: {:02x?}", &phm);
         let phm = serde_cbor::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
         crypter.use_new_construction();
 
@@ -333,9 +333,9 @@ impl Tunnel {
     }
 
     async fn send_raw(&mut self, cmd: &[u8]) -> Result<(), WebauthnCError> {
-        trace!(">>> {:02x?}", cmd);
+        trace!(">>> {}", hex::encode(cmd));
         let encrypted = self.crypter.encrypt(cmd)?;
-        trace!("ENC {:02x?}", encrypted);
+        trace!(">!> {}", hex::encode(&encrypted));
         self.stream.send(Message::Binary(encrypted)).await?;
         Ok(())
     }
@@ -353,9 +353,9 @@ impl Tunnel {
             return Err(WebauthnCError::Unknown);
         };
 
-        trace!("DEC {:02x?}", resp);
+        trace!("<!< {}", hex::encode(&resp));
         let decrypted = self.crypter.decrypt(&resp)?;
-        trace!("<<< {:02x?}", decrypted);
+        trace!("<<< {}", hex::encode(&decrypted));
         // TODO: protocol version
         Ok(Some(CableFrame::from_bytes(1, &decrypted)))
     }
