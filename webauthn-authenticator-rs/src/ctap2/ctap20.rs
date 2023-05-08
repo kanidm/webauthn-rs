@@ -1,12 +1,13 @@
 use std::{collections::BTreeMap, fmt::Debug};
 
+#[cfg(feature = "ctap2-management")]
+use crate::util::check_pin;
 use crate::{
     authenticator_hashed::AuthenticatorBackendHashedClientData,
     ctap2::{commands::*, pin_uv::*},
     error::WebauthnCError,
     transport::Token,
     ui::UiCallback,
-    util::check_pin,
 };
 
 use base64urlsafedata::Base64UrlSafeData;
@@ -69,6 +70,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         &self.info
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Perform a factory reset of the token, deleting all data.
     pub async fn factory_reset(&mut self) -> Result<(), WebauthnCError> {
         let ui_callback = self.ui_callback;
@@ -78,6 +80,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             .map(|_| ())
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Refreshes the cached [GetInfoResponse].
     ///
     /// This needs to be called (internally) after sending a command which
@@ -88,12 +91,14 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         Ok(())
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Checks whether a provided PIN follows the rules defined by the
     /// authenticator. This does not share the PIN with the authenticator.
     pub fn validate_pin(&self, pin: &str) -> Result<String, WebauthnCError> {
         check_pin(pin, self.info.get_min_pin_length())
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Sets a PIN on a device which does not already have one.
     ///
     /// To change a PIN, use [`change_pin()`][Self::change_pin].
@@ -125,6 +130,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         Ok(())
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Changes a PIN on a device.
     ///
     /// To set a PIN for the first time, use [`set_new_pin()`][Self::set_new_pin].

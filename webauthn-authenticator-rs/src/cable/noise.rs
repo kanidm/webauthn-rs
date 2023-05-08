@@ -5,6 +5,9 @@
 //! can't decrypt.
 //!
 //! [Noise protocol]: http://noiseprotocol.org/noise.html
+#[cfg(doc)]
+use crate::stubs::*;
+
 use std::mem::size_of;
 
 use openssl::{
@@ -13,11 +16,11 @@ use openssl::{
     symm::{decrypt_aead, encrypt_aead, Cipher},
 };
 
-use crate::{
-    cable::Psk,
-    crypto::{ecdh, hkdf_sha_256, point_to_bytes, public_key_from_bytes, regenerate},
-    prelude::WebauthnCError,
-    util::compute_sha256_2,
+use crate::{cable::Psk, prelude::WebauthnCError};
+
+#[cfg(feature = "cable")]
+use crate::crypto::{
+    compute_sha256_2, ecdh, hkdf_sha_256, point_to_bytes, public_key_from_bytes, regenerate,
 };
 
 const NOISE_KN_PROTOCOL: &[u8; 32] = b"Noise_KNpsk0_P256_AESGCM_SHA256\0";

@@ -1,5 +1,7 @@
+#[cfg(feature = "crypto")]
 use openssl::{error::ErrorStack, md::Md, pkey::Id, pkey_ctx::PkeyCtx, version::version};
 
+#[cfg(feature = "crypto")]
 /// Performs HKDF-SHA-256; copy of version from `./src/crypto.rs`.
 fn hkdf_sha_256<const N: usize>(salt: &[u8], ikm: &[u8]) -> Result<[u8; N], ErrorStack> {
     let mut output = [0; N];
@@ -12,7 +14,8 @@ fn hkdf_sha_256<const N: usize>(salt: &[u8], ikm: &[u8]) -> Result<[u8; N], Erro
     Ok(output)
 }
 
-fn main() {
+#[cfg(feature = "crypto")]
+fn test_openssl() {
     // Having a working hkdf_sha_256 implementation is essential for some parts
     // of the library functioning. We should fail early if something goes wrong.
     //
@@ -58,4 +61,9 @@ Please upgrade to OpenSSL v3.0.0 or later.
         println!("OpenSSL version string: {}", version());
         panic!("The installed version of OpenSSL is unusable.");
     }
+}
+
+fn main() {
+    #[cfg(feature = "crypto")]
+    test_openssl();
 }

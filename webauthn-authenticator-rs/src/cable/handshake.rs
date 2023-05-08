@@ -1,3 +1,6 @@
+#[cfg(doc)]
+use crate::stubs::*;
+
 use openssl::{ec::EcKey, pkey::Public};
 use serde::Serialize;
 use serde_cbor::Value;

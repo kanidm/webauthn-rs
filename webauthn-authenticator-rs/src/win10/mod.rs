@@ -24,10 +24,9 @@ mod rp;
 #[cfg(feature = "win10")]
 mod user;
 
-use crate::error::WebauthnCError;
 #[cfg(feature = "win10")]
 use crate::win10::{
-    clientdata::{creation_to_clientdata, get_to_clientdata, WinClientData},
+    clientdata::WinClientData,
     cose::WinCoseCredentialParameters,
     credential::{native_to_transports, WinCredentialList},
     extensions::{
@@ -39,7 +38,11 @@ use crate::win10::{
     rp::WinRpEntityInformation,
     user::WinUserEntityInformation,
 };
-use crate::{AuthenticatorBackend, Url};
+use crate::{
+    error::WebauthnCError,
+    util::{creation_to_clientdata, get_to_clientdata},
+    AuthenticatorBackend, Url,
+};
 
 use base64urlsafedata::Base64UrlSafeData;
 use webauthn_rs_proto::{

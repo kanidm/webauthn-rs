@@ -47,3 +47,24 @@ pub enum CableState {
     /// the operation.
     WaitingForAuthenticatorResponse,
 }
+
+// lastEnrollSampleStatus
+#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum EnrollSampleStatus {
+    Good = 0x00,
+    TooHigh = 0x01,
+    TooLow = 0x02,
+    TooLeft = 0x03,
+    TooRight = 0x04,
+    TooFast = 0x05,
+    TooSlow = 0x06,
+    PoorQuality = 0x07,
+    TooSkewed = 0x08,
+    TooShort = 0x09,
+    MergeFailure = 0x0a,
+    AlreadyExists = 0x0b,
+    // 0x0c unused
+    NoUserActivity = 0x0d,
+    NoUserPresenceTransition = 0x0e,
+}

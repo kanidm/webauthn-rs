@@ -1,20 +1,30 @@
 //! Specialized alternative traits for authenticator backends.
+#[cfg(feature = "ctap2")]
 use std::collections::BTreeMap;
 
+#[cfg(any(feature = "ctap2", feature = "crypto"))]
 use base64urlsafedata::Base64UrlSafeData;
+
+#[cfg(feature = "ctap2")]
 use serde_cbor::{ser::to_vec_packed, Value};
+#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 use url::Url;
+#[cfg(feature = "ctap2")]
+use webauthn_rs_proto::PublicKeyCredentialDescriptor;
 use webauthn_rs_proto::{
-    PublicKeyCredential, PublicKeyCredentialCreationOptions, PublicKeyCredentialDescriptor,
-    PublicKeyCredentialRequestOptions, RegisterPublicKeyCredential,
+    PublicKeyCredential, PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
+    RegisterPublicKeyCredential,
 };
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
+use crate::ctap2::commands::{
+    GetAssertionRequest, GetAssertionResponse, MakeCredentialRequest, MakeCredentialResponse,
+};
+use crate::error::WebauthnCError;
+#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 use crate::{
-    ctap2::commands::{
-        GetAssertionRequest, GetAssertionResponse, MakeCredentialRequest, MakeCredentialResponse,
-    },
-    error::WebauthnCError,
-    util::{compute_sha256, creation_to_clientdata, get_to_clientdata},
+    crypto::compute_sha256,
+    util::{creation_to_clientdata, get_to_clientdata},
     AuthenticatorBackend,
 };
 
@@ -77,6 +87,7 @@ pub trait AuthenticatorBackendHashedClientData {
     ) -> Result<PublicKeyCredential, WebauthnCError>;
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 /// This provides a [AuthenticatorBackend] implementation for
 /// [AuthenticatorBackendHashedClientData] implementations.
 ///
@@ -117,6 +128,7 @@ impl<T: AuthenticatorBackendHashedClientData> AuthenticatorBackend for T {
     }
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
 /// Performs a registration request, using a [MakeCredentialRequest].
 ///
 /// All PIN/UV auth parameters will be ignored, and are processed by
@@ -159,6 +171,7 @@ pub fn perform_register_with_request(
     to_vec_packed(&resp).map_err(|_| WebauthnCError::Cbor)
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
 /// Performs an authentication request, using a [GetAssertionRequest].
 ///
 /// All PIN/UV auth parameters will be ignored, and are processed by
@@ -200,161 +213,4 @@ pub fn perform_auth_with_request(
     // Write value with u32 keys
     let resp: BTreeMap<u32, Value> = resp.into();
     to_vec_packed(&resp).map_err(|_| WebauthnCError::Cbor)
-}
-
-#[cfg(test)]
-#[allow(clippy::panic)]
-mod test {
-    use openssl::{hash::MessageDigest, rand::rand_bytes, sign::Verifier, x509::X509};
-    use webauthn_rs_core::proto::COSEKey;
-    use webauthn_rs_proto::{AllowCredentials, PubKeyCredParams, RelyingParty, User};
-
-    use crate::{
-        ctap2::{commands::value_to_vec_u8, CBORResponse},
-        softtoken::SoftToken,
-    };
-
-    use super::*;
-
-    #[test]
-    fn perform_register_auth_with_command() {
-        let _ = tracing_subscriber::fmt::try_init();
-        let (mut soft_token, _) = SoftToken::new().unwrap();
-        let mut client_data_hash = vec![0; 32];
-        let mut user_id = vec![0; 16];
-        rand_bytes(&mut client_data_hash).unwrap();
-        rand_bytes(&mut user_id).unwrap();
-
-        let request = MakeCredentialRequest {
-            client_data_hash: client_data_hash.clone(),
-            rp: RelyingParty {
-                name: "example.com".to_string(),
-                id: "example.com".to_string(),
-            },
-            user: User {
-                id: Base64UrlSafeData(user_id),
-                name: "sampleuser".to_string(),
-                display_name: "Sample User".to_string(),
-            },
-            pub_key_cred_params: vec![
-                PubKeyCredParams {
-                    type_: "public-key".to_string(),
-                    alg: -7,
-                },
-                PubKeyCredParams {
-                    type_: "public-key".to_string(),
-                    alg: -257,
-                },
-            ],
-            exclude_list: vec![],
-            options: None,
-            pin_uv_auth_param: None,
-            pin_uv_auth_proto: None,
-            enterprise_attest: None,
-        };
-
-        let response = perform_register_with_request(&mut soft_token, request, 10000).unwrap();
-
-        // All keys should be ints
-        let m: Value = serde_cbor::from_slice(response.as_slice()).unwrap();
-        let m = if let Value::Map(m) = m {
-            m
-        } else {
-            panic!("unexpected type")
-        };
-        assert!(m.keys().all(|k| matches!(k, Value::Integer(_))));
-
-        // Try to deserialise the MakeCredentialResponse again
-        let response =
-            <MakeCredentialResponse as CBORResponse>::try_from(response.as_slice()).unwrap();
-        trace!(?response);
-
-        // Run packed attestation verification
-        // https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation
-        let mut att_stmt = if let Value::Map(m) = response.att_stmt.unwrap() {
-            m
-        } else {
-            panic!("unexpected type");
-        };
-        trace!(?att_stmt);
-        let signature = value_to_vec_u8(
-            att_stmt.remove(&Value::Text("sig".to_string())).unwrap(),
-            "att_stmt.sig",
-        )
-        .unwrap();
-
-        // Extract attestation certificate
-        let x5c = if let Value::Array(v) = att_stmt.remove(&Value::Text("x5c".to_string())).unwrap()
-        {
-            v
-        } else {
-            panic!("Unexpected type");
-        };
-        let x5c = value_to_vec_u8(x5c[0].to_owned(), "x5c[0]").unwrap();
-        let verification_cert = X509::from_der(&x5c).unwrap();
-        let pubkey = verification_cert.public_key().unwrap();
-
-        // Reconstruct verification data (auth_data + client_data_hash)
-        let mut verification_data =
-            value_to_vec_u8(response.auth_data.unwrap(), "verification_data").unwrap();
-        let auth_data_len = verification_data.len();
-        verification_data.reserve(client_data_hash.len());
-        verification_data.extend_from_slice(&client_data_hash);
-
-        let mut verifier = Verifier::new(MessageDigest::sha256(), &pubkey).unwrap();
-        assert!(verifier
-            .verify_oneshot(&signature, &verification_data)
-            .unwrap());
-
-        // https://www.w3.org/TR/webauthn-2/#attestation-object
-        let cred_id_off = /* rp_id_hash */ 32 + /* flags */ 1 + /* counter */ 4 + /* aaguid */ 16;
-        let cred_id_len = u16::from_be_bytes(
-            (&verification_data[cred_id_off..cred_id_off + 2])
-                .try_into()
-                .unwrap(),
-        ) as usize;
-        let cred_id = Base64UrlSafeData(
-            (verification_data[cred_id_off + 2..cred_id_off + 2 + cred_id_len]).to_vec(),
-        );
-
-        // Future assertions are signed with this COSEKey
-        let cose_key: Value = serde_cbor::from_slice(
-            &verification_data[cred_id_off + 2 + cred_id_len..auth_data_len],
-        )
-        .unwrap();
-        let cose_key = COSEKey::try_from(&cose_key).unwrap();
-
-        rand_bytes(&mut client_data_hash).unwrap();
-        let request = GetAssertionRequest {
-            client_data_hash: client_data_hash.clone(),
-            rp_id: "example.com".to_string(),
-            allow_list: vec![AllowCredentials {
-                type_: "public-key".to_string(),
-                id: cred_id.to_owned(),
-                transports: None,
-            }],
-            options: None,
-            pin_uv_auth_param: None,
-            pin_uv_auth_proto: None,
-        };
-        trace!(?request);
-
-        let response = perform_auth_with_request(&mut soft_token, request, 10000).unwrap();
-        let response =
-            <GetAssertionResponse as CBORResponse>::try_from(response.as_slice()).unwrap();
-        trace!(?response);
-
-        // Check correct matching credential
-        assert_eq!(response.credential.unwrap().id, cred_id);
-
-        // Check the signature
-        let signature = response.signature.unwrap();
-        let mut verification_data = response.auth_data.unwrap();
-        verification_data.reserve(client_data_hash.len());
-        verification_data.extend_from_slice(&client_data_hash);
-
-        assert!(cose_key
-            .verify_signature(&signature, &verification_data)
-            .unwrap());
-    }
 }

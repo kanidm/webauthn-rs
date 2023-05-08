@@ -22,6 +22,8 @@ use num_traits::cast::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_cbor::Value;
 
+use crate::types::EnrollSampleStatus;
+
 use super::*;
 
 /// Default maximum fingerprint friendly name length, in bytes.
@@ -228,27 +230,6 @@ impl From<TemplateInfo> for BTreeMap<Value, Value> {
 
         keys
     }
-}
-
-// lastEnrollSampleStatus
-#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum EnrollSampleStatus {
-    Good = 0x00,
-    TooHigh = 0x01,
-    TooLow = 0x02,
-    TooLeft = 0x03,
-    TooRight = 0x04,
-    TooFast = 0x05,
-    TooSlow = 0x06,
-    PoorQuality = 0x07,
-    TooSkewed = 0x08,
-    TooShort = 0x09,
-    MergeFailure = 0x0a,
-    AlreadyExists = 0x0b,
-    // 0x0c unused
-    NoUserActivity = 0x0d,
-    NoUserPresenceTransition = 0x0e,
 }
 
 /// Modality for biometric authentication.

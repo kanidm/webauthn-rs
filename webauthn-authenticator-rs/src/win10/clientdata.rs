@@ -1,11 +1,9 @@
 //! Wrappers for [CollectedClientData].
-use base64urlsafedata::Base64UrlSafeData;
-use std::collections::BTreeMap;
 use std::pin::Pin;
 use webauthn_rs_proto::CollectedClientData;
 
 use super::WinWrapper;
-use crate::{error::WebauthnCError, Url};
+use crate::error::WebauthnCError;
 
 use windows::{
     core::HSTRING,
@@ -62,27 +60,5 @@ impl WinWrapper<CollectedClientData> for WinClientData {
 
     fn native_ptr(&self) -> &WEBAUTHN_CLIENT_DATA {
         &self.native
-    }
-}
-
-pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
-    CollectedClientData {
-        type_: "webauthn.create".to_string(),
-        challenge,
-        origin,
-        token_binding: None,
-        cross_origin: None,
-        unknown_keys: BTreeMap::new(),
-    }
-}
-
-pub fn get_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
-    CollectedClientData {
-        type_: "webauthn.get".to_string(),
-        challenge,
-        origin,
-        token_binding: None,
-        cross_origin: None,
-        unknown_keys: BTreeMap::new(),
     }
 }

@@ -1,19 +1,25 @@
 //! CTAP 2.1 Biometrics functionality.
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use std::{
     ops::{Deref, DerefMut},
     time::Duration,
 };
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use async_trait::async_trait;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use unicode_normalization::UnicodeNormalization;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use webauthn_rs_proto::UserVerificationPolicy;
 
+use crate::ui::UiCallback;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::{
     error::{CtapError, WebauthnCError},
     transport::Token,
-    ui::UiCallback,
 };
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use super::{
     commands::{
         BioEnrollmentRequestTrait, BioEnrollmentResponse, BioSubCommand, Modality, Permissions,
@@ -25,6 +31,7 @@ use super::{
 
 /// Trait to provide a [BiometricAuthenticator] implementation.
 pub trait BiometricAuthenticatorInfo<U: UiCallback>: Sync + Send {
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Request type for biometric commands.
     type RequestType: BioEnrollmentRequestTrait;
 
@@ -52,6 +59,7 @@ pub trait BiometricAuthenticatorInfo<U: UiCallback>: Sync + Send {
     }
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 /// Internal support methods for biometric authentication.
 #[async_trait]
 trait BiometricAuthenticatorSupport<T, U, R>
@@ -73,6 +81,7 @@ where
     ) -> Result<BioEnrollmentResponse, WebauthnCError>;
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 #[async_trait]
 impl<'a, K, T, U, R> BiometricAuthenticatorSupport<T, U, R> for T
 where
@@ -138,6 +147,7 @@ where
     }
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 /// Biometric management commands for [Ctap21Authenticator][] and
 /// [Ctap21PreAuthenticator][].
 ///
@@ -210,6 +220,7 @@ pub trait BiometricAuthenticator {
     async fn remove_fingerprints(&mut self, ids: Vec<Vec<u8>>) -> Result<(), WebauthnCError>;
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 /// Implementation of biometric management commands for [Ctap21Authenticator][]
 /// and [Ctap21PreAuthenticator][].
 ///

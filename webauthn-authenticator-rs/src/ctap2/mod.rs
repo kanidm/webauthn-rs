@@ -29,9 +29,6 @@
 //! * multiple authenticators doesn't work particularly well, and connecting
 //!   devices while an action is in progress doesn't work
 //!
-//! * [Bluetooth Low Energy][ble] and Hybrid Authenticators (aka "caBLE") are
-//!   not supported
-//!
 //! * cancellations and timeouts
 //!
 //! * session management (re-using `pin_uv_auth_token`)
@@ -56,7 +53,8 @@
 //!   [authentication][Ctap20Authenticator::perform_auth] with a
 //!   [CLI interface][crate::ui::Cli]
 //!
-//! * [NFC][crate::nfc] and [USB HID][crate::usb] authenticators
+//! * [Bluetooth Low Energy][crate::bluetooth], [caBLE / Hybrid][crate::cable],
+//!   [NFC][crate::nfc] and [USB HID][crate::usb] authenticators
 //!
 //! * CTAP 2.1 and NFC [authenticator selection][select_one_token]
 //!
@@ -81,14 +79,11 @@
 //!
 //! ## Examples
 //!
-//! Find these in the `examples` directory of `webauthn-authenticator-rs`'
-//! source code:
+//! * `webauthn-authenticator-rs/examples/authenticate.rs` works with any
+//!   [crate::AuthenticatorBackend], including [CtapAuthenticator].
 //!
-//! * `key_manager` will connect to a key, pull hardware information, and let
-//!   you reconfigure the key (reset, PIN, fingerprints, etc.)
-//!
-//! * `authenticate` works with any [crate::AuthenticatorBackend], including
-//!   [CtapAuthenticator].
+//! * `fido-key-manager` will connect to a key, pull hardware information, and
+//!   let you reconfigure the key (reset, PIN, fingerprints, etc.)
 //!
 //! ## Device-specific issues
 //!
@@ -102,77 +97,20 @@
 //!
 //! ## Platform-specific issues
 //!
-//! ### Linux
+//! See `fido-key-manager/README.md`.
 //!
-//! * NFC support requires [PC/SC Lite], and a PC/SC initiator (driver) for your
-//!   NFC transceiver (reader).
-//!
-//!   If you're using a transceiver with an NXP PN53x-series chipset (eg: ACS
-//!   ACR122, Sony PaSoRi), you will need to block the `pn533` and `pn533_usb`
-//!   kernel module (which is incompatible [all other NFC software][linuxnfc])
-//!   from loading:
-//!
-//!   ```sh
-//!   echo "blacklist pn533" | sudo tee -a /etc/modprobe.d/blacklist.conf
-//!   echo "blacklist pn533_usb" | sudo tee -a /etc/modprobe.d/blacklist.conf
-//!   sudo rmmod pn533
-//!   sudo rmmod pn533_usb
-//!   ```
-//!
-//!   Then unplug and replug the device. One of those `rmmod` commands will
-//!   fail, depending on your kernel version.
-//!
-//! * USB token support requires `libudev` and appropriate permissions. This
-//!   will only work correctly with `hidapi`'s `hidraw` backend (not `libusb`).
-//!
-//!   systemd (udev) v252 and later
-//!   [automatically tag USB HID FIDO tokens][udev-tag] and set permissions
-//!   based on the `0xf1d0` usage page, which should work with any
-//!   FIDO-compliant token.
-//!
-//!   Systems with older versions of systemd will need a "U2F rules" package
-//!   (eg: `libu2f-udev`). But these match FIDO tokens using a list of known USB
-//!   manufacturer and product IDs, which can be a problem for new or esoteric
-//!   tokens.
-//!
-//! ### macOS
-//!
-//! * NFC should "just work", provided you've installed a PC/SC initiator
-//!   (driver) for your transciever.
-//!
-//! * USB HID tokens "just work".
-//!
-//! ### Windows
-//!
-//! On Windows 10 build 1903 and later, any programs using [CtapAuthenticator]
-//! must be run as Administrator.  If you do not:
-//!
-//! * NFC tokens will fail with "permission denied" when initialised, as Windows
-//!   blocks sending an ISO 7816 `SELECT` for the FIDO applet name.
-//!
-//!   This applies regardless of whether the connected token *is* a FIDO token,
-//!   Windows just blocks it outright.
-//!
-//! * USB tokens will not appear in a list of connected devices.
-//!
-//! `win10::Win10` (available with `--features win10`) provides a wrapper around
-//! Windows WebAuthn API which does not require Administrator privileges.
-//!
-//! [ble]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#ble
 //! [discoverable credentials]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorCredentialManagement
 //! [enterprise attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enable-enterprise-attestation
 //! [getPinToken]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinToken
 //! [getPinUvAuthTokenUsingPinWithPermissions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
 //! [getPinUvAuthTokenUsingUvWithPermissions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingUvWithPermissions
 //! [large blobs]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorLargeBlobs
-//! [linuxnfc]: https://ludovicrousseau.blogspot.com/2013/11/linux-nfc-driver-conflicts-with-ccid.html
 //! [PC/SC Lite]: https://pcsclite.apdu.fr/
 //! [Protocol One]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#pinProto1
 //! [Protocol Two]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#pinProto2
 //! [request extensions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-defined-extensions
 //! [secure]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-secure-interaction
 //! [u2f]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#u2f-interoperability
-//! [udev-tag]: https://github.com/systemd/systemd/issues/11996
 //! [yubi]: https://support.yubico.com/hc/en-us/articles/360016614920-YubiKey-USB-ID-Values
 
 // TODO: `commands` may become private in future.
@@ -201,12 +139,15 @@ use self::ctap21_bio::BiometricAuthenticatorInfo;
 
 #[doc(inline)]
 pub use self::{
-    commands::{CBORCommand, CBORResponse, EnrollSampleStatus, GetInfoResponse},
+    commands::{CBORCommand, CBORResponse, GetInfoResponse},
     ctap20::Ctap20Authenticator,
     ctap21::Ctap21Authenticator,
-    ctap21_bio::BiometricAuthenticator,
     ctap21pre::Ctap21PreAuthenticator,
 };
+
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+#[doc(inline)]
+pub use ctap21_bio::BiometricAuthenticator;
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///
@@ -292,6 +233,7 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         }
     }
 
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     /// Gets a mutable reference to a [BiometricAuthenticator] trait for the
     /// token, if it supports biometric commands.
     ///

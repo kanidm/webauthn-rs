@@ -42,6 +42,8 @@ jobs:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
 
       - if: runner.os != 'windows'
         run: |
@@ -79,22 +81,23 @@ jobs:
       matrix:
         rust_version: [stable, 1.66.0]
         features:
-          - ""
-          - --features bluetooth
-          - --features cable
-          - --features nfc
-          - --features usb
-          - --features bluetooth,nfc,usb
-          - --features cable,bluetooth,nfc,usb
+          - bluetooth
+          - cable
+          - nfc
+          - softpasskey
+          - softtoken
+          - usb
+          - bluetooth,nfc,usb,ctap2-management
+          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb
         os:
           - ubuntu-latest
           - windows-latest
         include:
           - os: windows-latest
-            features: --features win10
+            features: win10
             rust_version: stable
           - os: windows-latest
-            features: --features cable,bluetooth,nfc,usb,win10
+            features: bluetooth,cable,ctap2-management,nfc,softpasskey,softtoken,usb,win10
             rust_version: stable
         exclude:
           - os: windows-latest
@@ -108,6 +111,8 @@ jobs:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
 
       - if: runner.os != 'windows'
         run: |
@@ -120,29 +125,55 @@ jobs:
       - if: (contains(matrix.features, 'bluetooth') || contains(matrix.features, 'cable'))  && runner.os != 'windows'
         run: sudo apt-get -y install libdbus-1-dev
 
-      - if: runner.os == 'windows'
+      # Don't try to install OpenSSL when there's only the "win10" feature
+      # enabled. We should be able to operate without it.
+      - if: runner.os == 'windows' && matrix.features != 'win10'
         uses: johnwason/vcpkg-action@v4
         with:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
-      - run: cargo build -p webauthn-authenticator-rs ${{ matrix.features }}
+
+      - run: cargo build -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
-      - if: contains(matrix.features, 'windows') || runner.os != 'windows'
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets ${{ matrix.features }}
+      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
+      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
+      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
-      - run: cargo test -p webauthn-authenticator-rs ${{ matrix.features }}
+      # "ctap2-management" requires OpenSSL, which we won't have if built with
+      # only "win10" feature on Windows.
+      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
+      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
+
+      - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
-      - run: cargo run -p webauthn-authenticator-rs --example authenticate ${{ matrix.features }} -- --help
+
+      # authenticate example requires OpenSSL (via webauthn-rs-core), so don't
+      # run if features == 'win10'.
+      - if: runner.os != 'windows' || matrix.features != 'win10'
+        run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
+
+      # caBLE-specific examples. The "cable" feature requires OpenSSL, so this
+      # always OK to run on Windows.
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_domain ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel ${{ matrix.features }} -- --help
-      - run: cargo run -p webauthn-authenticator-rs --example softtoken ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example cable_domain --features ${{ matrix.features }} -- --help
+      - if: contains(matrix.features, 'cable')
+        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
+
+      # SoftToken-specific examples.
+      - if: contains(matrix.features, 'softtoken')
+        run: cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
@@ -157,6 +188,8 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
       - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev

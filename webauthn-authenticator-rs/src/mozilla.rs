@@ -1,4 +1,6 @@
-//! Authenticator implementation using Mozilla's authenticator-rs library.
+//! Authenticator implementation using Mozilla's `authenticator-rs` library.
+//!
+//! This library only supports USB HID devices.
 #[cfg(doc)]
 use crate::stubs::*;
 
@@ -20,7 +22,7 @@ use webauthn_rs_proto::{
 
 use authenticator::{authenticatorservice::AuthenticatorService, StatusUpdate};
 
-#[cfg(feature = "u2fhid")]
+#[cfg(feature = "mozilla")]
 use authenticator::{
     authenticatorservice::{
         CtapVersion, GetAssertionExtensions, GetAssertionOptions, MakeCredentialsExtensions,
@@ -38,13 +40,13 @@ use authenticator::{
 use std::sync::mpsc::{channel, RecvError, Sender};
 use std::thread;
 
-pub struct U2FHid {
+pub struct MozillaAuthenticator {
     status_tx: Sender<StatusUpdate>,
     _thread_handle: thread::JoinHandle<()>,
     manager: AuthenticatorService,
 }
 
-impl U2FHid {
+impl MozillaAuthenticator {
     pub fn new() -> Self {
         let mut manager = AuthenticatorService::new(CtapVersion::CTAP2)
             .expect("The auth service should initialize safely");
@@ -109,7 +111,7 @@ impl U2FHid {
             }
         });
 
-        U2FHid {
+        MozillaAuthenticator {
             status_tx,
             _thread_handle,
             manager,
@@ -117,13 +119,13 @@ impl U2FHid {
     }
 }
 
-impl Default for U2FHid {
+impl Default for MozillaAuthenticator {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AuthenticatorBackend for U2FHid {
+impl AuthenticatorBackend for MozillaAuthenticator {
     fn perform_register(
         &mut self,
         origin: Url,
@@ -346,73 +348,5 @@ impl AuthenticatorBackend for U2FHid {
                 ..Default::default()
             },
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::u2fhid::U2FHid;
-    use crate::AuthenticatorBackend;
-    use crate::Url;
-    use webauthn_rs_core::WebauthnCore as Webauthn;
-
-    #[test]
-    fn webauthn_authenticator_wan_u2fhid_interact() {
-        let _ = tracing_subscriber::fmt::try_init();
-        let wan = Webauthn::new_unsafe_experts_only(
-            "https://localhost:8080/auth",
-            "localhost",
-            vec![url::Url::parse("https://localhost:8080").unwrap()],
-            None,
-            None,
-            None,
-        );
-
-        let unique_id = [
-            158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
-        ];
-        let name = "william";
-
-        let (chal, reg_state) = wan
-            .generate_challenge_register(&unique_id, name, name, false)
-            .unwrap();
-
-        info!("🍿 challenge -> {:x?}", chal);
-
-        let mut u = U2FHid::new();
-
-        let r = u
-            .perform_register(
-                Url::parse("https://localhost:8080").unwrap(),
-                chal.public_key,
-                60_000,
-            )
-            .unwrap();
-
-        let cred = wan.register_credential(&r, &reg_state, None).unwrap();
-
-        trace!(?cred);
-
-        let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None)
-            .unwrap();
-
-        let r = u
-            .perform_auth(
-                Url::parse("https://localhost:8080").unwrap(),
-                chal.public_key,
-                60_000,
-            )
-            .map_err(|e| {
-                error!("Error -> {:x?}", e);
-                e
-            })
-            .expect("Failed to auth");
-
-        let auth_res = wan
-            .authenticate_credential(&r, &auth_state)
-            .expect("webauth authentication denied");
-
-        info!("auth_res -> {:x?}", auth_res);
     }
 }
