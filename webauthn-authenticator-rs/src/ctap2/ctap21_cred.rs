@@ -99,12 +99,10 @@ where
         sub_command: CredSubCommand,
         auth_session: &AuthSession,
     ) -> Result<CredentialManagementResponse, WebauthnCError> {
-        let client_data_hash = sub_command.prf();
-
         let (pin_uv_protocol, pin_uv_auth_param) = match auth_session {
             AuthSession::InterfaceToken(iface, pin_token) => {
                 let mut pin_uv_auth_param =
-                    iface.authenticate(pin_token, client_data_hash.as_slice())?;
+                    iface.authenticate(pin_token, sub_command.prf().as_slice())?;
                 pin_uv_auth_param.truncate(16);
 
                 (Some(iface.get_pin_uv_protocol()), Some(pin_uv_auth_param))
@@ -142,7 +140,7 @@ pub trait CredentialManagementAuthenticator {
     ///
     /// Returns [WebauthnCError::NotSupported] if the token does not support
     /// credential management.
-    fn check_credential_management_support(&mut self) -> Result<(), WebauthnCError>;
+    fn check_credential_management_support(&self) -> Result<(), WebauthnCError>;
 
     /// Gets metadata about the authenticator's discoverable credential storage.
     ///
@@ -153,10 +151,20 @@ pub trait CredentialManagementAuthenticator {
 
     /// Enumerates a list of all relying parties with discoverable credentials
     /// stored on this authenticator.
+    ///
+    /// ## Note
+    ///
+    /// To iterate over all credentials for a relying party, pass the
+    /// [`RelyingPartyCM::hash`] to [`enumerate_credentials_by_hash`][0].
+    ///
+    /// [`RelyingPartyCM::id`] [might be truncated][1] by the authenticator.
+    ///
+    /// [0]: CredentialManagementAuthenticator::enumerate_credentials_by_hash
+    /// [1]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#rpid-truncation
     async fn enumerate_rps(&mut self) -> Result<Vec<RelyingPartyCM>, WebauthnCError>;
 
-    /// Enumerates all discoverable credentials on the authenticator by SHA-256
-    /// hash of the relying party ID.
+    /// Enumerates all discoverable credentials on the authenticator for a
+    /// relying party, by the SHA-256 hash of the relying party ID.
     ///
     /// ## Note
     ///
@@ -166,6 +174,19 @@ pub trait CredentialManagementAuthenticator {
     async fn enumerate_credentials_by_hash(
         &mut self,
         rp_id_hash: SHA256Hash,
+    ) -> Result<Vec<DiscoverableCredential>, WebauthnCError>;
+
+    /// Enumerates all discoverable credentials on the authenticator for a
+    /// relying party, by the relying party ID.
+    ///
+    /// ## Note
+    ///
+    /// This does not provide a "permissions RP ID" with the request, as it only
+    /// works correctly with authenticators supporting the `pinUvAuthToken`
+    /// feature.
+    async fn enumerate_credentials_by_rpid(
+        &mut self,
+        rpid: &str,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError>;
 
     /// Deletes a discoverable credential from the authenticator.
@@ -201,7 +222,7 @@ where
     U: UiCallback + 'a,
     R: CredentialManagementRequestTrait,
 {
-    fn check_credential_management_support(&mut self) -> Result<(), WebauthnCError> {
+    fn check_credential_management_support(&self) -> Result<(), WebauthnCError> {
         if !self.supports_credential_management() {
             return Err(WebauthnCError::NotSupported);
         }
@@ -268,37 +289,16 @@ where
         rp_id_hash: SHA256Hash,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError> {
         self.check_credential_management_support()?;
+        enumerate_credentials_impl(self, CredSubCommand::EnumerateCredentialsBegin(rp_id_hash))
+            .await
+    }
 
-        let r = self
-            .cred_mgmt(CredSubCommand::EnumerateCredentialsBegin(rp_id_hash))
-            .await;
-
-        // "If no discoverable credentials for this RP ID hash exist on this
-        // authenticator, return CTAP2_ERR_NO_CREDENTIALS."
-        if matches!(r, Err(WebauthnCError::Ctap(CtapError::Ctap2NoCredentials))) {
-            return Ok(Vec::new());
-        }
-        let r = r?;
-
-        let total_creds = r.total_credentials.unwrap_or_default();
-        let mut o = Vec::with_capacity(total_creds as usize);
-
-        if total_creds == 0 {
-            return Ok(o);
-        }
-
-        o.push(r.discoverable_credential);
-
-        let ui = self.ui_callback;
-        for _ in 1..total_creds {
-            let r = self
-                .token
-                .transmit(R::ENUMERATE_CREDENTIALS_GET_NEXT, ui)
-                .await?;
-            o.push(r.discoverable_credential);
-        }
-
-        Ok(o)
+    async fn enumerate_credentials_by_rpid(
+        &mut self,
+        rp_id: &str,
+    ) -> Result<Vec<DiscoverableCredential>, WebauthnCError> {
+        self.check_credential_management_support()?;
+        enumerate_credentials_impl(self, CredSubCommand::enumerate_credentials_by_rpid(rp_id)).await
     }
 
     async fn delete_credential(
@@ -311,4 +311,47 @@ where
             .await
             .map(|_| ())
     }
+}
+
+#[doc(hidden)]
+async fn enumerate_credentials_impl<'a, K, T, U, R>(
+    self_: &mut T,
+    sub_command: CredSubCommand,
+) -> Result<Vec<DiscoverableCredential>, WebauthnCError>
+where
+    K: Token,
+    T: CredentialManagementAuthenticatorInfo<U, RequestType = R>
+        + Deref<Target = Ctap20Authenticator<'a, K, U>>
+        + DerefMut<Target = Ctap20Authenticator<'a, K, U>>,
+    U: UiCallback + 'a,
+    R: CredentialManagementRequestTrait,
+{
+    let r = self_.cred_mgmt(sub_command).await;
+
+    // "If no discoverable credentials for this RP ID hash exist on this
+    // authenticator, return CTAP2_ERR_NO_CREDENTIALS."
+    if matches!(r, Err(WebauthnCError::Ctap(CtapError::Ctap2NoCredentials))) {
+        return Ok(Vec::new());
+    }
+    let r = r?;
+
+    let total_creds = r.total_credentials.unwrap_or_default();
+    let mut o = Vec::with_capacity(total_creds as usize);
+
+    if total_creds == 0 {
+        return Ok(o);
+    }
+
+    o.push(r.discoverable_credential);
+
+    let ui = self_.ui_callback;
+    for _ in 1..total_creds {
+        let r = self_
+            .token
+            .transmit(R::ENUMERATE_CREDENTIALS_GET_NEXT, ui)
+            .await?;
+        o.push(r.discoverable_credential);
+    }
+
+    Ok(o)
 }

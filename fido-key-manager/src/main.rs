@@ -11,7 +11,6 @@ use std::time::Duration;
 use webauthn_authenticator_rs::ctap2::commands::UserCM;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
-use openssl::sha::Sha256;
 
 use webauthn_authenticator_rs::{
     ctap2::{select_one_token, CtapAuthenticator},
@@ -477,12 +476,13 @@ async fn main() {
 
             let cm = tokens[0].credential_management().unwrap();
 
-            let rp_id_hash = if let Some(rpid) = &o.rpid {
-                let mut h = Sha256::new();
-                h.update(rpid.as_bytes());
-                h.finish()
+            let (creds, rp) = if let Some(rpid) = o.rpid {
+                (cm.enumerate_credentials_by_rpid(&rpid).await, rpid)
             } else if let Some(hash) = o.hash {
-                hash
+                (
+                    cm.enumerate_credentials_by_hash(hash).await,
+                    hex::encode(hash),
+                )
             } else {
                 let rps = cm.enumerate_rps().await.expect("Error enumerating RPs");
                 println!("{} RP{}:", rps.len(), if rps.len() != 1 { "s" } else { "" });
@@ -500,23 +500,13 @@ async fn main() {
                 }
                 return;
             };
+            let creds = creds.expect("Error listing credentials");
 
-            let creds = cm
-                .enumerate_credentials_by_hash(rp_id_hash)
-                .await
-                .expect("Error listing credentials");
-
-            print!(
-                "{} credential{} for ",
+            println!(
+                "{} credential{} for {rp}:",
                 creds.len(),
                 if creds.len() != 1 { "s" } else { "" }
             );
-
-            if let Some(rpid) = o.rpid {
-                println!("{rpid} ({}):", hex::encode(rp_id_hash));
-            } else {
-                println!("{}:", hex::encode(rp_id_hash));
-            }
 
             let mut pii_warn = false;
             for (i, cred) in creds.iter().enumerate() {

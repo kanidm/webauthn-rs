@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use webauthn_rs_core::proto::COSEKey;
 use webauthn_rs_proto::CredentialProtectionPolicy;
 
-use crate::crypto::SHA256Hash;
+use crate::crypto::{compute_sha256, SHA256Hash};
 
 use super::*;
 
@@ -159,15 +159,20 @@ pub enum CredSubCommand {
     /// Starts enumerating all relying parties with discoverable credentials
     /// stored on this authenticator.
     ///
-    /// To get the next value, use
+    /// To get the next relying party, use
     /// [ENUMERATE_RPS_GET_NEXT][CredentialManagementRequestTrait::ENUMERATE_RPS_GET_NEXT].
     EnumerateRPsBegin,
 
     /// Starts enumerating all credentials for a relying party, by the SHA-256
     /// hash of the relying party ID.
     ///
-    /// To get the next value, use
-    /// [ENUMERATE_CREDENTIALS_GET_NEXT][CredentialManagementRequestTrait::ENUMERATE_CREDENTIALS_GET_NEXT].
+    /// To enumerate credentials by relying party ID (rather than its hash), use
+    /// [`enumerate_credentials_by_rpid()`][0].
+    ///
+    /// To get the next credential, use [ENUMERATE_CREDENTIALS_GET_NEXT][1].
+    ///
+    /// [0]: CredSubCommand::enumerate_credentials_by_rpid
+    /// [1]: CredentialManagementRequestTrait::ENUMERATE_CREDENTIALS_GET_NEXT
     EnumerateCredentialsBegin(/* rpIdHash */ SHA256Hash),
 
     /// Deletes a discoverable credential from the authenticator.
@@ -217,8 +222,11 @@ impl From<CredSubCommand> for Option<BTreeMap<Value, Value>> {
 }
 
 impl CredSubCommand {
+    /// The [PRF (pseudo-random function)][prf] for [CredSubCommand], used to
+    /// sign requests for PIN/UV authentication.
+    ///
+    /// [prf]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#prfValues
     pub fn prf(&self) -> Vec<u8> {
-        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#prfValues
         let subcommand = self.into();
         let sub_command_params: Option<BTreeMap<Value, Value>> = self.to_owned().into();
 
@@ -232,6 +240,18 @@ impl CredSubCommand {
         }
 
         o
+    }
+
+    /// Creates an [EnumerateCredentialsBegin][0] for enumerating credentials by
+    /// relying party ID.
+    ///
+    /// See [EnumerateCredentialsBegin][0] for enumerating credentials by the
+    /// SHA-256 hash of the relying party ID.
+    /// 
+    /// [0]: CredSubCommand::EnumerateCredentialsBegin
+    #[inline]
+    pub fn enumerate_credentials_by_rpid(rp_id: &str) -> Self {
+        Self::EnumerateCredentialsBegin(compute_sha256(rp_id.as_bytes()))
     }
 }
 
@@ -505,11 +525,11 @@ mod test {
     fn get_cred_metadata() {
         let _ = tracing_subscriber::fmt::try_init();
 
-        let c = CredentialManagementRequest::new(
-            CredSubCommand::GetCredsMetadata,
-            Some(2),
-            Some(PIN_UV_AUTH_PARAM.to_vec()),
-        );
+        const SUBCOMMAND: CredSubCommand = CredSubCommand::GetCredsMetadata;
+        assert_eq!(vec![0x01], SUBCOMMAND.prf());
+
+        let c =
+            CredentialManagementRequest::new(SUBCOMMAND, Some(2), Some(PIN_UV_AUTH_PARAM.to_vec()));
 
         assert_eq!(
             vec![
@@ -521,7 +541,7 @@ mod test {
         );
 
         let c = PrototypeCredentialManagementRequest::new(
-            CredSubCommand::GetCredsMetadata,
+            SUBCOMMAND,
             Some(1),
             Some(PIN_UV_AUTH_PARAM.to_vec()),
         );
@@ -555,11 +575,11 @@ mod test {
     fn enumerate_rps_begin() {
         let _ = tracing_subscriber::fmt::try_init();
 
-        let c = CredentialManagementRequest::new(
-            CredSubCommand::EnumerateRPsBegin,
-            Some(2),
-            Some(PIN_UV_AUTH_PARAM.to_vec()),
-        );
+        const SUBCOMMAND: CredSubCommand = CredSubCommand::EnumerateRPsBegin;
+        assert_eq!(vec![0x02], SUBCOMMAND.prf());
+
+        let c =
+            CredentialManagementRequest::new(SUBCOMMAND, Some(2), Some(PIN_UV_AUTH_PARAM.to_vec()));
 
         assert_eq!(
             vec![
@@ -571,7 +591,7 @@ mod test {
         );
 
         let c = PrototypeCredentialManagementRequest::new(
-            CredSubCommand::EnumerateRPsBegin,
+            SUBCOMMAND,
             Some(1),
             Some(PIN_UV_AUTH_PARAM.to_vec()),
         );
@@ -726,6 +746,20 @@ mod test {
             0x1c, 0xf0, 0x1a, 0x24, 0xb4, 0xc8, 0xae, 0x70, 0x6f, 0x32, 0x8c, 0xc2, 0xea, 0x8c,
             0xeb, 0xc4, 0xad, 0x5c,
         ]);
+
+        assert_eq!(
+            vec![
+                0x04, 0xa1, 0x01, 0x58, 0x20, 0x0b, 0x99, 0x7c, 0xcc, 0xeb, 0x3a, 0xeb, 0x29, 0xc5,
+                0x5c, 0x94, 0xa8, 0x94, 0xb1, 0x1c, 0xf0, 0x1a, 0x24, 0xb4, 0xc8, 0xae, 0x70, 0x6f,
+                0x32, 0x8c, 0xc2, 0xea, 0x8c, 0xeb, 0xc4, 0xad, 0x5c
+            ],
+            SUBCOMMAND.prf()
+        );
+
+        assert_eq!(
+            CredSubCommand::enumerate_credentials_by_rpid("webauthntest.identitystandards.io"),
+            SUBCOMMAND
+        );
 
         let c =
             CredentialManagementRequest::new(SUBCOMMAND, Some(2), Some(PIN_UV_AUTH_PARAM.to_vec()));
@@ -915,23 +949,34 @@ mod test {
     fn update_user_information() {
         let _ = tracing_subscriber::fmt::try_init();
 
-        // UpdateUserInformation only supported in CTAP 2.1 (CredentialManagementRequest)
-        let c = CredentialManagementRequest::new(
-            CredSubCommand::UpdateUserInformation(
-                vec![
-                    0x39, 0x24, 0xdb, 0xf7, 0xba, 0x5d, 0xe8, 0x82, 0x9c, 0x69, 0xee, 0x10, 0x15,
-                    0x89, 0x76, 0xf1,
-                ]
-                .into(),
-                UserCM {
-                    id: b"alice@example.com".to_vec(),
-                    name: Some("allison@example.com".to_string()),
-                    display_name: Some("Allison Doe".to_string()),
-                },
-            ),
-            Some(2),
-            Some(PIN_UV_AUTH_PARAM.into()),
+        let s = CredSubCommand::UpdateUserInformation(
+            vec![
+                0x39, 0x24, 0xdb, 0xf7, 0xba, 0x5d, 0xe8, 0x82, 0x9c, 0x69, 0xee, 0x10, 0x15, 0x89,
+                0x76, 0xf1,
+            ]
+            .into(),
+            UserCM {
+                id: b"alice@example.com".to_vec(),
+                name: Some("allison@example.com".to_string()),
+                display_name: Some("Allison Doe".to_string()),
+            },
         );
+        assert_eq!(
+            vec![
+                0x07, 0xa2, 0x02, 0xa2, 0x62, 0x69, 0x64, 0x50, 0x39, 0x24, 0xdb, 0xf7, 0xba, 0x5d,
+                0xe8, 0x82, 0x9c, 0x69, 0xee, 0x10, 0x15, 0x89, 0x76, 0xf1, 0x64, 0x74, 0x79, 0x70,
+                0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x2d, 0x6b, 0x65, 0x79, 0x03, 0xa3,
+                0x62, 0x69, 0x64, 0x51, 0x61, 0x6c, 0x69, 0x63, 0x65, 0x40, 0x65, 0x78, 0x61, 0x6d,
+                0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d, 0x64, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x61,
+                0x6c, 0x6c, 0x69, 0x73, 0x6f, 0x6e, 0x40, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65,
+                0x2e, 0x63, 0x6f, 0x6d, 0x6b, 0x64, 0x69, 0x73, 0x70, 0x6c, 0x61, 0x79, 0x4e, 0x61,
+                0x6d, 0x65, 0x6b, 0x41, 0x6c, 0x6c, 0x69, 0x73, 0x6f, 0x6e, 0x20, 0x44, 0x6f, 0x65
+            ],
+            s.prf()
+        );
+
+        // UpdateUserInformation only supported in CTAP 2.1 (CredentialManagementRequest)
+        let c = CredentialManagementRequest::new(s, Some(2), Some(PIN_UV_AUTH_PARAM.into()));
 
         assert_eq!(
             vec![
