@@ -258,14 +258,14 @@ fn transmit(
     })?;
     let mut resp = vec![0; MAX_BUFFER_SIZE_EXTENDED];
 
-    trace!(">>> {:02x?}", req);
+    trace!(">>> {}", hex::encode(&req));
 
     let rapdu = card.transmit(&req, &mut resp).map_err(|e| {
         error!("Failed to transmit APDU command to card: {}", e);
         e
     })?;
 
-    trace!("<<< {:02x?}", rapdu);
+    trace!("<<< {}", hex::encode(rapdu));
 
     ISO7816ResponseAPDU::try_from(rapdu).map_err(|e| {
         error!("Failed to parse card response: {:?}", e);
@@ -330,7 +330,7 @@ impl NFCCard {
         reader_name: &CStr,
         atr: &[u8],
     ) -> Result<NFCCard, WebauthnCError> {
-        trace!("ATR: {:02x?}", atr);
+        trace!("ATR: {}", hex::encode(atr));
         let atr = Atr::try_from(atr)?;
         trace!("Parsed: {:?}", &atr);
 

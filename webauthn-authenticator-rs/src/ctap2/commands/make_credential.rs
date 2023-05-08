@@ -434,7 +434,7 @@ mod test {
         ];
         let a = <MakeCredentialResponse as CBORResponse>::try_from(r.as_slice())
             .expect("Failed to decode message");
-        info!(?r);
+        info!("r = {}", hex::encode(r));
 
         assert_eq!(
             a,
@@ -606,6 +606,6 @@ mod test {
 
         // let pdu = mc.to_short_apdus();
         // info!("got APDU: {:?}", pdu);
-        info!("got inner APDU: {:?}", b);
+        info!("got inner APDU: {}", hex::encode(b));
     }
 }

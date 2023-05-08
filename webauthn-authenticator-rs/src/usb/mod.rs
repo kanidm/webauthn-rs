@@ -157,7 +157,7 @@ impl USBToken {
     /// Sends a single [U2FHIDFrame] to the device, without fragmentation.
     fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         let d: HidSendReportBytes = frame.into();
-        trace!(">>> {:02x?}", d);
+        trace!(">>> {}", hex::encode(d));
         let guard = self.device.lock()?;
         guard.deref().write(&d)?;
         Ok(())
@@ -182,7 +182,7 @@ impl USBToken {
         }
         .await?;
 
-        trace!("<<< {:02x?}", &ret);
+        trace!("<<< {}", hex::encode(ret));
         U2FHIDFrame::try_from(&ret)
     }
 

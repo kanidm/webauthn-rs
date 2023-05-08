@@ -71,8 +71,11 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
         U: UiCallback,
     {
         let cbor = cmd.cbor().map_err(|_| WebauthnCError::Cbor)?;
+        trace!(">>> {}", hex::encode(&cbor));
+
         let resp = self.transmit_raw(&cbor, ui).await?;
 
+        trace!("<<< {}", hex::encode(&resp));
         R::try_from(resp.as_slice()).map_err(|_| {
             //error!("error: {:?}", e);
             WebauthnCError::Cbor
