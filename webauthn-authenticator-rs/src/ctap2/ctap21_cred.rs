@@ -313,6 +313,7 @@ where
     }
 }
 
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 #[doc(hidden)]
 async fn enumerate_credentials_impl<'a, K, T, U, R>(
     self_: &mut T,

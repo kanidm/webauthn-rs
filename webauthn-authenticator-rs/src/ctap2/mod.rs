@@ -138,8 +138,10 @@ use crate::error::WebauthnCError;
 use crate::transport::Token;
 use crate::ui::UiCallback;
 
-use self::commands::GetInfoRequest;
-use self::ctap21_bio::BiometricAuthenticatorInfo;
+use self::{
+    commands::GetInfoRequest, ctap21_bio::BiometricAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo,
+};
 
 #[doc(inline)]
 pub use self::{
@@ -152,8 +154,7 @@ pub use self::{
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 #[doc(inline)]
 pub use self::{
-    ctap21_bio::BiometricAuthenticator,
-    ctap21_cred::{CredentialManagementAuthenticator, CredentialManagementAuthenticatorInfo},
+    ctap21_bio::BiometricAuthenticator, ctap21_cred::CredentialManagementAuthenticator,
 };
 
 /// Abstraction for different versions of the CTAP2 protocol.
