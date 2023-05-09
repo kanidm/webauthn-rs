@@ -16,7 +16,7 @@ pub struct AnyTransport {
     #[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
     pub bluetooth: BluetoothTransport,
     #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
-    pub nfc: NFCReader,
+    pub nfc: Option<NFCReader>,
     #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
     pub usb: USBTransport,
 }
@@ -37,13 +37,24 @@ pub enum AnyToken {
 impl AnyTransport {
     /// Creates connections to all available transports.
     ///
-    /// For NFC, uses `Scope::User`.
+    /// For NFC, uses `Scope::User`, and [ignores unavailability of the PC/SC
+    /// Service][0].
+    ///
+    /// [0]: crate::nfc#smart-card-service
     pub async fn new() -> Result<Self, WebauthnCError> {
         Ok(AnyTransport {
             #[cfg(feature = "bluetooth")]
             bluetooth: BluetoothTransport::new().await?,
             #[cfg(feature = "nfc")]
-            nfc: NFCReader::new(pcsc::Scope::User)?,
+            nfc: match NFCReader::new(pcsc::Scope::User) {
+                Ok(reader) => Some(reader),
+                Err(WebauthnCError::PcscError(pcsc::Error::NoService))
+                | Err(WebauthnCError::PcscError(pcsc::Error::ServiceStopped)) => {
+                    warn!("PC/SC service not available, continuing without NFC support...");
+                    None
+                }
+                Err(e) => return Err(e),
+            },
             #[cfg(feature = "usb")]
             usb: USBTransport::new()?,
         })
@@ -71,7 +82,9 @@ impl<'b> Transport<'b> for AnyTransport {
         );
 
         #[cfg(feature = "nfc")]
-        o.extend(self.nfc.tokens()?.into_iter().map(AnyToken::Nfc));
+        if let Some(nfc) = &mut self.nfc {
+            o.extend(nfc.tokens()?.into_iter().map(AnyToken::Nfc));
+        }
 
         #[cfg(feature = "usb")]
         o.extend(self.usb.tokens()?.into_iter().map(AnyToken::Usb));
