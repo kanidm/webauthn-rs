@@ -19,7 +19,9 @@ use openssl::{
 
 use crate::error::WebauthnCError;
 
-pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
+pub type SHA256Hash = [u8; 32];
+
+pub fn compute_sha256(data: &[u8]) -> SHA256Hash {
     let mut hasher = Sha256::new();
     hasher.update(data);
     hasher.finish()
@@ -27,7 +29,7 @@ pub fn compute_sha256(data: &[u8]) -> [u8; 32] {
 
 #[cfg(feature = "cable")]
 /// Computes the SHA256 of `a || b`.
-pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
+pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> SHA256Hash {
     let mut hasher = Sha256::new();
     hasher.update(a);
     hasher.update(b);

@@ -163,19 +163,27 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     ///
     /// This automatically selects an appropriate verification mode.
     ///
-    /// Arguments:
+    /// ## Arguments
+    ///
     /// * `client_data_hash`: the SHA256 hash of the client data JSON.
-    /// * `permissions`: a bitmask of permissions to request. This is only
-    ///   effective when the authenticator supports
-    ///   `getPinUvAuthToken...WithPermissions`. If this is not set, this
-    ///   will use (legacy) `getPinToken` instead.
-    /// * `rp_id`: the Relying Party to associate with the request. This is
-    ///   required for `GetAssertion` and `MakeCredential` requests, and
-    ///   optional for `CredentialManagement` requests. This is only effective
-    ///   when the authenticator supports `getPinUvAuthToken...WithPermissions`.
+    ///
+    /// * `permissions`: a bitmask of permissions to request. If this argument
+    ///   is not set, the library will always use
+    ///   [legacy `getPinToken` authentication][getPinToken].
+    ///
+    /// * `rp_id`: the Relying Party to associate with the request (permissions
+    ///   RP ID).
+    ///
+    ///   This argument is required if requesting [`GET_ASSERTION`][] and/or
+    ///   [`MAKE_CREDENTIAL`][] `permissions`, and is optional if requesting
+    ///   [`CREDENTIAL_MANAGEMENT`][] `permissions`.
+    ///
+    ///   This argument must not be set if `permissions` is empty.
+    ///
     /// * `user_verification_policy`: how to verify the user.
     ///
-    /// Returns:
+    /// ## Returns
+    ///
     /// * `Option<u32>`: the `pin_uv_auth_protocol`
     /// * `Option<Vec<u8>>`: the `pin_uv_auth_param`
     /// * `Ok((None, None))` if PIN and/or UV auth is not required.
@@ -183,8 +191,30 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     ///   was not available.
     /// * `Err` for errors from the token.
     ///
-    /// References:
-    /// * <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken>
+    /// ## Permissions and CTAP versions
+    ///
+    /// The `permissions` and `rp_id` arguments are **only** enforced when the
+    /// authenticator sets the `pinUvAuthToken` option, which is a
+    /// [mandatory feature][] in CTAP 2.1 and later.
+    ///
+    /// This **will not be enforced** for CTAP 2.0 and 2.1-PRE authenticators,
+    /// and automatically fall back to
+    /// [legacy `getPinToken` authentication][getPinToken].
+    ///
+    /// While this API follows CTAP 2.1 semantics, these are only weakly
+    /// enforced, making it important to test your application with CTAP 2.0,
+    /// 2.1-PRE and 2.1 authenticators.
+    ///
+    /// ## References
+    ///
+    /// * [Operations to Obtain a `pinUvAuthToken`][gettingPinUvAuthToken]
+    ///
+    /// [getPinToken]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinToken
+    /// [gettingPinUvAuthToken]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#gettingPinUvAuthToken
+    /// [mandatory feature]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#mandatory-features
+    /// [`CREDENTIAL_MANAGEMENT`]: Permissions::CREDENTIAL_MANAGEMENT
+    /// [`GET_ASSERTION`]: Permissions::GET_ASSERTION
+    /// [`MAKE_CREDENTIAL`]: Permissions::MAKE_CREDENTIAL
     pub(super) async fn get_pin_uv_auth_token(
         &mut self,
         client_data_hash: &[u8],
@@ -228,6 +258,11 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             return Err(WebauthnCError::Internal);
         }
 
+        if rp_id.is_some() && permissions.is_empty() {
+            error!("rp_id specified with no permissions");
+            return Err(WebauthnCError::Internal);
+        }
+
         trace!("Authenticator options: {:?}", self.info.options);
         let ui_callback = self.ui_callback;
         let client_pin = self.info.get_option("clientPin").unwrap_or_default();
@@ -261,7 +296,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         }
 
         let requires_pin = (permissions.intersects(Permissions::BIO_ENROLLMENT) && !uv_bio_enroll)
-            || (permissions.intersects(Permissions::AUTHENTICATOR_CONFIGURATION) && !uv_acfg);
+            || (permissions.intersects(Permissions::AUTHENTICATOR_CONFIGURATION) && !uv_acfg)
+            || permissions.intersects(Permissions::CREDENTIAL_MANAGEMENT);
         trace!("Permissions: {permissions:?}, uvBioEnroll: {uv_bio_enroll:?}, uvAcfg: {uv_acfg:?}, requiresPin: {requires_pin:?}");
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-platf-actions
         // 1. If the authenticator is protected by some form of user
@@ -270,7 +306,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         // options.authenticatorSelection.userVerification to "required", or
         // "preferred" in the WebAuthn API):
 
-        trace!("uvPolicy: {user_verification_policy:?}, clientPin: {client_pin:?}, uv: {uv:?}, alwaysUv: {always_uv:?}, makeCredUvNotRequired: {make_cred_uv_not_required:?}");
+        trace!("uvPolicy: {user_verification_policy:?}, clientPin: {client_pin:?}, pinUvAuthToken: {pin_uv_auth_token:?}, uv: {uv:?}, alwaysUv: {always_uv:?}, makeCredUvNotRequired: {make_cred_uv_not_required:?}");
         if user_verification_policy == UserVerificationPolicy::Required
             || user_verification_policy == UserVerificationPolicy::Preferred
             || client_pin

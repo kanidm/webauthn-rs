@@ -9,6 +9,8 @@ mod bio_enrollment;
 mod client_pin;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 mod config;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+mod credential_management;
 mod get_assertion;
 mod get_info;
 mod make_credential;
@@ -21,6 +23,8 @@ pub use self::bio_enrollment::*;
 pub use self::client_pin::*;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 pub use self::config::*;
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+pub use self::credential_management::*;
 pub use self::get_assertion::*;
 pub use self::get_info::*;
 pub use self::make_credential::*;
@@ -193,6 +197,18 @@ fn value_to_vec_u32(v: Value, loc: &str) -> Option<Vec<u32>> {
             .filter_map(|i| value_to_u32(&i, loc))
             .collect()
     })
+}
+
+#[cfg(feature = "ctap2-management")]
+pub(crate) fn value_to_u8(v: &Value, loc: &str) -> Option<u8> {
+    if let Value::Integer(i) = v {
+        u8::try_from(*i)
+            .map_err(|_| error!("Invalid value inside {}: {:?}", loc, i))
+            .ok()
+    } else {
+        error!("Invalid type for {}: {:?}", loc, v);
+        None
+    }
 }
 
 pub(crate) fn value_to_u32(v: &Value, loc: &str) -> Option<u32> {

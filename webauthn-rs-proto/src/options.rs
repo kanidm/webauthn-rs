@@ -69,7 +69,7 @@ pub enum UserVerificationPolicy {
 }
 
 /// Relying Party Entity
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RelyingParty {
     /// The name of the relying party.
@@ -80,7 +80,7 @@ pub struct RelyingParty {
 }
 
 /// User Entity
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     /// The user's id in base64 form. This MUST be a unique id, and
@@ -181,7 +181,7 @@ impl ToString for AuthenticatorTransport {
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct PublicKeyCredentialDescriptor {
     /// The type of credential
     #[serde(rename = "type")]

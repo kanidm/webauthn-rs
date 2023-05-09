@@ -39,7 +39,7 @@
 //!
 //! Many CTAP2 features are unsupported:
 //!
-//! * [discoverable credentials] (`authenticatorCredentialManagement`)
+//! * creating and using [discoverable credentials]
 //!
 //! * [large blobs] (`authenticatorLargeBlobs`)
 //!
@@ -51,7 +51,8 @@
 //!
 //! * Basic [registration][Ctap20Authenticator::perform_register] and
 //!   [authentication][Ctap20Authenticator::perform_auth] with a
-//!   [CLI interface][crate::ui::Cli]
+//!   [CLI interface][crate::ui::Cli] (or
+//!   [implement your own][crate::ui::UiCallback])
 //!
 //! * [Bluetooth Low Energy][crate::bluetooth], [caBLE / Hybrid][crate::cable],
 //!   [NFC][crate::nfc] and [USB HID][crate::usb] authenticators
@@ -77,6 +78,8 @@
 //!   and [minimum PIN length][Ctap21Authenticator::set_min_pin_length]
 //!   requirements
 //!
+//! * [managing discoverable credentials][CredentialManagementAuthenticator]
+//!
 //! ## Examples
 //!
 //! * `webauthn-authenticator-rs/examples/authenticate.rs` works with any
@@ -99,7 +102,7 @@
 //!
 //! See `fido-key-manager/README.md`.
 //!
-//! [discoverable credentials]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#authenticatorCredentialManagement
+//! [discoverable credentials]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-discoverable
 //! [enterprise attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#enable-enterprise-attestation
 //! [getPinToken]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinToken
 //! [getPinUvAuthTokenUsingPinWithPermissions]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#getPinUvAuthTokenUsingPinWithPermissions
@@ -120,6 +123,7 @@ mod ctap20;
 #[doc(hidden)]
 mod ctap21;
 mod ctap21_bio;
+mod ctap21_cred;
 #[doc(hidden)]
 mod ctap21pre;
 mod pin_uv;
@@ -134,8 +138,10 @@ use crate::error::WebauthnCError;
 use crate::transport::Token;
 use crate::ui::UiCallback;
 
-use self::commands::GetInfoRequest;
-use self::ctap21_bio::BiometricAuthenticatorInfo;
+use self::{
+    commands::GetInfoRequest, ctap21_bio::BiometricAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo,
+};
 
 #[doc(inline)]
 pub use self::{
@@ -147,7 +153,9 @@ pub use self::{
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 #[doc(inline)]
-pub use ctap21_bio::BiometricAuthenticator;
+pub use self::{
+    ctap21_bio::BiometricAuthenticator, ctap21_cred::CredentialManagementAuthenticator,
+};
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///
@@ -242,6 +250,28 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         match self {
             Self::Fido21(a) => a.supports_biometrics().then_some(a),
             Self::Fido21Pre(a) => a.supports_biometrics().then_some(a),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the token supports credential management.
+    pub fn supports_credential_management(&self) -> bool {
+        match self {
+            Self::Fido21(a) => a.supports_credential_management(),
+            Self::Fido21Pre(a) => a.supports_credential_management(),
+            _ => false,
+        }
+    }
+
+    #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+    /// Gets a mutable reference to a [CredentialManagementAuthenticator] trait
+    /// for the token, if it supports credential management commands.
+    ///
+    /// Returns `None` if the token does not support credential management.
+    pub fn credential_management(&mut self) -> Option<&mut dyn CredentialManagementAuthenticator> {
+        match self {
+            Self::Fido21(a) => a.supports_credential_management().then_some(a),
+            Self::Fido21Pre(a) => a.supports_credential_management().then_some(a),
             _ => None,
         }
     }

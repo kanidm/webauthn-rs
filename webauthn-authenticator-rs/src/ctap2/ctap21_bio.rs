@@ -224,9 +224,6 @@ pub trait BiometricAuthenticator {
 /// Implementation of biometric management commands for [Ctap21Authenticator][]
 /// and [Ctap21PreAuthenticator][].
 ///
-/// This is provided for implementors of [BiometricAuthenticatorInfo][] and
-/// [Ctap20Authenticator][].
-///
 /// [Ctap21Authenticator]: super::Ctap21Authenticator
 /// [Ctap21PreAuthenticator]: super::Ctap21PreAuthenticator
 #[async_trait]

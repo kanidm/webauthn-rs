@@ -64,9 +64,12 @@ macro_rules! bio_struct {
             get_modality: bool,
         }
 
-        impl BioEnrollmentRequestTrait for $name {
-            const BIO_CMD: u8 = $cmd;
+        impl CBORCommand for $name {
+            const CMD: u8 = $cmd;
+            type Response = BioEnrollmentResponse;
+        }
 
+        impl BioEnrollmentRequestTrait for $name {
             const GET_MODALITY: Self = Self {
                 get_modality: true,
                 modality: None,
@@ -174,23 +177,12 @@ pub trait BioEnrollmentRequestTrait: CBORCommand<Response = BioEnrollmentRespons
     /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#cancelEnrollment>
     const FINGERPRINT_CANCEL_CURRENT_ENROLLMENT: Self;
 
-    /// CTAP command ID.
-    const BIO_CMD: u8;
-
     /// Creates a new [BioEnrollmentRequest] from the given [BioSubCommand].
     fn new(
         s: BioSubCommand,
         pin_uv_protocol: Option<u32>,
         pin_uv_auth_param: Option<Vec<u8>>,
     ) -> Self;
-}
-
-impl<T> CBORCommand for T
-where
-    T: BioEnrollmentRequestTrait,
-{
-    const CMD: u8 = T::BIO_CMD;
-    type Response = BioEnrollmentResponse;
 }
 
 /// Metadata about a stored fingerprint.

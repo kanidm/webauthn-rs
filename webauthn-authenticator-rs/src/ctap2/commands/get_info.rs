@@ -63,7 +63,31 @@ pub struct GetInfoResponse {
     pub preferred_platform_uv_attempts: Option<u32>,
     pub uv_modality: Option<u32>,
     pub certifications: Option<BTreeMap<String, u8>>,
+
+    /// Estimated number of additional discoverable credentials which could be
+    /// created on the authenticator, assuming *maximally-sized* fields for all
+    /// requests (ie: errs low).
+    ///
+    /// If a request to create a maximally-sized discoverable credential *might*
+    /// fail due to storage constraints, the authenticator reports 0.
+    ///
+    /// This value may vary over time, depending on the size of individual
+    /// discoverable credentials, and the token's storage allocation strategy.
+    ///
+    /// ## CTAP compatibility
+    ///
+    /// This field is **optional**, and may only be present on authenticators
+    /// supporting CTAP 2.1 and later.
+    ///
+    /// On authenticators supporting [credential management][0] (including CTAP
+    /// 2.1-PRE), an optimistic estimate (ie: presuming *minimally-sized*
+    /// fields) may be available from
+    /// [`CredentialStorageMetadata::max_possible_remaining_resident_credentials_count`][1].
+    ///
+    /// [0]: crate::ctap2::CredentialManagementAuthenticator
+    /// [1]: super::CredentialStorageMetadata::max_possible_remaining_resident_credentials_count
     pub remaining_discoverable_credentials: Option<u32>,
+
     pub vendor_prototype_config_commands: Option<BTreeSet<u64>>,
 }
 
@@ -267,6 +291,18 @@ impl GetInfoResponse {
     /// requests.
     pub fn make_cred_uv_not_required(&self) -> bool {
         self.get_option("makeCredUvNotRqd").unwrap_or_default()
+    }
+
+    /// Returns `true` if the authenticator supports CTAP 2.1 credential
+    /// management.
+    pub fn ctap21_credential_management(&self) -> bool {
+        self.get_option("credMgmt").unwrap_or_default()
+    }
+
+    /// Returns `true` if the authenticator supports CTAP 2.1-PRE credential
+    /// management.
+    pub fn ctap21pre_credential_management(&self) -> bool {
+        self.get_option("credentialMgmtPreview").unwrap_or_default()
     }
 }
 
