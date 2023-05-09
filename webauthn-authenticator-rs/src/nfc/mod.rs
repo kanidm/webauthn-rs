@@ -23,7 +23,9 @@
 //!
 //! [2]: https://github.com/GoogleChromeLabs/chromeos_smart_card_connector/blob/main/docs/index-developer.md
 //!
-//! ## Windows support
+//! ## Windows
+//!
+//! ### Windows 10 WebAuthn API
 //!
 //! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
 //! non-Administrator access to **all** NFC FIDO tokens, throwing an error
@@ -32,6 +34,28 @@
 //!
 //! Use [Win10][crate::win10::Win10] (available with the `win10` feature) on
 //! Windows instead.
+//!
+//! ### Smart card service
+//!
+//! By default, Windows runs the [Smart Card service][3] (`SCardSvr`) in
+//! "Manual (Triggered)" start-up mode. Rather than starting the service on
+//! boot, Windows will wait for an application to use the PC/SC API.
+//!
+//! However, Windows *does not* automatically start `SCardSvr` if:
+//!
+//! * there has *never* been a smart card reader (or other CCID interface, such
+//!   as a Yubikey) connected to the PC
+//!
+//! * the user has explicitly disabled the service (in `services.msc`)
+//!
+//! Instead, Windows returns an error ([`NoService`][4]) when establishing a
+//! context (in [`NFCReader::new()`]).
+//!
+//! [`AnyTransport`] will ignore unavailability of `SCardSvr`, as it is presumed
+//! that PC/SC is one of many potentially-available transports.
+//!
+//! [3]: https://learn.microsoft.com/en-us/windows/security/identity-protection/smart-cards/smart-card-smart-cards-for-windows-service
+//! [4]: pcsc::Error::NoService
 use crate::ctap2::commands::to_short_apdus;
 use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
@@ -109,6 +133,10 @@ impl NFCReader {
     /// let reader = NFCReader::new(Scope::User);
     /// // TODO: Handle errors
     /// ```
+    ///
+    /// This returns an error [if the smart card service is unavailable][0].
+    ///
+    /// [0]: crate::nfc#smart-card-service
     pub fn new(scope: Scope) -> Result<Self, WebauthnCError> {
         Ok(NFCReader {
             ctx: Context::establish(scope).map_err(WebauthnCError::PcscError)?,
