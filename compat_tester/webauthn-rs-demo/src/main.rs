@@ -201,7 +201,7 @@ async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Res
 
 async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result {
     debug!("session - {:?}", request.session().get_raw("d_cred_map"));
-    
+
     let auth_start: AuthenticateStart = request.body_json().await?;
     debug!(?auth_start);
 
@@ -531,7 +531,10 @@ async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Re
         u
     };
 
-    let actor_res = request.state().condui_start_register(u, reg_start.username).await;
+    let actor_res = request
+        .state()
+        .condui_start_register(u, reg_start.username)
+        .await;
 
     let res = match actor_res {
         Ok((chal, rs)) => {
