@@ -1,35 +1,29 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
-// use std::fs::{File, OpenOptions};
-// use std::io::{Read, Result as IOResult, Write};
-use std::mem::size_of;
-// use std::os::windows::io::AsRawHandle;
-// use std::os::windows::prelude::{AsHandle, RawHandle};
+use std::{fmt, mem::size_of};
 
 use async_trait::async_trait;
+use tokio::sync::mpsc;
+
 use windows::{
-    Devices::{Enumeration::DeviceInformation, HumanInterfaceDevice::HidDevice},
+    core::HRESULT,
+    Devices::{
+        Enumeration::DeviceInformation,
+        HumanInterfaceDevice::{HidDevice, HidInputReport, HidInputReportReceivedEventArgs},
+    },
+    Foundation::{EventRegistrationToken, TypedEventHandler},
     Storage::{
         FileAccessMode,
         Streams::{DataReader, DataWriter},
     },
-    // Win32::{
-    //     Devices::HumanInterfaceDevice::{
-    //         HidD_FreePreparsedData, HidD_GetPreparsedData, HidP_GetCaps, HIDP_CAPS,
-    //     },
-    //     Foundation::HANDLE,
-    // },
+    Win32::Foundation::{ERROR_BAD_ARGUMENTS, ERROR_HANDLES_CLOSED},
 };
 
-use crate::usb::{HidReportBytes, HidSendReportBytes, HID_RPT_SIZE};
 use crate::{
     error::WebauthnCError,
-    usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID, HID_RPT_SEND_SIZE},
+    usb::{
+        platform::traits::{PlatformUSBDevice, PlatformUSBDeviceInfo, PlatformUSBDeviceManager},
+        HidReportBytes, HidSendReportBytes, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID,
+    },
 };
-
-use super::traits::{PlatformUSBDevice, PlatformUSBDeviceInfo, PlatformUSBDeviceManager};
 
 #[derive(Debug)]
 pub struct WindowsUSBDeviceManager {}
@@ -57,7 +51,6 @@ impl PlatformUSBDeviceManager for WindowsUSBDeviceManager {
     }
 }
 
-#[derive(Debug)]
 pub struct WindowsUSBDeviceInfo {
     info: DeviceInformation,
 }
@@ -67,75 +60,88 @@ impl PlatformUSBDeviceInfo for WindowsUSBDeviceInfo {
     type Device = WindowsUSBDevice;
 
     async fn open(&self) -> Result<Self::Device, WebauthnCError> {
-        let device_id = self.info.Id().unwrap();
-        println!("Opening device: {device_id}, {}", self.info.Name().unwrap());
+        WindowsUSBDevice::new(&self).await
+    }
+}
 
-        let device = HidDevice::FromIdAsync(&device_id, FileAccessMode::ReadWrite)
-            .unwrap()
-            .await;
-        let device = device.unwrap();
-
-        Ok(WindowsUSBDevice { device })
+impl fmt::Debug for WindowsUSBDeviceInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WindowsUSBDeviceInfo")
+            .field("id", &self.info.Id().unwrap_or_default().to_string())
+            .field("name", &self.info.Name().unwrap_or_default().to_string())
+            .finish()
     }
 }
 
 #[derive(Debug)]
 pub struct WindowsUSBDevice {
     device: HidDevice,
+    listener_token: EventRegistrationToken,
+    rx: mpsc::Receiver<HidInputReport>,
+}
+
+impl Drop for WindowsUSBDevice {
+    fn drop(&mut self) {
+        self.device
+            .RemoveInputReportReceived(self.listener_token)
+            .unwrap();
+    }
 }
 
 impl WindowsUSBDevice {
-    // pub fn new(path: String) -> IOResult<Self> {
-    //     let file = OpenOptions::new().read(true).write(true).open(&path)?;
-    //     let caps = Self::get_caps(file.as_raw_handle());
+    async fn new(info: &WindowsUSBDeviceInfo) -> Result<Self, WebauthnCError> {
+        trace!("Opening device: {info:?}");
+        let device_id = info.info.Id().map_err(|e| {
+            error!("Unable to get device ID: {e}");
+            WebauthnCError::Internal
+        })?;
 
-    //     Ok(Self { path, file, caps })
-    // }
+        let device = HidDevice::FromIdAsync(&device_id, FileAccessMode::ReadWrite)
+            .unwrap()
+            .await;
+        let device = device.unwrap();
 
-    // fn get_caps(handle: RawHandle) -> Option<HIDP_CAPS> {
-    //     let handle = HANDLE(handle as isize);
-    //     if handle.is_invalid() {
-    //         return None;
-    //     }
+        // HidDevice returns data using the InputReportReceived event. Stash the
+        // data into a channel to pick up later.
+        let (tx, rx) = mpsc::channel(100);
+        let listener_token = device
+            .InputReportReceived(&TypedEventHandler::<
+                HidDevice,
+                HidInputReportReceivedEventArgs,
+            >::new(move |_, args| {
+                let args = args.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
+                let report = args.Report()?;
+                tx.blocking_send(report)
+                    .map_err(|_| ERROR_HANDLES_CLOSED.into())
+            }))
+            .unwrap();
 
-    //     let preparseddata = std::ptr::null_mut();
-    //     let r = unsafe { HidD_GetPreparsedData(handle, preparseddata) };
-
-    //     if !r.as_bool() || preparseddata.is_null() {
-    //         return None;
-    //     }
-
-    //     let mut capabilities = std::mem::MaybeUninit::<HIDP_CAPS>::uninit();
-    //     unsafe {
-    //         let r = HidP_GetCaps(*preparseddata, capabilities.as_mut_ptr());
-    //         HidD_FreePreparsedData(*preparseddata);
-
-    //         if r.is_err() {
-    //             return None;
-    //         }
-
-    //         return Some(capabilities.assume_init());
-    //     }
-    // }
+        let o = WindowsUSBDevice {
+            device,
+            listener_token,
+            rx,
+        };
+        Ok(o)
+    }
 }
 
 #[async_trait]
 impl PlatformUSBDevice for WindowsUSBDevice {
-    async fn read(&self) -> Result<HidReportBytes, WebauthnCError> {
-        let ret = self.device.GetInputReportByIdAsync(0).unwrap().await;
+    async fn read(&mut self) -> Result<HidReportBytes, WebauthnCError> {
+        let ret = self.rx.recv().await;
+        // let ret = self.device.GetInputReportByIdAsync(0).unwrap().await;
         let ret = ret.unwrap();
         let buf = ret.Data().unwrap();
         let len = buf.Length().unwrap() as usize;
         println!("Read buffer length: {len}");
         let dr = DataReader::FromBuffer(&buf).expect("DataReader::FromBuffer");
 
-        let mut o = [0; size_of::<HidSendReportBytes>()];
-        dr.ReadBytes(&mut o[..len]).expect("ReadBytes");
-        println!("Read bytes: {}", hex::encode(&o[..len]));
-        let mut o2 = [0; size_of::<HidReportBytes>()];
-        o2.copy_from_slice(&o[1..]);
+        let mut o = [0; size_of::<HidReportBytes>()];
+        // Drop the leading report ID byte
+        dr.ReadByte().ok();
+        dr.ReadBytes(&mut o).expect("ReadBytes");
 
-        Ok(o2)
+        Ok(o)
     }
 
     async fn write(&self, data: HidSendReportBytes) -> Result<(), WebauthnCError> {
@@ -155,25 +161,3 @@ impl PlatformUSBDevice for WindowsUSBDevice {
         Ok(())
     }
 }
-
-// impl Read for WindowsUSBDevice {
-//     fn read(&mut self, bytes: &mut [u8]) -> IOResult<usize> {
-//         // Windows always includes the report ID.
-//         let mut input = [0; HID_RPT_SEND_SIZE];
-//         self.device.GetInputReportByIdAsync(0);
-
-//         let _ = self.file.read(&mut input)?;
-//         bytes.clone_from_slice(&input[1..]);
-//         Ok(bytes.len() as usize)
-//     }
-// }
-
-// impl Write for WindowsUSBDevice {
-//     fn write(&mut self, bytes: &[u8]) -> IOResult<usize> {
-//         self.file.write(bytes)
-//     }
-
-//     fn flush(&mut self) -> IOResult<()> {
-//         self.file.flush()
-//     }
-// }

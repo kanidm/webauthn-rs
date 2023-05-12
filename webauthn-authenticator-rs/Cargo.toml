@@ -41,7 +41,7 @@ nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
 softpasskey = ["crypto", "softtoken"]
 softtoken = ["crypto", "ctap2"]
-usb = ["ctap2", "dep:hidapi", "dep:windows"]
+usb = ["ctap2", "dep:hidapi", "dep:windows", "dep:tokio"]
 win10 = ["dep:windows"]
 
 default = []

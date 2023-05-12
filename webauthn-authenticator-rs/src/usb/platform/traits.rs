@@ -20,6 +20,6 @@ pub trait PlatformUSBDeviceInfo {
 
 #[async_trait]
 pub trait PlatformUSBDevice: Send {
-    async fn read(&self) -> Result<HidReportBytes, WebauthnCError>;
+    async fn read(&mut self) -> Result<HidReportBytes, WebauthnCError>;
     async fn write(&self, data: HidSendReportBytes) -> Result<(), WebauthnCError>;
 }

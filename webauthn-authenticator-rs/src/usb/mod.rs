@@ -193,7 +193,7 @@ impl USBToken {
     }
 
     /// Receives a single [U2FHIDFrame] from the device, without fragmentation.
-    async fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
+    async fn recv_one(&mut self) -> Result<U2FHIDFrame, WebauthnCError> {
         let ret: HidReportBytes = async {
             // let guard = self.device.lock()?;
             let ret = self.device.read().await?;
@@ -207,7 +207,7 @@ impl USBToken {
 
     /// Recives a [Response] from the device, handling fragmented [U2FHIDFrame]
     /// responses if needed.
-    async fn recv(&self) -> Result<Response, WebauthnCError> {
+    async fn recv(&mut self) -> Result<Response, WebauthnCError> {
         // Recieve first chunk
         let mut f = self.recv_one().await?;
         let mut s: usize = f.data.len();
