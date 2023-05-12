@@ -12,6 +12,7 @@
 //! Use [Win10][crate::win10::Win10] (available with the `win10` feature) on
 //! Windows instead.
 mod framing;
+mod platform;
 mod responses;
 
 use crate::error::WebauthnCError;
@@ -20,11 +21,12 @@ use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use async_trait::async_trait;
+use futures::executor::block_on;
 
 #[cfg(doc)]
 use crate::stubs::*;
 
-use hidapi::{HidApi, HidDevice};
+// use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use std::fmt;
 use std::ops::Deref;
@@ -33,6 +35,8 @@ use std::thread;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
+use self::platform::{WindowsUSBDeviceManager, WindowsUSBDevice};
+use self::platform::traits::{PlatformUSBDevice, PlatformUSBDeviceManager, PlatformUSBDeviceInfo};
 pub(crate) use self::responses::InitResponse;
 
 // u2f_hid.h
@@ -48,11 +52,14 @@ type HidReportBytes = [u8; HID_RPT_SIZE];
 type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
 
 pub struct USBTransport {
-    api: HidApi,
+    // todo: handle platform stuff
+    manager: WindowsUSBDeviceManager,
+    // api: HidApi,
 }
 
 pub struct USBToken {
-    device: Mutex<HidDevice>,
+    // todo: handle platform stuff
+    device: WindowsUSBDevice,
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
@@ -77,7 +84,8 @@ impl fmt::Debug for USBToken {
 impl USBTransport {
     pub fn new() -> Result<Self, WebauthnCError> {
         Ok(Self {
-            api: HidApi::new()?,
+            manager: PlatformUSBDeviceManager::new()?,
+            // api: HidApi::new()?,
         })
     }
 }
@@ -115,6 +123,18 @@ impl<'b> Transport<'b> for USBTransport {
     /// On Windows 10 build 1903 or later, this will not return any devices
     /// unless the program is run as Administrator.
     fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+        // TODO use async
+        let ret = block_on(self.manager.get_devices());
+
+        // TODO delay opening devices
+        Ok(ret.iter().filter_map(|d| {
+            let device = block_on(d.open());
+            device.ok().map(USBToken::new)
+        })
+        .collect())
+
+        // todo!()
+        /*
         let tokens: Vec<Self::Token> = self
             .api
             .device_list()
@@ -139,15 +159,15 @@ impl<'b> Transport<'b> for USBTransport {
                 return Err(WebauthnCError::BrokenHidApi);
             }
         }
-
         Ok(tokens)
+        */
     }
 }
 
 impl USBToken {
-    fn new(device: HidDevice) -> Self {
+    fn new(device: WindowsUSBDevice) -> Self {
         USBToken {
-            device: Mutex::new(device),
+            device, // : Mutex::new(device),
             cid: 0,
             supports_ctap1: false,
             supports_ctap2: false,
@@ -155,19 +175,19 @@ impl USBToken {
     }
 
     /// Sends a single [U2FHIDFrame] to the device, without fragmentation.
-    fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
+    async fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {}", hex::encode(d));
-        let guard = self.device.lock()?;
-        guard.deref().write(&d)?;
+        // let guard = self.device.lock()?;
+        self.device.write(d).await?;
         Ok(())
     }
 
     /// Sends a [U2FHIDFrame] to the device, fragmenting the message to fit
     /// within the USB HID MTU.
-    fn send(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
+    async fn send(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         for f in U2FHIDFrameIterator::new(frame)? {
-            self.send_one(&f)?;
+            self.send_one(&f).await?;
         }
         Ok(())
     }
@@ -175,9 +195,8 @@ impl USBToken {
     /// Receives a single [U2FHIDFrame] from the device, without fragmentation.
     async fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
         let ret: HidReportBytes = async {
-            let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
-            let guard = self.device.lock()?;
-            guard.deref().read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)?;
+            // let guard = self.device.lock()?;
+            let ret = self.device.read().await?;
             Ok::<HidReportBytes, WebauthnCError>(ret)
         }
         .await?;
@@ -216,7 +235,7 @@ impl Token for USBToken {
             len: cmd.len() as u16,
             data: cmd.to_vec(),
         };
-        self.send(&cmd)?;
+        self.send(&cmd).await?;
 
         // Get a response, checking for keep-alive
         let resp = loop {
@@ -262,7 +281,7 @@ impl Token for USBToken {
             cmd: U2FHID_INIT,
             len: nonce.len() as u16,
             data: nonce.to_vec(),
-        })?;
+        }).await?;
 
         match self.recv().await? {
             Response::Init(i) => {
@@ -295,6 +314,6 @@ impl Token for USBToken {
             len: 0,
             data: vec![],
         };
-        self.send_one(&cmd)
+        self.send_one(&cmd).await
     }
 }
