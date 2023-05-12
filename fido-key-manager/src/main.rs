@@ -19,6 +19,7 @@ use webauthn_authenticator_rs::{
     SHA256Hash,
 };
 use webauthn_rs_core::interface::COSEKeyType;
+use tokio_stream::StreamExt;
 
 /// Parses a Base-16 encoded string.
 ///
@@ -219,6 +220,21 @@ async fn main() {
 
     let ui = Cli {};
     let mut transport = AnyTransport::new().await.unwrap();
+    let stream = transport.tokens().await.unwrap();
+
+    let stream = stream.timeout(Duration::from_secs(5));
+    tokio::pin!(stream);
+
+    while let Some(Ok(event)) = stream.next().await {
+        println!("event: {event:?}");
+        if let TokenEvent::Added(t) = event {
+            let authenticator = CtapAuthenticator::new(t, &ui).await.unwrap();
+            println!("{}", authenticator.get_info());
+        }
+    }
+    todo!()
+
+    /*
     let mut tokens = transport.connect_all(&ui).expect("connect_all");
 
     if tokens.is_empty() {
@@ -662,4 +678,5 @@ async fn main() {
                 .expect("Error updating credential");
         }
     }
+     */
 }

@@ -1,12 +1,14 @@
-use std::{fmt, mem::size_of};
+use std::{fmt, future::IntoFuture, mem::size_of};
 
 use async_trait::async_trait;
+use futures::stream::BoxStream;
 use tokio::sync::mpsc;
 
+use tokio_stream::wrappers::ReceiverStream;
 use windows::{
-    core::HRESULT,
+    core::{HRESULT, HSTRING},
     Devices::{
-        Enumeration::DeviceInformation,
+        Enumeration::{DeviceInformation, DeviceInformationUpdate, DeviceWatcher},
         HumanInterfaceDevice::{HidDevice, HidInputReport, HidInputReportReceivedEventArgs},
     },
     Foundation::{EventRegistrationToken, TypedEventHandler},
@@ -20,7 +22,7 @@ use windows::{
 use crate::{
     error::WebauthnCError,
     usb::{
-        platform::traits::{PlatformUSBDevice, PlatformUSBDeviceInfo, PlatformUSBDeviceManager},
+        platform::traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
         HidReportBytes, HidSendReportBytes, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID,
     },
 };
@@ -29,9 +31,77 @@ use crate::{
 pub struct WindowsUSBDeviceManager {}
 
 #[async_trait]
-impl PlatformUSBDeviceManager for WindowsUSBDeviceManager {
+impl USBDeviceManager for WindowsUSBDeviceManager {
     type Device = WindowsUSBDevice;
     type DeviceInfo = WindowsUSBDeviceInfo;
+
+    fn watch_devices<'a>(
+        &'a self,
+    ) -> Result<BoxStream<'a, WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
+        trace!("watch_devices");
+        let (tx, rx) = mpsc::channel(16);
+
+        let selector =
+            HidDevice::GetDeviceSelector(FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID).map_err(|e| {
+                error!("creating FIDO device selector: {e}");
+                WebauthnCError::Internal
+            })?;
+        let watcher = DeviceInformation::CreateWatcherAqsFilter(&selector).map_err(|e| {
+            error!("creating DeviceWatcher: {e}");
+            WebauthnCError::Internal
+        })?;
+
+        let tx_add = tx.clone();
+        watcher
+            .Added(&TypedEventHandler::<DeviceWatcher, DeviceInformation>::new(
+                move |_, info| {
+                    let info = info.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
+
+                    tx_add
+                        .blocking_send(WatchEvent::Added(WindowsUSBDeviceInfo {
+                            info: info.clone(),
+                        }))
+                        .map_err(|_| ERROR_HANDLES_CLOSED.into())
+                },
+            ))
+            .map_err(|e| {
+                error!("adding DeviceWatch::Added listener: {e}");
+                WebauthnCError::Internal
+            })?;
+
+        watcher
+            .Removed(
+                &TypedEventHandler::<DeviceWatcher, DeviceInformationUpdate>::new(
+                    move |_, update| {
+                        let info = update
+                            .as_ref()
+                            .ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
+                        tx.blocking_send(WatchEvent::Removed(info.Id()?))
+                            .map_err(|_| ERROR_HANDLES_CLOSED.into())
+                    },
+                ),
+            )
+            .map_err(|e| {
+                error!("adding DeviceWatch::Added listener: {e}");
+                WebauthnCError::Internal
+            })?;
+
+        trace!("STtarting watcher");
+        watcher.Start().map_err(|e| {
+            error!("DeviceWatcher::Start: {e}");
+            WebauthnCError::Internal
+        })?;
+
+        todo!();
+        // TODO: this part doesn't actually work yet.
+        // Suspect that the issue is the DeviceWatcher needs to be kept
+        // while the stream is still running.
+
+        // TODO: dropping the ReceiverStream also needs to stop the watcher
+        // and clean up event handlers
+        let t = ReceiverStream::new(rx);
+        Ok(Box::pin(t))
+    }
 
     async fn get_devices(&self) -> Vec<Self::DeviceInfo> {
         let selector = HidDevice::GetDeviceSelector(FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID).unwrap();
@@ -56,11 +126,12 @@ pub struct WindowsUSBDeviceInfo {
 }
 
 #[async_trait]
-impl PlatformUSBDeviceInfo for WindowsUSBDeviceInfo {
+impl USBDeviceInfo for WindowsUSBDeviceInfo {
     type Device = WindowsUSBDevice;
+    type Id = HSTRING;
 
-    async fn open(&self) -> Result<Self::Device, WebauthnCError> {
-        WindowsUSBDevice::new(&self).await
+    async fn open(self) -> Result<Self::Device, WebauthnCError> {
+        WindowsUSBDevice::new(self).await
     }
 }
 
@@ -76,6 +147,7 @@ impl fmt::Debug for WindowsUSBDeviceInfo {
 #[derive(Debug)]
 pub struct WindowsUSBDevice {
     device: HidDevice,
+    info: WindowsUSBDeviceInfo,
     listener_token: EventRegistrationToken,
     rx: mpsc::Receiver<HidInputReport>,
 }
@@ -89,7 +161,7 @@ impl Drop for WindowsUSBDevice {
 }
 
 impl WindowsUSBDevice {
-    async fn new(info: &WindowsUSBDeviceInfo) -> Result<Self, WebauthnCError> {
+    async fn new(info: WindowsUSBDeviceInfo) -> Result<Self, WebauthnCError> {
         trace!("Opening device: {info:?}");
         let device_id = info.info.Id().map_err(|e| {
             error!("Unable to get device ID: {e}");
@@ -118,6 +190,7 @@ impl WindowsUSBDevice {
 
         let o = WindowsUSBDevice {
             device,
+            info,
             listener_token,
             rx,
         };
@@ -126,7 +199,13 @@ impl WindowsUSBDevice {
 }
 
 #[async_trait]
-impl PlatformUSBDevice for WindowsUSBDevice {
+impl USBDevice for WindowsUSBDevice {
+    type Info = WindowsUSBDeviceInfo;
+
+    fn get_info(&self) -> &Self::Info {
+        &self.info
+    }
+
     async fn read(&mut self) -> Result<HidReportBytes, WebauthnCError> {
         let ret = self.rx.recv().await;
         // let ret = self.device.GetInputReportByIdAsync(0).unwrap().await;

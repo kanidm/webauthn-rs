@@ -62,6 +62,7 @@ use crate::ui::UiCallback;
 
 use async_trait::async_trait;
 use futures::executor::block_on;
+use futures::stream::BoxStream;
 
 #[cfg(doc)]
 use crate::stubs::*;
@@ -248,7 +249,7 @@ impl NFCReader {
 impl<'b> Transport<'b> for NFCReader {
     type Token = NFCCard;
 
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         // FIXME: this API doesn't work too well for NFC - you could have a
         // reader which has no card in the field; and at which point you can
         // do a SELECT and GetInfoRequest to see if it's for us.
@@ -270,7 +271,8 @@ impl<'b> Transport<'b> for NFCReader {
             })
             .collect();
 
-        Ok(r)
+        // Ok(r)
+        todo!()
     }
 }
 
@@ -397,6 +399,8 @@ impl NFCCard {
 
 #[async_trait]
 impl Token for NFCCard {
+    type Id = ();
+
     fn has_button(&self) -> bool {
         false
     }

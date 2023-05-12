@@ -2,6 +2,10 @@
 //!
 //! This is still a work in progress, and doesn't yet handle tokens quite as
 //! well as we'd like.
+use futures::StreamExt;
+use tokio::sync::mpsc;
+use windows::core::HSTRING;
+
 #[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
 use crate::bluetooth::*;
 #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
@@ -34,6 +38,19 @@ pub enum AnyToken {
     Usb(USBToken),
 }
 
+#[derive(Debug)]
+pub enum AnyTokenId {
+    /// No-op stub entry, never used.
+    Stub,
+    #[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
+    Bluetooth(()),
+    #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
+    Nfc(()),
+    #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
+    Usb(HSTRING), // TODO
+}
+
+
 impl AnyTransport {
     /// Creates connections to all available transports.
     ///
@@ -61,41 +78,58 @@ impl AnyTransport {
     }
 }
 
+#[async_trait]
 impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
         {
             error!("No transports available!");
             return Err(WebauthnCError::NotSupported);
         }
 
-        let mut o: Vec<Self::Token> = Vec::new();
-        #[cfg(feature = "bluetooth")]
-        o.extend(
-            self.bluetooth
-                .tokens()?
-                .into_iter()
-                .map(AnyToken::Bluetooth),
-        );
+        // let mut o: Vec<Self::Token> = Vec::new();
 
-        #[cfg(feature = "nfc")]
-        if let Some(nfc) = &mut self.nfc {
-            o.extend(nfc.tokens()?.into_iter().map(AnyToken::Nfc));
-        }
+        // #[cfg(feature = "bluetooth")]
+        // o.extend(
+        //     self.bluetooth
+        //         .tokens()
+        //         .await?
+        //         .into_iter()
+        //         .map(AnyToken::Bluetooth),
+        // );
 
+        // #[cfg(feature = "nfc")]
+        // if let Some(nfc) = &mut self.nfc {
+        //     o.extend(nfc.tokens().await?.into_iter().map(AnyToken::Nfc));
+        // }
+
+        
         #[cfg(feature = "usb")]
-        o.extend(self.usb.tokens()?.into_iter().map(AnyToken::Usb));
+        {
+            let s = self.usb.tokens().await?;
+            return Ok(Box::pin(s.map(|e| {
+                match e {
+                    TokenEvent::Added(u) => TokenEvent::Added(AnyToken::Usb(u)),
+                    TokenEvent::Removed(u) => TokenEvent::Removed(AnyTokenId::Usb(u)),
+                }
+            })));
+            // o.extend(self.usb.tokens().await?.into_iter().map(AnyToken::Usb));
+        }
+        // Ok(o)
 
-        Ok(o)
+        todo!()
     }
+
 }
 
 #[async_trait]
 #[allow(clippy::unimplemented)]
 impl Token for AnyToken {
+    type Id = AnyTokenId;
+
     #[allow(unused_variables)]
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where

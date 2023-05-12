@@ -9,11 +9,17 @@ pub(crate) mod types;
 pub use crate::transport::any::{AnyToken, AnyTransport};
 
 use async_trait::async_trait;
-use futures::executor::block_on;
+use futures::{executor::block_on, stream::BoxStream};
 use std::fmt;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use crate::{ctap2::*, error::WebauthnCError, ui::UiCallback};
+
+#[derive(Debug)]
+pub enum TokenEvent<T: Token> {
+    Added(T),
+    Removed(T::Id),
+}
 
 /// Represents a transport layer protocol for [Token].
 ///
@@ -25,28 +31,34 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     type Token: Token + 'b;
 
     /// Gets a list of all connected tokens for this [Transport].
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
+    async fn tokens<'a>(
+        &'a mut self,
+    ) -> Result<BoxStream<'a, TokenEvent<Self::Token>>, WebauthnCError>;
 
-    fn connect_all<'a, U: UiCallback>(
+    async fn connect_all<'a, U: UiCallback>(
         &mut self,
         ui: &'a U,
     ) -> Result<Vec<CtapAuthenticator<'a, Self::Token, U>>, WebauthnCError> {
-        Ok(self
-            .tokens()?
-            .drain(..)
-            .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
-            .collect())
+        // Ok(self
+        //     .tokens()
+        //     .await?
+        //     .drain(..)
+        //     .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
+        //     .collect())
+        todo!()
     }
 
-    fn connect_one<'a, U: UiCallback>(
+    async fn connect_one<'a, U: UiCallback>(
         &mut self,
         ui: &'a U,
     ) -> Result<CtapAuthenticator<'a, Self::Token, U>, WebauthnCError> {
-        self.tokens()?
-            .drain(..)
-            .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
-            .next()
-            .ok_or(WebauthnCError::NoSelectedToken)
+        // self.tokens()
+        //     .await?
+        //     .drain(..)
+        //     .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
+        //     .next()
+        //     .ok_or(WebauthnCError::NoSelectedToken)
+        todo!()
     }
 }
 
@@ -56,6 +68,8 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
 /// [crate::ctap2] provides a higher level abstraction.
 #[async_trait]
 pub trait Token: Sized + fmt::Debug + Sync + Send {
+    type Id: Sized + fmt::Debug + Sync + Send;
+
     fn has_button(&self) -> bool {
         true
     }

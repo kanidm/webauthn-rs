@@ -20,8 +20,17 @@ use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_C
 use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
+use crate::usb::platform::traits::WatchEvent;
 use async_trait::async_trait;
+use futures::Stream;
+// use futures::{StreamExt as _};
 use futures::executor::block_on;
+use futures::stream::BoxStream;
+use tokio::sync::mpsc;
+use tokio::time::Interval;
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{StreamExt as _, StreamMap, Timeout};
+use windows::core::HSTRING;
 
 #[cfg(doc)]
 use crate::stubs::*;
@@ -30,13 +39,14 @@ use crate::stubs::*;
 use openssl::rand::rand_bytes;
 use std::fmt;
 use std::ops::Deref;
+use std::pin::Pin;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
-use self::platform::{WindowsUSBDeviceManager, WindowsUSBDevice};
-use self::platform::traits::{PlatformUSBDevice, PlatformUSBDeviceManager, PlatformUSBDeviceInfo};
+use self::platform::traits::{USBDevice, USBDeviceInfo, USBDeviceManager};
+use self::platform::{WindowsUSBDevice, WindowsUSBDeviceManager};
 pub(crate) use self::responses::InitResponse;
 
 // u2f_hid.h
@@ -84,12 +94,13 @@ impl fmt::Debug for USBToken {
 impl USBTransport {
     pub fn new() -> Result<Self, WebauthnCError> {
         Ok(Self {
-            manager: PlatformUSBDeviceManager::new()?,
+            manager: USBDeviceManager::new()?,
             // api: HidApi::new()?,
         })
     }
 }
 
+#[async_trait]
 impl<'b> Transport<'b> for USBTransport {
     type Token = USBToken;
 
@@ -122,16 +133,53 @@ impl<'b> Transport<'b> for USBTransport {
     ///
     /// On Windows 10 build 1903 or later, this will not return any devices
     /// unless the program is run as Administrator.
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
-        // TODO use async
-        let ret = block_on(self.manager.get_devices());
+    async fn tokens<'a>(
+        &'a mut self,
+    ) -> Result<BoxStream<'a, TokenEvent<Self::Token>>, WebauthnCError> {
+        let ret = self.manager.watch_devices()?;
 
-        // TODO delay opening devices
-        Ok(ret.iter().filter_map(|d| {
-            let device = block_on(d.open());
-            device.ok().map(USBToken::new)
-        })
-        .collect())
+        Ok(Box::pin(ret.filter_map(|event| {
+            println!("Event: {event:?}");
+            match event {
+                WatchEvent::Added(d) => {
+                    // TODO: async
+                    if let Ok(dev) = block_on(d.open()) {
+                        let token = USBToken::new(dev);
+                        return Some(TokenEvent::Added(token));
+                    }
+                }
+
+                WatchEvent::Removed(i) => {
+                    return Some(TokenEvent::Removed(i));
+                }
+            }
+
+            None
+        })))
+
+        // tokio::spawn(
+        //     async move {
+        //         while let Some(event) = ret.next().await {
+
+        //         }
+
+        //     }
+        // );
+
+        // // TODO: dropping the ReceiverStream also needs to stop the watcher
+        // // and clean up event handlers
+        // let t = ReceiverStream::new(rx);
+        // Ok(Box::pin(t))
+
+        // TODO use async
+        // let ret = block_on(self.manager.get_devices());
+
+        // // TODO delay opening devices
+        // Ok(ret.iter().filter_map(|d| {
+        //     let device = block_on(d.open());
+        //     device.ok().map(USBToken::new)
+        // })
+        // .collect())
 
         // todo!()
         /*
@@ -225,6 +273,9 @@ impl USBToken {
 
 #[async_trait]
 impl Token for USBToken {
+    // TODO: platform code
+    type Id = HSTRING;
+
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         U: UiCallback,
@@ -281,7 +332,8 @@ impl Token for USBToken {
             cmd: U2FHID_INIT,
             len: nonce.len() as u16,
             data: nonce.to_vec(),
-        }).await?;
+        })
+        .await?;
 
         match self.recv().await? {
             Response::Init(i) => {

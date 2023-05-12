@@ -371,6 +371,8 @@ impl Debug for Tunnel {
 
 #[async_trait]
 impl Token for Tunnel {
+    type Id = ();
+
     fn get_transport(&self) -> AuthenticatorTransport {
         AuthenticatorTransport::Hybrid
     }

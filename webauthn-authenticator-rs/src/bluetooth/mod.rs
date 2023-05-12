@@ -41,7 +41,7 @@ use btleplug::{
     },
     platform::{Manager, Peripheral},
 };
-use futures::{executor::block_on, StreamExt};
+use futures::{executor::block_on, StreamExt, stream::BoxStream};
 use tokio::time::sleep;
 use uuid::{uuid, Uuid};
 use webauthn_rs_proto::AuthenticatorTransport;
@@ -53,7 +53,7 @@ use crate::{
             CBORResponse, KeepAliveStatus, Response, U2FError, BTLE_CANCEL, BTLE_KEEPALIVE,
             TYPE_INIT, U2FHID_ERROR, U2FHID_MSG, U2FHID_PING,
         },
-        Token, Transport,
+        Token, Transport, TokenEvent,
     },
     ui::UiCallback,
 };
@@ -168,6 +168,7 @@ impl BluetoothTransport {
     }
 }
 
+#[async_trait]
 impl<'b> Transport<'b> for BluetoothTransport {
     type Token = BluetoothToken;
 
@@ -182,10 +183,11 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// easy to use as Windows WebAuthn API, but it's not there just yet.
     ///
     /// [0]: https://github.com/kanidm/webauthn-rs/issues/214
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         // TODO: handle async properly
         trace!("Scanning for BTLE tokens");
-        block_on(self.scan())
+        self.scan().await;
+        todo!()
     }
 }
 
@@ -245,6 +247,8 @@ impl BluetoothToken {
 
 #[async_trait]
 impl Token for BluetoothToken {
+    type Id = String;
+
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         U: UiCallback,
