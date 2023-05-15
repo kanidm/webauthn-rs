@@ -6,6 +6,7 @@
 // mod util;
 
 #[cfg(not(any(
+    target_os = "macos",
     target_os = "windows"
 )))]
 compile_error!("USB support is not implemented on this platform");

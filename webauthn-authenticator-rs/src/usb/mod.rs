@@ -266,7 +266,7 @@ impl USBToken {
 #[async_trait]
 impl Token for USBToken {
     // TODO: platform code
-    type Id = USBDeviceInfoImpl::Id;
+    type Id = <USBDeviceInfoImpl as USBDeviceInfo>::Id;
 
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
