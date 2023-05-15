@@ -99,6 +99,9 @@
 #![deny(clippy::needless_pass_by_value)]
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
+#[cfg(target_os = "macos")]
+#[macro_use]
+extern crate core_foundation;
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
