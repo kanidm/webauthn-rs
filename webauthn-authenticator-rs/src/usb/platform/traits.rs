@@ -12,7 +12,7 @@ pub trait USBDeviceManager: Sized {
     type Device: USBDevice;
     type DeviceInfo: USBDeviceInfo<Device = Self::Device>;
 
-    fn watch_devices<'a>(&'a self) -> Result<BoxStream<'a, WatchEvent<Self::DeviceInfo>>, WebauthnCError>;
+    fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>;
 
     async fn get_devices(&self) -> Vec<Self::DeviceInfo>;
     fn new() -> Result<Self, WebauthnCError>;

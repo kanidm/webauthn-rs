@@ -1,8 +1,8 @@
-use std::{fmt, future::IntoFuture, mem::size_of};
+use std::{fmt, mem::size_of, pin::Pin};
 
 use async_trait::async_trait;
-use futures::stream::BoxStream;
-use tokio::sync::mpsc;
+use futures::{Stream, stream::BoxStream};
+use tokio::sync::mpsc::{self};
 
 use tokio_stream::wrappers::ReceiverStream;
 use windows::{
@@ -27,20 +27,13 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
-pub struct WindowsUSBDeviceManager {}
+pub struct WindowsDeviceWatcher {
+    watcher: Pin<Box<DeviceWatcher>>,
+    stream: ReceiverStream<WatchEvent<WindowsUSBDeviceInfo>>,
+}
 
-#[async_trait]
-impl USBDeviceManager for WindowsUSBDeviceManager {
-    type Device = WindowsUSBDevice;
-    type DeviceInfo = WindowsUSBDeviceInfo;
-
-    fn watch_devices<'a>(
-        &'a self,
-    ) -> Result<BoxStream<'a, WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
-        trace!("watch_devices");
-        let (tx, rx) = mpsc::channel(16);
-
+impl WindowsDeviceWatcher {
+    fn new() -> Result<Self, WebauthnCError> {
         let selector =
             HidDevice::GetDeviceSelector(FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID).map_err(|e| {
                 error!("creating FIDO device selector: {e}");
@@ -50,6 +43,10 @@ impl USBDeviceManager for WindowsUSBDeviceManager {
             error!("creating DeviceWatcher: {e}");
             WebauthnCError::Internal
         })?;
+
+        let watcher = Box::pin(watcher);
+        let (tx, rx) = mpsc::channel(16);
+        let stream = ReceiverStream::from(rx);
 
         let tx_add = tx.clone();
         watcher
@@ -86,21 +83,48 @@ impl USBDeviceManager for WindowsUSBDeviceManager {
                 WebauthnCError::Internal
             })?;
 
-        trace!("STtarting watcher");
+        trace!("Starting WindowsDeviceWatcher");
         watcher.Start().map_err(|e| {
             error!("DeviceWatcher::Start: {e}");
             WebauthnCError::Internal
         })?;
 
-        todo!();
-        // TODO: this part doesn't actually work yet.
-        // Suspect that the issue is the DeviceWatcher needs to be kept
-        // while the stream is still running.
+        Ok(Self { watcher, stream })
+    }
+}
 
-        // TODO: dropping the ReceiverStream also needs to stop the watcher
-        // and clean up event handlers
-        let t = ReceiverStream::new(rx);
-        Ok(Box::pin(t))
+impl Drop for WindowsDeviceWatcher {
+    fn drop(&mut self) {
+        trace!("Dropping WindowsDeviceWatcher");
+        if let Err(e) = self.watcher.Stop() {
+            error!("DeviceWatcher::Stop: {e}");
+        }
+    }
+}
+
+impl Stream for WindowsDeviceWatcher {
+    type Item = WatchEvent<WindowsUSBDeviceInfo>;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        ReceiverStream::poll_next(Pin::new(&mut Pin::get_mut(self).stream), cx)
+    }
+}
+
+#[derive(Debug)]
+pub struct WindowsUSBDeviceManager {}
+
+#[async_trait]
+impl USBDeviceManager for WindowsUSBDeviceManager {
+    type Device = WindowsUSBDevice;
+    type DeviceInfo = WindowsUSBDeviceInfo;
+
+    fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>
+    {
+        trace!("watch_devices");
+        Ok(Box::pin(WindowsDeviceWatcher::new()?))
     }
 
     async fn get_devices(&self) -> Vec<Self::DeviceInfo> {
