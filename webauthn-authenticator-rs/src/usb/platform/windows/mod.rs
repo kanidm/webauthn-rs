@@ -219,7 +219,7 @@ impl WindowsUSBDevice {
                         .map_err(|_| ERROR_HANDLES_CLOSED.into())
                 }),
             )
-            .unwrap();
+            .map_win_err("HidInputDevice::InputReportReceived")?;
 
         let o = WindowsUSBDevice {
             device,
