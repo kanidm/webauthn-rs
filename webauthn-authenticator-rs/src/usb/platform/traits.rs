@@ -13,7 +13,9 @@ pub trait USBDeviceManager: Sized {
     /// The type used for USB device connections on this platform.
     type Device: USBDevice;
     /// The type used for USB device information produced on this platform.
-    type DeviceInfo: USBDeviceInfo<Device = Self::Device>;
+    type DeviceInfo: USBDeviceInfo<Device = Self::Device, Id = Self::DeviceId>;
+    /// The type used for USB device IDs on this platform.
+    type DeviceId: Debug;
 
     /// Instantiates a new [USBDeviceManager] for this platform.
     fn new() -> Result<Self, WebauthnCError>;

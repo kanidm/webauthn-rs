@@ -30,7 +30,6 @@ use tokio::sync::mpsc;
 use tokio::time::Interval;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::{StreamMap, Timeout};
-use windows::core::HSTRING;
 
 #[cfg(doc)]
 use crate::stubs::*;
@@ -267,7 +266,7 @@ impl USBToken {
 #[async_trait]
 impl Token for USBToken {
     // TODO: platform code
-    type Id = HSTRING;
+    type Id = USBDeviceInfoImpl::Id;
 
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where

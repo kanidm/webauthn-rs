@@ -5,7 +5,9 @@
 // #[macro_use]
 // mod util;
 
-#[cfg(not(any(target_os = "windows")))]
+#[cfg(not(any(
+    target_os = "windows"
+)))]
 compile_error!("USB support is not implemented on this platform");
 
 pub mod traits;
@@ -17,5 +19,6 @@ pub mod hidproto;
 extern crate libudev;
 
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
+#[cfg_attr(target_os = "macos", path = "macos/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 pub mod os;

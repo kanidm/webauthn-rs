@@ -133,6 +133,7 @@ pub struct USBDeviceManagerImpl {}
 impl USBDeviceManager for USBDeviceManagerImpl {
     type Device = USBDeviceImpl;
     type DeviceInfo = USBDeviceInfoImpl;
+    type DeviceId = USBDeviceInfoImpl::Id;
 
     fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
         trace!("watch_devices");

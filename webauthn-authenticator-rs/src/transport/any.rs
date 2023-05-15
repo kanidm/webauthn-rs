@@ -4,7 +4,6 @@
 //! well as we'd like.
 use futures::StreamExt;
 use tokio::sync::mpsc;
-use windows::core::HSTRING;
 
 #[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
 use crate::bluetooth::*;
@@ -47,7 +46,7 @@ pub enum AnyTokenId {
     #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
     Nfc(()),
     #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
-    Usb(HSTRING), // TODO
+    Usb(<USBToken as Token>::Id),
 }
 
 
