@@ -220,9 +220,9 @@ async fn main() {
 
     let ui = Cli {};
     let mut transport = AnyTransport::new().await.unwrap();
-    let stream = transport.tokens().await.unwrap();
+    let stream = transport.watch_tokens().await.unwrap();
 
-    let stream = stream.timeout(Duration::from_secs(5));
+    let stream = stream.timeout(Duration::from_secs(10));
     tokio::pin!(stream);
 
     while let Some(Ok(event)) = stream.next().await {

@@ -249,7 +249,7 @@ impl NFCReader {
 impl<'b> Transport<'b> for NFCReader {
     type Token = NFCCard;
 
-    async fn tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         // FIXME: this API doesn't work too well for NFC - you could have a
         // reader which has no card in the field; and at which point you can
         // do a SELECT and GetInfoRequest to see if it's for us.

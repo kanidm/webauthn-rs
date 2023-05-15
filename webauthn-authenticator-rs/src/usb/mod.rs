@@ -133,9 +133,7 @@ impl<'b> Transport<'b> for USBTransport {
     ///
     /// On Windows 10 build 1903 or later, this will not return any devices
     /// unless the program is run as Administrator.
-    async fn tokens<'a>(
-        &'a mut self,
-    ) -> Result<BoxStream<'a, TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         let ret = self.manager.watch_devices()?;
 
         Ok(Box::pin(ret.filter_map(|event| {
@@ -145,16 +143,14 @@ impl<'b> Transport<'b> for USBTransport {
                     // TODO: async
                     if let Ok(dev) = block_on(d.open()) {
                         let token = USBToken::new(dev);
-                        return Some(TokenEvent::Added(token));
+                        Some(TokenEvent::Added(token))
+                    } else {
+                        None
                     }
                 }
-
-                WatchEvent::Removed(i) => {
-                    return Some(TokenEvent::Removed(i));
-                }
+                WatchEvent::Removed(i) => Some(TokenEvent::Removed(i)),
+                WatchEvent::EnumerationComplete => Some(TokenEvent::EnumerationComplete),
             }
-
-            None
         })))
 
         // tokio::spawn(

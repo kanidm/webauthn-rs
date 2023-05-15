@@ -1,7 +1,7 @@
 use std::{fmt, mem::size_of, pin::Pin};
 
 use async_trait::async_trait;
-use futures::{Stream, stream::BoxStream};
+use futures::{stream::BoxStream, Stream};
 use tokio::sync::mpsc::{self};
 
 use tokio_stream::wrappers::ReceiverStream;
@@ -32,14 +32,29 @@ pub struct WindowsDeviceWatcher {
     stream: ReceiverStream<WatchEvent<WindowsUSBDeviceInfo>>,
 }
 
+lazy_static! {
+    static ref FIDO_SELECTOR: HSTRING =
+        HidDevice::GetDeviceSelector(FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID)
+            .expect("unable to create DeviceSelector");
+}
+
+trait WindowsErrorMapper<T> {
+    fn map_win_err(self, msg: &str) -> Result<T, WebauthnCError>;
+}
+
+impl<T> WindowsErrorMapper<T> for windows::core::Result<T> {
+    fn map_win_err(self, msg: &str) -> Result<T, WebauthnCError> {
+        self.map_err(|e| {
+            // TODO: sensible things
+            error!("{msg}: {e}");
+            WebauthnCError::Internal
+        })
+    }
+}
+
 impl WindowsDeviceWatcher {
     fn new() -> Result<Self, WebauthnCError> {
-        let selector =
-            HidDevice::GetDeviceSelector(FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID).map_err(|e| {
-                error!("creating FIDO device selector: {e}");
-                WebauthnCError::Internal
-            })?;
-        let watcher = DeviceInformation::CreateWatcherAqsFilter(&selector).map_err(|e| {
+        let watcher = DeviceInformation::CreateWatcherAqsFilter(&FIDO_SELECTOR).map_err(|e| {
             error!("creating DeviceWatcher: {e}");
             WebauthnCError::Internal
         })?;
@@ -50,7 +65,7 @@ impl WindowsDeviceWatcher {
 
         let tx_add = tx.clone();
         watcher
-            .Added(&TypedEventHandler::<DeviceWatcher, DeviceInformation>::new(
+            .Added(&TypedEventHandler::<_, DeviceInformation>::new(
                 move |_, info| {
                     let info = info.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
 
@@ -61,33 +76,31 @@ impl WindowsDeviceWatcher {
                         .map_err(|_| ERROR_HANDLES_CLOSED.into())
                 },
             ))
-            .map_err(|e| {
-                error!("adding DeviceWatch::Added listener: {e}");
-                WebauthnCError::Internal
-            })?;
+            .map_win_err("adding DeviceWatcher::Added listener")?;
+
+        let tx_removed = tx.clone();
+        watcher
+            .Removed(&TypedEventHandler::<_, DeviceInformationUpdate>::new(
+                move |_, update| {
+                    let info = update
+                        .as_ref()
+                        .ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
+                    tx_removed
+                        .blocking_send(WatchEvent::Removed(info.Id()?))
+                        .map_err(|_| ERROR_HANDLES_CLOSED.into())
+                },
+            ))
+            .map_win_err("adding DeviceWatcher::Removed listener")?;
 
         watcher
-            .Removed(
-                &TypedEventHandler::<DeviceWatcher, DeviceInformationUpdate>::new(
-                    move |_, update| {
-                        let info = update
-                            .as_ref()
-                            .ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
-                        tx.blocking_send(WatchEvent::Removed(info.Id()?))
-                            .map_err(|_| ERROR_HANDLES_CLOSED.into())
-                    },
-                ),
-            )
-            .map_err(|e| {
-                error!("adding DeviceWatch::Added listener: {e}");
-                WebauthnCError::Internal
-            })?;
+            .EnumerationCompleted(&TypedEventHandler::<_, _>::new(move |_, _| {
+                tx.blocking_send(WatchEvent::EnumerationComplete)
+                    .map_err(|_| ERROR_HANDLES_CLOSED.into())
+            }))
+            .map_win_err("adding DeviceWatcher::EnumerationCompleted listener")?;
 
         trace!("Starting WindowsDeviceWatcher");
-        watcher.Start().map_err(|e| {
-            error!("DeviceWatcher::Start: {e}");
-            WebauthnCError::Internal
-        })?;
+        watcher.Start().map_win_err("DeviceWatcher::Start")?;
 
         Ok(Self { watcher, stream })
     }
@@ -121,23 +134,23 @@ impl USBDeviceManager for WindowsUSBDeviceManager {
     type Device = WindowsUSBDevice;
     type DeviceInfo = WindowsUSBDeviceInfo;
 
-    fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>
-    {
+    fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
         trace!("watch_devices");
         Ok(Box::pin(WindowsDeviceWatcher::new()?))
     }
 
-    async fn get_devices(&self) -> Vec<Self::DeviceInfo> {
-        let selector = HidDevice::GetDeviceSelector(FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID).unwrap();
-        let ret = DeviceInformation::FindAllAsyncAqsFilter(&selector)
-            .unwrap()
-            .await;
+    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError> {
+        let ret = DeviceInformation::FindAllAsyncAqsFilter(&FIDO_SELECTOR)
+            .map_win_err("getting DeviceInformation::FindAllAsyncAqsFilter future")?
+            .await
+            .map_win_err(
+                "enumerating connected devices (DeviceInformation::FindAllAsyncAqsFilter)",
+            )?;
 
-        let ret = ret.expect("async returned error");
-
-        ret.into_iter()
+        Ok(ret
+            .into_iter()
             .map(|info| WindowsUSBDeviceInfo { info })
-            .collect()
+            .collect())
     }
 
     fn new() -> Result<Self, WebauthnCError> {
@@ -178,38 +191,34 @@ pub struct WindowsUSBDevice {
 
 impl Drop for WindowsUSBDevice {
     fn drop(&mut self) {
-        self.device
-            .RemoveInputReportReceived(self.listener_token)
-            .unwrap();
+        if let Err(e) = self.device.RemoveInputReportReceived(self.listener_token) {
+            error!("HidDevice::RemoveInputReportReceived: {e}");
+        }
     }
 }
 
 impl WindowsUSBDevice {
     async fn new(info: WindowsUSBDeviceInfo) -> Result<Self, WebauthnCError> {
         trace!("Opening device: {info:?}");
-        let device_id = info.info.Id().map_err(|e| {
-            error!("Unable to get device ID: {e}");
-            WebauthnCError::Internal
-        })?;
+        let device_id = info.info.Id().map_win_err("unable to get device ID")?;
 
         let device = HidDevice::FromIdAsync(&device_id, FileAccessMode::ReadWrite)
-            .unwrap()
-            .await;
-        let device = device.unwrap();
+            .map_win_err("getting HidDevice::FromIdAsync future")?
+            .await
+            .map_win_err("opening device (HidDevice::FromIdAsync)")?;
 
         // HidDevice returns data using the InputReportReceived event. Stash the
         // data into a channel to pick up later.
         let (tx, rx) = mpsc::channel(100);
         let listener_token = device
-            .InputReportReceived(&TypedEventHandler::<
-                HidDevice,
-                HidInputReportReceivedEventArgs,
-            >::new(move |_, args| {
-                let args = args.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
-                let report = args.Report()?;
-                tx.blocking_send(report)
-                    .map_err(|_| ERROR_HANDLES_CLOSED.into())
-            }))
+            .InputReportReceived(
+                &TypedEventHandler::<_, HidInputReportReceivedEventArgs>::new(move |_, args| {
+                    let args = args.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
+                    let report = args.Report()?;
+                    tx.blocking_send(report)
+                        .map_err(|_| ERROR_HANDLES_CLOSED.into())
+                }),
+            )
             .unwrap();
 
         let o = WindowsUSBDevice {
@@ -232,35 +241,57 @@ impl USBDevice for WindowsUSBDevice {
 
     async fn read(&mut self) -> Result<HidReportBytes, WebauthnCError> {
         let ret = self.rx.recv().await;
-        // let ret = self.device.GetInputReportByIdAsync(0).unwrap().await;
-        let ret = ret.unwrap();
-        let buf = ret.Data().unwrap();
-        let len = buf.Length().unwrap() as usize;
-        println!("Read buffer length: {len}");
-        let dr = DataReader::FromBuffer(&buf).expect("DataReader::FromBuffer");
+        let ret = ret.ok_or(WebauthnCError::Closed)?;
+        let buf = ret
+            .Data()
+            .map_win_err("reading HidInputReport (HidInputReport::Data)")?;
+        let len = buf
+            .Length()
+            .map_win_err("reading HidInputReport (IBuffer::Length)")? as usize;
+        if len != size_of::<HidReportBytes>() + 1 {
+            return Err(WebauthnCError::InvalidMessageLength);
+        }
+        let dr = DataReader::FromBuffer(&buf)
+            .map_win_err("reading HidInputReport (DataReader::FromBuffer)")?;
 
         let mut o = [0; size_of::<HidReportBytes>()];
         // Drop the leading report ID byte
         dr.ReadByte().ok();
-        dr.ReadBytes(&mut o).expect("ReadBytes");
+        dr.ReadBytes(&mut o)
+            .map_win_err("reading HidInputReport (DataReader::ReadBytes)")?;
 
         Ok(o)
     }
 
     async fn write(&self, data: HidSendReportBytes) -> Result<(), WebauthnCError> {
-        let report = self.device.CreateOutputReportById(data[0] as u16).unwrap();
-        let dw = DataWriter::new().unwrap();
-        dw.WriteBytes(&data[..]).unwrap();
-        report
-            .SetData(&dw.DetachBuffer().expect("DetachBuffer"))
-            .expect("SetData");
+        let report = self
+            .device
+            .CreateOutputReportById(data[0] as u16)
+            .map_win_err("writing HidOutputReport (CreateOutputReportById)")?;
+        {
+            let dw = DataWriter::new().map_win_err("writing HidOutputReport (DataWriter::new)")?;
+            dw.WriteBytes(&data[..])
+                .map_win_err("writing HidOutputReport (DataWriter::WriteBytes)")?;
+
+            let buffer = dw
+                .DetachBuffer()
+                .map_win_err("writing HidOutputReport (DataWriter::DetachBuffer)")?;
+
+            report
+                .SetData(&buffer)
+                .map_win_err("writing HidOutputReport (HidOutputReport::SetData)")?;
+        }
         let ret = self
             .device
             .SendOutputReportAsync(&report)
-            .unwrap()
+            .map_win_err("writing HidOutputReport (HidDevice::SendOutputReportAsync future)")?
             .await
-            .unwrap();
-        assert_eq!(ret as usize, size_of::<HidSendReportBytes>());
+            .map_win_err("writing HidOutputReport (HidDevice::SendOutputReportAsync result)")?;
+
+        if ret as usize != size_of::<HidSendReportBytes>() {
+            error!("unexpected HidDevice::SendOutputReportAsync length ({ret})");
+            return Err(WebauthnCError::ApduTransmission);
+        }
         Ok(())
     }
 }

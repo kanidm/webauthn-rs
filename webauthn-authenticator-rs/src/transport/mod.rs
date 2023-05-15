@@ -19,6 +19,7 @@ use crate::{ctap2::*, error::WebauthnCError, ui::UiCallback};
 pub enum TokenEvent<T: Token> {
     Added(T),
     Removed(T::Id),
+    EnumerationComplete,
 }
 
 /// Represents a transport layer protocol for [Token].
@@ -30,10 +31,10 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     /// The type of [Token] returned by this [Transport].
     type Token: Token + 'b;
 
-    /// Gets a list of all connected tokens for this [Transport].
-    async fn tokens<'a>(
-        &'a mut self,
-    ) -> Result<BoxStream<'a, TokenEvent<Self::Token>>, WebauthnCError>;
+    /// Watches for token connection and disconnection on this [Transport].
+    async fn watch_tokens(
+        &mut self,
+    ) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
 
     async fn connect_all<'a, U: UiCallback>(
         &mut self,

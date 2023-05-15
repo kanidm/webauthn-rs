@@ -64,7 +64,7 @@ async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + 
     let mut reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
 
-    match reader.tokens() {
+    match reader.watch_tokens() {
         Ok(mut tokens) => {
             while let Some(card) = tokens.pop() {
                 let auth = CtapAuthenticator::new(card, ui).await;

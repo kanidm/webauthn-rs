@@ -12,10 +12,14 @@ pub trait USBDeviceManager: Sized {
     type Device: USBDevice;
     type DeviceInfo: USBDeviceInfo<Device = Self::Device>;
 
+    fn new() -> Result<Self, WebauthnCError>;
+
+    /// Watches for USB authenticator device connection and disconnection events
+    /// indefinitely.
     fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>;
 
-    async fn get_devices(&self) -> Vec<Self::DeviceInfo>;
-    fn new() -> Result<Self, WebauthnCError>;
+    /// Gets a list of USB authenticators connected right now.
+    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError>;
 }
 
 #[derive(Debug)]
@@ -25,6 +29,7 @@ where
 {
     Added(T),
     Removed(T::Id),
+    EnumerationComplete,
 }
 
 #[async_trait]

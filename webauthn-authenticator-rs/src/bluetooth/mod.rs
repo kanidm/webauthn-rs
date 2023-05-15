@@ -183,7 +183,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// easy to use as Windows WebAuthn API, but it's not there just yet.
     ///
     /// [0]: https://github.com/kanidm/webauthn-rs/issues/214
-    async fn tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         // TODO: handle async properly
         trace!("Scanning for BTLE tokens");
         self.scan().await;

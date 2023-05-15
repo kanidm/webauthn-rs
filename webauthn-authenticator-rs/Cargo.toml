@@ -55,6 +55,7 @@ base64urlsafedata.workspace = true
 webauthn-rs-proto.workspace = true
 webauthn-rs-core = { workspace = true, optional = true }
 
+lazy_static = "1.4.0"
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true

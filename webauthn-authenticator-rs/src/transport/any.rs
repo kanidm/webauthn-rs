@@ -83,7 +83,7 @@ impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]
-    async fn tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
         {
             error!("No transports available!");
@@ -109,11 +109,13 @@ impl<'b> Transport<'b> for AnyTransport {
         
         #[cfg(feature = "usb")]
         {
-            let s = self.usb.tokens().await?;
+            let s = self.usb.watch_tokens().await?;
             return Ok(Box::pin(s.map(|e| {
                 match e {
                     TokenEvent::Added(u) => TokenEvent::Added(AnyToken::Usb(u)),
                     TokenEvent::Removed(u) => TokenEvent::Removed(AnyTokenId::Usb(u)),
+                    // TODO: wait for all transports to report enumeration complete before actually firing this
+                    TokenEvent::EnumerationComplete => TokenEvent::EnumerationComplete,
                 }
             })));
             // o.extend(self.usb.tokens().await?.into_iter().map(AnyToken::Usb));
