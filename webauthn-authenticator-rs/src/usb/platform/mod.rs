@@ -5,6 +5,9 @@
 // #[macro_use]
 // mod util;
 
+#[cfg(not(any(target_os = "windows")))]
+compile_error!("USB support is not implemented on this platform");
+
 pub mod traits;
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
@@ -15,7 +18,6 @@ extern crate libudev;
 
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
-#[cfg_attr(not(any(target_os = "linux", target_os = "windows")), path = "stub/mod.rs")]
 mod os;
 
 #[doc(inline)]
