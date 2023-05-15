@@ -29,7 +29,7 @@ use crate::{
 
 pub struct WindowsDeviceWatcher {
     watcher: Pin<Box<DeviceWatcher>>,
-    stream: ReceiverStream<WatchEvent<WindowsUSBDeviceInfo>>,
+    stream: ReceiverStream<WatchEvent<USBDeviceInfoImpl>>,
 }
 
 lazy_static! {
@@ -70,7 +70,7 @@ impl WindowsDeviceWatcher {
                     let info = info.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
 
                     tx_add
-                        .blocking_send(WatchEvent::Added(WindowsUSBDeviceInfo {
+                        .blocking_send(WatchEvent::Added(USBDeviceInfoImpl {
                             info: info.clone(),
                         }))
                         .map_err(|_| ERROR_HANDLES_CLOSED.into())
@@ -116,7 +116,7 @@ impl Drop for WindowsDeviceWatcher {
 }
 
 impl Stream for WindowsDeviceWatcher {
-    type Item = WatchEvent<WindowsUSBDeviceInfo>;
+    type Item = WatchEvent<USBDeviceInfoImpl>;
 
     fn poll_next(
         self: Pin<&mut Self>,
@@ -127,12 +127,12 @@ impl Stream for WindowsDeviceWatcher {
 }
 
 #[derive(Debug)]
-pub struct WindowsUSBDeviceManager {}
+pub struct USBDeviceManagerImpl {}
 
 #[async_trait]
-impl USBDeviceManager for WindowsUSBDeviceManager {
-    type Device = WindowsUSBDevice;
-    type DeviceInfo = WindowsUSBDeviceInfo;
+impl USBDeviceManager for USBDeviceManagerImpl {
+    type Device = USBDeviceImpl;
+    type DeviceInfo = USBDeviceInfoImpl;
 
     fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
         trace!("watch_devices");
@@ -149,7 +149,7 @@ impl USBDeviceManager for WindowsUSBDeviceManager {
 
         Ok(ret
             .into_iter()
-            .map(|info| WindowsUSBDeviceInfo { info })
+            .map(|info| USBDeviceInfoImpl { info })
             .collect())
     }
 
@@ -158,21 +158,21 @@ impl USBDeviceManager for WindowsUSBDeviceManager {
     }
 }
 
-pub struct WindowsUSBDeviceInfo {
+pub struct USBDeviceInfoImpl {
     info: DeviceInformation,
 }
 
 #[async_trait]
-impl USBDeviceInfo for WindowsUSBDeviceInfo {
-    type Device = WindowsUSBDevice;
+impl USBDeviceInfo for USBDeviceInfoImpl {
+    type Device = USBDeviceImpl;
     type Id = HSTRING;
 
     async fn open(self) -> Result<Self::Device, WebauthnCError> {
-        WindowsUSBDevice::new(self).await
+        USBDeviceImpl::new(self).await
     }
 }
 
-impl fmt::Debug for WindowsUSBDeviceInfo {
+impl fmt::Debug for USBDeviceInfoImpl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("WindowsUSBDeviceInfo")
             .field("id", &self.info.Id().unwrap_or_default().to_string())
@@ -182,14 +182,14 @@ impl fmt::Debug for WindowsUSBDeviceInfo {
 }
 
 #[derive(Debug)]
-pub struct WindowsUSBDevice {
+pub struct USBDeviceImpl {
     device: HidDevice,
-    info: WindowsUSBDeviceInfo,
+    info: USBDeviceInfoImpl,
     listener_token: EventRegistrationToken,
     rx: mpsc::Receiver<HidInputReport>,
 }
 
-impl Drop for WindowsUSBDevice {
+impl Drop for USBDeviceImpl {
     fn drop(&mut self) {
         if let Err(e) = self.device.RemoveInputReportReceived(self.listener_token) {
             error!("HidDevice::RemoveInputReportReceived: {e}");
@@ -197,8 +197,8 @@ impl Drop for WindowsUSBDevice {
     }
 }
 
-impl WindowsUSBDevice {
-    async fn new(info: WindowsUSBDeviceInfo) -> Result<Self, WebauthnCError> {
+impl USBDeviceImpl {
+    async fn new(info: USBDeviceInfoImpl) -> Result<Self, WebauthnCError> {
         trace!("Opening device: {info:?}");
         let device_id = info.info.Id().map_win_err("unable to get device ID")?;
 
@@ -221,7 +221,7 @@ impl WindowsUSBDevice {
             )
             .map_win_err("HidInputDevice::InputReportReceived")?;
 
-        let o = WindowsUSBDevice {
+        let o = USBDeviceImpl {
             device,
             info,
             listener_token,
@@ -232,8 +232,8 @@ impl WindowsUSBDevice {
 }
 
 #[async_trait]
-impl USBDevice for WindowsUSBDevice {
-    type Info = WindowsUSBDeviceInfo;
+impl USBDevice for USBDeviceImpl {
+    type Info = USBDeviceInfoImpl;
 
     fn get_info(&self) -> &Self::Info {
         &self.info

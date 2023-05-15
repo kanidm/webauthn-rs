@@ -23,13 +23,13 @@ use crate::usb::framing::*;
 use crate::usb::platform::traits::WatchEvent;
 use async_trait::async_trait;
 use futures::Stream;
-// use futures::{StreamExt as _};
+use futures::{StreamExt as _};
 use futures::executor::block_on;
 use futures::stream::BoxStream;
 use tokio::sync::mpsc;
 use tokio::time::Interval;
 use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::{StreamExt as _, StreamMap, Timeout};
+use tokio_stream::{StreamMap, Timeout};
 use windows::core::HSTRING;
 
 #[cfg(doc)]
@@ -46,7 +46,7 @@ use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use self::platform::traits::{USBDevice, USBDeviceInfo, USBDeviceManager};
-use self::platform::{WindowsUSBDevice, WindowsUSBDeviceManager};
+use self::platform::os::*;
 pub(crate) use self::responses::InitResponse;
 
 // u2f_hid.h
@@ -62,14 +62,12 @@ type HidReportBytes = [u8; HID_RPT_SIZE];
 type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
 
 pub struct USBTransport {
-    // todo: handle platform stuff
-    manager: WindowsUSBDeviceManager,
+    manager: USBDeviceManagerImpl,
     // api: HidApi,
 }
 
 pub struct USBToken {
-    // todo: handle platform stuff
-    device: WindowsUSBDevice,
+    device: USBDeviceImpl,
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
@@ -136,12 +134,11 @@ impl<'b> Transport<'b> for USBTransport {
     async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         let ret = self.manager.watch_devices()?;
 
-        Ok(Box::pin(ret.filter_map(|event| {
+        Ok(Box::pin(ret.filter_map(|event| async move {
             println!("Event: {event:?}");
             match event {
                 WatchEvent::Added(d) => {
-                    // TODO: async
-                    if let Ok(dev) = block_on(d.open()) {
+                    if let Ok(dev) = d.open().await {
                         let token = USBToken::new(dev);
                         Some(TokenEvent::Added(token))
                     } else {
@@ -209,7 +206,7 @@ impl<'b> Transport<'b> for USBTransport {
 }
 
 impl USBToken {
-    fn new(device: WindowsUSBDevice) -> Self {
+    fn new(device: USBDeviceImpl) -> Self {
         USBToken {
             device, // : Mutex::new(device),
             cid: 0,
