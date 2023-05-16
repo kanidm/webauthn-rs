@@ -301,7 +301,7 @@ pub fn IOHIDManagerOpen(
 }
 
 pub fn IOHIDManagerClose(
-    manager: IOHIDManager,
+    manager: &IOHIDManager,
     options: IOHIDManagerOptions,
 ) -> Result<(), IOReturn> {
     unsafe { _IOHIDManagerClose(manager.as_concrete_TypeRef(), options) }.ok()
@@ -310,6 +310,16 @@ pub fn IOHIDManagerClose(
 pub fn IOHIDManagerScheduleWithRunLoop(manager: &IOHIDManager) {
     unsafe {
         _IOHIDManagerScheduleWithRunLoop(
+            manager.as_concrete_TypeRef(),
+            CFRunLoopGetCurrent(),
+            kCFRunLoopDefaultMode,
+        )
+    }
+}
+
+pub fn IOHIDManagerUnscheduleFromRunLoop(manager: &IOHIDManager) {
+    unsafe {
+        _IOHIDManagerUnscheduleFromRunLoop(
             manager.as_concrete_TypeRef(),
             CFRunLoopGetCurrent(),
             kCFRunLoopDefaultMode,
@@ -357,6 +367,16 @@ pub fn IOHIDDeviceRegisterInputReportCallback(
 pub fn IOHIDDeviceScheduleWithRunLoop(device: &IOHIDDevice) {
     unsafe {
         _IOHIDDeviceScheduleWithRunLoop(
+            device.as_concrete_TypeRef(),
+            CFRunLoopGetCurrent(),
+            kCFRunLoopDefaultMode,
+        );
+    }
+}
+
+pub fn IOHIDDeviceUnscheduleFromRunLoop(device: &IOHIDDevice) {
+    unsafe {
+        _IOHIDDeviceUnscheduleFromRunLoop(
             device.as_concrete_TypeRef(),
             CFRunLoopGetCurrent(),
             kCFRunLoopDefaultMode,
@@ -427,6 +447,12 @@ extern "C" {
         runLoop: CFRunLoopRef,
         runLoopMode: CFStringRef,
     );
+    #[link_name = "IOHIDManagerUnscheduleFromRunLoop"]
+    fn _IOHIDManagerUnscheduleFromRunLoop(
+        manager: IOHIDManagerRef,
+        runLoop: CFRunLoopRef,
+        runLoopMode: CFStringRef,
+    );
 
     // IOHIDDevice
     fn IOHIDDeviceGetTypeID() -> CFTypeID;
@@ -449,6 +475,12 @@ extern "C" {
     );
     #[link_name = "IOHIDDeviceScheduleWithRunLoop"]
     fn _IOHIDDeviceScheduleWithRunLoop(
+        device: IOHIDDeviceRef,
+        runLoop: CFRunLoopRef,
+        runLoopMode: CFStringRef,
+    );
+    #[link_name = "IOHIDDeviceUnscheduleFromRunLoop"]
+    fn _IOHIDDeviceUnscheduleFromRunLoop(
         device: IOHIDDeviceRef,
         runLoop: CFRunLoopRef,
         runLoopMode: CFStringRef,

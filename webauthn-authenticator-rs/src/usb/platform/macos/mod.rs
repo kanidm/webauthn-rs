@@ -6,22 +6,12 @@ use async_trait::async_trait;
 use core_foundation::{
     mach_port::CFIndex,
     runloop::{
-        kCFRunLoopDefaultMode, CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef,
-        CFRunLoopRun, CFRunLoopStop,
+        CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopStop,
     },
 };
-use futures::{stream::BoxStream, Stream}; // channel::mpsc::{self, Receiver, Sender}};
+use futures::{stream::BoxStream, Stream};
 use libc::c_void;
-use std::{
-    fmt,
-    marker::PhantomPinned,
-    mem::size_of,
-    pin::Pin,
-    slice::from_raw_parts,
-    // sync::mpsc::{self as std_mpsc, Receiver as StdReceiver, Sender as StdSender, SyncSender},
-    sync::Arc,
-    thread,
-};
+use std::{fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, thread};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -41,7 +31,7 @@ use crate::{
                 IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport, IOHIDManager,
                 IOHIDManagerCreate, IOHIDManagerRegisterDeviceMatchingCallback,
                 IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerSetDeviceMatching,
-                IOHIDReportType, IOReturn,
+                IOHIDReportType, IOReturn, IOHIDManagerUnscheduleFromRunLoop, IOHIDDeviceUnscheduleFromRunLoop,
             },
             traits::*,
         },
@@ -50,7 +40,7 @@ use crate::{
 };
 
 use self::iokit::{
-    CFRunLoopEntryObserver, IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop, SendableRunLoop,
+    CFRunLoopEntryObserver, IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop, SendableRunLoop, IOHIDDeviceClose, IOHIDManagerClose,
 };
 
 pub struct USBDeviceManagerImpl {
@@ -81,7 +71,9 @@ impl USBDeviceManager for USBDeviceManagerImpl {
         Ok(Self {}) // manager, _matcher })
     }
 
-    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
+    async fn watch_devices(
+        &mut self,
+    ) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
         let (mut matcher, rx) = MacDeviceMatcher::new()?;
         let (observer_tx, mut observer_rx) = mpsc::channel(1);
         let stream = ReceiverStream::from(rx);
@@ -188,12 +180,15 @@ impl MacDeviceMatcher {
         IOHIDManagerScheduleWithRunLoop(&self.manager);
         IOHIDManagerOpen(&self.manager, kIOHIDManagerOptionNone).unwrap();
 
-        trace!("Starting manager runloop");
+        trace!("starting MacDeviceMatcher runloop");
         unsafe {
             CFRunLoopRun();
         }
 
-        trace!("runloop done");
+        trace!("MacDeviceMatcher runloop done, cleaning up");
+        IOHIDManagerUnscheduleFromRunLoop(&self.manager);
+        IOHIDManagerClose(&self.manager, 0).ok();
+        trace!("MacDeviceMatcher finished");
     }
 
     extern "C" fn on_device_matching(
@@ -202,38 +197,12 @@ impl MacDeviceMatcher {
         _: *mut c_void,
         device_ref: IOHIDDeviceRef,
     ) {
-        println!("on_device_matching");
-
         let this = unsafe { &mut *(context as *mut Self) };
         let device = device_ref.into();
-        println!("device: {:?}", device);
-        // tokio::spawn(async move {
-        //     println!("matching thread ...");
+        trace!("on_device_matching: {device:?}");
         let _ = this
             .tx
             .blocking_send(WatchEvent::Added(USBDeviceInfoImpl { device }));
-        // .await;
-        // });
-
-        // let _ = this
-        //     .selector_sender
-        //     .send(DeviceSelectorEvent::DevicesAdded(vec![device_ref]));
-        // let selector_sender = this.selector_sender.clone();
-        // let status_sender = this.status_sender.clone();
-        // let (tx, rx) = channel();
-        // let f = &this.new_device_cb;
-
-        // // Create a new per-device runloop.
-        // let runloop = RunLoop::new(move |alive| {
-        //     // Ensure that the runloop is still alive.
-        //     if alive() {
-        //         f((device_ref, rx), selector_sender, status_sender, alive);
-        //     }
-        // });
-
-        // if let Ok(runloop) = runloop {
-        //     this.map.insert(device_ref, DeviceData { tx, runloop });
-        // }
     }
 
     extern "C" fn on_device_removal(
@@ -242,40 +211,19 @@ impl MacDeviceMatcher {
         _: *mut c_void,
         device_ref: IOHIDDeviceRef,
     ) {
-        println!("on_device_removal");
         let this = unsafe { &mut *(context as *mut Self) };
         let device = device_ref.into();
-        println!("device: {:?}", device);
-        // tokio::spawn(async {
-        let _ = this.tx.blocking_send(WatchEvent::Removed(device)); //.await;
-                                                           // });
-
-        // this.remove_device(device_ref);
+        trace!("on_device_removal: {device:?}");
+        let _ = this.tx.blocking_send(WatchEvent::Removed(device));
     }
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
-        println!("observe");
+        trace!("fetching MacDeviceMatcher RunLoop...");
         let tx: &Sender<SendableRunLoop> = unsafe { &*(context as *mut _) };
         let runloop = SendableRunLoop::retain(unsafe { CFRunLoopGetCurrent() });
-        println!("Got manager runloop, sending...");
-        // Send the current runloop to the receiver to unblock it.
-        // tokio::spawn(async {
         let _ = tx.blocking_send(runloop);
-        // });
     }
 }
-
-// impl Stream for MacDeviceMatcher {
-//     type Item = WatchEvent<USBDeviceInfoImpl>;
-
-//     fn poll_next(
-//         self: Pin<&mut Self>,
-//         cx: &mut std::task::Context<'_>,
-//     ) -> std::task::Poll<Option<Self::Item>> {
-//         let stream = unsafe { self.map_unchecked_mut(|s| &mut s.stream) };
-//         ReceiverStream::poll_next(stream, cx)
-//     }
-// }
 
 #[derive(Debug)]
 pub struct USBDeviceInfoImpl {
@@ -334,50 +282,10 @@ impl USBDeviceImpl {
 
         trace!("waiting for a runloop for device");
         let runloop: SendableRunLoop = observer_rx.recv().await.expect("failed to receive runloop");
-        trace!("Got device runloop");
+        trace!("got device runloop");
 
-        let d = Self { info, rx, runloop };
-
-        // let context = (&mut d) as *mut Self as *mut c_void;
-
-        // unsafe {
-        //     IOHIDDeviceRegisterInputReportCallback(
-        //         &d.info.device,
-        //         d.buf.as_mut_ptr(),
-        //         d.buf.len().try_into().unwrap(),
-        //         Self::on_input_report,
-        //         context,
-        //     );
-
-        //     IOHIDDeviceScheduleWithRunLoop(
-        //         &d.info.device,
-        //     );
-
-        //     IOHIDDeviceOpen(&d.info.device, 0).map_err(|e| {
-        //         error!("IOHIDDeviceOpen return error: {e:?}");
-        //         WebauthnCError::Internal
-        //     })?;
-        // }
-
-        Ok(d)
+        Ok(Self { info, rx, runloop })
     }
-
-    // extern "C" fn on_input_report(
-    //     context: *mut c_void,
-    //     _: IOReturn,
-    //     _: IOHIDDeviceRef,
-    //     _: IOHIDReportType,
-    //     _: u32,
-    //     report: *mut u8,
-    //     report_len: CFIndex,
-    // ) {
-    //     let this = unsafe { &mut *(context as *mut Self) };
-    //     println!("on_input_report: len = {report_len}");
-    //     let src_data = unsafe { from_raw_parts(report, report_len as usize) };
-    //     let mut data: HidReportBytes = [0; size_of::<HidReportBytes>()];
-    //     data.copy_from_slice(src_data);
-    //     this.tx.blocking_send(data).unwrap();
-    // }
 }
 
 struct MacUSBDeviceWorker {
@@ -390,8 +298,6 @@ struct MacUSBDeviceWorker {
 impl MacUSBDeviceWorker {
     fn new(device: IOHIDDevice) -> (Pin<Box<Self>>, Receiver<HidReportBytes>) {
         let (rx, tx) = mpsc::channel(16);
-        // let (rx_a, rx_i) = mpsc::channel(16);
-
         (
             Box::pin(Self {
                 device,
@@ -403,7 +309,7 @@ impl MacUSBDeviceWorker {
     }
 
     fn start(&self) {
-        let context = unsafe { self as *const Self as *const c_void };
+        let context = self as *const Self as *const c_void;
         let mut buf = [0; size_of::<HidReportBytes>()];
         IOHIDDeviceRegisterInputReportCallback(
             &self.device,
@@ -422,13 +328,20 @@ impl MacUSBDeviceWorker {
             })
             .unwrap();
 
-        trace!("Starting device runloop");
+        trace!("starting device runloop");
         unsafe {
             CFRunLoopRun();
         }
 
-        trace!("device runloop done");
+        trace!("MacUSBDeviceWorker runloop done, cleaning up");
+        IOHIDDeviceUnscheduleFromRunLoop(&self.device);
+        IOHIDDeviceClose(&self.device, 0).map_err(|e| {
+            error!("IOHIDDeviceClose returned error: {e}");
+            WebauthnCError::Internal
+        }).unwrap();
+        // This buffer needs to live while the RunLoop does
         drop(buf);
+        trace!("MacUSBDeviceWorker finished");
     }
 
     extern "C" fn on_input_report(
@@ -441,20 +354,18 @@ impl MacUSBDeviceWorker {
         report_len: CFIndex,
     ) {
         let this = unsafe { &mut *(context as *mut Self) };
-        println!("on_input_report: len = {report_len}");
+        trace!("on_input_report: len = {report_len}");
         let src_data = unsafe { from_raw_parts(report, report_len as usize) };
+        assert_eq!(report_len as usize, size_of::<HidReportBytes>());
         let mut data: HidReportBytes = [0; size_of::<HidReportBytes>()];
         data.copy_from_slice(src_data);
         let _ = this.rx.blocking_send(data);
     }
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
-        println!("observe usbdevice");
+        trace!("fetching MacUSBDeviceWorker RunLoop...");
         let tx: &Sender<SendableRunLoop> = unsafe { &*(context as *mut _) };
         let runloop = SendableRunLoop::retain(unsafe { CFRunLoopGetCurrent() });
-        println!("Got device runloop, sending...");
-
-        // Send the current runloop to the receiver to unblock it.
         let _ = tx.blocking_send(runloop);
     }
 }
@@ -482,7 +393,7 @@ impl USBDevice for USBDeviceImpl {
             data,
         )
         .map_err(|e| {
-            error!("IOHIDDeviceSetReport return error: {e}");
+            error!("IOHIDDeviceSetReport returned error: {e}");
             WebauthnCError::ApduTransmission
         })
     }
