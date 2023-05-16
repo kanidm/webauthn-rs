@@ -131,7 +131,7 @@ impl<'b> Transport<'b> for USBTransport {
     /// On Windows 10 build 1903 or later, this will not return any devices
     /// unless the program is run as Administrator.
     async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
-        let ret = self.manager.watch_devices()?;
+        let ret = self.manager.watch_devices().await?;
 
         Ok(Box::pin(ret.filter_map(|event| async move {
             println!("Event: {event:?}");

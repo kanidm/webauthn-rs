@@ -232,6 +232,8 @@ async fn main() {
             println!("{}", authenticator.get_info());
         }
     }
+
+    drop(stream);
     todo!()
 
     /*

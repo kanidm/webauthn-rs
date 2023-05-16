@@ -337,11 +337,11 @@ pub fn IOHIDDeviceSetReport(
 
 pub fn IOHIDDeviceRegisterInputReportCallback(
     device: &IOHIDDevice,
-    report: *const u8,
+    report: *mut u8,
     reportLength: CFIndex,
     callback: IOHIDReportCallback,
-    context: *mut c_void,
-) -> Result<(), IOReturn> {
+    context: *const c_void,
+) {
     // TODO: wrap the event handler nicely
     unsafe {
         _IOHIDDeviceRegisterInputReportCallback(
@@ -350,18 +350,17 @@ pub fn IOHIDDeviceRegisterInputReportCallback(
             reportLength,
             callback,
             context,
-        )
+        );
     }
-    .ok()
 }
 
-pub fn IOHIDDeviceScheduleWithRunLoop(
-    device: &IOHIDDevice,
-    runLoop: CFRunLoopRef,
-    runLoopMode: CFStringRef,
-) {
+pub fn IOHIDDeviceScheduleWithRunLoop(device: &IOHIDDevice) {
     unsafe {
-        _IOHIDDeviceScheduleWithRunLoop(device.as_concrete_TypeRef(), runLoop, runLoopMode);
+        _IOHIDDeviceScheduleWithRunLoop(
+            device.as_concrete_TypeRef(),
+            CFRunLoopGetCurrent(),
+            kCFRunLoopDefaultMode,
+        );
     }
 }
 
@@ -443,11 +442,11 @@ extern "C" {
     #[link_name = "IOHIDDeviceRegisterInputReportCallback"]
     fn _IOHIDDeviceRegisterInputReportCallback(
         device: IOHIDDeviceRef,
-        report: *const u8,
+        report: *mut u8,
         reportLength: CFIndex,
         callback: IOHIDReportCallback,
-        context: *mut c_void,
-    ) -> IOReturn;
+        context: *const c_void,
+    );
     #[link_name = "IOHIDDeviceScheduleWithRunLoop"]
     fn _IOHIDDeviceScheduleWithRunLoop(
         device: IOHIDDeviceRef,

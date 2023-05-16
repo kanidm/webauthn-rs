@@ -25,7 +25,7 @@ pub trait USBDeviceManager: Sized {
     ///
     /// This method fires [`WatchEvent::Added`] events for any USB devices
     /// *already* connected, followed by [`WatchEvent::EnumerationComplete`].
-    fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>;
+    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>;
 
     /// Gets a list of currently-connected USB authenticators.
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError>;
