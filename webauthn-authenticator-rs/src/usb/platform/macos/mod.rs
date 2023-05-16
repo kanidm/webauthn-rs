@@ -5,7 +5,10 @@
 use async_trait::async_trait;
 use core_foundation::{
     mach_port::CFIndex,
-    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun, CFRunLoopObserverRef, CFRunLoopActivity, CFRunLoopStop},
+    runloop::{
+        kCFRunLoopDefaultMode, CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef,
+        CFRunLoopRun, CFRunLoopStop,
+    },
 };
 use futures::{stream::BoxStream, Stream};
 use libc::c_void;
@@ -39,7 +42,9 @@ use crate::{
     },
 };
 
-use self::iokit::{IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop, CFRunLoopEntryObserver, SendableRunLoop};
+use self::iokit::{
+    CFRunLoopEntryObserver, IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop, SendableRunLoop,
+};
 
 pub struct USBDeviceManagerImpl {
     // stream: ReceiverStream<WatchEvent<USBDeviceInfoImpl>>,
@@ -82,7 +87,6 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 
         let runloop: SendableRunLoop = observer_rx.recv().expect("failed to receive runloop");
 
-
         Ok(Box::pin(MacRunLoopStream { runloop, stream }))
     }
 
@@ -113,7 +117,6 @@ impl<T> Drop for MacRunLoopStream<T> {
         unsafe { CFRunLoopStop(*self.runloop) }
     }
 }
-
 
 // impl Drop for USBDeviceManagerImpl {
 //     fn drop(&mut self) {
@@ -193,9 +196,13 @@ impl MacDeviceMatcher {
         let this = unsafe { &mut *(context as *mut Self) };
         let device = device_ref.into();
         println!("device: {:?}", device);
-        let _ = this
-            .tx
-            .send(WatchEvent::Added(USBDeviceInfoImpl { device }));
+        tokio::spawn(async {
+            let _ = this
+                .tx
+                .send(WatchEvent::Added(USBDeviceInfoImpl { device }))
+                .await;
+        });
+
         // let _ = this
         //     .selector_sender
         //     .send(DeviceSelectorEvent::DevicesAdded(vec![device_ref]));
@@ -227,7 +234,9 @@ impl MacDeviceMatcher {
         let this = unsafe { &mut *(context as *mut Self) };
         let device = device_ref.into();
         println!("device: {:?}", device);
-        let _ = this.tx.send(WatchEvent::Removed(device));
+        tokio::spawn(async {
+            let _ = this.tx.send(WatchEvent::Removed(device)).await;
+        });
 
         // this.remove_device(device_ref);
     }
