@@ -4,14 +4,17 @@
 
 use async_trait::async_trait;
 use core_foundation::{
+    base::{kCFAllocatorDefault, TCFType},
+    date::CFAbsoluteTimeGetCurrent,
     mach_port::CFIndex,
     runloop::{
         CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopStop,
+        CFRunLoopTimerCreate, CFRunLoopTimerRef, CFRunLoopAddTimer, kCFRunLoopCommonModes, CFRunLoopTimer, CFRunLoopTimerContext,
     },
 };
 use futures::{stream::BoxStream, Stream};
 use libc::c_void;
-use std::{fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, thread};
+use std::{fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, thread, ptr};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -28,10 +31,11 @@ use crate::{
             os::iokit::{
                 kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, IOHIDDevice, IOHIDDeviceMatcher,
                 IOHIDDeviceOpen, IOHIDDeviceRef, IOHIDDeviceRegisterInputReportCallback,
-                IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport, IOHIDManager,
-                IOHIDManagerCreate, IOHIDManagerRegisterDeviceMatchingCallback,
+                IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport,
+                IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDManagerCreate,
+                IOHIDManagerRegisterDeviceMatchingCallback,
                 IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerSetDeviceMatching,
-                IOHIDReportType, IOReturn, IOHIDManagerUnscheduleFromRunLoop, IOHIDDeviceUnscheduleFromRunLoop,
+                IOHIDManagerUnscheduleFromRunLoop, IOHIDReportType, IOReturn,
             },
             traits::*,
         },
@@ -40,7 +44,8 @@ use crate::{
 };
 
 use self::iokit::{
-    CFRunLoopEntryObserver, IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop, SendableRunLoop, IOHIDDeviceClose, IOHIDManagerClose,
+    CFRunLoopEntryObserver, IOHIDDeviceClose, IOHIDManagerClose, IOHIDManagerOpen,
+    IOHIDManagerScheduleWithRunLoop, SendableRunLoop,
 };
 
 pub struct USBDeviceManagerImpl {
@@ -167,18 +172,40 @@ impl MacDeviceMatcher {
 
         IOHIDManagerRegisterDeviceMatchingCallback(
             &self.manager,
-            MacDeviceMatcher::on_device_matching,
+            Self::on_device_matching,
             context,
         );
 
-        IOHIDManagerRegisterDeviceRemovalCallback(
-            &self.manager,
-            MacDeviceMatcher::on_device_removal,
-            context,
-        );
+        IOHIDManagerRegisterDeviceRemovalCallback(&self.manager, Self::on_device_removal, context);
 
         IOHIDManagerScheduleWithRunLoop(&self.manager);
         IOHIDManagerOpen(&self.manager, kIOHIDManagerOptionNone).unwrap();
+
+        // IOHIDManager doesn't give a signal that it has "finished"
+        // enumerating, so schedule a one-off timer on the CFRunLoop to fire in
+        // a couple of seconds.
+        let timer = unsafe {
+            let fire_date = CFAbsoluteTimeGetCurrent() + 2.0;
+            let mut context = CFRunLoopTimerContext {
+                version: 0,
+                info: context as *mut _,
+                retain: None,
+                release: None,
+                copyDescription: None,
+            };
+            let timer = CFRunLoopTimer::wrap_under_create_rule(CFRunLoopTimerCreate(
+                kCFAllocatorDefault,
+                fire_date,
+                0.,
+                0,
+                0,
+                Self::enumeration_complete,
+                &mut context,
+            ));
+
+            CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer.as_concrete_TypeRef(), kCFRunLoopCommonModes);
+            timer
+        };
 
         trace!("starting MacDeviceMatcher runloop");
         unsafe {
@@ -186,6 +213,7 @@ impl MacDeviceMatcher {
         }
 
         trace!("MacDeviceMatcher runloop done, cleaning up");
+        drop(timer);
         IOHIDManagerUnscheduleFromRunLoop(&self.manager);
         IOHIDManagerClose(&self.manager, 0).ok();
         trace!("MacDeviceMatcher finished");
@@ -215,6 +243,12 @@ impl MacDeviceMatcher {
         let device = device_ref.into();
         trace!("on_device_removal: {device:?}");
         let _ = this.tx.blocking_send(WatchEvent::Removed(device));
+    }
+
+    extern "C" fn enumeration_complete(_: CFRunLoopTimerRef, context: *mut c_void) {
+        let this = unsafe { &mut *(context as *mut Self) };
+        trace!("enumeration_complete");
+        let _ = this.tx.blocking_send(WatchEvent::EnumerationComplete);
     }
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
@@ -335,10 +369,12 @@ impl MacUSBDeviceWorker {
 
         trace!("MacUSBDeviceWorker runloop done, cleaning up");
         IOHIDDeviceUnscheduleFromRunLoop(&self.device);
-        IOHIDDeviceClose(&self.device, 0).map_err(|e| {
-            error!("IOHIDDeviceClose returned error: {e}");
-            WebauthnCError::Internal
-        }).unwrap();
+        IOHIDDeviceClose(&self.device, 0)
+            .map_err(|e| {
+                error!("IOHIDDeviceClose returned error: {e}");
+                WebauthnCError::Internal
+            })
+            .unwrap();
         // This buffer needs to live while the RunLoop does
         drop(buf);
         trace!("MacUSBDeviceWorker finished");
