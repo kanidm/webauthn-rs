@@ -4,14 +4,16 @@
 
 use async_trait::async_trait;
 use core_foundation::{
-    base::{kCFAllocatorDefault, CFRelease, TCFType},
     mach_port::CFIndex,
-    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent},
+    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun},
 };
-use futures::stream::BoxStream;
+use futures::{stream::BoxStream, Stream};
 use libc::c_void;
-use std::{fmt, mem::size_of, pin::Pin, slice::from_raw_parts};
-use tokio::sync::mpsc;
+use std::{
+    fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, sync::Arc, thread,
+};
+use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio_stream::wrappers::ReceiverStream;
 
 // mod device;
 // pub mod transaction;
@@ -19,19 +21,17 @@ use tokio::sync::mpsc;
 mod iokit;
 // mod monitor;
 
-use self::iokit::{
-    kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, IOHIDDevice, IOHIDDeviceMatcher,
-    IOHIDDeviceRef, IOHIDDeviceSetReport, IOHIDManager, IOHIDManagerCreate, IOHIDManagerRef,
-    IOHIDManagerSetDeviceMatching, IOHIDReportType, IOReturn,
-};
-
 use crate::{
     error::WebauthnCError,
     usb::{
         platform::{
             os::iokit::{
-                kIOReturnSuccess, IOHIDDeviceOpen, IOHIDDeviceRegisterInputReportCallback,
-                IOHIDDeviceScheduleWithRunLoop,
+                kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, IOHIDDevice, IOHIDDeviceMatcher,
+                IOHIDDeviceOpen, IOHIDDeviceRef, IOHIDDeviceRegisterInputReportCallback,
+                IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport, IOHIDManager,
+                IOHIDManagerCreate, IOHIDManagerRegisterDeviceMatchingCallback,
+                IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerSetDeviceMatching,
+                IOHIDReportType, IOReturn,
             },
             traits::*,
         },
@@ -39,15 +39,19 @@ use crate::{
     },
 };
 
+use self::iokit::{IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop};
+
 pub struct USBDeviceManagerImpl {
-    manager: IOHIDManager,
-    _matcher: IOHIDDeviceMatcher,
+    // stream: ReceiverStream<WatchEvent<USBDeviceInfoImpl>>,
+    // tx: Sender<WatchEvent<USBDeviceInfoImpl>>,
+    // manager: IOHIDManager,
+    // _matcher: IOHIDDeviceMatcher,
 }
 
 impl fmt::Debug for USBDeviceManagerImpl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("USBDeviceManagerImpl")
-            .field("manager", &self.manager)
+            // .field("manager", &self.manager)
             .finish()
     }
 }
@@ -62,23 +66,16 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     type DeviceId = IOHIDDevice;
 
     fn new() -> Result<Self, WebauthnCError> {
-        let manager = unsafe { IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDManagerOptionNone) };
-
-        // Match FIDO devices only.
-        let _matcher = IOHIDDeviceMatcher::new();
-        unsafe { IOHIDManagerSetDeviceMatching(manager, _matcher.dict.as_concrete_TypeRef()) };
-
-        Ok(Self { manager, _matcher })
+        Ok(Self {}) // manager, _matcher })
     }
 
     fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
-        let mut matcher = Box::pin(MacDeviceMatcher {});
-        let context = unsafe {
-            let matcher_ref = Pin::as_mut(&mut matcher);
-            Pin::get_unchecked_mut(matcher_ref) as *mut MacDeviceMatcher as *mut c_void
-        };
+        let (mut matcher, stream) = MacDeviceMatcher::new()?;
 
-        todo!()
+        tokio::spawn(async move {
+            matcher.as_mut().start()
+        });
+        Ok(Box::pin(stream))
     }
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError> {
@@ -92,16 +89,81 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 //     }
 // }
 
-struct MacDeviceMatcher {}
+struct MacDeviceMatcher {
+    manager: IOHIDManager,
+    _matcher: IOHIDDeviceMatcher,
+    tx: Sender<WatchEvent<USBDeviceInfoImpl>>,
+    _pin: PhantomPinned,
+}
+
+unsafe impl Send for MacDeviceMatcher {}
+unsafe impl Sync for MacDeviceMatcher {}
 
 impl MacDeviceMatcher {
+    fn new() -> Result<
+        (
+            Pin<Box<Self>>,
+            ReceiverStream<WatchEvent<USBDeviceInfoImpl>>,
+        ),
+        WebauthnCError,
+    > {
+        let manager =
+            IOHIDManagerCreate(kIOHIDManagerOptionNone).ok_or(WebauthnCError::Internal)?;
+        // Match FIDO devices only.
+        let _matcher = IOHIDDeviceMatcher::new();
+        IOHIDManagerSetDeviceMatching(&manager, Some(&_matcher));
+        let (tx, rx) = mpsc::channel(16);
+        let stream = ReceiverStream::from(rx);
+        let o = Self {
+            manager,
+            _matcher,
+            tx,
+            _pin: PhantomPinned,
+        };
+
+        Ok((Box::pin(o), stream))
+    }
+
+    fn start(&self) {
+        let context = unsafe { self as *const Self as *const c_void };
+
+        IOHIDManagerRegisterDeviceMatchingCallback(
+            &self.manager,
+            MacDeviceMatcher::on_device_matching,
+            context,
+        );
+
+        IOHIDManagerRegisterDeviceRemovalCallback(
+            &self.manager,
+            MacDeviceMatcher::on_device_removal,
+            context,
+        );
+
+        IOHIDManagerScheduleWithRunLoop(&self.manager);
+        IOHIDManagerOpen(&self.manager, kIOHIDManagerOptionNone).unwrap();
+
+        trace!("Starting runloop");
+        unsafe {
+            CFRunLoopRun();
+        }
+
+        trace!("runloop done");
+    }
+
     extern "C" fn on_device_matching(
         context: *mut c_void,
         _: IOReturn,
         _: *mut c_void,
         device_ref: IOHIDDeviceRef,
     ) {
+        println!("on_device_matching");
+
         let this = unsafe { &mut *(context as *mut Self) };
+        let device = device_ref.into();
+        println!("device: {:?}", device);
+        let _ = this
+            .tx
+            .send(WatchEvent::Added(USBDeviceInfoImpl { device }));
         // let _ = this
         //     .selector_sender
         //     .send(DeviceSelectorEvent::DevicesAdded(vec![device_ref]));
@@ -121,7 +183,6 @@ impl MacDeviceMatcher {
         // if let Ok(runloop) = runloop {
         //     this.map.insert(device_ref, DeviceData { tx, runloop });
         // }
-        todo!()
     }
 
     extern "C" fn on_device_removal(
@@ -130,11 +191,27 @@ impl MacDeviceMatcher {
         _: *mut c_void,
         device_ref: IOHIDDeviceRef,
     ) {
+        println!("on_device_removal");
         let this = unsafe { &mut *(context as *mut Self) };
+        let device = device_ref.into();
+        println!("device: {:?}", device);
+        let _ = this.tx.send(WatchEvent::Removed(device));
+
         // this.remove_device(device_ref);
-        todo!()
     }
 }
+
+// impl Stream for MacDeviceMatcher {
+//     type Item = WatchEvent<USBDeviceInfoImpl>;
+
+//     fn poll_next(
+//         self: Pin<&mut Self>,
+//         cx: &mut std::task::Context<'_>,
+//     ) -> std::task::Poll<Option<Self::Item>> {
+//         let stream = unsafe { self.map_unchecked_mut(|s| &mut s.stream) };
+//         ReceiverStream::poll_next(stream, cx)
+//     }
+// }
 
 pub struct USBDeviceInfoImpl {
     device: IOHIDDevice,
@@ -179,29 +256,28 @@ impl USBDeviceImpl {
         let context = (&mut d) as *mut Self as *mut c_void;
 
         unsafe {
-            let r = IOHIDDeviceRegisterInputReportCallback(
-                d.info.device,
+            IOHIDDeviceRegisterInputReportCallback(
+                &d.info.device,
                 d.buf.as_mut_ptr(),
                 d.buf.len().try_into().unwrap(),
                 Self::on_input_report,
                 context,
-            );
-            if r != kIOReturnSuccess {
-                error!("IOHIDDeviceRegisterInputReportCallback return error: {r}");
-                return Err(WebauthnCError::Internal);
-            }
+            )
+            .map_err(|e| {
+                error!("IOHIDDeviceRegisterInputReportCallback return error: {e}");
+                WebauthnCError::Internal
+            })?;
 
             IOHIDDeviceScheduleWithRunLoop(
-                d.info.device,
+                &d.info.device,
                 CFRunLoopGetCurrent(),
                 kCFRunLoopDefaultMode,
             );
 
-            let r = IOHIDDeviceOpen(d.info.device, 0);
-            if r != kIOReturnSuccess {
-                error!("IOHIDDeviceOpen return error: {r}");
-                return Err(WebauthnCError::Internal);
-            }
+            IOHIDDeviceOpen(&d.info.device, 0).map_err(|e| {
+                error!("IOHIDDeviceOpen return error: {e}");
+                WebauthnCError::Internal
+            })?;
         }
 
         Ok(d)
@@ -221,7 +297,7 @@ impl USBDeviceImpl {
         let src_data = unsafe { from_raw_parts(report, report_len as usize) };
         let mut data: HidReportBytes = [0; size_of::<HidReportBytes>()];
         data.copy_from_slice(src_data);
-        this.tx.blocking_send(data);
+        this.tx.blocking_send(data).unwrap();
     }
 }
 
@@ -241,21 +317,15 @@ impl USBDevice for USBDeviceImpl {
     async fn write(&self, data: HidSendReportBytes) -> Result<(), WebauthnCError> {
         let report_id = data[0];
         let data = &data[if report_id == 0 { 1 } else { 0 }..];
-        let r = unsafe {
-            IOHIDDeviceSetReport(
-                self.device,
-                kIOHIDReportTypeOutput,
-                report_id.try_into().unwrap(),
-                data.as_ptr(),
-                data.len() as CFIndex,
-            )
-        };
-
-        if r != kIOReturnSuccess {
-            error!("IOHIDDeviceSetReport return error: {r}");
-            return Err(WebauthnCError::ApduTransmission);
-        }
-
-        Ok(())
+        IOHIDDeviceSetReport(
+            &self.info.device,
+            kIOHIDReportTypeOutput,
+            report_id.try_into().unwrap(),
+            data,
+        )
+        .map_err(|e| {
+            error!("IOHIDDeviceSetReport return error: {e}");
+            WebauthnCError::ApduTransmission
+        })
     }
 }
