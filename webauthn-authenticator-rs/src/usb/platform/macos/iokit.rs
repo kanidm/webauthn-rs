@@ -173,15 +173,7 @@ impl CFRunLoopEntryTimer {
         let timer = unsafe {
             let fire_date = CFAbsoluteTimeGetCurrent() + delay.as_secs_f64();
 
-            CFRunLoopTimer::wrap_under_create_rule(CFRunLoopTimerCreate(
-                kCFAllocatorDefault,
-                fire_date,
-                0.,
-                0,
-                0,
-                callback,
-                context_ptr,
-            ))
+            CFRunLoopTimer::new(fire_date, 0., 0, 0, callback, context_ptr)
         };
 
         Self { timer, context_ptr }
@@ -189,12 +181,8 @@ impl CFRunLoopEntryTimer {
 
     pub fn add_to_current_runloop(&self) {
         unsafe {
-            CFRunLoopAddTimer(
-                CFRunLoopGetCurrent(),
-                self.timer.as_concrete_TypeRef(),
-                kCFRunLoopDefaultMode,
-            )
-        };
+            CFRunLoop::get_current().add_timer(&self.timer, kCFRunLoopDefaultMode);
+        }
     }
 }
 
@@ -246,12 +234,8 @@ impl CFRunLoopEntryObserver {
 
     pub fn add_to_current_runloop(&self) {
         unsafe {
-            CFRunLoopAddObserver(
-                CFRunLoopGetCurrent(),
-                self.observer.as_concrete_TypeRef(),
-                kCFRunLoopDefaultMode,
-            )
-        };
+            CFRunLoop::get_current().add_observer(&self.observer, kCFRunLoopDefaultMode);
+        }
     }
 }
 
@@ -348,7 +332,7 @@ pub fn IOHIDManagerScheduleWithRunLoop(manager: &IOHIDManager) {
     unsafe {
         _IOHIDManagerScheduleWithRunLoop(
             manager.as_concrete_TypeRef(),
-            CFRunLoopGetCurrent(),
+            CFRunLoop::get_current().as_concrete_TypeRef(),
             kCFRunLoopDefaultMode,
         )
     }
@@ -358,7 +342,7 @@ pub fn IOHIDManagerUnscheduleFromRunLoop(manager: &IOHIDManager) {
     unsafe {
         _IOHIDManagerUnscheduleFromRunLoop(
             manager.as_concrete_TypeRef(),
-            CFRunLoopGetCurrent(),
+            CFRunLoop::get_current().as_concrete_TypeRef(),
             kCFRunLoopDefaultMode,
         )
     }
@@ -405,7 +389,7 @@ pub fn IOHIDDeviceScheduleWithRunLoop(device: &IOHIDDevice) {
     unsafe {
         _IOHIDDeviceScheduleWithRunLoop(
             device.as_concrete_TypeRef(),
-            CFRunLoopGetCurrent(),
+            CFRunLoop::get_current().as_concrete_TypeRef(),
             kCFRunLoopDefaultMode,
         );
     }
@@ -415,7 +399,7 @@ pub fn IOHIDDeviceUnscheduleFromRunLoop(device: &IOHIDDevice) {
     unsafe {
         _IOHIDDeviceUnscheduleFromRunLoop(
             device.as_concrete_TypeRef(),
-            CFRunLoopGetCurrent(),
+            CFRunLoop::get_current().as_concrete_TypeRef(),
             kCFRunLoopDefaultMode,
         );
     }
@@ -437,16 +421,6 @@ impl From<IOHIDDeviceRef> for IOHIDDevice {
 
 #[link(name = "IOKit", kind = "framework")]
 extern "C" {
-    // CFRunLoop
-    pub fn CFRunLoopObserverCreate(
-        allocator: CFAllocatorRef,
-        activities: CFOptionFlags,
-        repeats: Boolean,
-        order: CFIndex,
-        callout: CFRunLoopObserverCallBack,
-        context: *mut CFRunLoopObserverContext,
-    ) -> CFRunLoopObserverRef;
-
     // IOHIDManager
     fn IOHIDManagerGetTypeID() -> CFTypeID;
 
@@ -536,7 +510,6 @@ extern "C" {
 mod tests {
     use super::*;
     use std::os::raw::c_void;
-    use std::ptr;
     use std::sync::mpsc::{channel, Sender};
     use std::thread;
 

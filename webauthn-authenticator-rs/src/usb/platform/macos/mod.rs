@@ -2,6 +2,22 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+//! macOS / IOKit USB HID implementation.
+//! 
+//! This module is based on [Mozilla authenticator-rs][0]' macOS platform
+//! support library, but has a lot of changes to it.
+//! 
+//! ## Overview
+//! 
+//! **Rant:** IOKit is a giant pain to work with outside a [CFRunLoop], and
+//! macOS' platform Rust bindings aren't nearly as well-polished as Windows'.
+//! 
+//! [USBDeviceManagerImpl::watch_devices] creates an [IOHIDManager], then sets
+//! up a new thread to 
+//! 
+//! [0]: https://github.com/mozilla/authenticator-rs
+//! [CFRunLoop]: core_foundation::runloop::CFRunLoop
+
 use async_trait::async_trait;
 use core_foundation::{
     mach_port::CFIndex,
@@ -19,11 +35,7 @@ use std::{
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 
-// mod device;
-// pub mod transaction;
-
 mod iokit;
-// mod monitor;
 
 use crate::{
     error::WebauthnCError,
