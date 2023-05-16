@@ -5,7 +5,7 @@
 use async_trait::async_trait;
 use core_foundation::{
     mach_port::CFIndex,
-    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun},
+    runloop::{kCFRunLoopDefaultMode, CFRunLoopGetCurrent, CFRunLoopRun, CFRunLoopObserverRef, CFRunLoopActivity, CFRunLoopStop},
 };
 use futures::{stream::BoxStream, Stream};
 use libc::c_void;
@@ -39,7 +39,7 @@ use crate::{
     },
 };
 
-use self::iokit::{IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop};
+use self::iokit::{IOHIDManagerOpen, IOHIDManagerScheduleWithRunLoop, CFRunLoopEntryObserver, SendableRunLoop};
 
 pub struct USBDeviceManagerImpl {
     // stream: ReceiverStream<WatchEvent<USBDeviceInfoImpl>>,
@@ -71,17 +71,49 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 
     fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
         let (mut matcher, stream) = MacDeviceMatcher::new()?;
+        let (observer_tx, observer_rx) = std::sync::mpsc::channel();
 
         tokio::spawn(async move {
+            let context = &observer_tx as *const _ as *mut c_void;
+            let obs = CFRunLoopEntryObserver::new(MacDeviceMatcher::observe, context);
+            obs.add_to_current_runloop();
             matcher.as_mut().start()
         });
-        Ok(Box::pin(stream))
+
+        let runloop: SendableRunLoop = observer_rx.recv().expect("failed to receive runloop");
+
+
+        Ok(Box::pin(MacRunLoopStream { runloop, stream }))
     }
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError> {
         todo!()
     }
 }
+
+struct MacRunLoopStream<T> {
+    runloop: SendableRunLoop,
+    stream: ReceiverStream<T>,
+}
+
+impl<T> Stream for MacRunLoopStream<T> {
+    type Item = T;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let stream = unsafe { self.map_unchecked_mut(|s| &mut s.stream) };
+        ReceiverStream::poll_next(stream, cx)
+    }
+}
+
+impl<T> Drop for MacRunLoopStream<T> {
+    fn drop(&mut self) {
+        unsafe { CFRunLoopStop(*self.runloop) }
+    }
+}
+
 
 // impl Drop for USBDeviceManagerImpl {
 //     fn drop(&mut self) {
@@ -198,6 +230,14 @@ impl MacDeviceMatcher {
         let _ = this.tx.send(WatchEvent::Removed(device));
 
         // this.remove_device(device_ref);
+    }
+
+    extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
+        println!("observe");
+        let tx: &std::sync::mpsc::Sender<SendableRunLoop> = unsafe { &*(context as *mut _) };
+
+        // Send the current runloop to the receiver to unblock it.
+        let _ = tx.send(SendableRunLoop::retain(unsafe { CFRunLoopGetCurrent() }));
     }
 }
 
