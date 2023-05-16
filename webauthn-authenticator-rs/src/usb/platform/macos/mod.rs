@@ -4,17 +4,18 @@
 
 use async_trait::async_trait;
 use core_foundation::{
-    base::{kCFAllocatorDefault, TCFType},
-    date::CFAbsoluteTimeGetCurrent,
     mach_port::CFIndex,
     runloop::{
         CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopStop,
-        CFRunLoopTimerCreate, CFRunLoopTimerRef, CFRunLoopAddTimer, kCFRunLoopCommonModes, CFRunLoopTimer, CFRunLoopTimerContext,
+        CFRunLoopTimerRef,
     },
 };
 use futures::{stream::BoxStream, Stream};
 use libc::c_void;
-use std::{fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, thread, ptr};
+use std::{
+    fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, thread,
+    time::Duration,
+};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -29,23 +30,20 @@ use crate::{
     usb::{
         platform::{
             os::iokit::{
-                kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, IOHIDDevice, IOHIDDeviceMatcher,
+                kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, CFRunLoopEntryObserver,
+                CFRunLoopEntryTimer, IOHIDDevice, IOHIDDeviceClose, IOHIDDeviceMatcher,
                 IOHIDDeviceOpen, IOHIDDeviceRef, IOHIDDeviceRegisterInputReportCallback,
                 IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport,
-                IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDManagerCreate,
-                IOHIDManagerRegisterDeviceMatchingCallback,
-                IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerSetDeviceMatching,
-                IOHIDManagerUnscheduleFromRunLoop, IOHIDReportType, IOReturn,
+                IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDManagerClose,
+                IOHIDManagerCreate, IOHIDManagerOpen, IOHIDManagerRegisterDeviceMatchingCallback,
+                IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerScheduleWithRunLoop,
+                IOHIDManagerSetDeviceMatching, IOHIDManagerUnscheduleFromRunLoop, IOHIDReportType,
+                IOReturn, SendableRunLoop,
             },
             traits::*,
         },
         HidReportBytes, HidSendReportBytes,
     },
-};
-
-use self::iokit::{
-    CFRunLoopEntryObserver, IOHIDDeviceClose, IOHIDManagerClose, IOHIDManagerOpen,
-    IOHIDManagerScheduleWithRunLoop, SendableRunLoop,
 };
 
 pub struct USBDeviceManagerImpl {
@@ -168,7 +166,7 @@ impl MacDeviceMatcher {
     }
 
     fn start(&self) {
-        let context = self as *const Self as *const c_void;
+        let context = self as *const Self as *mut c_void;
 
         IOHIDManagerRegisterDeviceMatchingCallback(
             &self.manager,
@@ -184,28 +182,9 @@ impl MacDeviceMatcher {
         // IOHIDManager doesn't give a signal that it has "finished"
         // enumerating, so schedule a one-off timer on the CFRunLoop to fire in
         // a couple of seconds.
-        let timer = unsafe {
-            let fire_date = CFAbsoluteTimeGetCurrent() + 2.0;
-            let mut context = CFRunLoopTimerContext {
-                version: 0,
-                info: context as *mut _,
-                retain: None,
-                release: None,
-                copyDescription: None,
-            };
-            let timer = CFRunLoopTimer::wrap_under_create_rule(CFRunLoopTimerCreate(
-                kCFAllocatorDefault,
-                fire_date,
-                0.,
-                0,
-                0,
-                Self::enumeration_complete,
-                &mut context,
-            ));
-
-            CFRunLoopAddTimer(CFRunLoopGetCurrent(), timer.as_concrete_TypeRef(), kCFRunLoopCommonModes);
-            timer
-        };
+        let timer =
+            CFRunLoopEntryTimer::new(Self::enumeration_complete, context, Duration::from_secs(2));
+        timer.add_to_current_runloop();
 
         trace!("starting MacDeviceMatcher runloop");
         unsafe {

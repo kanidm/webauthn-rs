@@ -4,6 +4,7 @@
 
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
+use core_foundation::date::CFAbsoluteTimeGetCurrent;
 use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
 
 use core_foundation::array::*;
@@ -19,6 +20,7 @@ use std::fmt::{Debug, Display};
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
+use std::time::Duration;
 
 use crate::usb::FIDO_USAGE_PAGE;
 use crate::usb::FIDO_USAGE_U2FHID;
@@ -103,12 +105,6 @@ declare_TCFType!(IOHIDManager, IOHIDManagerRef);
 impl_TCFType!(IOHIDManager, IOHIDManagerRef, IOHIDManagerGetTypeID);
 impl_CFTypeDescription!(IOHIDManager);
 
-// impl fmt::Debug for IOHIDManager {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_tuple("IOHIDManager").finish()
-//     }
-// }
-
 unsafe impl Send for IOHIDManager {}
 unsafe impl Sync for IOHIDManager {}
 
@@ -118,12 +114,6 @@ pub type IOHIDDeviceRef = *mut __IOHIDDevice;
 declare_TCFType!(IOHIDDevice, IOHIDDeviceRef);
 impl_TCFType!(IOHIDDevice, IOHIDDeviceRef, IOHIDDeviceGetTypeID);
 impl_CFTypeDescription!(IOHIDDevice);
-
-// impl fmt::Debug for IOHIDDevice {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         f.debug_tuple("IOHIDDevice").finish()
-//     }
-// }
 
 unsafe impl Send for IOHIDDevice {}
 unsafe impl Sync for IOHIDDevice {}
@@ -160,47 +150,92 @@ impl<T> Drop for Sendable<T> {
 
 pub type SendableRunLoop = Sendable<__CFRunLoop>;
 
-#[repr(C)]
-pub struct CFRunLoopObserverContext {
-    pub version: CFIndex,
-    pub info: *mut c_void,
-    pub retain: Option<extern "C" fn(info: *const c_void) -> *const c_void>,
-    pub release: Option<extern "C" fn(info: *const c_void)>,
-    pub copyDescription: Option<extern "C" fn(info: *const c_void) -> CFStringRef>,
+fn new_run_loop_timer_context(context: *mut c_void) -> CFRunLoopTimerContext {
+    CFRunLoopTimerContext {
+        version: 0,
+        info: context,
+        retain: None,
+        release: None,
+        copyDescription: None,
+    }
 }
 
-impl CFRunLoopObserverContext {
-    pub fn new(context: *mut c_void) -> Self {
-        Self {
-            version: 0 as CFIndex,
-            info: context,
-            retain: None,
-            release: None,
-            copyDescription: None,
-        }
+pub struct CFRunLoopEntryTimer {
+    timer: CFRunLoopTimer,
+    context_ptr: *mut CFRunLoopTimerContext,
+}
+
+impl CFRunLoopEntryTimer {
+    pub fn new(callback: CFRunLoopTimerCallBack, context: *mut c_void, delay: Duration) -> Self {
+        let context = new_run_loop_timer_context(context);
+        let context_ptr = Box::into_raw(Box::new(context));
+
+        let timer = unsafe {
+            let fire_date = CFAbsoluteTimeGetCurrent() + delay.as_secs_f64();
+
+            CFRunLoopTimer::wrap_under_create_rule(CFRunLoopTimerCreate(
+                kCFAllocatorDefault,
+                fire_date,
+                0.,
+                0,
+                0,
+                callback,
+                context_ptr,
+            ))
+        };
+
+        Self { timer, context_ptr }
+    }
+
+    pub fn add_to_current_runloop(&self) {
+        unsafe {
+            CFRunLoopAddTimer(
+                CFRunLoopGetCurrent(),
+                self.timer.as_concrete_TypeRef(),
+                kCFRunLoopDefaultMode,
+            )
+        };
+    }
+}
+
+impl Drop for CFRunLoopEntryTimer {
+    fn drop(&mut self) {
+        unsafe {
+            // Drop the CFRunLoopTimerContext.
+            let _ = Box::from_raw(self.context_ptr);
+        };
+    }
+}
+
+fn new_run_loop_observer_context(context: *mut c_void) -> CFRunLoopObserverContext {
+    CFRunLoopObserverContext {
+        version: 0,
+        info: context,
+        retain: None,
+        release: None,
+        copyDescription: None,
     }
 }
 
 pub struct CFRunLoopEntryObserver {
-    observer: CFRunLoopObserverRef,
-    // Keep alive until the observer goes away.
+    observer: CFRunLoopObserver,
     context_ptr: *mut CFRunLoopObserverContext,
 }
 
 impl CFRunLoopEntryObserver {
     pub fn new(callback: CFRunLoopObserverCallBack, context: *mut c_void) -> Self {
-        let context = CFRunLoopObserverContext::new(context);
+        let context = new_run_loop_observer_context(context);
         let context_ptr = Box::into_raw(Box::new(context));
 
         let observer = unsafe {
-            CFRunLoopObserverCreate(
+            CFRunLoopObserver::wrap_under_create_rule(CFRunLoopObserverCreate(
                 kCFAllocatorDefault,
                 kCFRunLoopEntry,
                 false as Boolean,
                 0,
                 callback,
                 context_ptr,
-            )
+            ))
         };
 
         Self {
@@ -211,7 +246,11 @@ impl CFRunLoopEntryObserver {
 
     pub fn add_to_current_runloop(&self) {
         unsafe {
-            CFRunLoopAddObserver(CFRunLoopGetCurrent(), self.observer, kCFRunLoopDefaultMode)
+            CFRunLoopAddObserver(
+                CFRunLoopGetCurrent(),
+                self.observer.as_concrete_TypeRef(),
+                kCFRunLoopDefaultMode,
+            )
         };
     }
 }
@@ -219,8 +258,6 @@ impl CFRunLoopEntryObserver {
 impl Drop for CFRunLoopEntryObserver {
     fn drop(&mut self) {
         unsafe {
-            CFRelease(self.observer as *mut c_void);
-
             // Drop the CFRunLoopObserverContext.
             let _ = Box::from_raw(self.context_ptr);
         };
@@ -525,17 +562,17 @@ mod tests {
                 let manager = IOHIDManagerCreate(0).unwrap();
 
                 IOHIDManagerScheduleWithRunLoop(&manager);
-                IOHIDManagerSetDeviceMatching(&manager, None);
 
-                // This step requires "input monitoring" permission in security and privacy settings.
+                // Set an explicit device filter so that we don't need "Input Monitoring" permissions.
+                let matcher = IOHIDDeviceMatcher::new();
+                IOHIDManagerSetDeviceMatching(&manager, Some(&matcher));
                 IOHIDManagerOpen(&manager, 0).unwrap();
 
                 // This will run until `CFRunLoopStop()` is called.
                 CFRunLoopRun();
 
-                IOHIDManagerClose(manager, 0).unwrap();
-
-                // CFRelease(manager.0 as *mut c_void);
+                IOHIDManagerClose(&manager, 0).unwrap();
+                drop(matcher);
             }
         });
 
