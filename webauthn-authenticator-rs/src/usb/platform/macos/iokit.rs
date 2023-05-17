@@ -20,6 +20,7 @@ use std::fmt::{self, Debug, Display};
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
+use std::ptr::NonNull;
 use std::time::Duration;
 
 use crate::{
@@ -250,98 +251,94 @@ impl IOHIDDeviceMatcher {
     }
 }
 
-pub fn IOHIDManagerCreate(options: IOHIDManagerOptions) -> Option<IOHIDManager> {
-    unsafe {
-        let r = _IOHIDManagerCreate(kCFAllocatorDefault, options);
-        if r.is_null() {
-            return None;
+impl IOHIDManager {
+    pub fn create() -> Self {
+        unsafe {
+            TCFType::wrap_under_create_rule(_IOHIDManagerCreate(
+                kCFAllocatorDefault,
+                kIOHIDManagerOptionNone,
+            ))
         }
-        Some(TCFType::wrap_under_create_rule(r))
     }
-}
 
-pub fn IOHIDManagerCopyDevices(manager: &IOHIDManager) -> Vec<IOHIDDevice> {
-    unsafe {
-        let s: CFSet<c_void> =
-            CFSet::wrap_under_get_rule(_IOHIDManagerCopyDevices(manager.as_concrete_TypeRef()));
-        let mut refs: Vec<*const c_void> = Vec::with_capacity(s.len());
+    pub fn copy_devices(&self) -> Vec<IOHIDDevice> {
+        unsafe {
+            let s: CFSet<c_void> =
+                CFSet::wrap_under_get_rule(_IOHIDManagerCopyDevices(self.as_concrete_TypeRef()));
+            let mut refs: Vec<*const c_void> = Vec::with_capacity(s.len());
 
-        CFSetGetValues(s.as_concrete_TypeRef(), refs.as_mut_ptr());
-        refs.set_len(s.len());
+            CFSetGetValues(s.as_concrete_TypeRef(), refs.as_mut_ptr());
+            refs.set_len(s.len());
 
-        refs.into_iter()
-            .map(|ptr| IOHIDDeviceRef::from_void_ptr(ptr).into())
-            .collect()
+            refs.into_iter()
+                .map(|ptr| IOHIDDeviceRef::from_void_ptr(ptr).into())
+                .collect()
+        }
     }
-}
 
-pub fn IOHIDManagerSetDeviceMatching(
-    manager: &IOHIDManager,
-    matching: Option<&IOHIDDeviceMatcher>,
-) {
-    unsafe {
-        _IOHIDManagerSetDeviceMatching(
-            manager.as_concrete_TypeRef(),
-            matching.map_or(ptr::null_mut(), |m| m.dict.as_concrete_TypeRef()),
-        )
+    pub fn set_device_matching(&self, matching: Option<&IOHIDDeviceMatcher>) {
+        unsafe {
+            _IOHIDManagerSetDeviceMatching(
+                self.as_concrete_TypeRef(),
+                matching.map_or(ptr::null(), |m| m.dict.as_concrete_TypeRef()),
+            )
+        }
     }
-}
 
-pub fn IOHIDManagerRegisterDeviceMatchingCallback(
-    manager: &IOHIDManager,
-    callback: IOHIDDeviceCallback,
-    context: *const c_void,
-) {
-    unsafe {
-        _IOHIDManagerRegisterDeviceMatchingCallback(
-            manager.as_concrete_TypeRef(),
-            callback,
-            context,
-        )
+    pub fn register_device_matching_callback(
+        &self,
+        callback: IOHIDDeviceCallback,
+        context: *const c_void,
+    ) {
+        unsafe {
+            _IOHIDManagerRegisterDeviceMatchingCallback(
+                self.as_concrete_TypeRef(),
+                callback,
+                context,
+            )
+        }
     }
-}
 
-pub fn IOHIDManagerRegisterDeviceRemovalCallback(
-    manager: &IOHIDManager,
-    callback: IOHIDDeviceCallback,
-    context: *const c_void,
-) {
-    unsafe {
-        _IOHIDManagerRegisterDeviceRemovalCallback(manager.as_concrete_TypeRef(), callback, context)
+    pub fn register_device_removal_callback(
+        &self,
+        callback: IOHIDDeviceCallback,
+        context: *const c_void,
+    ) {
+        unsafe {
+            _IOHIDManagerRegisterDeviceRemovalCallback(
+                self.as_concrete_TypeRef(),
+                callback,
+                context,
+            )
+        }
     }
-}
 
-pub fn IOHIDManagerOpen(
-    manager: &IOHIDManager,
-    options: IOHIDManagerOptions,
-) -> Result<(), IOReturn> {
-    unsafe { _IOHIDManagerOpen(manager.as_concrete_TypeRef(), options) }.into_result()
-}
-
-pub fn IOHIDManagerClose(
-    manager: &IOHIDManager,
-    options: IOHIDManagerOptions,
-) -> Result<(), IOReturn> {
-    unsafe { _IOHIDManagerClose(manager.as_concrete_TypeRef(), options) }.into_result()
-}
-
-pub fn IOHIDManagerScheduleWithRunLoop(manager: &IOHIDManager) {
-    unsafe {
-        _IOHIDManagerScheduleWithRunLoop(
-            manager.as_concrete_TypeRef(),
-            CFRunLoop::get_current().as_concrete_TypeRef(),
-            kCFRunLoopDefaultMode,
-        )
+    pub fn open(&self, options: IOHIDManagerOptions) -> Result<(), IOReturn> {
+        unsafe { _IOHIDManagerOpen(self.as_concrete_TypeRef(), options) }.into_result()
     }
-}
 
-pub fn IOHIDManagerUnscheduleFromRunLoop(manager: &IOHIDManager) {
-    unsafe {
-        _IOHIDManagerUnscheduleFromRunLoop(
-            manager.as_concrete_TypeRef(),
-            CFRunLoop::get_current().as_concrete_TypeRef(),
-            kCFRunLoopDefaultMode,
-        )
+    pub fn close(&self, options: IOHIDManagerOptions) -> Result<(), IOReturn> {
+        unsafe { _IOHIDManagerClose(self.as_concrete_TypeRef(), options) }.into_result()
+    }
+
+    pub fn schedule_with_run_loop(&self, runloop: &CFRunLoop) {
+        unsafe {
+            _IOHIDManagerScheduleWithRunLoop(
+                self.as_concrete_TypeRef(),
+                runloop.as_concrete_TypeRef(),
+                kCFRunLoopDefaultMode,
+            );
+        }
+    }
+
+    pub fn unschedule_from_run_loop(&self, runloop: &CFRunLoop) {
+        unsafe {
+            _IOHIDManagerUnscheduleFromRunLoop(
+                self.as_concrete_TypeRef(),
+                runloop.as_concrete_TypeRef(),
+                kCFRunLoopDefaultMode,
+            )
+        }
     }
 }
 
@@ -526,19 +523,18 @@ mod tests {
 
             unsafe {
                 // We need some source for the runloop to run.
-                let manager = IOHIDManagerCreate(0).unwrap();
-
-                IOHIDManagerScheduleWithRunLoop(&manager);
+                let runloop = CFRunLoop::get_current();
+                let manager = IOHIDManager::create();
+                manager.schedule_with_run_loop(&runloop);
 
                 // Set an explicit device filter so that we don't need "Input Monitoring" permissions.
                 let matcher = IOHIDDeviceMatcher::new();
-                IOHIDManagerSetDeviceMatching(&manager, Some(&matcher));
-                IOHIDManagerOpen(&manager, 0).unwrap();
+                manager.set_device_matching(Some(&matcher));
+                manager.open(0).unwrap();
 
                 // This will run until `CFRunLoopStop()` is called.
                 CFRunLoopRun();
-
-                IOHIDManagerClose(&manager, 0).unwrap();
+                manager.close(0).unwrap();
             }
         });
 

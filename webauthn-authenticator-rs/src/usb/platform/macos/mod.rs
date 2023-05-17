@@ -24,10 +24,11 @@
 
 use async_trait::async_trait;
 use core_foundation::{
+    base::CFIndexConvertible,
     mach_port::CFIndex,
     runloop::{
         CFRunLoop, CFRunLoopActivity, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopTimerRef,
-    }, base::CFIndexConvertible,
+    },
 };
 use futures::{stream::BoxStream, Stream};
 use libc::c_void;
@@ -49,19 +50,14 @@ use crate::{
                 CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceClose, IOHIDDeviceMatcher,
                 IOHIDDeviceOpen, IOHIDDeviceRef, IOHIDDeviceRegisterInputReportCallback,
                 IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport,
-                IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDManagerClose,
-                IOHIDManagerCreate, IOHIDManagerOpen, IOHIDManagerRegisterDeviceMatchingCallback,
-                IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerScheduleWithRunLoop,
-                IOHIDManagerSetDeviceMatching, IOHIDManagerUnscheduleFromRunLoop, IOHIDReportType,
-                IOReturn, Sendable,
+                IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDReportType, IOReturn,
+                Sendable,
             },
             traits::*,
         },
         HidReportBytes, HidSendReportBytes,
     },
 };
-
-use self::iokit::IOHIDManagerCopyDevices;
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
 
@@ -101,15 +97,18 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     }
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>> {
-        let manager = IOHIDManagerCreate(kIOHIDManagerOptionNone).ok_or(WebauthnCError::Internal)?;
+        let manager = IOHIDManager::create();
 
         // Match FIDO devices only.
         let matcher = IOHIDDeviceMatcher::new();
-        IOHIDManagerSetDeviceMatching(&manager, Some(&matcher));        
+        manager.set_device_matching(Some(&matcher));
 
-        let devices = IOHIDManagerCopyDevices(&manager);
-        
-        Ok(devices.into_iter().map(|device| USBDeviceInfoImpl { device }).collect())
+        let devices = manager.copy_devices();
+
+        Ok(devices
+            .into_iter()
+            .map(|device| USBDeviceInfoImpl { device })
+            .collect())
     }
 }
 
@@ -152,8 +151,7 @@ struct MacDeviceMatcher {
 
 impl MacDeviceMatcher {
     fn new() -> Result<(Pin<Box<Self>>, Receiver<WatchEvent<USBDeviceInfoImpl>>)> {
-        let manager =
-            IOHIDManagerCreate(kIOHIDManagerOptionNone).ok_or(WebauthnCError::Internal)?;
+        let manager = IOHIDManager::create();
 
         let (tx, rx) = mpsc::channel(MESSAGE_QUEUE_LENGTH);
         let o = Self {
@@ -167,19 +165,17 @@ impl MacDeviceMatcher {
 
     fn start(&self) -> Result<()> {
         let context = self as *const Self as *mut c_void;
+        let runloop = CFRunLoop::get_current();
 
         // Match FIDO devices only.
         let matcher = IOHIDDeviceMatcher::new();
-        IOHIDManagerSetDeviceMatching(&self.manager, Some(&matcher));
-
-        IOHIDManagerRegisterDeviceMatchingCallback(
-            &self.manager,
-            Self::on_device_matching,
-            context,
-        );
-        IOHIDManagerRegisterDeviceRemovalCallback(&self.manager, Self::on_device_removal, context);
-        IOHIDManagerScheduleWithRunLoop(&self.manager);
-        IOHIDManagerOpen(&self.manager, kIOHIDManagerOptionNone)?;
+        self.manager.set_device_matching(Some(&matcher));
+        self.manager
+            .register_device_matching_callback(Self::on_device_matching, context);
+        self.manager
+            .register_device_removal_callback(Self::on_device_removal, context);
+        self.manager.schedule_with_run_loop(&runloop);
+        self.manager.open(kIOHIDManagerOptionNone)?;
 
         // IOHIDManager doesn't signal that it has "finished" enumerating, so
         // schedule a one-off timer on the CFRunLoop to fire in 2 seconds.
@@ -194,8 +190,8 @@ impl MacDeviceMatcher {
 
         // trace!("MacDeviceMatcher runloop done, cleaning up");
         drop(timer);
-        IOHIDManagerUnscheduleFromRunLoop(&self.manager);
-        IOHIDManagerClose(&self.manager, 0)?;
+        self.manager.unschedule_from_run_loop(&runloop);
+        self.manager.close(0)?;
         // trace!("MacDeviceMatcher finished");
         Ok(())
     }
