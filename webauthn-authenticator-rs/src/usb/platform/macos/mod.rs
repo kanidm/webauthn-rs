@@ -47,11 +47,8 @@ use crate::{
         platform::{
             os::iokit::{
                 kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, CFRunLoopEntryObserver,
-                CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceClose, IOHIDDeviceMatcher,
-                IOHIDDeviceOpen, IOHIDDeviceRef, IOHIDDeviceRegisterInputReportCallback,
-                IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport,
-                IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDReportType, IOReturn,
-                Sendable,
+                CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef,
+                IOHIDManager, IOHIDReportType, IOReturn, Sendable,
             },
             traits::*,
         },
@@ -328,16 +325,16 @@ impl MacUSBDeviceWorker {
 
     fn start(&self) -> Result<()> {
         let context = self as *const Self as *const c_void;
+        let runloop = CFRunLoop::get_current();
         let mut buf = [0; size_of::<HidReportBytes>()];
-        IOHIDDeviceRegisterInputReportCallback(
-            &self.device,
+        self.device.register_input_report_callback(
             buf.as_mut_ptr(),
-            buf.len().to_CFIndex(),
+            buf.len(),
             Self::on_input_report,
             context,
         );
-        IOHIDDeviceScheduleWithRunLoop(&self.device);
-        IOHIDDeviceOpen(&self.device, 0)?;
+        self.device.schedule_with_run_loop(&runloop);
+        self.device.open(0)?;
 
         // trace!("starting device runloop");
         unsafe {
@@ -345,8 +342,8 @@ impl MacUSBDeviceWorker {
         }
 
         // trace!("MacUSBDeviceWorker runloop done, cleaning up");
-        IOHIDDeviceUnscheduleFromRunLoop(&self.device);
-        IOHIDDeviceClose(&self.device, 0)?;
+        self.device.unschedule_from_run_loop(&runloop);
+        self.device.close(0)?;
         // This buffer needs to live while the RunLoop does
         let _ = &buf;
         // trace!("MacUSBDeviceWorker finished");
@@ -390,8 +387,7 @@ impl USBDevice for USBDeviceImpl {
     async fn write(&self, data: HidSendReportBytes) -> Result<()> {
         let report_id = data[0];
         let data = &data[if report_id == 0 { 1 } else { 0 }..];
-        Ok(IOHIDDeviceSetReport(
-            &self.info.device,
+        Ok(self.info.device.set_report(
             kIOHIDReportTypeOutput,
             CFIndex::from(report_id),
             data,

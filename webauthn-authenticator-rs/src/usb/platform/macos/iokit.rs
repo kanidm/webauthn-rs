@@ -342,69 +342,71 @@ impl IOHIDManager {
     }
 }
 
-pub fn IOHIDDeviceSetReport(
-    device: &IOHIDDevice,
-    reportType: IOHIDReportType,
-    reportID: CFIndex,
-    report: &[u8],
-) -> Result<(), WebauthnCError> {
-    Ok(unsafe {
-        _IOHIDDeviceSetReport(
-            device.as_concrete_TypeRef(),
-            reportType,
-            reportID,
-            report.as_ptr(),
-            report.len().to_CFIndex(),
-        )
+impl IOHIDDevice {
+    pub fn set_report(
+        &self,
+        reportType: IOHIDReportType,
+        reportID: CFIndex,
+        report: &[u8],
+    ) -> Result<(), IOReturn> {
+        unsafe {
+            _IOHIDDeviceSetReport(
+                self.as_concrete_TypeRef(),
+                reportType,
+                reportID,
+                report.as_ptr(),
+                report.len().to_CFIndex(),
+            )
+        }
+        .into_result()
     }
-    .into_result()?)
-}
 
-pub fn IOHIDDeviceRegisterInputReportCallback(
-    device: &IOHIDDevice,
-    report: *mut u8,
-    reportLength: CFIndex,
-    callback: IOHIDReportCallback,
-    context: *const c_void,
-) {
-    // TODO: wrap the event handler nicely
-    unsafe {
-        _IOHIDDeviceRegisterInputReportCallback(
-            device.as_concrete_TypeRef(),
-            report,
-            reportLength,
-            callback,
-            context,
-        );
+    pub fn register_input_report_callback(
+        &self,
+        report: *mut u8,
+        reportLength: usize,
+        callback: IOHIDReportCallback,
+        context: *const c_void,
+    ) {
+        // TODO: wrap the event handler nicely
+        unsafe {
+            _IOHIDDeviceRegisterInputReportCallback(
+                self.as_concrete_TypeRef(),
+                report,
+                reportLength.to_CFIndex(),
+                callback,
+                context,
+            );
+        }
     }
-}
 
-pub fn IOHIDDeviceScheduleWithRunLoop(device: &IOHIDDevice) {
-    unsafe {
-        _IOHIDDeviceScheduleWithRunLoop(
-            device.as_concrete_TypeRef(),
-            CFRunLoop::get_current().as_concrete_TypeRef(),
-            kCFRunLoopDefaultMode,
-        );
+    pub fn schedule_with_run_loop(&self, runloop: &CFRunLoop) {
+        unsafe {
+            _IOHIDDeviceScheduleWithRunLoop(
+                self.as_concrete_TypeRef(),
+                runloop.as_concrete_TypeRef(),
+                kCFRunLoopDefaultMode,
+            );
+        }
     }
-}
 
-pub fn IOHIDDeviceUnscheduleFromRunLoop(device: &IOHIDDevice) {
-    unsafe {
-        _IOHIDDeviceUnscheduleFromRunLoop(
-            device.as_concrete_TypeRef(),
-            CFRunLoop::get_current().as_concrete_TypeRef(),
-            kCFRunLoopDefaultMode,
-        );
+    pub fn unschedule_from_run_loop(&self, runloop: &CFRunLoop) {
+        unsafe {
+            _IOHIDDeviceUnscheduleFromRunLoop(
+                self.as_concrete_TypeRef(),
+                runloop.as_concrete_TypeRef(),
+                kCFRunLoopDefaultMode,
+            );
+        }
     }
-}
 
-pub fn IOHIDDeviceClose(device: &IOHIDDevice, options: IOOptionBits) -> Result<(), IOReturn> {
-    unsafe { _IOHIDDeviceClose(device.as_concrete_TypeRef(), options) }.into_result()
-}
+    pub fn close(&self, options: IOOptionBits) -> Result<(), IOReturn> {
+        unsafe { _IOHIDDeviceClose(self.as_concrete_TypeRef(), options) }.into_result()
+    }
 
-pub fn IOHIDDeviceOpen(device: &IOHIDDevice, options: IOOptionBits) -> Result<(), IOReturn> {
-    unsafe { _IOHIDDeviceOpen(device.as_concrete_TypeRef(), options) }.into_result()
+    pub fn open(&self, options: IOOptionBits) -> Result<(), IOReturn> {
+        unsafe { _IOHIDDeviceOpen(self.as_concrete_TypeRef(), options) }.into_result()
+    }
 }
 
 impl From<IOHIDDeviceRef> for IOHIDDevice {
