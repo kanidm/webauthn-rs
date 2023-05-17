@@ -511,7 +511,6 @@ mod tests {
                 CFRunLoopRun();
 
                 IOHIDManagerClose(&manager, 0).unwrap();
-                drop(matcher);
             }
         });
 

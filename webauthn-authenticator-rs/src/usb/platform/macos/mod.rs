@@ -3,22 +3,22 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 //! macOS / IOKit USB HID implementation.
-//! 
+//!
 //! This module is based on [Mozilla authenticator-rs][0]' macOS platform
 //! support library, but has a lot of changes to it.
-//! 
+//!
 //! ## Overview
-//! 
+//!
 //! **Rant:** IOKit is a giant pain to work with outside a [`CFRunLoop`], and
 //! macOS' platform Rust bindings aren't nearly as well-polished as Windows'.
 //! This module attempts to work around that as best as possible.
-//! 
+//!
 //! [`USBDeviceManagerImpl::watch_devices`] creates an [`IOHIDManager`], then
 //! sets up a new thread to drive its [`CFRunLoop`].
-//! 
-//! When new devices are discovered, [`USBDeviceImpl`] starts up a new thread to 
+//!
+//! When new devices are discovered, [`USBDeviceImpl`] starts up a new thread to
 //! drive the [`CFRunLoop`] for [`IOHIDDevice`].
-//! 
+//!
 //! [0]: https://github.com/mozilla/authenticator-rs
 //! [`CFRunLoop`]: core_foundation::runloop::CFRunLoop
 
@@ -26,8 +26,7 @@ use async_trait::async_trait;
 use core_foundation::{
     mach_port::CFIndex,
     runloop::{
-        CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopStop,
-        CFRunLoopTimerRef, CFRunLoop
+        CFRunLoop, CFRunLoopActivity, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopTimerRef,
     },
 };
 use futures::{stream::BoxStream, Stream};
@@ -62,6 +61,8 @@ use crate::{
     },
 };
 
+const MESSAGE_QUEUE_LENGTH: usize = 16;
+
 pub struct USBDeviceManagerImpl {
     // stream: ReceiverStream<WatchEvent<USBDeviceInfoImpl>>,
     // tx: Sender<WatchEvent<USBDeviceInfoImpl>>,
@@ -77,8 +78,8 @@ impl fmt::Debug for USBDeviceManagerImpl {
     }
 }
 
-unsafe impl Send for USBDeviceManagerImpl {}
-unsafe impl Sync for USBDeviceManagerImpl {}
+// unsafe impl Send for USBDeviceManagerImpl {}
+// unsafe impl Sync for USBDeviceManagerImpl {}
 
 #[async_trait]
 impl USBDeviceManager for USBDeviceManagerImpl {
@@ -99,14 +100,16 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 
         thread::spawn(move || {
             let context = &observer_tx as *const _ as *mut c_void;
-            let obs = CFRunLoopEntryObserver::new(MacDeviceMatcher::observe, context);
+            let obs = CFRunLoopEntryObserver::new(Self::observe, context);
             obs.add_to_current_runloop();
             matcher.as_mut().start()
         });
 
         trace!("Waiting for manager runloop");
-
-        let runloop: Sendable<CFRunLoop> = observer_rx.recv().await.expect("failed to receive runloop");
+        let runloop = observer_rx.recv().await.ok_or_else(|| {
+            error!("failed to receive MacDeviceMatcher CFRunLoop");
+            WebauthnCError::Internal
+        })?;
         trace!("Got a manager runloop");
 
         Ok(Box::pin(MacRunLoopStream { runloop, stream }))
@@ -114,6 +117,14 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError> {
         todo!()
+    }
+}
+
+impl USBDeviceManagerImpl {
+    extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
+        trace!("fetching MacDeviceMatcher RunLoop...");
+        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
+        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
     }
 }
 
@@ -140,21 +151,14 @@ impl<T> Drop for MacRunLoopStream<T> {
     }
 }
 
-// impl Drop for USBDeviceManagerImpl {
-//     fn drop(&mut self) {
-//         unsafe { CFRelease(self.manager.0 as *mut c_void) };
-//     }
-// }
-
 struct MacDeviceMatcher {
     manager: IOHIDManager,
-    _matcher: IOHIDDeviceMatcher,
     tx: Sender<WatchEvent<USBDeviceInfoImpl>>,
     _pin: PhantomPinned,
 }
 
-unsafe impl Send for MacDeviceMatcher {}
-unsafe impl Sync for MacDeviceMatcher {}
+// unsafe impl Send for MacDeviceMatcher {}
+// unsafe impl Sync for MacDeviceMatcher {}
 
 impl MacDeviceMatcher {
     fn new() -> Result<
@@ -166,14 +170,11 @@ impl MacDeviceMatcher {
     > {
         let manager =
             IOHIDManagerCreate(kIOHIDManagerOptionNone).ok_or(WebauthnCError::Internal)?;
-        // Match FIDO devices only.
-        let _matcher = IOHIDDeviceMatcher::new();
-        IOHIDManagerSetDeviceMatching(&manager, Some(&_matcher));
-        let (tx, rx) = mpsc::channel(16);
+
+        let (tx, rx) = mpsc::channel(MESSAGE_QUEUE_LENGTH);
         let stream = ReceiverStream::from(rx);
         let o = Self {
             manager,
-            _matcher,
             tx,
             _pin: PhantomPinned,
         };
@@ -182,6 +183,10 @@ impl MacDeviceMatcher {
     }
 
     fn start(&self) {
+        // Match FIDO devices only.
+        let matcher = IOHIDDeviceMatcher::new();
+        IOHIDManagerSetDeviceMatching(&self.manager, Some(&matcher));
+
         let context = self as *const Self as *mut c_void;
 
         IOHIDManagerRegisterDeviceMatchingCallback(
@@ -245,12 +250,6 @@ impl MacDeviceMatcher {
         trace!("enumeration_complete");
         let _ = this.tx.blocking_send(WatchEvent::EnumerationComplete);
     }
-
-    extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
-        trace!("fetching MacDeviceMatcher RunLoop...");
-        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
-        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
-    }
 }
 
 #[derive(Debug)]
@@ -304,16 +303,25 @@ impl USBDeviceImpl {
         thread::spawn(move || {
             trace!("started device thread");
             let context = &observer_tx as *const _ as *mut c_void;
-            let obs = CFRunLoopEntryObserver::new(MacUSBDeviceWorker::observe, context);
+            let obs = CFRunLoopEntryObserver::new(Self::observe, context);
             obs.add_to_current_runloop();
             worker.as_ref().start()
         });
 
         trace!("waiting for a runloop for device");
-        let runloop: Sendable<CFRunLoop> = observer_rx.recv().await.expect("failed to receive runloop");
+        let runloop = observer_rx.recv().await.ok_or_else(|| {
+            error!("failed to receive MacUSBDeviceWorker CFRunLoop");
+            WebauthnCError::Internal
+        })?;
         trace!("got device runloop");
 
         Ok(Self { info, rx, runloop })
+    }
+
+    extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
+        trace!("fetching MacUSBDeviceWorker RunLoop...");
+        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
+        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
     }
 }
 
@@ -326,7 +334,7 @@ struct MacUSBDeviceWorker {
 
 impl MacUSBDeviceWorker {
     fn new(device: IOHIDDevice) -> (Pin<Box<Self>>, Receiver<HidReportBytes>) {
-        let (rx, tx) = mpsc::channel(16);
+        let (rx, tx) = mpsc::channel(MESSAGE_QUEUE_LENGTH);
         (
             Box::pin(Self {
                 device,
@@ -391,12 +399,6 @@ impl MacUSBDeviceWorker {
         let mut data: HidReportBytes = [0; size_of::<HidReportBytes>()];
         data.copy_from_slice(src_data);
         let _ = this.rx.blocking_send(data);
-    }
-
-    extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
-        trace!("fetching MacUSBDeviceWorker RunLoop...");
-        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
-        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
     }
 }
 
