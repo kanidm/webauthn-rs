@@ -16,7 +16,7 @@ use core_foundation::string::*;
 use std::error::Error;
 use std::ffi::c_char;
 use std::ffi::CStr;
-use std::fmt::{Debug, Display};
+use std::fmt::{self, Debug, Display};
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
@@ -118,65 +118,56 @@ impl_CFTypeDescription!(IOHIDDevice);
 unsafe impl Send for IOHIDDevice {}
 unsafe impl Sync for IOHIDDevice {}
 
-pub struct Sendable<T>(*mut T);
+/// `Sendable` wraps arbitrary Core Foundation types to mark them as [`Send`]
+/// (thread-safe).
+/// 
+/// `core-foundation-rs` marks very few types as `Send`, even though
+/// [Apple's documentation indicates immutable Core Foundation types are
+/// generally thread-safe][0].
+///
+/// Once this is [addressed upstream][1], this will become unnecessary.
+/// 
+/// [0]: https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Multithreading/ThreadSafetySummary/ThreadSafetySummary.html#//apple_ref/doc/uid/10000057i-CH12-SW9
+/// [1]: https://github.com/servo/core-foundation-rs/issues/550
+pub struct Sendable<T: TCFType>(pub T);
 
-impl<T> Sendable<T> {
-    #[inline]
-    pub fn new(inner: *mut T) -> Self {
-        Self(inner)
-    }
+unsafe impl<T: TCFType> Send for Sendable<T> {}
 
-    #[inline]
-    pub fn retain(inner: *mut T) -> Self {
-        unsafe { CFRetain(inner as *mut c_void) };
-        Self::new(inner)
-    }
-}
-
-unsafe impl<T> Send for Sendable<T> {}
-
-impl<T> Deref for Sendable<T> {
-    type Target = *mut T;
-    fn deref(&self) -> &*mut T {
+impl<T: TCFType> Deref for Sendable<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
         &self.0
     }
 }
 
-impl<T> Drop for Sendable<T> {
-    fn drop(&mut self) {
-        unsafe { CFRelease(self.0 as *mut c_void) };
+impl<T: TCFType + Debug> Debug for Sendable<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Sendable").field(&self.0).finish()
     }
 }
 
-pub type SendableRunLoop = Sendable<__CFRunLoop>;
-
-fn new_run_loop_timer_context(context: *mut c_void) -> CFRunLoopTimerContext {
-    CFRunLoopTimerContext {
-        version: 0,
-        info: context,
-        retain: None,
-        release: None,
-        copyDescription: None,
-    }
-}
-
-pub struct CFRunLoopEntryTimer {
+pub struct CFRunLoopTimerHelper {
     timer: CFRunLoopTimer,
-    context_ptr: *mut CFRunLoopTimerContext,
 }
 
-impl CFRunLoopEntryTimer {
-    pub fn new(callback: CFRunLoopTimerCallBack, context: *mut c_void, delay: Duration) -> Self {
-        let context = new_run_loop_timer_context(context);
-        let context_ptr = Box::into_raw(Box::new(context));
+impl CFRunLoopTimerHelper {
+    pub fn new(callback: CFRunLoopTimerCallBack, info: *mut c_void, delay: Duration) -> Self {
+        // CFRunLoopTimerCreate copies the CFRunLoopTimerContext, so there is no
+        // need to persist it beyond that function call.
+        let mut context = CFRunLoopTimerContext {
+            version: 0,
+            info,
+            retain: None,
+            release: None,
+            copyDescription: None,
+        };
 
         let timer = unsafe {
             let fire_date = CFAbsoluteTimeGetCurrent() + delay.as_secs_f64();
-
-            CFRunLoopTimer::new(fire_date, 0., 0, 0, callback, context_ptr)
+            CFRunLoopTimer::new(fire_date, 0., 0, 0, callback, &mut context)
         };
 
-        Self { timer, context_ptr }
+        Self { timer }
     }
 
     pub fn add_to_current_runloop(&self) {
@@ -186,34 +177,21 @@ impl CFRunLoopEntryTimer {
     }
 }
 
-impl Drop for CFRunLoopEntryTimer {
-    fn drop(&mut self) {
-        unsafe {
-            // Drop the CFRunLoopTimerContext.
-            let _ = Box::from_raw(self.context_ptr);
-        };
-    }
-}
-
-fn new_run_loop_observer_context(context: *mut c_void) -> CFRunLoopObserverContext {
-    CFRunLoopObserverContext {
-        version: 0,
-        info: context,
-        retain: None,
-        release: None,
-        copyDescription: None,
-    }
-}
-
 pub struct CFRunLoopEntryObserver {
     observer: CFRunLoopObserver,
-    context_ptr: *mut CFRunLoopObserverContext,
 }
 
 impl CFRunLoopEntryObserver {
-    pub fn new(callback: CFRunLoopObserverCallBack, context: *mut c_void) -> Self {
-        let context = new_run_loop_observer_context(context);
-        let context_ptr = Box::into_raw(Box::new(context));
+    pub fn new(callback: CFRunLoopObserverCallBack, info: *mut c_void) -> Self {
+        // CFRunLoopObserverCreate copies the CFRunLoopObserverContext, so
+        // there is no need to persist it beyond that function call.
+        let mut context = CFRunLoopObserverContext {
+            version: 0,
+            info,
+            retain: None,
+            release: None,
+            copyDescription: None,
+        };
 
         let observer = unsafe {
             CFRunLoopObserver::wrap_under_create_rule(CFRunLoopObserverCreate(
@@ -222,29 +200,17 @@ impl CFRunLoopEntryObserver {
                 false as Boolean,
                 0,
                 callback,
-                context_ptr,
+                &mut context,
             ))
         };
 
-        Self {
-            observer,
-            context_ptr,
-        }
+        Self { observer }
     }
 
     pub fn add_to_current_runloop(&self) {
         unsafe {
             CFRunLoop::get_current().add_observer(&self.observer, kCFRunLoopDefaultMode);
         }
-    }
-}
-
-impl Drop for CFRunLoopEntryObserver {
-    fn drop(&mut self) {
-        unsafe {
-            // Drop the CFRunLoopObserverContext.
-            let _ = Box::from_raw(self.context_ptr);
-        };
     }
 }
 
@@ -514,10 +480,10 @@ mod tests {
     use std::thread;
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
-        let tx: &Sender<SendableRunLoop> = unsafe { &*(context as *mut _) };
+        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
 
         // Send the current runloop to the receiver to unblock it.
-        let _ = tx.send(SendableRunLoop::retain(unsafe { CFRunLoopGetCurrent() }));
+        let _ = tx.send(Sendable(CFRunLoop::get_current()));
     }
 
     #[test]
@@ -550,15 +516,15 @@ mod tests {
         });
 
         // Block until we enter the CFRunLoop.
-        let runloop: SendableRunLoop = rx.recv().expect("failed to receive runloop");
+        let runloop: Sendable<CFRunLoop> = rx.recv().expect("failed to receive runloop");
 
         // Stop the runloop.
-        unsafe { CFRunLoopStop(*runloop) };
+        runloop.stop();
 
         // Stop the thread.
         thread.join().expect("failed to join the thread");
 
         // Try to stop the runloop again (without crashing).
-        unsafe { CFRunLoopStop(*runloop) };
+        runloop.stop();
     }
 }

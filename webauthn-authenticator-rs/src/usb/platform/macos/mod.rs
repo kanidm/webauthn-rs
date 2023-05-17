@@ -9,21 +9,25 @@
 //! 
 //! ## Overview
 //! 
-//! **Rant:** IOKit is a giant pain to work with outside a [CFRunLoop], and
+//! **Rant:** IOKit is a giant pain to work with outside a [`CFRunLoop`], and
 //! macOS' platform Rust bindings aren't nearly as well-polished as Windows'.
+//! This module attempts to work around that as best as possible.
 //! 
-//! [USBDeviceManagerImpl::watch_devices] creates an [IOHIDManager], then sets
-//! up a new thread to 
+//! [`USBDeviceManagerImpl::watch_devices`] creates an [`IOHIDManager`], then
+//! sets up a new thread to drive its [`CFRunLoop`].
+//! 
+//! When new devices are discovered, [`USBDeviceImpl`] starts up a new thread to 
+//! drive the [`CFRunLoop`] for [`IOHIDDevice`].
 //! 
 //! [0]: https://github.com/mozilla/authenticator-rs
-//! [CFRunLoop]: core_foundation::runloop::CFRunLoop
+//! [`CFRunLoop`]: core_foundation::runloop::CFRunLoop
 
 use async_trait::async_trait;
 use core_foundation::{
     mach_port::CFIndex,
     runloop::{
         CFRunLoopActivity, CFRunLoopGetCurrent, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopStop,
-        CFRunLoopTimerRef,
+        CFRunLoopTimerRef, CFRunLoop
     },
 };
 use futures::{stream::BoxStream, Stream};
@@ -43,14 +47,14 @@ use crate::{
         platform::{
             os::iokit::{
                 kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, CFRunLoopEntryObserver,
-                CFRunLoopEntryTimer, IOHIDDevice, IOHIDDeviceClose, IOHIDDeviceMatcher,
+                CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceClose, IOHIDDeviceMatcher,
                 IOHIDDeviceOpen, IOHIDDeviceRef, IOHIDDeviceRegisterInputReportCallback,
                 IOHIDDeviceScheduleWithRunLoop, IOHIDDeviceSetReport,
                 IOHIDDeviceUnscheduleFromRunLoop, IOHIDManager, IOHIDManagerClose,
                 IOHIDManagerCreate, IOHIDManagerOpen, IOHIDManagerRegisterDeviceMatchingCallback,
                 IOHIDManagerRegisterDeviceRemovalCallback, IOHIDManagerScheduleWithRunLoop,
                 IOHIDManagerSetDeviceMatching, IOHIDManagerUnscheduleFromRunLoop, IOHIDReportType,
-                IOReturn, SendableRunLoop,
+                IOReturn, Sendable,
             },
             traits::*,
         },
@@ -102,7 +106,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 
         trace!("Waiting for manager runloop");
 
-        let runloop: SendableRunLoop = observer_rx.recv().await.expect("failed to receive runloop");
+        let runloop: Sendable<CFRunLoop> = observer_rx.recv().await.expect("failed to receive runloop");
         trace!("Got a manager runloop");
 
         Ok(Box::pin(MacRunLoopStream { runloop, stream }))
@@ -114,7 +118,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 }
 
 struct MacRunLoopStream<T> {
-    runloop: SendableRunLoop,
+    runloop: Sendable<CFRunLoop>,
     stream: ReceiverStream<T>,
 }
 
@@ -132,7 +136,7 @@ impl<T> Stream for MacRunLoopStream<T> {
 
 impl<T> Drop for MacRunLoopStream<T> {
     fn drop(&mut self) {
-        unsafe { CFRunLoopStop(*self.runloop) }
+        self.runloop.stop()
     }
 }
 
@@ -195,7 +199,7 @@ impl MacDeviceMatcher {
         // enumerating, so schedule a one-off timer on the CFRunLoop to fire in
         // a couple of seconds.
         let timer =
-            CFRunLoopEntryTimer::new(Self::enumeration_complete, context, Duration::from_secs(2));
+            CFRunLoopTimerHelper::new(Self::enumeration_complete, context, Duration::from_secs(2));
         timer.add_to_current_runloop();
 
         trace!("starting MacDeviceMatcher runloop");
@@ -244,9 +248,8 @@ impl MacDeviceMatcher {
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
         trace!("fetching MacDeviceMatcher RunLoop...");
-        let tx: &Sender<SendableRunLoop> = unsafe { &*(context as *mut _) };
-        let runloop = SendableRunLoop::retain(unsafe { CFRunLoopGetCurrent() });
-        let _ = tx.blocking_send(runloop);
+        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
+        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
     }
 }
 
@@ -268,7 +271,7 @@ impl USBDeviceInfo for USBDeviceInfoImpl {
 pub struct USBDeviceImpl {
     info: USBDeviceInfoImpl,
     rx: mpsc::Receiver<HidReportBytes>,
-    runloop: SendableRunLoop,
+    runloop: Sendable<CFRunLoop>,
 }
 
 unsafe impl Send for USBDeviceImpl {}
@@ -278,13 +281,14 @@ impl fmt::Debug for USBDeviceImpl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("USBDeviceImpl")
             .field("info", &self.info)
+            .field("runloop", &self.runloop)
             .finish()
     }
 }
 
 impl Drop for USBDeviceImpl {
     fn drop(&mut self) {
-        unsafe { CFRunLoopStop(*self.runloop) }
+        self.runloop.stop();
     }
 }
 
@@ -306,7 +310,7 @@ impl USBDeviceImpl {
         });
 
         trace!("waiting for a runloop for device");
-        let runloop: SendableRunLoop = observer_rx.recv().await.expect("failed to receive runloop");
+        let runloop: Sendable<CFRunLoop> = observer_rx.recv().await.expect("failed to receive runloop");
         trace!("got device runloop");
 
         Ok(Self { info, rx, runloop })
@@ -391,9 +395,8 @@ impl MacUSBDeviceWorker {
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
         trace!("fetching MacUSBDeviceWorker RunLoop...");
-        let tx: &Sender<SendableRunLoop> = unsafe { &*(context as *mut _) };
-        let runloop = SendableRunLoop::retain(unsafe { CFRunLoopGetCurrent() });
-        let _ = tx.blocking_send(runloop);
+        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
+        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
     }
 }
 
