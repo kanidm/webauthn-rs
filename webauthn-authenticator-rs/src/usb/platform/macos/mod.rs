@@ -46,15 +46,16 @@ use crate::{
     usb::{
         platform::{
             os::iokit::{
-                kIOHIDManagerOptionNone, kIOHIDReportTypeOutput, CFRunLoopEntryObserver,
-                CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef,
-                IOHIDManager, IOHIDReportType, IOReturn, Sendable,
+                CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher,
+                IOHIDDeviceRef, IOHIDManager, IOHIDReportType, IOReturn, Sendable,
             },
             traits::*,
         },
         HidReportBytes, HidSendReportBytes,
     },
 };
+
+use self::iokit::IOHIDManagerOptions;
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
 
@@ -94,7 +95,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     }
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>> {
-        let manager = IOHIDManager::create();
+        let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
 
         // Match FIDO devices only.
         let matcher = IOHIDDeviceMatcher::new();
@@ -148,7 +149,7 @@ struct MacDeviceMatcher {
 
 impl MacDeviceMatcher {
     fn new() -> Result<(Pin<Box<Self>>, Receiver<WatchEvent<USBDeviceInfoImpl>>)> {
-        let manager = IOHIDManager::create();
+        let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
 
         let (tx, rx) = mpsc::channel(MESSAGE_QUEUE_LENGTH);
         let o = Self {
@@ -172,7 +173,7 @@ impl MacDeviceMatcher {
         self.manager
             .register_device_removal_callback(Self::on_device_removal, context);
         self.manager.schedule_with_run_loop(&runloop);
-        self.manager.open(kIOHIDManagerOptionNone)?;
+        self.manager.open(IOHIDManagerOptions::empty())?;
 
         // IOHIDManager doesn't signal that it has "finished" enumerating, so
         // schedule a one-off timer on the CFRunLoop to fire in 2 seconds.
@@ -188,7 +189,7 @@ impl MacDeviceMatcher {
         // trace!("MacDeviceMatcher runloop done, cleaning up");
         drop(timer);
         self.manager.unschedule_from_run_loop(&runloop);
-        self.manager.close(0)?;
+        self.manager.close(IOHIDManagerOptions::empty())?;
         // trace!("MacDeviceMatcher finished");
         Ok(())
     }
@@ -387,10 +388,9 @@ impl USBDevice for USBDeviceImpl {
     async fn write(&self, data: HidSendReportBytes) -> Result<()> {
         let report_id = data[0];
         let data = &data[if report_id == 0 { 1 } else { 0 }..];
-        Ok(self.info.device.set_report(
-            kIOHIDReportTypeOutput,
-            CFIndex::from(report_id),
-            data,
-        )?)
+        Ok(self
+            .info
+            .device
+            .set_report(IOHIDReportType::Output, CFIndex::from(report_id), data)?)
     }
 }

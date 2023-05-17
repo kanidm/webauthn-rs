@@ -6,6 +6,7 @@
 
 use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
 
+use bitflags::bitflags;
 use core_foundation::array::*;
 use core_foundation::base::*;
 use core_foundation::date::CFAbsoluteTimeGetCurrent;
@@ -20,7 +21,6 @@ use std::fmt::{self, Debug, Display};
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
-use std::ptr::NonNull;
 use std::time::Duration;
 
 use crate::{
@@ -87,8 +87,6 @@ impl Debug for IOReturn {
     }
 }
 
-pub type IOHIDManagerOptions = IOOptionBits;
-
 pub type IOHIDDeviceCallback = extern "C" fn(
     context: *mut c_void,
     result: IOReturn,
@@ -96,7 +94,6 @@ pub type IOHIDDeviceCallback = extern "C" fn(
     device: IOHIDDeviceRef,
 );
 
-pub type IOHIDReportType = IOOptionBits;
 pub type IOHIDReportCallback = extern "C" fn(
     context: *mut c_void,
     result: IOReturn,
@@ -107,9 +104,24 @@ pub type IOHIDReportCallback = extern "C" fn(
     report_len: CFIndex,
 );
 
-pub const kIOHIDManagerOptionNone: IOHIDManagerOptions = 0;
+bitflags! {
+    #[derive(Default)]
+    #[repr(C)]
+    pub struct IOHIDManagerOptions: u32 {
+        const USE_PERSISTENT_PROPERTIES = 0x01;
+        const DO_NOT_LOAD_PROPERTIES = 0x02;
+        const DO_NOT_SAVE_PROPERTIES = 0x04;
+        const INDEPENDENT_DEVICES = 0x08;
+    }
+}
 
-pub const kIOHIDReportTypeOutput: IOHIDReportType = 1;
+#[repr(u32)]
+pub enum IOHIDReportType {
+    Input = 0,
+    Output,
+    Feature,
+    Count,
+}
 
 #[repr(C)]
 pub struct __IOHIDManager(c_void);
@@ -252,11 +264,11 @@ impl IOHIDDeviceMatcher {
 }
 
 impl IOHIDManager {
-    pub fn create() -> Self {
+    pub fn create(options: IOHIDManagerOptions) -> Self {
         unsafe {
             TCFType::wrap_under_create_rule(_IOHIDManagerCreate(
                 kCFAllocatorDefault,
-                kIOHIDManagerOptionNone,
+                options,
             ))
         }
     }
@@ -526,17 +538,17 @@ mod tests {
             unsafe {
                 // We need some source for the runloop to run.
                 let runloop = CFRunLoop::get_current();
-                let manager = IOHIDManager::create();
+                let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
                 manager.schedule_with_run_loop(&runloop);
 
                 // Set an explicit device filter so that we don't need "Input Monitoring" permissions.
                 let matcher = IOHIDDeviceMatcher::new();
                 manager.set_device_matching(Some(&matcher));
-                manager.open(0).unwrap();
+                manager.open(IOHIDManagerOptions::empty()).unwrap();
 
                 // This will run until `CFRunLoopStop()` is called.
                 CFRunLoopRun();
-                manager.close(0).unwrap();
+                manager.close(IOHIDManagerOptions::empty()).unwrap();
             }
         });
 
