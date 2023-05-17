@@ -4,26 +4,28 @@
 
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
-use core_foundation::date::CFAbsoluteTimeGetCurrent;
 use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
 
 use core_foundation::array::*;
 use core_foundation::base::*;
+use core_foundation::date::CFAbsoluteTimeGetCurrent;
 use core_foundation::dictionary::*;
 use core_foundation::number::*;
 use core_foundation::runloop::*;
+use core_foundation::set::{CFSet, CFSetGetValues, CFSetRef};
 use core_foundation::string::*;
 use std::error::Error;
-use std::ffi::c_char;
-use std::ffi::CStr;
+use std::ffi::{c_char, CStr};
 use std::fmt::{self, Debug, Display};
 use std::ops::Deref;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
 use std::time::Duration;
 
-use crate::usb::FIDO_USAGE_PAGE;
-use crate::usb::FIDO_USAGE_U2FHID;
+use crate::{
+    error::WebauthnCError,
+    usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID},
+};
 
 type IOOptionBits = u32;
 
@@ -49,7 +51,7 @@ impl IOReturn {
         s.to_str().ok()
     }
 
-    pub fn ok(self) -> Result<(), Self> {
+    pub fn into_result(self) -> Result<(), Self> {
         match self.0 {
             Self::kIOReturnSuccess => Ok(()),
             _ => Err(self),
@@ -57,16 +59,26 @@ impl IOReturn {
     }
 }
 
+impl From<IOReturn> for WebauthnCError {
+    fn from(e: IOReturn) -> Self {
+        WebauthnCError::IoError(format!("{e:?}"))
+    }
+}
+
 impl Error for IOReturn {}
 
 impl Display for IOReturn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message().unwrap_or_default())
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:x}", self.0)?;
+        if let Some(msg) = self.message() {
+            write!(f, ": {msg}")?;
+        }
+        Ok(())
     }
 }
 
 impl Debug for IOReturn {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("IOReturn")
             .field("id", &format!("0x{:x}", self.0))
             .field("message", &self.message().unwrap_or_default())
@@ -120,13 +132,17 @@ unsafe impl Sync for IOHIDDevice {}
 
 /// `Sendable` wraps arbitrary Core Foundation types to mark them as [`Send`]
 /// (thread-safe).
-/// 
+///
 /// `core-foundation-rs` marks very few types as `Send`, even though
 /// [Apple's documentation indicates immutable Core Foundation types are
 /// generally thread-safe][0].
 ///
 /// Once this is [addressed upstream][1], this will become unnecessary.
-/// 
+///
+/// ## Safety
+///
+/// This is only safe where `T` is a thread-safe type.
+///
 /// [0]: https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/Multithreading/ThreadSafetySummary/ThreadSafetySummary.html#//apple_ref/doc/uid/10000057i-CH12-SW9
 /// [1]: https://github.com/servo/core-foundation-rs/issues/550
 pub struct Sendable<T: TCFType>(pub T);
@@ -244,6 +260,21 @@ pub fn IOHIDManagerCreate(options: IOHIDManagerOptions) -> Option<IOHIDManager> 
     }
 }
 
+pub fn IOHIDManagerCopyDevices(manager: &IOHIDManager) -> Vec<IOHIDDevice> {
+    unsafe {
+        let s: CFSet<c_void> =
+            CFSet::wrap_under_get_rule(_IOHIDManagerCopyDevices(manager.as_concrete_TypeRef()));
+        let mut refs: Vec<*const c_void> = Vec::with_capacity(s.len());
+
+        CFSetGetValues(s.as_concrete_TypeRef(), refs.as_mut_ptr());
+        refs.set_len(s.len());
+
+        refs.into_iter()
+            .map(|ptr| IOHIDDeviceRef::from_void_ptr(ptr).into())
+            .collect()
+    }
+}
+
 pub fn IOHIDManagerSetDeviceMatching(
     manager: &IOHIDManager,
     matching: Option<&IOHIDDeviceMatcher>,
@@ -284,14 +315,14 @@ pub fn IOHIDManagerOpen(
     manager: &IOHIDManager,
     options: IOHIDManagerOptions,
 ) -> Result<(), IOReturn> {
-    unsafe { _IOHIDManagerOpen(manager.as_concrete_TypeRef(), options) }.ok()
+    unsafe { _IOHIDManagerOpen(manager.as_concrete_TypeRef(), options) }.into_result()
 }
 
 pub fn IOHIDManagerClose(
     manager: &IOHIDManager,
     options: IOHIDManagerOptions,
 ) -> Result<(), IOReturn> {
-    unsafe { _IOHIDManagerClose(manager.as_concrete_TypeRef(), options) }.ok()
+    unsafe { _IOHIDManagerClose(manager.as_concrete_TypeRef(), options) }.into_result()
 }
 
 pub fn IOHIDManagerScheduleWithRunLoop(manager: &IOHIDManager) {
@@ -319,17 +350,17 @@ pub fn IOHIDDeviceSetReport(
     reportType: IOHIDReportType,
     reportID: CFIndex,
     report: &[u8],
-) -> Result<(), IOReturn> {
-    unsafe {
+) -> Result<(), WebauthnCError> {
+    Ok(unsafe {
         _IOHIDDeviceSetReport(
             device.as_concrete_TypeRef(),
             reportType,
             reportID,
             report.as_ptr(),
-            report.len().try_into().unwrap(),
+            report.len().to_CFIndex(),
         )
     }
-    .ok()
+    .into_result()?)
 }
 
 pub fn IOHIDDeviceRegisterInputReportCallback(
@@ -372,11 +403,11 @@ pub fn IOHIDDeviceUnscheduleFromRunLoop(device: &IOHIDDevice) {
 }
 
 pub fn IOHIDDeviceClose(device: &IOHIDDevice, options: IOOptionBits) -> Result<(), IOReturn> {
-    unsafe { _IOHIDDeviceClose(device.as_concrete_TypeRef(), options) }.ok()
+    unsafe { _IOHIDDeviceClose(device.as_concrete_TypeRef(), options) }.into_result()
 }
 
 pub fn IOHIDDeviceOpen(device: &IOHIDDevice, options: IOOptionBits) -> Result<(), IOReturn> {
-    unsafe { _IOHIDDeviceOpen(device.as_concrete_TypeRef(), options) }.ok()
+    unsafe { _IOHIDDeviceOpen(device.as_concrete_TypeRef(), options) }.into_result()
 }
 
 impl From<IOHIDDeviceRef> for IOHIDDevice {
@@ -395,6 +426,8 @@ extern "C" {
         allocator: CFAllocatorRef,
         options: IOHIDManagerOptions,
     ) -> IOHIDManagerRef;
+    #[link_name = "IOHIDManagerCopyDevices"]
+    fn _IOHIDManagerCopyDevices(manager: IOHIDManagerRef) -> CFSetRef;
     #[link_name = "IOHIDManagerSetDeviceMatching"]
     fn _IOHIDManagerSetDeviceMatching(manager: IOHIDManagerRef, matching: CFDictionaryRef);
     #[link_name = "IOHIDManagerRegisterDeviceMatchingCallback"]
@@ -409,11 +442,6 @@ extern "C" {
         callback: IOHIDDeviceCallback,
         context: *const c_void,
     );
-    // pub fn IOHIDManagerRegisterInputReportCallback(
-    //     manager: IOHIDManagerRef,
-    //     callback: IOHIDReportCallback,
-    //     context: *mut c_void,
-    // );
     #[link_name = "IOHIDManagerOpen"]
     fn _IOHIDManagerOpen(manager: IOHIDManagerRef, options: IOHIDManagerOptions) -> IOReturn;
     #[link_name = "IOHIDManagerClose"]

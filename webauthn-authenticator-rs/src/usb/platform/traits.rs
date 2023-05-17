@@ -3,7 +3,7 @@ use futures::stream::BoxStream;
 use std::fmt::Debug;
 
 use crate::{
-    error::WebauthnCError,
+    error::Result,
     usb::{HidReportBytes, HidSendReportBytes},
 };
 
@@ -18,17 +18,17 @@ pub trait USBDeviceManager: Sized {
     type DeviceId: Debug;
 
     /// Instantiates a new [USBDeviceManager] for this platform.
-    fn new() -> Result<Self, WebauthnCError>;
+    fn new() -> Result<Self>;
 
     /// Watches for USB authenticator device connection and disconnection events
     /// until the resulting stream is dropped.
     ///
     /// This method fires [`WatchEvent::Added`] events for any USB devices
     /// *already* connected, followed by [`WatchEvent::EnumerationComplete`].
-    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError>;
+    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>>;
 
     /// Gets a list of currently-connected USB authenticators.
-    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError>;
+    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>>;
 }
 
 #[derive(Debug)]
@@ -54,7 +54,7 @@ pub trait USBDeviceInfo: Debug {
     type Id: Debug;
 
     /// Opens a connection to this USB device.
-    async fn open(self) -> Result<Self::Device, WebauthnCError>;
+    async fn open(self) -> Result<Self::Device>;
 }
 
 /// Platform-specific USB device connection structure.
@@ -67,8 +67,8 @@ pub trait USBDevice: Send {
     fn get_info(&self) -> &Self::Info;
 
     /// Read some bytes from the FIDO device's HID input report descriptor.
-    async fn read(&mut self) -> Result<HidReportBytes, WebauthnCError>;
+    async fn read(&mut self) -> Result<HidReportBytes>;
 
     /// Write some bytes to the FIDO device's HID output report descriptor.
-    async fn write(&self, data: HidSendReportBytes) -> Result<(), WebauthnCError>;
+    async fn write(&self, data: HidSendReportBytes) -> Result<()>;
 }

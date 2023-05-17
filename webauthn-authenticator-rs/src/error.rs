@@ -1,5 +1,7 @@
 use std::sync::PoisonError;
 
+pub type Result<T> = std::result::Result<T, WebauthnCError>;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum WebauthnCError {
     Json,
