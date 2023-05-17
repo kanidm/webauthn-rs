@@ -265,18 +265,13 @@ impl IOHIDDeviceMatcher {
 
 impl IOHIDManager {
     pub fn create(options: IOHIDManagerOptions) -> Self {
-        unsafe {
-            TCFType::wrap_under_create_rule(_IOHIDManagerCreate(
-                kCFAllocatorDefault,
-                options,
-            ))
-        }
+        unsafe { TCFType::wrap_under_create_rule(IOHIDManagerCreate(kCFAllocatorDefault, options)) }
     }
 
     pub fn copy_devices(&self) -> Vec<IOHIDDevice> {
         unsafe {
             let s: CFSet<c_void> =
-                CFSet::wrap_under_get_rule(_IOHIDManagerCopyDevices(self.as_concrete_TypeRef()));
+                CFSet::wrap_under_get_rule(IOHIDManagerCopyDevices(self.as_concrete_TypeRef()));
             let mut refs: Vec<*const c_void> = Vec::with_capacity(s.len());
 
             CFSetGetValues(s.as_concrete_TypeRef(), refs.as_mut_ptr());
@@ -290,7 +285,7 @@ impl IOHIDManager {
 
     pub fn set_device_matching(&self, matching: Option<&IOHIDDeviceMatcher>) {
         unsafe {
-            _IOHIDManagerSetDeviceMatching(
+            IOHIDManagerSetDeviceMatching(
                 self.as_concrete_TypeRef(),
                 matching.map_or(ptr::null(), |m| m.dict.as_concrete_TypeRef()),
             )
@@ -303,7 +298,7 @@ impl IOHIDManager {
         context: *const c_void,
     ) {
         unsafe {
-            _IOHIDManagerRegisterDeviceMatchingCallback(
+            IOHIDManagerRegisterDeviceMatchingCallback(
                 self.as_concrete_TypeRef(),
                 callback,
                 context,
@@ -317,25 +312,21 @@ impl IOHIDManager {
         context: *const c_void,
     ) {
         unsafe {
-            _IOHIDManagerRegisterDeviceRemovalCallback(
-                self.as_concrete_TypeRef(),
-                callback,
-                context,
-            )
+            IOHIDManagerRegisterDeviceRemovalCallback(self.as_concrete_TypeRef(), callback, context)
         }
     }
 
     pub fn open(&self, options: IOHIDManagerOptions) -> Result<(), IOReturn> {
-        unsafe { _IOHIDManagerOpen(self.as_concrete_TypeRef(), options) }.into_result()
+        unsafe { IOHIDManagerOpen(self.as_concrete_TypeRef(), options) }.into_result()
     }
 
     pub fn close(&self, options: IOHIDManagerOptions) -> Result<(), IOReturn> {
-        unsafe { _IOHIDManagerClose(self.as_concrete_TypeRef(), options) }.into_result()
+        unsafe { IOHIDManagerClose(self.as_concrete_TypeRef(), options) }.into_result()
     }
 
     pub fn schedule_with_run_loop(&self, runloop: &CFRunLoop) {
         unsafe {
-            _IOHIDManagerScheduleWithRunLoop(
+            IOHIDManagerScheduleWithRunLoop(
                 self.as_concrete_TypeRef(),
                 runloop.as_concrete_TypeRef(),
                 kCFRunLoopDefaultMode,
@@ -345,7 +336,7 @@ impl IOHIDManager {
 
     pub fn unschedule_from_run_loop(&self, runloop: &CFRunLoop) {
         unsafe {
-            _IOHIDManagerUnscheduleFromRunLoop(
+            IOHIDManagerUnscheduleFromRunLoop(
                 self.as_concrete_TypeRef(),
                 runloop.as_concrete_TypeRef(),
                 kCFRunLoopDefaultMode,
@@ -362,7 +353,7 @@ impl IOHIDDevice {
         report: &[u8],
     ) -> Result<(), IOReturn> {
         unsafe {
-            _IOHIDDeviceSetReport(
+            IOHIDDeviceSetReport(
                 self.as_concrete_TypeRef(),
                 reportType,
                 reportID,
@@ -380,9 +371,8 @@ impl IOHIDDevice {
         callback: IOHIDReportCallback,
         context: *const c_void,
     ) {
-        // TODO: wrap the event handler nicely
         unsafe {
-            _IOHIDDeviceRegisterInputReportCallback(
+            IOHIDDeviceRegisterInputReportCallback(
                 self.as_concrete_TypeRef(),
                 report,
                 reportLength.to_CFIndex(),
@@ -394,7 +384,7 @@ impl IOHIDDevice {
 
     pub fn schedule_with_run_loop(&self, runloop: &CFRunLoop) {
         unsafe {
-            _IOHIDDeviceScheduleWithRunLoop(
+            IOHIDDeviceScheduleWithRunLoop(
                 self.as_concrete_TypeRef(),
                 runloop.as_concrete_TypeRef(),
                 kCFRunLoopDefaultMode,
@@ -404,7 +394,7 @@ impl IOHIDDevice {
 
     pub fn unschedule_from_run_loop(&self, runloop: &CFRunLoop) {
         unsafe {
-            _IOHIDDeviceUnscheduleFromRunLoop(
+            IOHIDDeviceUnscheduleFromRunLoop(
                 self.as_concrete_TypeRef(),
                 runloop.as_concrete_TypeRef(),
                 kCFRunLoopDefaultMode,
@@ -413,11 +403,11 @@ impl IOHIDDevice {
     }
 
     pub fn close(&self, options: IOOptionBits) -> Result<(), IOReturn> {
-        unsafe { _IOHIDDeviceClose(self.as_concrete_TypeRef(), options) }.into_result()
+        unsafe { IOHIDDeviceClose(self.as_concrete_TypeRef(), options) }.into_result()
     }
 
     pub fn open(&self, options: IOOptionBits) -> Result<(), IOReturn> {
-        unsafe { _IOHIDDeviceOpen(self.as_concrete_TypeRef(), options) }.into_result()
+        unsafe { IOHIDDeviceOpen(self.as_concrete_TypeRef(), options) }.into_result()
     }
 }
 
@@ -432,39 +422,30 @@ extern "C" {
     // IOHIDManager
     fn IOHIDManagerGetTypeID() -> CFTypeID;
 
-    #[link_name = "IOHIDManagerCreate"]
-    fn _IOHIDManagerCreate(
+    fn IOHIDManagerCreate(
         allocator: CFAllocatorRef,
         options: IOHIDManagerOptions,
     ) -> IOHIDManagerRef;
-    #[link_name = "IOHIDManagerCopyDevices"]
-    fn _IOHIDManagerCopyDevices(manager: IOHIDManagerRef) -> CFSetRef;
-    #[link_name = "IOHIDManagerSetDeviceMatching"]
-    fn _IOHIDManagerSetDeviceMatching(manager: IOHIDManagerRef, matching: CFDictionaryRef);
-    #[link_name = "IOHIDManagerRegisterDeviceMatchingCallback"]
-    fn _IOHIDManagerRegisterDeviceMatchingCallback(
+    fn IOHIDManagerCopyDevices(manager: IOHIDManagerRef) -> CFSetRef;
+    fn IOHIDManagerSetDeviceMatching(manager: IOHIDManagerRef, matching: CFDictionaryRef);
+    fn IOHIDManagerRegisterDeviceMatchingCallback(
         manager: IOHIDManagerRef,
         callback: IOHIDDeviceCallback,
         context: *const c_void,
     );
-    #[link_name = "IOHIDManagerRegisterDeviceRemovalCallback"]
-    fn _IOHIDManagerRegisterDeviceRemovalCallback(
+    fn IOHIDManagerRegisterDeviceRemovalCallback(
         manager: IOHIDManagerRef,
         callback: IOHIDDeviceCallback,
         context: *const c_void,
     );
-    #[link_name = "IOHIDManagerOpen"]
-    fn _IOHIDManagerOpen(manager: IOHIDManagerRef, options: IOHIDManagerOptions) -> IOReturn;
-    #[link_name = "IOHIDManagerClose"]
-    fn _IOHIDManagerClose(manager: IOHIDManagerRef, options: IOHIDManagerOptions) -> IOReturn;
-    #[link_name = "IOHIDManagerScheduleWithRunLoop"]
-    fn _IOHIDManagerScheduleWithRunLoop(
+    fn IOHIDManagerOpen(manager: IOHIDManagerRef, options: IOHIDManagerOptions) -> IOReturn;
+    fn IOHIDManagerClose(manager: IOHIDManagerRef, options: IOHIDManagerOptions) -> IOReturn;
+    fn IOHIDManagerScheduleWithRunLoop(
         manager: IOHIDManagerRef,
         runLoop: CFRunLoopRef,
         runLoopMode: CFStringRef,
     );
-    #[link_name = "IOHIDManagerUnscheduleFromRunLoop"]
-    fn _IOHIDManagerUnscheduleFromRunLoop(
+    fn IOHIDManagerUnscheduleFromRunLoop(
         manager: IOHIDManagerRef,
         runLoop: CFRunLoopRef,
         runLoopMode: CFStringRef,
@@ -472,39 +453,32 @@ extern "C" {
 
     // IOHIDDevice
     fn IOHIDDeviceGetTypeID() -> CFTypeID;
-    #[link_name = "IOHIDDeviceSetReport"]
-    fn _IOHIDDeviceSetReport(
+    fn IOHIDDeviceSetReport(
         device: IOHIDDeviceRef,
         reportType: IOHIDReportType,
         reportID: CFIndex,
         report: *const u8,
         reportLength: CFIndex,
     ) -> IOReturn;
-    // pub fn IOHIDDeviceGetProperty(device: IOHIDDeviceRef, key: CFStringRef) -> CFTypeRef;
-    #[link_name = "IOHIDDeviceRegisterInputReportCallback"]
-    fn _IOHIDDeviceRegisterInputReportCallback(
+    fn IOHIDDeviceRegisterInputReportCallback(
         device: IOHIDDeviceRef,
         report: *mut u8,
         reportLength: CFIndex,
         callback: IOHIDReportCallback,
         context: *const c_void,
     );
-    #[link_name = "IOHIDDeviceScheduleWithRunLoop"]
-    fn _IOHIDDeviceScheduleWithRunLoop(
+    fn IOHIDDeviceScheduleWithRunLoop(
         device: IOHIDDeviceRef,
         runLoop: CFRunLoopRef,
         runLoopMode: CFStringRef,
     );
-    #[link_name = "IOHIDDeviceUnscheduleFromRunLoop"]
-    fn _IOHIDDeviceUnscheduleFromRunLoop(
+    fn IOHIDDeviceUnscheduleFromRunLoop(
         device: IOHIDDeviceRef,
         runLoop: CFRunLoopRef,
         runLoopMode: CFStringRef,
     );
-    #[link_name = "IOHIDDeviceClose"]
-    fn _IOHIDDeviceClose(device: IOHIDDeviceRef, options: IOOptionBits) -> IOReturn;
-    #[link_name = "IOHIDDeviceOpen"]
-    fn _IOHIDDeviceOpen(device: IOHIDDeviceRef, options: IOOptionBits) -> IOReturn;
+    fn IOHIDDeviceClose(device: IOHIDDeviceRef, options: IOOptionBits) -> IOReturn;
+    fn IOHIDDeviceOpen(device: IOHIDDeviceRef, options: IOOptionBits) -> IOReturn;
 }
 
 ////////////////////////////////////////////////////////////////////////
