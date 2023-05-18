@@ -14,7 +14,7 @@ compile_error!("USB support is not implemented on this platform");
 
 pub mod traits;
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg(any(test, target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 pub mod descriptors;
 
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]

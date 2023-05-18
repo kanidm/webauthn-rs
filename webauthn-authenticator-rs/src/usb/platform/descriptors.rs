@@ -5,11 +5,9 @@
 
 use num_traits::FromPrimitive;
 
-use crate::{
-    error::{Result, WebauthnCError},
-    usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID},
-};
+use crate::usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 
+/// HID descriptor tags; shifted right by 2 bits (removing the `bSize` field).
 #[derive(FromPrimitive, Debug)]
 #[repr(u8)]
 enum Tag {
@@ -70,23 +68,23 @@ impl<'a> Iterator for DescriptorIterator<'a> {
 
         let mut i0 = self.i[0];
         if i0 == 0xfe {
-            // Long tag
-            if self.i.len() < 2 {
-                // Not enough bytes to get the long tag length
+            // Long item: 0xfe [size] [tag] [data...]
+            if self.i.len() < 3 {
+                // Not enough bytes to get the long item length and tag
                 return None;
             }
 
             let length = usize::from(self.i[1]);
-            if self.i.len() < length + 2 {
-                // Not enough bytes to get long tag value
+            if self.i.len() < length + 3 {
+                // Not enough bytes to get long item value
                 return None;
             }
             warn!("long tags are not fully supported, returning the whole tag");
             tag = None;
-            (value, self.i) = self.i[2..].split_at(length);
+            (value, self.i) = self.i[3..].split_at(length);
         } else {
-            // Short tag
-            let mut length = usize::from(self.i[0] & 0x03);
+            // Short item: [tag | type | size] [data...]
+            let mut length = usize::from(i0 & 0x03);
             if length == 0x03 {
                 length += 1;
             }
@@ -97,7 +95,7 @@ impl<'a> Iterator for DescriptorIterator<'a> {
             //     warn!("unknown short tag: 0b{i0:b}",);
             // }
             if self.i.len() < length + 1 {
-                // Not enough bytes to get short tag value
+                // Not enough bytes to get short item value
                 return None;
             }
             (value, self.i) = self.i[1..].split_at(length);

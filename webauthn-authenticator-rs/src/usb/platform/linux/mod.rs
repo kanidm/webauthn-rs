@@ -1,3 +1,4 @@
+//! https://www.kernel.org/doc/Documentation/hid/hidraw.txt
 use std::{fmt, mem::size_of, pin::Pin, fs::File, io::Read};
 
 use async_trait::async_trait;
@@ -36,7 +37,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 
         for device in devices {
             // trace!("device: {:?}", device);
-
+            // TODO: use HIDIOCGRDESC (for descriptor) and HIDIOCGRAWINFO (for bus) instead of depending on sysfs paths
             let descriptor_path = device.syspath().join("device").join("report_descriptor");
             trace!("Report descriptor: {descriptor_path:?}");
 
