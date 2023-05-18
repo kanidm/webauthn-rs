@@ -53,118 +53,103 @@ struct DescriptorItem<'a> {
     value: &'a [u8],
 }
 
-impl<'a> DescriptorItem<'a> {
-    pub fn parse(i: &'a [u8]) -> Result<(Self, usize)> {
-        if i.is_empty() {
-            return Err(WebauthnCError::MessageTooShort);
+struct DescriptorIterator<'a> {
+    i: &'a [u8],
+}
+
+impl<'a> Iterator for DescriptorIterator<'a> {
+    type Item = DescriptorItem<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i.is_empty() {
+            return None;
         }
 
-        let mut i0 = i[0];
+        let tag;
+        let value;
+
+        let mut i0 = self.i[0];
         if i0 == 0xfe {
-            if i.len() < 2 {
-                return Err(WebauthnCError::MessageTooShort);
+            // Long tag
+            if self.i.len() < 2 {
+                // Not enough bytes to get the long tag length
+                return None;
             }
-            
-            let end = usize::from(i[1]) + 2;
-            if end > i.len() {
-                return Err(WebauthnCError::MessageTooShort);
+
+            let length = usize::from(self.i[1]);
+            if self.i.len() < length + 2 {
+                // Not enough bytes to get long tag value
+                return None;
             }
-            
-            warn!("long tags are not supported, returning the whole tag");
-            Ok((
-                Self {
-                    tag: None,
-                    value: &i[0..end],
-                },
-                end,
-            ))
+            warn!("long tags are not fully supported, returning the whole tag");
+            tag = None;
+            (value, self.i) = self.i[2..].split_at(length);
         } else {
-            let mut size = i[0] & 0x03;
-            if size == 0x03 {
-                size += 1;
+            // Short tag
+            let mut length = usize::from(self.i[0] & 0x03);
+            if length == 0x03 {
+                length += 1;
             }
             i0 >>= 2;
 
-            let tag = Tag::from_u8(i0);
+            tag = Tag::from_u8(i0);
             // if tag.is_none() {
             //     warn!("unknown short tag: 0b{i0:b}",);
             // }
-
-            let end = usize::from(size) + 1;
-            if end > i.len() {
-                return Err(WebauthnCError::MessageTooShort);
+            if self.i.len() < length + 1 {
+                // Not enough bytes to get short tag value
+                return None;
             }
-
-            return Ok((
-                Self {
-                    tag,
-                    value: &i[1..end],
-                },
-                end,
-            ));
+            (value, self.i) = self.i[1..].split_at(length);
         }
+
+        Some(DescriptorItem { tag, value })
     }
 }
 
-pub fn is_fido_authenticator(mut descriptor: &[u8]) -> bool {
+pub fn is_fido_authenticator(descriptor: &[u8]) -> bool {
+    let mut descriptor = DescriptorIterator { i: descriptor };
     let mut current_usage_page = 0u16;
-    while !descriptor.is_empty() {
-        match DescriptorItem::parse(descriptor) {
-            Err(WebauthnCError::MessageTooShort) => {
-                error!("descriptor appears truncated");
-                return false;
-            }
-
-            Err(e) => {
-                error!("error parsing descriptor: {e:?}");
-                return false;
-            }
-
-            Ok((item, len)) => {
-                descriptor = &descriptor[len..];
-                trace!("item: {item:?}");
-                match item.tag {
-                    Some(Tag::UsagePage) => {
-                        if let Ok(usage_page) = item.value.try_into() {
-                            current_usage_page = u16::from_le_bytes(usage_page);
-                        }
-                    }
-
-                    Some(Tag::Usage) => {
-                        if current_usage_page == FIDO_USAGE_PAGE {
-                            // 1 or 2 byte usage page; expect the current usage page to be FIDO
-                            if item.value.len() == 1 && u16::from(item.value[0]) == FIDO_USAGE_U2FHID {
-                                return true;
-                            }
-
-                            if let Ok(usage) = item.value.try_into() {
-                                if u16::from_le_bytes(usage) == FIDO_USAGE_U2FHID {
-                                    return true;
-                                }
-                            }
-                        }
-
-                        if let Ok(usage) = item.value.try_into() {
-                            // 4 byte usage page; doesn't matter what the current usage page is
-                            let usage_and_page = u32::from_le_bytes(usage);
-                            let usage_page = (usage_and_page >> 16) as u16;
-                            let usage = (usage_and_page & 0xffff) as u16;
-
-                            if usage_page == FIDO_USAGE_PAGE && usage == FIDO_USAGE_U2FHID {
-                                return true;
-                            }
-                        }
-                    }
-
-                    _ => continue,
+    while let Some(item) = descriptor.next() {
+        trace!("item: {item:?}");
+        match item.tag {
+            Some(Tag::UsagePage) => {
+                if let Ok(usage_page) = item.value.try_into() {
+                    current_usage_page = u16::from_le_bytes(usage_page);
                 }
             }
+
+            Some(Tag::Usage) => {
+                if current_usage_page == FIDO_USAGE_PAGE {
+                    // 1 or 2 byte usage page; expect the current usage page to be FIDO
+                    if item.value.len() == 1 && u16::from(item.value[0]) == FIDO_USAGE_U2FHID {
+                        return true;
+                    }
+
+                    if let Ok(usage) = item.value.try_into() {
+                        if u16::from_le_bytes(usage) == FIDO_USAGE_U2FHID {
+                            return true;
+                        }
+                    }
+                }
+
+                if let Ok(usage) = item.value.try_into() {
+                    // 4 byte usage page; doesn't matter what the current usage page is
+                    let usage_and_page = u32::from_le_bytes(usage);
+                    let usage_page = (usage_and_page >> 16) as u16;
+                    let usage = (usage_and_page & 0xffff) as u16;
+
+                    if usage_page == FIDO_USAGE_PAGE && usage == FIDO_USAGE_U2FHID {
+                        return true;
+                    }
+                }
+            }
+
+            _ => continue,
         }
     }
-
     return false;
 }
-
 
 #[cfg(test)]
 mod test {
@@ -201,5 +186,4 @@ mod test {
         invalid_long: false, "fe";
         invalid_long_usage_page: false, "0701020304";
     }
-    
 }
