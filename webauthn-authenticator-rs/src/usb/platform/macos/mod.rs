@@ -24,7 +24,6 @@
 
 use async_trait::async_trait;
 use core_foundation::{
-    base::CFIndexConvertible,
     mach_port::CFIndex,
     runloop::{
         CFRunLoop, CFRunLoopActivity, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopTimerRef,
