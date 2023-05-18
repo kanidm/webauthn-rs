@@ -120,6 +120,9 @@ core-foundation = "0.9"
 libc = "0.2"
 mach2 = "0.4"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio-udev = "0.8.0"
+
 [[example]]
 name = "authenticate"
 required-features = ["crypto", "ui-cli"]

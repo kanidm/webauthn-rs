@@ -12,7 +12,7 @@
 use std::io;
 use std::mem;
 
-use crate::consts::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID, INIT_HEADER_SIZE, MAX_HID_RPT_SIZE};
+use crate::usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID}; //, INIT_HEADER_SIZE, MAX_HID_RPT_SIZE};
 
 // The 4 MSBs (the tag) are set when it's a long item.
 const HID_MASK_LONG_ITEM_TAG: u8 = 0b1111_0000;
@@ -232,18 +232,19 @@ pub fn read_hid_rpt_sizes(desc: ReportDescriptor) -> io::Result<(usize, usize)> 
 
     match (in_rpt_count, out_rpt_count) {
         (Some(in_count), Some(out_count)) => {
-            if in_count > INIT_HEADER_SIZE
-                && in_count <= MAX_HID_RPT_SIZE
-                && out_count > INIT_HEADER_SIZE
-                && out_count <= MAX_HID_RPT_SIZE
-            {
-                Ok((in_count, out_count))
-            } else {
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Report size is too small or too large",
-                ))
-            }
+            todo!()
+            // if in_count > INIT_HEADER_SIZE
+            //     && in_count <= MAX_HID_RPT_SIZE
+            //     && out_count > INIT_HEADER_SIZE
+            //     && out_count <= MAX_HID_RPT_SIZE
+            // {
+            //     Ok((in_count, out_count))
+            // } else {
+            //     Err(io::Error::new(
+            //         io::ErrorKind::InvalidData,
+            //         "Report size is too small or too large",
+            //     ))
+            // }
         }
         _ => Err(io::Error::new(
             io::ErrorKind::InvalidData,
