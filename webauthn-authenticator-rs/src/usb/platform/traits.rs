@@ -70,5 +70,5 @@ pub trait USBDevice: Send {
     async fn read(&mut self) -> Result<HidReportBytes>;
 
     /// Write some bytes to the FIDO device's HID output report descriptor.
-    async fn write(&self, data: HidSendReportBytes) -> Result<()>;
+    async fn write(&mut self, data: HidSendReportBytes) -> Result<()>;
 }

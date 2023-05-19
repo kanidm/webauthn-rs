@@ -109,7 +109,7 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
         U: UiCallback;
 
     /// Cancels a pending request.
-    async fn cancel(&self) -> Result<(), WebauthnCError>;
+    async fn cancel(&mut self) -> Result<(), WebauthnCError>;
 
     /// Initializes the [Token]
     async fn init(&mut self) -> Result<(), WebauthnCError>;

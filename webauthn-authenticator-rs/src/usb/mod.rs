@@ -222,7 +222,7 @@ impl USBToken {
     }
 
     /// Sends a single [U2FHIDFrame] to the device, without fragmentation.
-    async fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
+    async fn send_one(&mut self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {}", hex::encode(d));
         // let guard = self.device.lock()?;
@@ -232,7 +232,7 @@ impl USBToken {
 
     /// Sends a [U2FHIDFrame] to the device, fragmenting the message to fit
     /// within the USB HID MTU.
-    async fn send(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
+    async fn send(&mut self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         for f in U2FHIDFrameIterator::new(frame)? {
             self.send_one(&f).await?;
         }
@@ -358,7 +358,7 @@ impl Token for USBToken {
         AuthenticatorTransport::Usb
     }
 
-    async fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&mut self) -> Result<(), WebauthnCError> {
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CANCEL,

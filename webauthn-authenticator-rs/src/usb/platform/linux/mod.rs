@@ -1,57 +1,225 @@
 //! https://www.kernel.org/doc/Documentation/hid/hidraw.txt
-use std::{fmt, mem::size_of, pin::Pin, fs::File, io::Read};
+use std::{
+    collections::HashSet,
+    ffi::c_int,
+    fmt,
+    fs::{File, OpenOptions},
+    io::{Read, Write},
+    mem::size_of,
+    os::fd::AsRawFd,
+    path::Path,
+    thread,
+    time::Duration,
+};
 
 use async_trait::async_trait;
-use futures::{stream::BoxStream, Stream};
+use futures::stream::BoxStream;
+use nix::{
+    ioctl_read,
+    poll::{ppoll, PollFd, PollFlags},
+    sys::signalfd::SigSet,
+};
+use num_traits::FromPrimitive;
 use tokio::sync::mpsc::{self};
-
 use tokio_stream::wrappers::ReceiverStream;
-use tokio_udev::Enumerator;
+use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
 use crate::{
-    error::Result,
+    error::{Result, WebauthnCError},
     usb::{
-        platform::{traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent}, descriptors::is_fido_authenticator},
+        platform::{
+            descriptors::is_fido_authenticator,
+            traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
+        },
         HidReportBytes, HidSendReportBytes,
     },
 };
 
+// include/uapi/linux/hid.h
+const HID_MAX_DESCRIPTOR_SIZE: usize = 4096;
+
+// include/uapi/linux/hidraw.h
+#[allow(non_camel_case_types)] // match the kernel's name for the structure
+#[repr(C)]
+pub struct hidraw_report_descriptor {
+    size: c_int,
+    value: [u8; HID_MAX_DESCRIPTOR_SIZE],
+}
+
+impl hidraw_report_descriptor {
+    fn get_value(&self) -> &[u8] {
+        &self.value[..HID_MAX_DESCRIPTOR_SIZE.min(self.size.max(0) as usize)]
+    }
+}
+
+impl fmt::Debug for hidraw_report_descriptor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("hidraw_report_descriptor")
+            .field("value", &self.get_value())
+            .finish()
+    }
+}
+
+impl Default for hidraw_report_descriptor {
+    fn default() -> Self {
+        Self {
+            size: 0,
+            value: [0; HID_MAX_DESCRIPTOR_SIZE],
+        }
+    }
+}
+
+#[derive(Default)]
+#[allow(non_camel_case_types)] // match the kernel's name for the structure
+#[repr(C)]
+pub struct hidraw_devinfo {
+    bustype: u32,
+    vendor: u16,
+    product: u16,
+}
+
+ioctl_read!(hid_ioc_rd_desc_size, b'H', 0x01, c_int);
+ioctl_read!(hid_ioc_rd_desc, b'H', 0x02, hidraw_report_descriptor);
+ioctl_read!(hid_ioc_raw_info, b'H', 0x03, hidraw_devinfo);
+
 #[derive(Debug)]
 pub struct USBDeviceManagerImpl {}
+
+#[derive(Debug, FromPrimitive, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u32)]
+enum BusType {
+    PCI = 0x01,
+    ISAPNP = 0x02,
+    USB = 0x03,
+    HIL = 0x04,
+    Bluetooth = 0x05,
+    Virtual = 0x06,
+}
 
 #[async_trait]
 impl USBDeviceManager for USBDeviceManagerImpl {
     type Device = USBDeviceImpl;
     type DeviceInfo = USBDeviceInfoImpl;
-    type DeviceId = String;
+    type DeviceId = Box<Path>;
 
     async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
-        trace!("watch_devices");
-        todo!()
+        // udev only tells us about newly-connected devices, so we need to
+        // explicitly look for any existing devices first!
+        let existing_devices = self.get_devices().await?;
+
+        // Our channel needs to be big enough to hold any existing devices *and*
+        // the EnumerationComplete event without blocking, so that we make it
+        // harder to miss something between get_devices() and
+        // ppoll()'ing MonitorSocket. While it's unlikely someone will have
+        // enough FIDO keys connected over USB to hit the default channel size,
+        // we should still write this defensively.
+        let (tx, rx) = mpsc::channel(16.max(existing_devices.len() + 2));
+
+        // udev::MonitorSocket and tokio_udev::AsyncMonitorSocket are not
+        // Send/Sync), so we have to use a thread and ppoll() the fd:
+        // https://github.com/jeandudey/tokio-udev/issues/13
+        thread::spawn(move || {
+            let monitor = match MonitorBuilder::new()
+                .and_then(|b| b.match_subsystem("hidraw"))
+                .and_then(|b| b.listen())
+            {
+                Ok(m) => m,
+                Err(e) => {
+                    error!("unable to create udev MonitorSocket: {e:?}");
+                    return;
+                }
+            };
+
+            // Keep a track of all known device paths, so we can notify only for
+            // removed FIDO devices (rather than all removed HIDs).
+            let mut known_devices = HashSet::new();
+
+            for device in existing_devices {
+                known_devices.insert(device.path.to_owned());
+                if tx.blocking_send(WatchEvent::Added(device)).is_err() {
+                    // Channel disappeared!
+                    return;
+                };
+            }
+
+            if tx.blocking_send(WatchEvent::EnumerationComplete).is_err() {
+                // Channel disappeared!
+                return;
+            }
+
+            let pollfd = PollFd::new(monitor.as_raw_fd(), PollFlags::POLLIN | PollFlags::POLLPRI);
+
+            loop {
+                trace!("ppoll'ing for event");
+                if let Err(e) = ppoll(
+                    &mut [pollfd],
+                    Some(Duration::from_secs(1).into()),
+                    Some(SigSet::all()),
+                ) {
+                    error!("ppoll() failed: {e:?}");
+                    return;
+                }
+
+                // No point in processing anything if the channel has gone away.
+                if tx.is_closed() {
+                    return;
+                }
+
+                for event in monitor.iter() {
+                    // trace!("event: {event:?}");
+                    let device = event.device();
+                    match event.event_type() {
+                        EventType::Add => {
+                            match USBDeviceInfoImpl::new(&device) {
+                                Some(i) => {
+                                    known_devices.insert(i.path.to_owned());
+                                    if tx.blocking_send(WatchEvent::Added(i)).is_err() {
+                                        // Channel disappeared!
+                                        return;
+                                    }
+                                }
+
+                                // Not a FIDO device, ignore it.
+                                None => continue,
+                            };
+                        }
+
+                        EventType::Remove => {
+                            if let Some(path) = device.devnode() {
+                                if known_devices.remove(path) {
+                                    if tx.blocking_send(WatchEvent::Removed(path.into())).is_err() {
+                                        // Channel disappeared!
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+
+                        _ => (),
+                    }
+                }
+            }
+        });
+
+        let stream: ReceiverStream<WatchEvent<USBDeviceInfoImpl>> = ReceiverStream::from(rx);
+        Ok(Box::pin(stream))
     }
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>> {
         let mut enumerator = Enumerator::new()?;
         enumerator.match_subsystem("hidraw")?;
         let devices = enumerator.scan_devices()?;
+        let mut o = Vec::new();
 
         for device in devices {
             // trace!("device: {:?}", device);
-            // TODO: use HIDIOCGRDESC (for descriptor) and HIDIOCGRAWINFO (for bus) instead of depending on sysfs paths
-            let descriptor_path = device.syspath().join("device").join("report_descriptor");
-            trace!("Report descriptor: {descriptor_path:?}");
-
-            let mut file = File::open(descriptor_path)?;
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf)?;
-            drop(file);
-            trace!("raw descriptor: {}", hex::encode(&buf));
-
-            let fido = is_fido_authenticator(&buf);
-            trace!(?fido);
-
+            let info = match USBDeviceInfoImpl::new(&device) {
+                Some(v) => v,
+                None => continue,
+            };
+            o.push(info);
         }
-        todo!()
+        Ok(o)
     }
 
     fn new() -> Result<Self> {
@@ -60,34 +228,108 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 }
 
 #[derive(Debug)]
-pub struct USBDeviceInfoImpl {}
+pub struct USBDeviceInfoImpl {
+    path: Box<Path>,
+    // descriptor: hidraw_report_descriptor,
+    vendor: u16,
+    product: u16,
+}
+
+impl USBDeviceInfoImpl {
+    fn new(device: &Device) -> Option<Self> {
+        let path = device.devnode()?;
+        let fd = match File::open(path) {
+            Ok(fd) => fd,
+            Err(e) => {
+                warn!("cannot open {path:?}: {e}");
+                return None;
+            }
+        };
+
+        let mut info = hidraw_devinfo::default();
+        let mut descriptor_size: c_int = 0;
+        let mut descriptor = hidraw_report_descriptor::default();
+        unsafe {
+            hid_ioc_raw_info(fd.as_raw_fd(), &mut info).ok()?;
+        }
+
+        // Drop unknown or non-USB BusTypes
+        let bustype = BusType::from_u32(info.bustype);
+        if bustype != Some(BusType::USB) {
+            trace!(
+                "{path:?} is not USB HID: {bustype:?} (0x{:x})",
+                info.bustype
+            );
+            return None;
+        }
+
+        unsafe {
+            hid_ioc_rd_desc_size(fd.as_raw_fd(), &mut descriptor_size).ok()?;
+            if descriptor_size <= 0 {
+                return None;
+            }
+            if usize::try_from(descriptor_size).ok()? > HID_MAX_DESCRIPTOR_SIZE {
+                error!("HID descriptor exceeded maximum size ({descriptor_size} > {HID_MAX_DESCRIPTOR_SIZE})");
+                return None;
+            }
+            descriptor.size = descriptor_size;
+            hid_ioc_rd_desc(fd.as_raw_fd(), &mut descriptor).ok()?;
+        }
+
+        trace!("raw descriptor: {}", hex::encode(descriptor.get_value()));
+        if is_fido_authenticator(descriptor.get_value()) {
+            Some(USBDeviceInfoImpl {
+                path: path.into(),
+                // descriptor,
+                vendor: info.vendor,
+                product: info.product,
+            })
+        } else {
+            trace!("{path:?} does not look like a FIDO authenticator");
+            None
+        }
+    }
+}
 
 #[async_trait]
 impl USBDeviceInfo for USBDeviceInfoImpl {
     type Device = USBDeviceImpl;
-    type Id = String;
+    type Id = Box<Path>;
 
     async fn open(self) -> Result<Self::Device> {
-        todo!()
+        let device = OpenOptions::new().read(true).write(true).open(&self.path)?;
+        Ok(USBDeviceImpl { info: self, device })
     }
 }
 
 #[derive(Debug)]
-pub struct USBDeviceImpl {}
+pub struct USBDeviceImpl {
+    info: USBDeviceInfoImpl,
+    device: File,
+}
 
 #[async_trait]
 impl USBDevice for USBDeviceImpl {
     type Info = USBDeviceInfoImpl;
 
     fn get_info(&self) -> &Self::Info {
-        todo!()
+        &self.info
     }
 
     async fn read(&mut self) -> Result<HidReportBytes> {
-        todo!()
+        // TODO: check for numbered reports?
+        let mut o = [0; size_of::<HidReportBytes>()];
+        self.device.read(&mut o)?;
+        Ok(o)
     }
 
-    async fn write(&self, data: HidSendReportBytes) -> Result<()> {
-        todo!()
+    async fn write(&mut self, data: HidSendReportBytes) -> Result<()> {
+        let len = self.device.write(&data)?;
+        if len != data.len() {
+            error!("incomplete write: wrote {len} of {} bytes", data.len());
+            Err(WebauthnCError::ApduTransmission)
+        } else {
+            Ok(())
+        }
     }
 }

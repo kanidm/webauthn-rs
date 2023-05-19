@@ -450,7 +450,7 @@ impl Token for BluetoothToken {
         AuthenticatorTransport::Ble
     }
 
-    async fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&mut self) -> Result<(), WebauthnCError> {
         self.send_one(BtleFrame {
             cmd: BTLE_CANCEL,
             len: 0,

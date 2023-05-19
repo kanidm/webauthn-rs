@@ -121,7 +121,8 @@ libc = "0.2"
 mach2 = "0.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-tokio-udev = "0.8.0"
+nix = { version = "0.26.2", features = ["ioctl", "poll"] }
+udev = "0.7.0"
 
 [[example]]
 name = "authenticate"
