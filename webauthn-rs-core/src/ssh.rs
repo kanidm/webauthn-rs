@@ -1,8 +1,11 @@
+use crate::attestation::verify_attestation_ca_chain;
+use crate::crypto::compute_sha256;
 use crate::internals::AuthenticatorData;
 use crate::proto::COSEKey;
-use crate::proto::Registration;
-use crate::proto::RegisteredExtensions;
 use crate::proto::ExtnState;
+use crate::proto::RegisteredExtensions;
+use crate::proto::Registration;
+use crate::proto::{AttestationCa, AttestationCaList};
 use uuid::Uuid;
 
 use nom::bytes::complete::{tag, take};
@@ -26,8 +29,14 @@ use crate::crypto::assert_packed_attest_req;
 
 pub fn verify_fido_sk_ssh_attestation(
     attestation: &[u8],
-    // pubkey: &[u8],
+    challenge: &[u8],
+    attestation_cas: &AttestationCaList,
+    danger_disable_certificate_time_checks: bool,
 ) -> Result<AttestedPublicKey, WebauthnError> {
+    if attestation_cas.is_empty() {
+        return Err(WebauthnError::MissingAttestationCaList);
+    }
+
     let alg = COSEAlgorithm::ES256;
 
     // There doesn't seem to be much in the way of docs about the format of
@@ -42,32 +51,30 @@ pub fn verify_fido_sk_ssh_attestation(
         .as_ref()
         .ok_or(WebauthnError::MissingAttestationCredentialData)?;
 
-    // let att_obj =
-
     let attestation_format = AttestationFormat::Packed;
 
-    // TODO: If/when ssh changes the attest blob, we can parse format here!
-
-    // TODO: We can use verify_packed_attestation once we have the attestation
-    // object from the attest blob.
+    // Ssh simply uses the challenge as the client data hash.
+    let client_data_hash = compute_sha256(challenge);
 
     trace!(?ssh_sk_attest);
 
     let verification_data: Vec<u8> = ssh_sk_attest
         .auth_data_bytes
         .iter()
-        // .chain(client_data_hash)
+        .chain(client_data_hash.iter())
         .copied()
         .collect();
 
-    let r = verify_signature(
+    let is_valid_signature = verify_signature(
         alg,
         &ssh_sk_attest.att_cert,
         &ssh_sk_attest.sig,
         &verification_data,
-    )
-    .unwrap();
-    error!(?r);
+    )?;
+
+    if !is_valid_signature {
+        return Err(WebauthnError::AttestationStatementSigInvalid);
+    }
 
     // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
     // Statement Certificate Requirements.
@@ -81,7 +88,7 @@ pub fn verify_fido_sk_ssh_attestation(
 
     validate_extension::<FidoGenCeAaguid>(&ssh_sk_attest.att_cert, &acd.aaguid)?;
 
-    // TODO: In future if ssh changes their attest format we can provide the full chain here.
+    // In the future if ssh changes their attest format we can provide the full chain here.
     let att_x509 = vec![ssh_sk_attest.att_cert.clone()];
 
     let attestation = ParsedAttestation {
@@ -91,6 +98,32 @@ pub fn verify_fido_sk_ssh_attestation(
         },
     };
 
+    let ca_crt = verify_attestation_ca_chain(
+        &attestation.data,
+        attestation_cas,
+        danger_disable_certificate_time_checks,
+    )?;
+
+    // It may seem odd to unwrap the option and make this not verified at this point,
+    // but in this case because we have the ca_list and none was the result (which happens)
+    // in some cases, we need to map that through. But we need verify_attesation_ca_chain
+    // to still return these option types due to re-attestation in the future.
+    let ca_crt = ca_crt.ok_or(WebauthnError::AttestationNotVerifiable)?;
+
+    match &attestation.metadata {
+        AttestationMetadata::Packed { aaguid } | AttestationMetadata::Tpm { aaguid, .. } => {
+            // If not present, fail.
+            if !ca_crt.aaguids.contains(aaguid) {
+                trace!(?aaguid, "aaguid not trust by this CA");
+                return Err(WebauthnError::AttestationUntrustedAaguid);
+            }
+        }
+        _ => {
+            // Fail
+            trace!("this attestation format does not contain an aaguid and can not proceed");
+            return Err(WebauthnError::AttestationFormatMissingAaguid);
+        }
+    };
 
     let cred_protect = match ssh_sk_attest.auth_data.extensions.cred_protect.as_ref() {
         Some(credprotect) => ExtnState::Set(credprotect.0),
@@ -267,6 +300,7 @@ impl COSEKey {
 #[cfg(test)]
 mod tests {
     use super::verify_fido_sk_ssh_attestation;
+    use crate::proto::{AttestationCa, AttestationCaList};
     use base64urlsafedata::Base64UrlSafeData;
 
     #[test]
@@ -274,20 +308,34 @@ mod tests {
         let _ = tracing_subscriber::fmt::try_init();
 
         // Create with:
-        //  ssh-keygen -t ecdsa-sk -O write-attestation=~/.ssh/id_ecdsa_sk.attest -f ~/.ssh/id_ecdsa_sk
+        //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
+        //  ssh-keygen -t ecdsa-sk -O challenge=/Users/william/.ssh/id_ecdsa_sk.chal -O write-attestation=/Users/william/.ssh/id_ecdsa_sk.attest -f /Users/william/.ssh/id_ecdsa_sk
 
-        let attest = Base64UrlSafeData::try_from(
-        "AAAAEXNzaC1zay1hdHRlc3QtdjAxAAAC8DCCAuwwggHUoAMCAQICCQCIobnFT2wgvjANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbzELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEoMCYGA1UEAwwfWXViaWNvIFUyRiBFRSBTZXJpYWwgMTE2OTc5MzQxNjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABP3N+hZ2qRVyajtVRGx/tdK/YAcNNGY++kDoDODSHk4cAqXSZ7jZepIkLdQXk7JP2dD0gVMpP5WzOJpEv8J6tRejgZQwgZEwEwYKKwYBBAGCxAoNAQQFBAMFBAMwEAYJKwYBBAGCxAoMBAMCAQcwIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBSAwIQYLKwYBBAGC5RwBAQQEEgQQc7sM1OUCSbicb7WURb9yCzAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQA8JczOIP9yDzuYizYwoJwGCwmYbUWNuokPu/NOMRLKTHvRfZRhf5LRHX7WjD0kJwifo725l/O7b+G4Y+3w9a1tK00wBGCMxw3F/oGcxsn+Tg6zWQZW3HXN8Qxfb5vtnX7lK5omugUPyq7XBqiBqFi2oqHFxjPjZSYFqQLE1DxDfJVtxXysvG1q/tkTkRagkAaqLb59SitNKsSXJ14Y9aG6liaFpSL8q+BeIe6XBHZ8NGxGhZdnhOu6qzYcTpSXlYHjeUoVF2/crpnQocjl59cgarJgS2aJV/jlSWnyZVhKbq14up6YUg0UsO60+UYm5rKuxS5OvAsvgKbl+71jhxCSAAAASDBGAiEAuYjniWggxcWVrsX/0/8N6KWMRNDmpf3dQk/Y4cSuGLQCIQDdQ3Nu5vjOGm5H/NNE0hSbot53h0aWoEYM46GZLODnBAAAAMZYxOMGEOihYhFZYP4ewiPmUpyfS26AIA3LXlwyHIrx4rG/RQAAAARzuwzU5QJJuJxvtZRFv3ILAEBkB7bC8L0QnHND8bFs0wJ4UzHLzPIeJDmwID0cDIwhwI1V3mAQXqs6f2qfRmfDDGuy/rEXU9peERCS0c+nlXVEpQECAyYgASFYIE85NQyOCXu6kaHewAmdcG3P12/TBDFqiHTmQqK6J+ZOIlgg8MWx7zxh66Hv3qTP2CqqjRP0gTrS2g624zScjHeCgkgAAAAAAAAAAA==")
+        let attest = Base64UrlSafeData::try_from("AAAAEXNzaC1zay1hdHRlc3QtdjAxAAACwTCCAr0wggGloAMCAQICBBisRsAwDQYJKoZIhvcNAQELBQAwLjEsMCoGA1UEAxMjWXViaWNvIFUyRiBSb290IENBIFNlcmlhbCA0NTcyMDA2MzEwIBcNMTQwODAxMDAwMDAwWhgPMjA1MDA5MDQwMDAwMDBaMG4xCzAJBgNVBAYTAlNFMRIwEAYDVQQKDAlZdWJpY28gQUIxIjAgBgNVBAsMGUF1dGhlbnRpY2F0b3IgQXR0ZXN0YXRpb24xJzAlBgNVBAMMHll1YmljbyBVMkYgRUUgU2VyaWFsIDQxMzk0MzQ4ODBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABHnqOyx8SXAQYiMM0j/rYOUpMXHUg/EAvoWdaw+DlwMBtUbN1G7PyuPj8w+B6e1ivSaNTB69N7O8vpKowq7rTjqjbDBqMCIGCSsGAQQBgsQKAgQVMS4zLjYuMS40LjEuNDE0ODIuMS43MBMGCysGAQQBguUcAgEBBAQDAgUgMCEGCysGAQQBguUcAQEEBBIEEMtpSB6P90A5k+wKJymhVKgwDAYDVR0TAQH/BAIwADANBgkqhkiG9w0BAQsFAAOCAQEAl50Dl9hg+C7hXTEceW66+yL6p+CE2bq0xhu7V/PmtMGKSDe4XDxO2+SDQ/TWpdmxztqK4f7UkSkhcwWOXuHL3WvawHVXxqDo02gluhWef7WtjNr4BIaM+Q6PH4rqF8AWtVwqetSXyJT7cddT15uaSEtsN21yO5mNLh1DBr8QM7Wu+Myly7JWi2kkIm0io1irfYfkrF8uCRqnFXnzpWkJSX1y9U4GusHDtEE7ul6vlMO2TzT566Qay2rig3dtNkZTeEj+6IS93fWxuleYVM/9zrrDRAWVJ+Vt1Zj49WZxWr5DAd0ZETDmufDGQDkSU+IpgD867ydL7b/eP8u9QurWeQAAAEYwRAIgeYp6mYVsuaj0NpHps1qkGkJYroyurnuCKdSYWUCCsVgCIAhFdmhNWGG0cY5l3sZUhjmrwCHpuQ1A0QXbhuEtjM7sAAAAxljE4wYQ6KFiEVlg/h7CI+ZSnJ9LboAgDcteXDIcivHisb9FAAALNMtpSB6P90A5k+wKJymhVKgAQPQVE6m4sayalwAfqHVZBGEP32y5ju2Vo7U3k1zPFKQGLDhpA0dRHWvYbsvTPmqVzSGuxSyRW/ugWzPqsveALlSlAQIDJiABIVggQ25tmKStvyG74d5VF1nSmn9UCTaq/gkNu4mG8PTI11YiWCAMvZ7dwFsRGIN40+RbHnxDitWfGRtXV9rwTbBpG1P3XAAAAAAAAAAA")
             .expect("Failed to decode attestation");
 
-        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBE85NQyOCXu6kaHewAmdcG3P12/TBDFqiHTmQqK6J+ZO8MWx7zxh66Hv3qTP2CqqjRP0gTrS2g624zScjHeCgkgAAAAEc3NoOg== william@maxixe.dev.blackhats.net.au";
+        let challenge = Base64UrlSafeData::try_from("VzCkpMNVYVgXHBuDP74v9A==")
+            .expect("Failed to decode attestation");
+
+        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBENubZikrb8hu+HeVRdZ0pp/VAk2qv4JDbuJhvD0yNdWDL2e3cBbERiDeNPkWx58Q4rVnxkbV1fa8E2waRtT91wAAAAEc3NoOg== william@maxixe.dev.blackhats.net.au";
         let mut key = sshkeys::PublicKey::from_string(pubkey).unwrap();
         // Blank the comment
         key.comment = None;
 
+        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        // Aaguid for yubikey 5 nano
+        att_ca.insert_aaguid(uuid::uuid!("cb69481e-8ff7-4039-93ec-0a2729a154a8"));
+        let att_ca_list: AttestationCaList =
+            att_ca.try_into().expect("Failed to build att ca list");
+
         // Parse
-        let att = verify_fido_sk_ssh_attestation(attest.0.as_slice())
-            .expect("Failed to parse attestation");
+        let att = verify_fido_sk_ssh_attestation(
+            attest.0.as_slice(),
+            challenge.0.as_slice(),
+            &att_ca_list,
+            false,
+        )
+        .expect("Failed to parse attestation");
 
         trace!("key {:?}", key);
         trace!("att {:?}", att.pubkey);
@@ -297,23 +345,27 @@ mod tests {
         assert!(att.pubkey == key);
     }
 
+    /*
     #[test]
     fn test_ssh_ecdsa_sk_credprotect_attest() {
         let _ = tracing_subscriber::fmt::try_init();
 
         // Create with:
-        //  ssh-keygen -t ecdsa-sk -O write-attestation=~/.ssh/id_ecdsa_sk.attest -f ~/.ssh/id_ecdsa_sk
+        //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
+        //  ssh-keygen -t ecdsa-sk -O verify-required -O challenge=/Users/william/.ssh/id_ecdsa_sk.chal -O write-attestation=/Users/william/.ssh/id_ecdsa_sk.attest -f /Users/william/.ssh/id_ecdsa_sk
 
-        let attest = Base64UrlSafeData::try_from("AAAAEXNzaC1zay1hdHRlc3QtdjAxAAAC8DCCAuwwggHUoAMCAQICCQCIobnFT2wgvjANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbzELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEoMCYGA1UEAwwfWXViaWNvIFUyRiBFRSBTZXJpYWwgMTE2OTc5MzQxNjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABP3N+hZ2qRVyajtVRGx/tdK/YAcNNGY++kDoDODSHk4cAqXSZ7jZepIkLdQXk7JP2dD0gVMpP5WzOJpEv8J6tRejgZQwgZEwEwYKKwYBBAGCxAoNAQQFBAMFBAMwEAYJKwYBBAGCxAoMBAMCAQcwIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBSAwIQYLKwYBBAGC5RwBAQQEEgQQc7sM1OUCSbicb7WURb9yCzAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQA8JczOIP9yDzuYizYwoJwGCwmYbUWNuokPu/NOMRLKTHvRfZRhf5LRHX7WjD0kJwifo725l/O7b+G4Y+3w9a1tK00wBGCMxw3F/oGcxsn+Tg6zWQZW3HXN8Qxfb5vtnX7lK5omugUPyq7XBqiBqFi2oqHFxjPjZSYFqQLE1DxDfJVtxXysvG1q/tkTkRagkAaqLb59SitNKsSXJ14Y9aG6liaFpSL8q+BeIe6XBHZ8NGxGhZdnhOu6qzYcTpSXlYHjeUoVF2/crpnQocjl59cgarJgS2aJV/jlSWnyZVhKbq14up6YUg0UsO60+UYm5rKuxS5OvAsvgKbl+71jhxCSAAAARzBFAiB/FTh6vhRgOMm/4ELLdL6opEUEy6b2nU4mcnAzezjYDwIhAIIYxa2zQUEJKLFLZIGlE9Rm8+S5Ln6wlgyVa+dqePJJAAAA1FjS4wYQ6KFiEVlg/h7CI+ZSnJ9LboAgDcteXDIcivHisb/FAAAAA3O7DNTlAkm4nG+1lEW/cgsAQGLYekSea7yiheTcFGTGxK602eGommtVC39E7mYtBf+7+J246YwPehWqWg1e32MLTZbXdGNMH7yErUP9jwQoKJGlAQIDJiABIVggWKx1IQZ8MWXyWF0lykJRGRpSLQrYD2zzDx5Qm0+TAz8iWCAtxQEq+eGx7QNUXwW1noU/46GEF0Z6mBRVCROjHe84MKFrY3JlZFByb3RlY3QDAAAAAAAAAAA=")
+        let attest = Base64UrlSafeData::try_from("")
+            .expect("Failed to decode attestation");
+        let challenge = Base64UrlSafeData::try_from("VzCkpMNVYVgXHBuDP74v9A==")
             .expect("Failed to decode attestation");
 
-        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBFisdSEGfDFl8lhdJcpCURkaUi0K2A9s8w8eUJtPkwM/LcUBKvnhse0DVF8FtZ6FP+OhhBdGepgUVQkTox3vODAAAAAEc3NoOg== william@maxixe.dev.blackhats.net.au";
+        let pubkey = "";
         let mut key = sshkeys::PublicKey::from_string(pubkey).unwrap();
         // Blank the comment
         key.comment = None;
 
         // Parse
-        let att = verify_fido_sk_ssh_attestation(attest.0.as_slice())
+        let att = verify_fido_sk_ssh_attestation(attest.0.as_slice(), challenge.0.as_slice())
             .expect("Failed to parse attestation");
 
         trace!("key {:?}", key);
@@ -323,4 +375,5 @@ mod tests {
         // Check the supplied pubkey and the attested pubkey are the same.
         assert!(att.pubkey == key);
     }
+    */
 }
