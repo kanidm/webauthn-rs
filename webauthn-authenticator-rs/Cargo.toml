@@ -124,6 +124,9 @@ mach2 = "0.4"
 nix = { version = "0.26.2", features = ["ioctl", "poll"] }
 udev = "0.7.0"
 
+[target.'cfg(target_os = "linux")'.build-dependencies]
+bindgen = "0.65.1"
+
 [[example]]
 name = "authenticate"
 required-features = ["crypto", "ui-cli"]

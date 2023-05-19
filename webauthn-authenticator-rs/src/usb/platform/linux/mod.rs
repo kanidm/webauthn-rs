@@ -1,8 +1,8 @@
 //! https://www.kernel.org/doc/Documentation/hid/hidraw.txt
+mod wrapper;
+
 use std::{
     collections::HashSet,
-    ffi::c_int,
-    fmt,
     fs::{File, OpenOptions},
     io::{Read, Write},
     mem::size_of,
@@ -15,12 +15,11 @@ use std::{
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use nix::{
-    ioctl_read,
     poll::{ppoll, PollFd, PollFlags},
     sys::signalfd::SigSet,
 };
 use num_traits::FromPrimitive;
-use tokio::sync::mpsc::{self};
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
@@ -35,58 +34,13 @@ use crate::{
     },
 };
 
-// include/uapi/linux/hid.h
-const HID_MAX_DESCRIPTOR_SIZE: usize = 4096;
-
-// include/uapi/linux/hidraw.h
-#[allow(non_camel_case_types)] // match the kernel's name for the structure
-#[repr(C)]
-pub struct hidraw_report_descriptor {
-    size: c_int,
-    value: [u8; HID_MAX_DESCRIPTOR_SIZE],
-}
-
-impl hidraw_report_descriptor {
-    fn get_value(&self) -> &[u8] {
-        &self.value[..HID_MAX_DESCRIPTOR_SIZE.min(self.size.max(0) as usize)]
-    }
-}
-
-impl Default for hidraw_report_descriptor {
-    fn default() -> Self {
-        Self {
-            size: 0,
-            value: [0; HID_MAX_DESCRIPTOR_SIZE],
-        }
-    }
-}
-
-#[derive(Default)]
-#[allow(non_camel_case_types)] // match the kernel's name for the structure
-#[repr(C)]
-pub struct hidraw_devinfo {
-    bustype: u32,
-    vendor: u16,
-    product: u16,
-}
-
-ioctl_read!(hid_ioc_rd_desc_size, b'H', 0x01, c_int);
-ioctl_read!(hid_ioc_rd_desc, b'H', 0x02, hidraw_report_descriptor);
-ioctl_read!(hid_ioc_raw_info, b'H', 0x03, hidraw_devinfo);
+use self::wrapper::{
+    hid_ioc_raw_info, hid_ioc_rd_desc, hid_ioc_rd_desc_size, hidraw_devinfo,
+    hidraw_report_descriptor, BusType, HID_MAX_DESCRIPTOR_SIZE,
+};
 
 #[derive(Debug)]
 pub struct USBDeviceManagerImpl {}
-
-#[derive(Debug, FromPrimitive, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u32)]
-enum BusType {
-    PCI = 0x01,
-    ISAPNP = 0x02,
-    USB = 0x03,
-    HIL = 0x04,
-    Bluetooth = 0x05,
-    Virtual = 0x06,
-}
 
 #[async_trait]
 impl USBDeviceManager for USBDeviceManagerImpl {
@@ -222,7 +176,6 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 #[derive(Debug)]
 pub struct USBDeviceInfoImpl {
     path: Box<Path>,
-    // descriptor: hidraw_report_descriptor,
     vendor: u16,
     product: u16,
 }
@@ -242,7 +195,7 @@ impl USBDeviceInfoImpl {
         };
 
         let mut info = hidraw_devinfo::default();
-        let mut descriptor_size: c_int = 0;
+        let mut descriptor_size: u32 = 0;
         let mut descriptor = hidraw_report_descriptor::default();
         unsafe {
             hid_ioc_raw_info(fd.as_raw_fd(), &mut info).ok()?;
@@ -263,7 +216,7 @@ impl USBDeviceInfoImpl {
             if descriptor_size <= 0 {
                 return None;
             }
-            if usize::try_from(descriptor_size).ok()? > HID_MAX_DESCRIPTOR_SIZE {
+            if descriptor_size > HID_MAX_DESCRIPTOR_SIZE {
                 error!("HID descriptor exceeded maximum size ({descriptor_size} > {HID_MAX_DESCRIPTOR_SIZE})");
                 return None;
             }
@@ -275,9 +228,9 @@ impl USBDeviceInfoImpl {
         if is_fido_authenticator(descriptor.get_value()) {
             Some(USBDeviceInfoImpl {
                 path: path.into(),
-                // descriptor,
-                vendor: info.vendor,
-                product: info.product,
+                // The userspace API lies: https://bugzilla.kernel.org/show_bug.cgi?id=217463
+                vendor: info.vendor as u16,
+                product: info.product as u16,
             })
         } else {
             // trace!("{path:?} does not look like a FIDO authenticator");
