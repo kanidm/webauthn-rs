@@ -52,14 +52,6 @@ impl hidraw_report_descriptor {
     }
 }
 
-impl fmt::Debug for hidraw_report_descriptor {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("hidraw_report_descriptor")
-            .field("value", &self.get_value())
-            .finish()
-    }
-}
-
 impl Default for hidraw_report_descriptor {
     fn default() -> Self {
         Self {
@@ -150,7 +142,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
             let pollfd = PollFd::new(monitor.as_raw_fd(), PollFlags::POLLIN | PollFlags::POLLPRI);
 
             loop {
-                trace!("ppoll'ing for event");
+                // trace!("ppoll'ing for event");
                 if let Err(e) = ppoll(
                     &mut [pollfd],
                     Some(Duration::from_secs(1).into()),
@@ -241,6 +233,9 @@ impl USBDeviceInfoImpl {
         let fd = match File::open(path) {
             Ok(fd) => fd,
             Err(e) => {
+                // This isn't necessarily bad - raw HID access to other input
+                // devices (eg: keyboards) may be blocked. But the udev rules
+                // could be wrong, blocking FIDO tokens as well...
                 warn!("cannot open {path:?}: {e}");
                 return None;
             }
@@ -256,10 +251,10 @@ impl USBDeviceInfoImpl {
         // Drop unknown or non-USB BusTypes
         let bustype = BusType::from_u32(info.bustype);
         if bustype != Some(BusType::USB) {
-            trace!(
-                "{path:?} is not USB HID: {bustype:?} (0x{:x})",
-                info.bustype
-            );
+            // trace!(
+            //     "{path:?} is not USB HID: {bustype:?} (0x{:x})",
+            //     info.bustype
+            // );
             return None;
         }
 
@@ -276,7 +271,7 @@ impl USBDeviceInfoImpl {
             hid_ioc_rd_desc(fd.as_raw_fd(), &mut descriptor).ok()?;
         }
 
-        trace!("raw descriptor: {}", hex::encode(descriptor.get_value()));
+        // trace!("raw descriptor: {}", hex::encode(descriptor.get_value()));
         if is_fido_authenticator(descriptor.get_value()) {
             Some(USBDeviceInfoImpl {
                 path: path.into(),
@@ -285,7 +280,7 @@ impl USBDeviceInfoImpl {
                 product: info.product,
             })
         } else {
-            trace!("{path:?} does not look like a FIDO authenticator");
+            // trace!("{path:?} does not look like a FIDO authenticator");
             None
         }
     }

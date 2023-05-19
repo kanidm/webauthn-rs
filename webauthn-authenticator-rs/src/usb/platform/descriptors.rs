@@ -8,7 +8,7 @@ use num_traits::FromPrimitive;
 use crate::usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 
 /// HID descriptor tags; shifted right by 2 bits (removing the `bSize` field).
-#[derive(FromPrimitive, Debug)]
+#[derive(FromPrimitive)]
 #[repr(u8)]
 enum Tag {
     // Main items
@@ -45,7 +45,7 @@ enum Tag {
     Delimiter = 0b1010_10,
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 struct DescriptorItem<'a> {
     tag: Option<Tag>,
     value: &'a [u8],
@@ -79,7 +79,7 @@ impl<'a> Iterator for DescriptorIterator<'a> {
                 // Not enough bytes to get long item value
                 return None;
             }
-            warn!("long tags are not fully supported, returning the whole tag");
+            warn!("long tags are not supported");
             tag = None;
             (value, self.i) = self.i[3..].split_at(length);
         } else {
@@ -109,7 +109,7 @@ pub fn is_fido_authenticator(descriptor: &[u8]) -> bool {
     let mut descriptor = DescriptorIterator { i: descriptor };
     let mut current_usage_page = 0u16;
     while let Some(item) = descriptor.next() {
-        trace!("item: {item:?}");
+        // trace!("item: {item:?}");
         match item.tag {
             Some(Tag::UsagePage) => {
                 if let Ok(usage_page) = item.value.try_into() {
