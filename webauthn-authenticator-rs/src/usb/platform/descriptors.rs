@@ -1,7 +1,11 @@
-//! Parse USB descriptors
+//! USB HID report descriptor parser.
 //!
-//! https://www.usb.org/sites/default/files/documents/hid1_11.pdf section 6.2.2
+//! ## References
 //!
+//! * [Device Class Definition for Human Interface Devices, version 1.11][0],
+//!   §6.2.2 "Report Descriptor"
+//!
+//! [0]: https://www.usb.org/sites/default/files/documents/hid1_11.pdf
 
 use num_traits::FromPrimitive;
 
@@ -45,12 +49,25 @@ enum Tag {
     Delimiter = 0b1010_10,
 }
 
-// #[derive(Debug)]
+/// Item in a report descriptor.
 struct DescriptorItem<'a> {
+    /// The tag of the item, if known.
     tag: Option<Tag>,
+
+    /// The value of the item.
     value: &'a [u8],
 }
 
+/// Iterator-based report descriptor parser.
+///
+/// This returns each [item] in a descriptor, without regard to its context.
+///
+/// ## Limitations
+///
+/// This only fully supports short items. This will parse long items, but skip
+/// the tag.
+///
+/// [item]: DescriptorItem
 struct DescriptorIterator<'a> {
     i: &'a [u8],
 }
@@ -105,6 +122,12 @@ impl<'a> Iterator for DescriptorIterator<'a> {
     }
 }
 
+/// Parses a USB HID Report Descriptor to determine whether it is a FIDO
+/// authenticator.
+///
+/// This only handles [`Tag::UsagePage`] and [`Tag::Usage`], so will only
+/// support simple descriptors. This is should be sufficient for USB FIDO
+/// authethicators.
 pub fn is_fido_authenticator(descriptor: &[u8]) -> bool {
     let mut descriptor = DescriptorIterator { i: descriptor };
     let mut current_usage_page = 0u16;

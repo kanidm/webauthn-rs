@@ -195,6 +195,13 @@ pub enum Opt {
 pub struct CliParser {
     #[clap(subcommand)]
     pub commands: Opt,
+
+    /// Select a key by waiting for an insertion event after initial device
+    /// enumeration.
+    /// 
+    /// Otherwise, this runs on the first key.
+    #[clap(long)]
+    pub wait_for_key_insertion: bool,
 }
 
 pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
@@ -222,48 +229,77 @@ async fn main() {
     let mut transport = AnyTransport::new().await.unwrap();
     
 
-    let stream = transport.watch_tokens().await.unwrap();
+    // let stream = transport.watch_tokens().await.unwrap();
 
-    let stream = stream.timeout(Duration::from_secs(10));
-    tokio::pin!(stream);
+    // let stream = stream.timeout(Duration::from_secs(10));
+    // tokio::pin!(stream);
 
-    while let Some(Ok(event)) = stream.next().await {
-        // println!("event: {event:?}");
-        if let TokenEvent::Added(t) = event {
-            let authenticator = CtapAuthenticator::new(t, &ui).await.unwrap();
-            println!("{}", authenticator.get_info());
-        }
-    }
+    // while let Some(Ok(event)) = stream.next().await {
+    //     // println!("event: {event:?}");
+    //     if let TokenEvent::Added(t) = event {
+    //         let authenticator = CtapAuthenticator::new(t, &ui).await.unwrap();
+    //         println!("{}", authenticator.get_info());
+    //     }
+    // }
 
-    drop(stream);
-    todo!()
+    // drop(stream);
+    // todo!()
 
-    /*
-    let mut tokens = transport.connect_all(&ui).expect("connect_all");
+    let mut stream = transport.watch_tokens().await.unwrap();
 
-    if tokens.is_empty() {
-        println!("No tokens available!");
-        return;
-    }
+    // if tokens.is_empty() {
+    //     println!("No tokens available!");
+    //     return;
+    // }
 
-    let token_count = tokens.len();
+    // let token_count = tokens.len();
     // let authenticator = select_transport(&ui);
-    let authenticator = &mut tokens[0];
-
+    // let authenticator = &mut tokens[0];
+    
+    // TODO: reimplement to use stream
     match opt.commands {
         Opt::Selection => {
-            let token = select_one_token(tokens.iter_mut()).await;
-            println!("selected token: {token:?}");
+            todo!()
+            //let token = select_one_token(tokens.iter_mut()).await;
+            //println!("selected token: {token:?}");
         }
 
         Opt::Info => {
-            for token in &tokens {
-                println!("{}", token.get_info());
+            while let Some(event) = stream.next().await {
+                match event {
+                    TokenEvent::Added(t) => {
+                        let authenticator = CtapAuthenticator::new(t, &ui).await.unwrap();
+                        println!("{}", authenticator.get_info());
+                    },
+                    TokenEvent::EnumerationComplete => {
+                        break;
+                    },
+                    _ => (),
+                }
             }
         }
 
         Opt::FactoryReset => {
-            assert_eq!(token_count, 1);
+            while let Some(event) = stream.next().await {
+                // Keep advancing the stream until enumeration complete, we want
+                // to ignore everything already connected.
+                if matches!(event, TokenEvent::EnumerationComplete) {
+                    break;
+                }
+            }
+
+            println!("Please disconnect and reconnect your token to reset to factory settings.");
+
+            let mut authenticator = None;
+            while let Some(event) = stream.next().await {
+                if let TokenEvent::Added(t) = event {
+                    authenticator = Some(CtapAuthenticator::new(t, &ui).await.unwrap());
+                    break;
+                }
+            }
+
+            let mut authenticator = authenticator.unwrap();
+
             println!("Resetting token to factory settings. Type 'yes' to continue.");
             let mut buf = String::new();
             stdout().flush().ok();
@@ -280,6 +316,8 @@ async fn main() {
             }
         }
 
+        _ => todo!()
+/*
         Opt::ToggleAlwaysUv => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
@@ -681,6 +719,6 @@ async fn main() {
                 .await
                 .expect("Error updating credential");
         }
+         */
     }
-     */
 }

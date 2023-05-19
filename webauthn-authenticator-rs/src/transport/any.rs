@@ -49,7 +49,6 @@ pub enum AnyTokenId {
     Usb(<USBToken as Token>::Id),
 }
 
-
 impl AnyTransport {
     /// Creates connections to all available transports.
     ///
@@ -89,8 +88,6 @@ impl<'b> Transport<'b> for AnyTransport {
             return Err(WebauthnCError::NotSupported);
         }
 
-        // let mut o: Vec<Self::Token> = Vec::new();
-
         // #[cfg(feature = "bluetooth")]
         // o.extend(
         //     self.bluetooth
@@ -105,7 +102,6 @@ impl<'b> Transport<'b> for AnyTransport {
         //     o.extend(nfc.tokens().await?.into_iter().map(AnyToken::Nfc));
         // }
 
-        
         #[cfg(feature = "usb")]
         {
             let s = self.usb.watch_tokens().await?;
@@ -117,13 +113,39 @@ impl<'b> Transport<'b> for AnyTransport {
                     TokenEvent::EnumerationComplete => TokenEvent::EnumerationComplete,
                 }
             })));
-            // o.extend(self.usb.tokens().await?.into_iter().map(AnyToken::Usb));
         }
-        // Ok(o)
 
         todo!()
     }
 
+    async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+        #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
+        {
+            error!("No transports available!");
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        let mut o: Vec<Self::Token> = Vec::new();
+
+        #[cfg(feature = "bluetooth")]
+        o.extend(
+            self.bluetooth
+                .get_devices()
+                .await?
+                .into_iter()
+                .map(AnyToken::Bluetooth),
+        );
+
+        #[cfg(feature = "nfc")]
+        if let Some(nfc) = &self.nfc {
+            o.extend(nfc.get_devices().await?.into_iter().map(AnyToken::Nfc));
+        }
+
+        #[cfg(feature = "usb")]
+        o.extend(self.usb.get_devices().await?.into_iter().map(AnyToken::Usb));
+
+        Ok(o)
+    }
 }
 
 #[async_trait]

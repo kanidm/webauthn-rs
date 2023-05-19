@@ -41,7 +41,7 @@ use btleplug::{
     },
     platform::{Manager, Peripheral},
 };
-use futures::{executor::block_on, StreamExt, stream::BoxStream};
+use futures::{executor::block_on, stream::BoxStream, StreamExt};
 use tokio::time::sleep;
 use uuid::{uuid, Uuid};
 use webauthn_rs_proto::AuthenticatorTransport;
@@ -53,7 +53,7 @@ use crate::{
             CBORResponse, KeepAliveStatus, Response, U2FError, BTLE_CANCEL, BTLE_KEEPALIVE,
             TYPE_INIT, U2FHID_ERROR, U2FHID_MSG, U2FHID_PING,
         },
-        Token, Transport, TokenEvent,
+        Token, TokenEvent, Transport,
     },
     ui::UiCallback,
 };

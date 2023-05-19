@@ -1,4 +1,6 @@
-//! https://www.kernel.org/doc/Documentation/hid/hidraw.txt
+//! Linux [hidraw] USB HID implementation.
+//!
+//! [hidraw]: https://www.kernel.org/doc/Documentation/hid/hidraw.txt
 mod wrapper;
 
 use std::{

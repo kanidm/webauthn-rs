@@ -384,7 +384,7 @@ impl USBDevice for USBDeviceImpl {
         ret.ok_or(WebauthnCError::Closed)
     }
 
-    async fn write(&self, data: HidSendReportBytes) -> Result<()> {
+    async fn write(&mut self, data: HidSendReportBytes) -> Result<()> {
         let report_id = data[0];
         let data = &data[if report_id == 0 { 1 } else { 0 }..];
         Ok(self

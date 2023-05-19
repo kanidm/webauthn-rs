@@ -32,35 +32,13 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     type Token: Token + 'b;
 
     /// Watches for token connection and disconnection on this [Transport].
-    async fn watch_tokens(
-        &mut self,
-    ) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
+    ///
+    /// This will initially send synthetic [`TokenEvent::Added`] for all
+    /// currently-connected tokens, followed by
+    /// [`TokenEvent::EnumerationComplete`].
+    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
 
-    async fn connect_all<'a, U: UiCallback>(
-        &mut self,
-        ui: &'a U,
-    ) -> Result<Vec<CtapAuthenticator<'a, Self::Token, U>>, WebauthnCError> {
-        // Ok(self
-        //     .tokens()
-        //     .await?
-        //     .drain(..)
-        //     .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
-        //     .collect())
-        todo!()
-    }
-
-    async fn connect_one<'a, U: UiCallback>(
-        &mut self,
-        ui: &'a U,
-    ) -> Result<CtapAuthenticator<'a, Self::Token, U>, WebauthnCError> {
-        // self.tokens()
-        //     .await?
-        //     .drain(..)
-        //     .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
-        //     .next()
-        //     .ok_or(WebauthnCError::NoSelectedToken)
-        todo!()
-    }
+    async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
 }
 
 /// Represents a connection to a single FIDO token over a [Transport].

@@ -70,9 +70,7 @@ impl WindowsDeviceWatcher {
                     let info = info.as_ref().ok_or::<HRESULT>(ERROR_BAD_ARGUMENTS.into())?;
 
                     tx_add
-                        .blocking_send(WatchEvent::Added(USBDeviceInfoImpl {
-                            info: info.clone(),
-                        }))
+                        .blocking_send(WatchEvent::Added(USBDeviceInfoImpl { info: info.clone() }))
                         .map_err(|_| ERROR_HANDLES_CLOSED.into())
                 },
             ))
@@ -264,7 +262,7 @@ impl USBDevice for USBDeviceImpl {
         Ok(o)
     }
 
-    async fn write(&self, data: HidSendReportBytes) -> Result<(), WebauthnCError> {
+    async fn write(&mut self, data: HidSendReportBytes) -> Result<(), WebauthnCError> {
         let report = self
             .device
             .CreateOutputReportById(data[0] as u16)

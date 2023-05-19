@@ -1,20 +1,14 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+//! Platform-specific USB HID API bindings.
+//!
+//! These typically implement a minimal subset of the platform's USB HID API
+//! which is necessary to support FIDO tokens.
 
-// #[macro_use]
-// mod util;
-
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "windows"
-)))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 compile_error!("USB support is not implemented on this platform");
 
 pub mod traits;
 
-#[cfg(any(test, target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg(any(test, target_os = "linux"))]
 pub mod descriptors;
 
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]

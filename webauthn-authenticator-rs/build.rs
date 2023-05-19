@@ -65,7 +65,7 @@ Please upgrade to OpenSSL v3.0.0 or later.
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use std::{path::PathBuf, env};
+    use std::{env, path::PathBuf};
 
     const WRAPPER_H: &'static str = "src/usb/platform/linux/wrapper.h";
 
