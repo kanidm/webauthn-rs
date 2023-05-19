@@ -372,15 +372,17 @@ pub struct CredentialV3 {
     into = "SerialisableAttestedPublicKey"
 )]
 */
+/// An attested public key. This contains the ssh public key as well as the
+/// attestation metadata.
 pub struct AttestedPublicKey {
+    /// The ssh public key
     pub pubkey: PublicKey,
-    // Does this mean that uv=true on all auth? I don't think it does
-    // due to ctap2.1. We need to use cred protect
-    pub user_verified: bool,
     /// The set of registrations that were verified at registration, that can
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
+    /// The parser attestation data
     pub attestation: ParsedAttestation,
+    /// The format of the attestation presented by the device.
     pub attestation_format: AttestationFormat,
 }
 

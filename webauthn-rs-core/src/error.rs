@@ -286,6 +286,9 @@ pub enum WebauthnError {
 
     #[error("This public key string is not a valid public key")]
     SshPublicKeyInvalidPubkey,
+
+    #[error("The attestation requst indicates cred protect was required, but user verification was not performed")]
+    SshPublicKeyInconsistentUserVerification,
 }
 
 impl PartialEq for WebauthnError {

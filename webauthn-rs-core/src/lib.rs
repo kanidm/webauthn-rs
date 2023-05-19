@@ -13,8 +13,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
-// TODO - UNDO THIS
-// #![deny(warnings)]
+#![deny(warnings)]
 #![warn(unused_extern_crates)]
 #![warn(missing_docs)]
 #![deny(clippy::todo)]
