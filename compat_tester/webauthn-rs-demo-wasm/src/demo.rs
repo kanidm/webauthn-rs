@@ -53,9 +53,10 @@ impl From<FetchError> for AppMsg {
 impl Demo {
     async fn register_begin(
         username: String,
-        settings: RegisterWithType,
+        reg_type: RegisterWithType,
     ) -> Result<AppMsg, FetchError> {
-        let req_jsvalue = serde_json::to_string(&settings)
+        let reg_start = RegisterStart { username: username.to_owned(), reg_type };
+        let req_jsvalue = serde_json::to_string(&reg_start)
             .map(|s| JsValue::from(&s))
             .expect_throw("Failed to serialise settings");
 
@@ -64,8 +65,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/demo/register_start/{}", username);
-        let request = Request::new_with_str_and_init(&dest, &opts)?;
+        let request = Request::new_with_str_and_init("/demo/register_start", &opts)?;
 
         request
             .headers()
@@ -106,7 +106,8 @@ impl Demo {
         let rpkc = RegisterPublicKeyCredential::from(data);
         console::log!(format!("rpkc -> {:?}", rpkc).as_str());
 
-        let req_jsvalue = serde_json::to_string(&rpkc)
+        let reg_finish = RegisterFinish { username, rpkc };
+        let req_jsvalue = serde_json::to_string(&reg_finish)
             .map(|s| JsValue::from(&s))
             .expect("Failed to serialise rpkc");
 
@@ -115,8 +116,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/demo/register_finish/{}", username);
-        let request = Request::new_with_str_and_init(&dest, &opts)?;
+        let request = Request::new_with_str_and_init("/demo/register_finish", &opts)?;
 
         request
             .headers()
@@ -145,9 +145,13 @@ impl Demo {
 
     async fn login_begin(
         username: String,
-        settings: AuthenticateWithType,
+        auth_type: AuthenticateWithType,
     ) -> Result<AppMsg, FetchError> {
-        let req_jsvalue = serde_json::to_string(&settings)
+        let auth_start = AuthenticateStart {
+            username: username.to_owned(),
+            auth_type,
+        };
+        let req_jsvalue = serde_json::to_string(&auth_start)
             .map(|s| JsValue::from(&s))
             .expect_throw("Failed to serialise settings");
 
@@ -156,8 +160,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/demo/login_start/{}", username);
-        let request = Request::new_with_str_and_init(&dest, &opts)?;
+        let request = Request::new_with_str_and_init("/demo/login_start", &opts)?;
 
         request
             .headers()
@@ -192,8 +195,11 @@ impl Demo {
     ) -> Result<AppMsg, FetchError> {
         let pkc = PublicKeyCredential::from(data);
         console::log!(format!("pkc -> {:?}", pkc).as_str());
+        let auth_finish = AuthenticateFinish {
+            username, pkc
+        };
 
-        let req_jsvalue = serde_json::to_string(&pkc)
+        let req_jsvalue = serde_json::to_string(&auth_finish)
             .map(|s| JsValue::from(&s))
             .expect("Failed to serialise pkc");
 
@@ -202,8 +208,7 @@ impl Demo {
         opts.mode(RequestMode::SameOrigin);
         opts.body(Some(&req_jsvalue));
 
-        let dest = format!("/demo/login_finish/{}", username);
-        let request = Request::new_with_str_and_init(&dest, &opts)?;
+        let request = Request::new_with_str_and_init("/demo/login_finish", &opts)?;
 
         request
             .headers()
@@ -480,7 +485,7 @@ impl Component for Demo {
                         })
                         .unwrap_or(AttestationLevel::None);
 
-                let settings = utils::get_select_value_from_element_id("credential_type")
+                let reg_type = utils::get_select_value_from_element_id("credential_type")
                     .and_then(|v| match v.as_str() {
                         "pk" => Some(RegisterWithType::Passkey),
                         "sk" => Some(RegisterWithType::SecurityKey(attest_req)),
@@ -489,13 +494,11 @@ impl Component for Demo {
                     })
                     .unwrap_or(RegisterWithType::Passkey);
 
-                console::log!(format!("cred_type  -> {:?}", settings).as_str());
-                console::log!(format!("username   -> {:?}", username).as_str());
-
-                self.reg_settings = settings.clone();
+                self.reg_settings = reg_type.clone();
+                console::log!(format!("register_settings -> {reg_type:?}").as_str());
 
                 ctx.link().send_future(async {
-                    match Self::register_begin(username, settings).await {
+                    match Self::register_begin(username, reg_type).await {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }
@@ -549,11 +552,11 @@ impl Component for Demo {
                 }
                 self.last_username = username.clone();
 
-                let settings: AuthenticateWithType = (&self.reg_settings).into();
+                let auth_type: AuthenticateWithType = (&self.reg_settings).into();
 
                 console::log!(format!("login -> {:?}", username).as_str());
                 ctx.link().send_future(async {
-                    match Self::login_begin(username, settings).await {
+                    match Self::login_begin(username, auth_type).await {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }

@@ -96,17 +96,15 @@ async fn index_view(_request: tide::Request<AppState>) -> tide::Result {
 }
 
 async fn demo_start_register(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-
     let session = request.session_mut();
     session.remove("d_rs");
 
-    let reg_settings = request.body_json::<RegisterWithType>().await?;
+    let reg_settings: RegisterStart = request.body_json().await?;
     debug!(?reg_settings);
 
     let actor_res = request
         .state()
-        .demo_start_register(Uuid::new_v4(), username, reg_settings)
+        .demo_start_register(Uuid::new_v4(), reg_settings.username, reg_settings.reg_type)
         .await;
 
     let res = match actor_res {
@@ -130,7 +128,7 @@ async fn demo_start_register(mut request: tide::Request<AppState>) -> tide::Resu
 }
 
 async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
+    let reg_finish: RegisterFinish = request.body_json().await?;
 
     debug!("session - {:?}", request.session().get_raw("d_cred_map"));
     let session = request.session_mut();
@@ -148,19 +146,17 @@ async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Res
     let mut cred_map: BTreeMap<String, Vec<TypedCredential>> =
         session.get("d_cred_map").unwrap_or_default();
 
-    let mut creds: Vec<_> = cred_map.remove(&username).unwrap_or_default();
-
-    let reg = request.body_json::<RegisterPublicKeyCredential>().await?;
+    let mut creds: Vec<_> = cred_map.remove(&reg_finish.username).unwrap_or_default();
 
     let actor_res = request
         .state()
-        .demo_finish_register(&username, &reg, rs)
+        .demo_finish_register(&reg_finish.username, &reg_finish.rpkc, rs)
         .await;
     let res = match actor_res {
         Ok(cred) => {
             // TODO make this a fn call back for cred exist
             creds.push(cred);
-            cred_map.insert(username, creds);
+            cred_map.insert(reg_finish.username, creds);
             // Set the credmap back
             request
                 .session_mut()
@@ -204,12 +200,10 @@ async fn demo_finish_register(mut request: tide::Request<AppState>) -> tide::Res
 }
 
 async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-
     debug!("session - {:?}", request.session().get_raw("d_cred_map"));
 
-    let auth_settings = request.body_json::<AuthenticateWithType>().await?;
-    debug!(?auth_settings);
+    let auth_start: AuthenticateStart = request.body_json().await?;
+    debug!(?auth_start);
 
     let session = request.session_mut();
     session.remove("d_st");
@@ -217,10 +211,10 @@ async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result 
     let mut cred_map: BTreeMap<String, Vec<TypedCredential>> =
         session.get("d_cred_map").unwrap_or_default();
 
-    let creds = match cred_map.remove(&username) {
+    let creds = match cred_map.remove(&auth_start.username) {
         Some(v) => v,
         None => {
-            error!("no creds for {}", username);
+            error!("no creds for {}", auth_start.username);
             return Ok(tide::Response::builder(tide::StatusCode::BadRequest)
                 .body(tide::Body::from_json(
                     &ResponseError::CredentialRetrievalError,
@@ -231,7 +225,7 @@ async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result 
 
     let actor_res = request
         .state()
-        .demo_start_login(&username, creds, auth_settings)
+        .demo_start_login(&auth_start.username, creds, auth_start.auth_type)
         .await;
 
     let session = request.session_mut();
@@ -262,9 +256,7 @@ async fn demo_start_login(mut request: tide::Request<AppState>) -> tide::Result 
 }
 
 async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
-    let username_copy = username.clone();
-
+    let auth_finish: AuthenticateFinish = request.body_json().await?;
     let session = request.session_mut();
 
     let st = match session.get("d_st") {
@@ -278,11 +270,9 @@ async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result
     };
     session.remove("d_st");
 
-    let lgn = request.body_json::<PublicKeyCredential>().await?;
-
     let res = match request
         .state()
-        .demo_finish_login(&username_copy, &lgn, st)
+        .demo_finish_login(&auth_finish.username, &auth_finish.pkc, st)
         .await
     {
         Ok(_auth_result) => tide::Response::builder(tide::StatusCode::Ok).build(),
@@ -525,7 +515,7 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
 }
 
 async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Result {
-    let username: String = request.param("username")?.parse()?;
+    let reg_start: RegisterStart = request.body_json().await?;
 
     let session = request.session_mut();
     session.remove("cu_rs");
@@ -533,15 +523,18 @@ async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Re
     // Setup the uuid to name map.
     let mut uuid_map: BTreeMap<String, Uuid> = session.get("cu_id_map").unwrap_or_default();
 
-    let u = if let Some(u) = uuid_map.get(&username) {
+    let u = if let Some(u) = uuid_map.get(&reg_start.username) {
         *u
     } else {
         let u = Uuid::new_v4();
-        uuid_map.insert(username.clone(), u);
+        uuid_map.insert(reg_start.username.clone(), u);
         u
     };
 
-    let actor_res = request.state().condui_start_register(u, username).await;
+    let actor_res = request
+        .state()
+        .condui_start_register(u, reg_start.username)
+        .await;
 
     let res = match actor_res {
         Ok((chal, rs)) => {
@@ -732,16 +725,12 @@ async fn main() -> tide::Result<()> {
     app.at("/compat/login_start").post(compat_start_login);
     app.at("/compat/login_finish").post(compat_finish_login);
 
-    app.at("/demo/register_start/:username")
-        .post(demo_start_register);
-    app.at("/demo/register_finish/:username")
-        .post(demo_finish_register);
-    app.at("/demo/login_start/:username").post(demo_start_login);
-    app.at("/demo/login_finish/:username")
-        .post(demo_finish_login);
+    app.at("/demo/register_start").post(demo_start_register);
+    app.at("/demo/register_finish").post(demo_finish_register);
+    app.at("/demo/login_start").post(demo_start_login);
+    app.at("/demo/login_finish").post(demo_finish_login);
 
-    app.at("/condui/register_start/:username")
-        .post(condui_start_register);
+    app.at("/condui/register_start").post(condui_start_register);
     app.at("/condui/register_finish")
         .post(condui_finish_register);
     app.at("/condui/login_start").post(condui_start_login);

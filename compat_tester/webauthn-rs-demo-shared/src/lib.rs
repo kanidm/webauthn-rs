@@ -35,11 +35,35 @@ impl Into<Option<AttestationCaList>> for AttestationLevel {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RegisterStart {
+    pub username: String,
+    pub reg_type: RegisterWithType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum RegisterWithType {
     Passkey,
     Passwordless(AttestationLevel),
     SecurityKey(AttestationLevel),
     // Device(bool),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RegisterFinish {
+    pub username: String,
+    pub rpkc: RegisterPublicKeyCredential,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuthenticateStart {
+    pub username: String,
+    pub auth_type: AuthenticateWithType,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AuthenticateFinish {
+    pub username: String,
+    pub pkc: PublicKeyCredential,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
