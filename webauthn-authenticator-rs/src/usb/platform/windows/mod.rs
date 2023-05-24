@@ -131,9 +131,9 @@ pub struct USBDeviceManagerImpl {}
 impl USBDeviceManager for USBDeviceManagerImpl {
     type Device = USBDeviceImpl;
     type DeviceInfo = USBDeviceInfoImpl;
-    type DeviceId = USBDeviceInfoImpl::Id;
+    type DeviceId = HSTRING;
 
-    fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
+    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
         trace!("watch_devices");
         Ok(Box::pin(WindowsDeviceWatcher::new()?))
     }

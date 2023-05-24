@@ -183,6 +183,10 @@ pub struct USBDeviceInfoImpl {
 }
 
 impl USBDeviceInfoImpl {
+    /// Try to open a [Device] as a USB HID FIDO token.
+    ///
+    /// Returns `None` on access errors (permissions), or if the device is not a
+    /// USB HID FIDO token.
     fn new(device: &Device) -> Option<Self> {
         let path = device.devnode()?;
         let fd = match File::open(path) {
@@ -197,8 +201,6 @@ impl USBDeviceInfoImpl {
         };
 
         let mut info = hidraw_devinfo::default();
-        let mut descriptor_size: u32 = 0;
-        let mut descriptor = hidraw_report_descriptor::default();
         unsafe {
             hid_ioc_raw_info(fd.as_raw_fd(), &mut info).ok()?;
         }
@@ -213,16 +215,16 @@ impl USBDeviceInfoImpl {
             return None;
         }
 
+        let mut descriptor = hidraw_report_descriptor::default();
         unsafe {
-            hid_ioc_rd_desc_size(fd.as_raw_fd(), &mut descriptor_size).ok()?;
-            if descriptor_size <= 0 {
+            hid_ioc_rd_desc_size(fd.as_raw_fd(), &mut descriptor.size).ok()?;
+            if descriptor.size <= 0 {
                 return None;
             }
-            if descriptor_size > HID_MAX_DESCRIPTOR_SIZE {
-                error!("HID descriptor exceeded maximum size ({descriptor_size} > {HID_MAX_DESCRIPTOR_SIZE})");
+            if descriptor.size > HID_MAX_DESCRIPTOR_SIZE {
+                error!("HID descriptor exceeded maximum size ({} > {HID_MAX_DESCRIPTOR_SIZE})", descriptor.size);
                 return None;
             }
-            descriptor.size = descriptor_size;
             hid_ioc_rd_desc(fd.as_raw_fd(), &mut descriptor).ok()?;
         }
 
