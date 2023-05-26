@@ -32,6 +32,13 @@ where
 }
 
 #[derive(Debug, Args)]
+pub struct InfoOpt {
+    /// Continue watching for more connected devices forever.
+    #[clap(long)]
+    pub watch: bool,
+}
+
+#[derive(Debug, Args)]
 pub struct SetPinOpt {
     #[clap(short, long)]
     pub new_pin: String,
@@ -150,7 +157,7 @@ pub enum Opt {
     /// Request user presence on a connected FIDO token.
     Selection,
     /// Show information about the connected FIDO token.
-    Info,
+    Info(InfoOpt),
     /// Resets the connected FIDO token to factory settings, deleting all keys.
     ///
     /// This command will only work for the first 10 seconds since the token was
@@ -196,12 +203,12 @@ pub struct CliParser {
     #[clap(subcommand)]
     pub commands: Opt,
 
-    /// Select a key by waiting for an insertion event after initial device
-    /// enumeration.
-    /// 
-    /// Otherwise, this runs on the first key.
-    #[clap(long)]
-    pub wait_for_key_insertion: bool,
+    // /// Select a key by waiting for an insertion event after initial device
+    // /// enumeration.
+    // /// 
+    // /// Otherwise, this runs on the first key.
+    // #[clap(long)]
+    // pub wait_for_key_insertion: bool,
 }
 
 pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
@@ -264,7 +271,7 @@ async fn main() {
             //println!("selected token: {token:?}");
         }
 
-        Opt::Info => {
+        Opt::Info(o) => {
             while let Some(event) = stream.next().await {
                 match event {
                     TokenEvent::Added(t) => {
@@ -272,7 +279,12 @@ async fn main() {
                         println!("{}", authenticator.get_info());
                     },
                     TokenEvent::EnumerationComplete => {
-                        break;
+                        if o.watch {
+                            println!("Initial enumeration completed, watching for more devices...");
+                            println!("Press Ctrl-C to stop watching.");
+                        } else {
+                            break;
+                        }
                     },
                     _ => (),
                 }
