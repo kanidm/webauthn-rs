@@ -147,10 +147,10 @@ impl NFCDeviceWatcher {
                 if tx.is_closed() {
                     break;
                 }
-                trace!(
-                    "{} known reader(s), pruning ignored readers",
-                    reader_states.len()
-                );
+                // trace!(
+                //     "{} known reader(s), pruning ignored readers",
+                //     reader_states.len()
+                // );
                 // Remove all disconnected readers
                 reader_states.retain(|state| {
                     !state
@@ -158,15 +158,15 @@ impl NFCDeviceWatcher {
                         .intersects(State::UNKNOWN | State::IGNORE)
                 });
 
-                trace!("{} reader(s) remain after pruning", reader_states.len());
+                // trace!("{} reader(s) remain after pruning", reader_states.len());
 
                 // Get a list of readers right now
                 let readers = ctx.list_readers_owned()?;
-                trace!(
-                    "{} reader(s) currently connected: {:?}",
-                    readers.len(),
-                    readers
-                );
+                // trace!(
+                //     "{} reader(s) currently connected: {:?}",
+                //     readers.len(),
+                //     readers
+                // );
 
                 // Add any new readers to the list
                 for reader_name in readers {
@@ -181,7 +181,7 @@ impl NFCDeviceWatcher {
                 }
 
                 // Update view of current states
-                trace!("Updating {} reader states", reader_states.len());
+                // trace!("Updating {} reader states", reader_states.len());
                 for state in &mut reader_states {
                     state.sync_current_state();
                 }
@@ -191,14 +191,14 @@ impl NFCDeviceWatcher {
 
                 if let Err(e) = r {
                     if e == pcsc::Error::Timeout {
-                        trace!("Timeout from get_status_change");
+                        // trace!("Timeout from get_status_change");
                         continue;
                     } else {
                         r?;
                     }
                 }
 
-                trace!("Updated reader states");
+                // trace!("Updated reader states");
                 for state in &reader_states {
                     if state.name() == PNP_NOTIFICATION() {
                         continue;
