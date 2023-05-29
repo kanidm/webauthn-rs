@@ -4,9 +4,9 @@
 //! well as we'd like.
 use async_stream::stream;
 use futures::{
-    select,
+    select, select_biased,
     stream::{select_all, Empty, FusedStream},
-    StreamExt, select_biased,
+    StreamExt,
 };
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
@@ -89,114 +89,122 @@ impl<'b> Transport<'b> for AnyTransport {
 
     #[allow(unreachable_code)]
     async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
-        #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
-        {
-            error!("No transports available!");
+        // TODO: Bluetooth will probably be much slower (tens of seconds) to
+        // complete than the other transports (1 - 2 seconds), so it may be
+        // worth making "enumeration complete" optional for some transports.
+        //
+        // It could also be a problem if a delayed Bluetooth enumeration event
+        // means that a USB event after it "completed" would be missed.
+
+        // Bluetooth
+        let mut bluetooth_complete = !cfg!(feature = "bluetooth");
+        #[cfg(feature = "bluetooth")]
+        let bluetooth: BoxStream<TokenEvent<BluetoothToken>> =
+            match self.bluetooth.watch_tokens().await {
+                Err(e) => {
+                    error!("Bluetooth transport failure: {e:?}");
+                    bluetooth_complete = true;
+                    Box::pin(futures::stream::empty())
+                }
+                Ok(s) => s,
+            };
+
+        #[cfg(not(feature = "bluetooth"))]
+        let bluetooth: BoxStream<TokenEvent<AnyToken>> = Box::pin(futures::stream::empty());
+
+        let mut bluetooth = bluetooth.fuse();
+
+        // NFC
+        let mut nfc_complete = !cfg!(feature = "nfc");
+        #[cfg(feature = "nfc")]
+        let nfc: BoxStream<TokenEvent<NFCCard>> = if let Some(nfc) = &mut self.nfc {
+            match nfc.watch_tokens().await {
+                Err(e) => {
+                    error!("NFC transport failure: {e:?}");
+                    nfc_complete = true;
+                    Box::pin(futures::stream::empty())
+                }
+                Ok(s) => s,
+            }
+        } else {
+            nfc_complete = true;
+            Box::pin(futures::stream::empty())
+        };
+
+        #[cfg(not(feature = "nfc"))]
+        let nfc: BoxStream<TokenEvent<AnyToken>> = Box::pin(futures::stream::empty());
+
+        let mut nfc = nfc.fuse();
+
+        // USB HID
+        let mut usb_complete = !cfg!(feature = "usb");
+        #[cfg(feature = "usb")]
+        let usb: BoxStream<TokenEvent<USBToken>> = match self.usb.watch_tokens().await {
+            Err(e) => {
+                error!("USB transport failure: {e:?}");
+                usb_complete = true;
+                Box::pin(futures::stream::empty())
+            }
+            Ok(s) => s,
+        };
+
+        #[cfg(not(feature = "usb"))]
+        let usb: BoxStream<TokenEvent<AnyToken>> = Box::pin(futures::stream::empty());
+
+        let mut usb = usb.fuse();
+
+        if bluetooth_complete && nfc_complete && usb_complete {
+            error!("no transports available!");
             return Err(WebauthnCError::NotSupported);
         }
 
+        // Main stream
         let s = stream! {
-
-            let mut nfc_complete = false;
-            let nfc: BoxStream<TokenEvent<NFCCard>> = if let Some(nfc) = &mut self.nfc {
-                match nfc.watch_tokens().await {
-                    Err(e) => {
-                        error!("NFC transport failure: {e:?}");
-                        nfc_complete = true;
-                        Box::pin(futures::stream::empty())
-                    }
-                    Ok(s) => s,
-                }
-            } else {
-                nfc_complete = true;
-                Box::pin(futures::stream::empty())
-            };
-            let mut nfc = nfc.fuse();
-
-            let mut usb_complete = false;
-            let mut usb = self.usb.watch_tokens().await.unwrap().fuse();
-
-            
-            while !nfc.is_terminated() || !usb.is_terminated() {
+            while !bluetooth.is_terminated() || !nfc.is_terminated() || !usb.is_terminated() {
                 tokio::select! {
-                    Some(u) = usb.next() => {
-                        match u {
-                            TokenEvent::Added(u) => {yield TokenEvent::Added(AnyToken::Usb(u));},
-                            TokenEvent::Removed(i) => {yield TokenEvent::Removed(AnyTokenId::Usb(i));},
-                            TokenEvent::EnumerationComplete => {
-                                if nfc_complete {
-                                    trace!("Sending enumeration complete from USB");
-                                    yield TokenEvent::EnumerationComplete;
-                                }
-                                usb_complete = true;
+                    Some(b) = bluetooth.next() => {
+                        let a: TokenEvent<AnyToken> = b.into();
+                        if matches!(a, TokenEvent::EnumerationComplete) {
+                            if nfc_complete && usb_complete {
+                                trace!("Sending enumeration complete from Bluetooth");
+                                yield TokenEvent::EnumerationComplete;
                             }
+                            bluetooth_complete = true;
+                        } else {
+                            yield a;
                         }
                     }
 
                     Some(n) = nfc.next() => {
-                        trace!("NFC event: {n:?}");
-
-                        match n {
-                            TokenEvent::Added(n) => { yield TokenEvent::Added(AnyToken::Nfc(n)); }
-                            TokenEvent::Removed(i) => {yield TokenEvent::Removed(AnyTokenId::Nfc(i));},
-                            TokenEvent::EnumerationComplete => {
-                                if usb_complete {
-                                    trace!("Sending enumeration complete from NFC");
-                                    yield TokenEvent::EnumerationComplete;
-                                }
-                                nfc_complete = true;
+                        let a: TokenEvent<AnyToken> = n.into();
+                        if matches!(a, TokenEvent::EnumerationComplete) {
+                            if bluetooth_complete && usb_complete {
+                                trace!("Sending enumeration complete from NFC");
+                                yield TokenEvent::EnumerationComplete;
                             }
+                            nfc_complete = true;
+                        } else {
+                            yield a;
                         }
                     }
-                    
+
+                    Some(u) = usb.next() => {
+                        let a: TokenEvent<AnyToken> = u.into();
+                        if matches!(a, TokenEvent::EnumerationComplete) {
+                            if bluetooth_complete && nfc_complete {
+                                trace!("Sending enumeration complete from USB");
+                                yield TokenEvent::EnumerationComplete;
+                            }
+                            usb_complete = true;
+                        } else {
+                            yield a;
+                        }
+                    }
                 }
             }
         };
 
         Ok(Box::pin(s))
-/*
-        let (enumeration_tx, enumeration_rx) = mpsc::channel(1);
-        let enumeration_stream = Box::pin(ReceiverStream::new(enumeration_rx));
-        let (nfc_tx, mut nfc_rx) = mpsc::channel(1);
-        let (usb_tx, mut usb_rx) = mpsc::channel(1);
-
-        let usb: BoxStream<TokenEvent<Self::Token>> =
-            Box::pin(self.usb.watch_tokens().await?.filter_map(|e| async move {
-                match e {
-                    TokenEvent::Added(u) => Some(TokenEvent::Added(AnyToken::Usb(u))),
-                    TokenEvent::Removed(u) => Some(TokenEvent::Removed(AnyTokenId::Usb(u))),
-                    TokenEvent::EnumerationComplete => {
-                        usb_tx.clone().send(());
-                        None
-                    }
-                }
-            }));
-
-        tokio::spawn(async move {
-            // We don't actually care about the result, only that enumeration
-            // finished.
-            let _ = nfc_rx.recv().await;
-            let _ = usb_rx.recv().await;
-            enumeration_tx.send(TokenEvent::EnumerationComplete);
-            todo!()
-        });
-
-        // #[cfg(feature = "bluetooth")]
-        // o.extend(
-        //     self.bluetooth
-        //         .tokens()
-        //         .await?
-        //         .into_iter()
-        //         .map(AnyToken::Bluetooth),
-        // );
-
-        // #[cfg(feature = "nfc")]
-        // if let Some(nfc) = &mut self.nfc {
-        //     o.extend(nfc.tokens().await?.into_iter().map(AnyToken::Nfc));
-        // }
-
-        Ok(Box::pin(select_all([nfc, usb, enumeration_stream])))
-         */
     }
 
     async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
@@ -307,6 +315,39 @@ impl Token for AnyToken {
             AnyToken::Nfc(n) => n.has_button(),
             #[cfg(feature = "usb")]
             AnyToken::Usb(u) => u.has_button(),
+        }
+    }
+}
+
+#[cfg(feature = "bluetooth")]
+impl From<TokenEvent<BluetoothToken>> for TokenEvent<AnyToken> {
+    fn from(e: TokenEvent<BluetoothToken>) -> Self {
+        match e {
+            TokenEvent::Added(t) => TokenEvent::Added(AnyToken::Bluetooth(t)),
+            TokenEvent::Removed(i) => TokenEvent::Removed(AnyTokenId::Bluetooth(i)),
+            TokenEvent::EnumerationComplete => TokenEvent::EnumerationComplete,
+        }
+    }
+}
+
+#[cfg(feature = "nfc")]
+impl From<TokenEvent<NFCCard>> for TokenEvent<AnyToken> {
+    fn from(e: TokenEvent<NFCCard>) -> Self {
+        match e {
+            TokenEvent::Added(t) => TokenEvent::Added(AnyToken::Nfc(t)),
+            TokenEvent::Removed(i) => TokenEvent::Removed(AnyTokenId::Nfc(i)),
+            TokenEvent::EnumerationComplete => TokenEvent::EnumerationComplete,
+        }
+    }
+}
+
+#[cfg(feature = "usb")]
+impl From<TokenEvent<USBToken>> for TokenEvent<AnyToken> {
+    fn from(e: TokenEvent<USBToken>) -> Self {
+        match e {
+            TokenEvent::Added(t) => TokenEvent::Added(AnyToken::Usb(t)),
+            TokenEvent::Removed(i) => TokenEvent::Removed(AnyTokenId::Usb(i)),
+            TokenEvent::EnumerationComplete => TokenEvent::EnumerationComplete,
         }
     }
 }

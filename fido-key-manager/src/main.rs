@@ -275,7 +275,10 @@ async fn main() {
             while let Some(event) = stream.next().await {
                 match event {
                     TokenEvent::Added(t) => {
-                        let authenticator = CtapAuthenticator::new(t, &ui).await.unwrap();
+                        let authenticator = match CtapAuthenticator::new(t, &ui).await {
+                            Some(a) => a,
+                            None => continue,
+                        };
                         println!("{}", authenticator.get_info());
                     },
                     TokenEvent::EnumerationComplete => {

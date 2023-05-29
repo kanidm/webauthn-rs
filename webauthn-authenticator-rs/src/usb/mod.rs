@@ -287,7 +287,13 @@ impl Token for USBToken {
                 self.cid = i.cid;
                 self.supports_ctap1 = i.supports_ctap1();
                 self.supports_ctap2 = i.supports_ctap2();
-                Ok(())
+
+                if self.supports_ctap2 {
+                    Ok(())
+                } else {
+                    error!("token does not support CTAP 2");
+                    Err(WebauthnCError::NotSupported)
+                }
             }
             e => {
                 error!("Unhandled response type: {:?}", e);

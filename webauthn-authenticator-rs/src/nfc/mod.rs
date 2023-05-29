@@ -61,8 +61,7 @@ use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
 use async_trait::async_trait;
-use futures::stream::{self, BoxStream};
-use futures::{Stream, StreamExt};
+use futures::{stream::BoxStream, Stream};
 use tokio::sync::mpsc;
 use tokio::task::{spawn_blocking, JoinHandle};
 use tokio_stream::wrappers::ReceiverStream;
@@ -75,7 +74,7 @@ use std::ffi::{CStr, CString};
 use std::fmt;
 use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
@@ -95,37 +94,29 @@ pub const APPLET_DF: [u8; 8] = [
     /* RID */ 0xA0, 0x00, 0x00, 0x06, 0x47, /* PIX */ 0x2F, 0x00, 0x01,
 ];
 
-struct ReaderInfo {
-    name: CString,
-    state: State,
-    atr: Vec<u8>,
-}
+/// List of strings, which if they appear in a PC/SC card reader's name,
+/// indicate we should ignore it.
+///
+/// **See:** [`is_ignored_reader()`]
+const IGNORED_READERS: [&str; 2] = [
+    // Nitrokey 3 exposes a CCID interface, which we can select the FIDO applet
+    // on, but it doesn't actually work.
+    "Nitrokey",
+    // YubiKey exposes a CCID interface when OpenGPG or PIV support is enabled,
+    // and this interface doesn't support FIDO.
+    "YubiKey",
+];
 
-impl ReaderInfo {
-    /// Create a new [ReaderInfo] in the `UNAWARE` state
-    fn new(name: CString) -> Self {
-        Self {
-            name,
-            state: State::UNAWARE,
-            atr: vec![],
+/// Is the PC/SC card reader one which should be ignored?
+fn ignored_reader(reader_name: &CStr) -> bool {
+    let reader_name = match reader_name.as_ref().to_str() {
+        Ok(r) => r,
+        Err(e) => {
+            error!("could not convert {reader_name:?} to UTF-8: {e:?}");
+            return false;
         }
-    }
-}
-
-impl From<ReaderInfo> for pcsc::ReaderState {
-    fn from(i: ReaderInfo) -> Self {
-        ReaderState::new(i.name.clone(), i.state)
-    }
-}
-
-impl From<pcsc::ReaderState> for ReaderInfo {
-    fn from(s: pcsc::ReaderState) -> Self {
-        Self {
-            name: s.name().to_owned(),
-            state: s.event_state(),
-            atr: s.atr().to_vec(),
-        }
-    }
+    };
+    IGNORED_READERS.iter().any(|i| reader_name.contains(i))
 }
 
 struct NFCDeviceWatcher {
@@ -174,8 +165,17 @@ impl NFCDeviceWatcher {
                         .iter()
                         .any(|s| s.name() == reader_name.as_ref())
                     {
-                        // New reader
-                        trace!("New reader: {:?}", reader_name);
+                        // We still need to keep track of ignored readers, so
+                        // that we don't get spurious PNP_NOTIFICATION events
+                        // for them.
+                        trace!(
+                            "New reader: {reader_name:?} {}",
+                            if ignored_reader(&reader_name) {
+                                "(ignored)"
+                            } else {
+                                ""
+                            }
+                        );
                         reader_states.push(ReaderState::new(reader_name, State::UNAWARE));
                     }
                 }
@@ -200,22 +200,32 @@ impl NFCDeviceWatcher {
 
                 // trace!("Updated reader states");
                 for state in &reader_states {
-                    if state.name() == PNP_NOTIFICATION() {
+                    if state.name() == PNP_NOTIFICATION()
+                        || !state.event_state().contains(State::CHANGED)
+                        || ignored_reader(state.name())
+                    {
                         continue;
                     }
-                    trace!("Reader {:?} current_state: {:?}, event_state: {:?}", state.name(), state.current_state(), state.event_state());
-                    if !state.event_state().contains(State::CHANGED) {
-                        continue;
-                    }
+                    trace!(
+                        "Reader {:?} current_state: {:?}, event_state: {:?}",
+                        state.name(),
+                        state.current_state(),
+                        state.event_state()
+                    );
 
-                    if state.event_state().intersects(State::INUSE | State::EXCLUSIVE) {
+                    if state
+                        .event_state()
+                        .intersects(State::INUSE | State::EXCLUSIVE)
+                    {
                         // TODO: The card could have been captured by something
                         // else, and we try again later.
                         trace!("ignoring in-use card");
                         continue;
                     }
 
-                    if state.event_state().contains(State::PRESENT) && !state.current_state().contains(State::PRESENT) {
+                    if state.event_state().contains(State::PRESENT)
+                        && !state.current_state().contains(State::PRESENT)
+                    {
                         if let Ok(mut card) = NFCCard::new(ctx.clone(), state.name(), state.atr()) {
                             let tx = tx.clone();
                             tokio::spawn(async move {
@@ -229,7 +239,9 @@ impl NFCDeviceWatcher {
                                 };
                             });
                         }
-                    } else if state.current_state().contains(State::EMPTY) && !state.current_state().contains(State::EMPTY) {
+                    } else if state.current_state().contains(State::EMPTY)
+                        && !state.current_state().contains(State::EMPTY)
+                    {
                         if tx
                             .blocking_send(TokenEvent::Removed(state.name().to_owned()))
                             .is_err()
@@ -318,26 +330,6 @@ impl NFCTransport {
             ctx: Context::establish(scope).map_err(WebauthnCError::PcscError)?,
         })
     }
-
-    /*
-
-       pub fn wait_for_card(&mut self) -> Result<NFCCard, WebauthnCError> {
-           loop {
-               self.update_reader_states()?;
-               // Check every reader ...
-               for reader_info in &self.reader_infos {
-                   //trace!("rdr_state: {:?}", read_state);
-                   if reader_info.state.contains(State::PRESENT) {
-                       let card = NFCCard::new(self, &reader_info.name, &reader_info.atr);
-                       match card {
-                           Ok(c) => return Ok(c),
-                           Err(e) => error!("Error accessing card: {:?}", e),
-                       }
-                   }
-               }
-           } // end loop.
-       }
-    */
 }
 
 #[async_trait]
@@ -475,6 +467,7 @@ impl NFCCard {
         trace!("ATR: {}", hex::encode(atr));
         let atr = Atr::try_from(atr)?;
         trace!("Parsed: {:?}", &atr);
+        trace!("issuer data: {:?}", atr.card_issuers_data_str());
 
         if atr.storage_card {
             return Err(WebauthnCError::StorageCard);
@@ -591,6 +584,31 @@ impl Token for NFCCard {
 
     async fn cancel(&mut self) -> Result<(), WebauthnCError> {
         // There does not appear to be a "cancel" command over NFC.
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn ignored_readers() -> Result<(), Box<dyn std::error::Error>> {
+        let _ = tracing_subscriber::fmt().try_init();
+
+        // CCID interfaces on tokens
+        assert!(ignored_reader(&CStr::from_bytes_with_nul(
+            b"Nitrokey Nitrokey 3\0"
+        )?));
+        assert!(ignored_reader(&CStr::from_bytes_with_nul(
+            b"Yubico YubiKey FIDO+CCID\0"
+        )?));
+
+        // Smartcard readers
+        assert!(!ignored_reader(&CStr::from_bytes_with_nul(
+            b"ACS ACR122U PICC Interface\0"
+        )?));
+
         Ok(())
     }
 }
