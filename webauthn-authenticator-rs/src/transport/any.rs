@@ -3,13 +3,7 @@
 //! This is still a work in progress, and doesn't yet handle tokens quite as
 //! well as we'd like.
 use async_stream::stream;
-use futures::{
-    select, select_biased,
-    stream::{select_all, Empty, FusedStream},
-    StreamExt,
-};
-use tokio::sync::{mpsc, oneshot};
-use tokio_stream::wrappers::ReceiverStream;
+use futures::{stream::FusedStream, StreamExt};
 
 #[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
 use crate::bluetooth::*;
@@ -200,6 +194,8 @@ impl<'b> Transport<'b> for AnyTransport {
                             yield a;
                         }
                     }
+
+                    else => continue,
                 }
             }
         };

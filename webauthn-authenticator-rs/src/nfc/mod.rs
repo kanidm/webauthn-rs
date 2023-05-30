@@ -142,6 +142,7 @@ impl NFCDeviceWatcher {
                 //     "{} known reader(s), pruning ignored readers",
                 //     reader_states.len()
                 // );
+
                 // Remove all disconnected readers
                 reader_states.retain(|state| {
                     !state
@@ -158,6 +159,22 @@ impl NFCDeviceWatcher {
                 //     readers.len(),
                 //     readers
                 // );
+
+                if readers.is_empty() && !enumeration_complete {
+                    // When there are no real readers connected (ie: other than
+                    // PNP_NOTIFICATION), get_status_change() waits for either
+                    // a reader to be connected, or timeout (1 second)... which
+                    // is quite slow.
+                    //
+                    // When there are real reader(s), get_status_change
+                    // immediately reports status change(s) for anything in the
+                    // UNAWARE state.
+                    enumeration_complete = true;
+                    if tx.blocking_send(TokenEvent::EnumerationComplete).is_err() {
+                        // Channel lost!
+                        break 'main;
+                    }
+                }
 
                 // Add any new readers to the list
                 for reader_name in readers {
@@ -190,11 +207,16 @@ impl NFCDeviceWatcher {
                 let r = ctx.get_status_change(Duration::from_secs(1), &mut reader_states);
 
                 if let Err(e) = r {
-                    if e == pcsc::Error::Timeout {
-                        // trace!("Timeout from get_status_change");
-                        continue;
-                    } else {
-                        r?;
+                    use pcsc::Error::*;
+                    match e {
+                        Timeout | UnknownReader => {
+                            continue;
+                        },
+
+                        e => {
+                            error!("while watching for PC/SC status changes: {e:?}");
+                            r?;
+                        }
                     }
                 }
 
@@ -253,6 +275,9 @@ impl NFCDeviceWatcher {
                 }
 
                 if !enumeration_complete {
+                    // This condition is hit when there was at least one real
+                    // reader connected on the first loop (which was in the
+                    // UNAWARE state).
                     enumeration_complete = true;
                     if tx.blocking_send(TokenEvent::EnumerationComplete).is_err() {
                         // Channel lost!
@@ -597,17 +622,33 @@ mod test {
         let _ = tracing_subscriber::fmt().try_init();
 
         // CCID interfaces on tokens
-        assert!(ignored_reader(&CStr::from_bytes_with_nul(
-            b"Nitrokey Nitrokey 3\0"
-        )?));
-        assert!(ignored_reader(&CStr::from_bytes_with_nul(
-            b"Yubico YubiKey FIDO+CCID\0"
-        )?));
+        const IGNORED: [&'static str; 3] = [
+            "Nitrokey Nitrokey 3",
+            "Nitrokey Nitrokey 3 [CCID/ICCD Interface] 00 00",
+            "Yubico YubiKey FIDO+CCID",
+        ];
 
         // Smartcard readers
-        assert!(!ignored_reader(&CStr::from_bytes_with_nul(
-            b"ACS ACR122U PICC Interface\0"
-        )?));
+        const ALLOWED: [&'static str; 4] = [
+            "ACS ACR122U 00 00",
+            "ACS ACR122U 01 00",
+            "ACS ACR122U PICC Interface",
+            "ACS ACR123 3S Reader [ACR123U-PICC] (1.00.xx) 00 00",
+        ];
+
+        for n in IGNORED {
+            assert!(
+                ignored_reader(&CString::new(n)?),
+                "expected {n} to be ignored"
+            );
+        }
+
+        for n in ALLOWED {
+            assert!(
+                !ignored_reader(&CString::new(n)?),
+                "expected {n} to be allowed"
+            );
+        }
 
         Ok(())
     }
