@@ -13,10 +13,11 @@ rust-version = "1.66.0"
 build = "build.rs"
 
 [features]
+bluetooth = ["webauthn-authenticator-rs/bluetooth"]
 nfc = ["webauthn-authenticator-rs/nfc"]
 usb = ["webauthn-authenticator-rs/usb"]
 
-default = ["nfc", "usb"]
+default = ["bluetooth", "nfc", "usb"]
 
 [dependencies]
 webauthn-authenticator-rs = { workspace = true, features = ["ui-cli", "ctap2-management"] }

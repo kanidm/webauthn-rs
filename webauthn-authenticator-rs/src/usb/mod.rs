@@ -71,6 +71,7 @@ pub struct USBToken {
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
+    initialised: bool,
 }
 
 impl fmt::Debug for USBTransport {
@@ -85,6 +86,7 @@ impl fmt::Debug for USBToken {
             .field("cid", &self.cid)
             .field("supports_ctap1", &self.supports_ctap1)
             .field("supports_ctap2", &self.supports_ctap2)
+            .field("initialised", &self.initialised)
             .finish()
     }
 }
@@ -110,8 +112,12 @@ impl<'b> Transport<'b> for USBTransport {
             match event {
                 WatchEvent::Added(d) => {
                     if let Ok(dev) = d.open().await {
-                        let token = USBToken::new(dev);
-                        Some(TokenEvent::Added(token))
+                        let mut token = USBToken::new(dev);
+                        if let Ok(()) = token.init().await {
+                            Some(TokenEvent::Added(token))
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
@@ -164,6 +170,7 @@ impl USBToken {
             cid: 0,
             supports_ctap1: false,
             supports_ctap2: false,
+            initialised: false,
         }
     }
 
@@ -225,6 +232,11 @@ impl Token for USBToken {
     where
         U: UiCallback,
     {
+        if !self.initialised {
+            error!("attempted to transmit to uninitialised token");
+            return Err(WebauthnCError::Internal);
+        }
+
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CBOR,
@@ -268,6 +280,11 @@ impl Token for USBToken {
     }
 
     async fn init(&mut self) -> Result<(), WebauthnCError> {
+        if self.initialised {
+            warn!("attempted to init an already-initialised token");
+            return Ok(())
+        }
+
         // Setup a channel to communicate with the device (CTAPHID_INIT).
         let mut nonce: [u8; 8] = [0; 8];
         rand_bytes(&mut nonce)?;
@@ -289,6 +306,7 @@ impl Token for USBToken {
                 self.supports_ctap2 = i.supports_ctap2();
 
                 if self.supports_ctap2 {
+                    self.initialised = true;
                     Ok(())
                 } else {
                     error!("token does not support CTAP 2");
@@ -311,6 +329,11 @@ impl Token for USBToken {
     }
 
     async fn cancel(&mut self) -> Result<(), WebauthnCError> {
+        if !self.initialised {
+            error!("attempted to cancel uninitialised token");
+            return Err(WebauthnCError::Internal);
+        }
+
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CANCEL,

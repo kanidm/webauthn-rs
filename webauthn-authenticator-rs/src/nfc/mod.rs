@@ -116,7 +116,16 @@ fn ignored_reader(reader_name: &CStr) -> bool {
             return false;
         }
     };
-    IGNORED_READERS.iter().any(|i| reader_name.contains(i))
+    
+    let r = IGNORED_READERS.iter().any(|i| reader_name.contains(i));
+
+    #[cfg(nfc_allow_ignored_readers)]
+    if r {
+        warn!("allowing ignored reader: {reader_name:?}");
+        return false;
+    }
+
+    r
 }
 
 struct NFCDeviceWatcher {
@@ -253,7 +262,7 @@ impl NFCDeviceWatcher {
                             tokio::spawn(async move {
                                 match card.init().await {
                                     Ok(()) => {
-                                        tx.send(TokenEvent::Added(card)).await;
+                                        let _ = tx.send(TokenEvent::Added(card)).await;
                                     }
                                     Err(e) => {
                                         error!("initialising card: {e:?}");
@@ -314,6 +323,7 @@ pub struct NFCCard {
     card: Mutex<Card>,
     reader_name: CString,
     pub atr: Atr,
+    initialised: bool,
 }
 
 impl fmt::Debug for NFCTransport {
@@ -327,6 +337,7 @@ impl fmt::Debug for NFCCard {
         f.debug_struct("NFCCard")
             .field("reader_name", &self.reader_name)
             .field("atr", &self.atr)
+            .field("initialised", &self.initialised)
             .finish()
     }
 }
@@ -509,6 +520,7 @@ impl NFCCard {
             card: Mutex::new(card),
             reader_name: reader_name.to_owned(),
             atr,
+            initialised: false,
         })
     }
 
@@ -538,6 +550,10 @@ impl Token for NFCCard {
     where
         U: UiCallback,
     {
+        if !self.initialised {
+            error!("attempted to transmit to uninitialised card");
+            return Err(WebauthnCError::Internal);
+        }
         // let apdu = cmd.to_extended_apdu().map_err(|_| WebauthnCError::Cbor)?;
         // let mut resp = self.transmit(&apdu, &ISO7816LengthForm::ExtendedOnly)?;
 
@@ -568,6 +584,18 @@ impl Token for NFCCard {
     /// This may fail with "permission denied" on Windows 10 build 1903 or
     /// later, unless the program is run as Administrator.
     async fn init(&mut self) -> Result<(), WebauthnCError> {
+        if self.initialised {
+            warn!("attempted to init an already-initialised card");
+            return Ok(())
+        } else {
+            // FIXME: macOS likes to drop in on our **exclusive** connection with a
+            // SELECT(a0 00 00 03 08 00 00 10 00 01 00) (for the PIV applet). This
+            // seems to confuse some cards.
+            //
+            // So, lets wait a moment for it to butt in.
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
         let guard = self.card.lock()?;
         let resp = transmit(
             guard.deref(),
@@ -585,10 +613,17 @@ impl Token for NFCCard {
             return Err(WebauthnCError::NotSupported);
         }
 
+        self.initialised = true;
         Ok(())
     }
 
     async fn close(&mut self) -> Result<(), WebauthnCError> {
+        if !self.initialised {
+            // Card wasn't initialised, but close() may be called
+            // unconditionally.
+            return Ok(());
+        }
+
         let guard = self.card.lock()?;
         let resp = transmit(
             guard.deref(),

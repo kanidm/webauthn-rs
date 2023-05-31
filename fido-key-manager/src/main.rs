@@ -1,6 +1,6 @@
-#[cfg(not(any(feature = "nfc", feature = "usb")))]
+#[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
 compile_error!(
-    "you must build this tool with either the 'nfc' or 'usb' feature for it to do something useful"
+    "you must build this tool with either the 'bluetooth', 'nfc' and/or 'usb' feature(s) for it to do something useful"
 );
 
 extern crate tracing;

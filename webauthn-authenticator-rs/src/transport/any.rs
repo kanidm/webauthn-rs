@@ -42,7 +42,7 @@ pub enum AnyTokenId {
     /// No-op stub entry, never used.
     Stub,
     #[cfg(any(all(doc, not(doctest)), feature = "bluetooth"))]
-    Bluetooth(()),
+    Bluetooth(<BluetoothToken as Token>::Id),
     #[cfg(any(all(doc, not(doctest)), feature = "nfc"))]
     Nfc(<NFCCard as Token>::Id),
     #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
