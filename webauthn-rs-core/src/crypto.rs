@@ -98,7 +98,8 @@ impl TryFrom<(&[u8], COSEAlgorithm)> for X509PublicKey {
 }
 */
 
-pub(crate) fn verify_signature(
+/// Validate an x509 signature is valid for the supplied data
+pub fn verify_signature(
     alg: COSEAlgorithm,
     pubk: &x509::X509,
     signature: &[u8],
@@ -143,9 +144,13 @@ where
     }
 }
 
+/// TpmSanData
 pub struct TpmSanData<'a> {
+    /// Manufacturer
     pub manufacturer: &'a str,
+    /// Model
     pub model: &'a str,
+    /// Version
     pub version: &'a str,
 }
 
@@ -302,9 +307,9 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
     Ok(())
 }
 
+/// Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
+/// Statement Certificate Requirements.
 pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
-    // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
-    // Statement Certificate Requirements.
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
     let der_bytes = pubk.to_der()?;
     let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
@@ -726,7 +731,8 @@ impl COSEKey {
         }
     }
 
-    pub(crate) fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
+    /// Retrieve the public key of this COSEKey as an OpenSSL structure
+    pub fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
         match &self.key {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type

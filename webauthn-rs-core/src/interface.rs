@@ -19,8 +19,6 @@ use openssl::hash::MessageDigest;
 use openssl::{bn, ec, nid, pkey, x509};
 use uuid::Uuid;
 
-use sshkeys::PublicKey;
-
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
 pub type Aaguid = [u8; 16];
@@ -365,27 +363,6 @@ pub struct CredentialV3 {
     pub registration_policy: UserVerificationPolicy,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-/*
-#[serde(
-    try_from = "SerialisableAttestedPublicKey",
-    into = "SerialisableAttestedPublicKey"
-)]
-*/
-/// An attested public key. This contains the ssh public key as well as the
-/// attestation metadata.
-pub struct AttestedPublicKey {
-    /// The ssh public key
-    pub pubkey: PublicKey,
-    /// The set of registrations that were verified at registration, that can
-    /// be used in future authentication attempts
-    pub extensions: RegisteredExtensions,
-    /// The parser attestation data
-    pub attestation: ParsedAttestation,
-    /// The format of the attestation presented by the device.
-    pub attestation_format: AttestationFormat,
-}
-
 /// Serialised Attestation Data which can be stored in a stable database or similar.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SerialisableAttestationData {
@@ -645,13 +622,13 @@ pub struct AuthenticationSignedExtensions {
 
 /// Attested Credential Data
 #[derive(Debug, Clone)]
-pub(crate) struct AttestedCredentialData {
+pub struct AttestedCredentialData {
     /// The guid of the authenticator. May indicate manufacturer.
-    pub(crate) aaguid: Aaguid,
+    pub aaguid: Aaguid,
     /// The credential ID.
-    pub(crate) credential_id: CredentialID,
+    pub credential_id: CredentialID,
     /// The credentials public Key.
-    pub(crate) credential_pk: serde_cbor::Value,
+    pub credential_pk: serde_cbor::Value,
 }
 
 /// Information about the authentication that occured.

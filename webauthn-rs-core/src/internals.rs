@@ -1,3 +1,6 @@
+//! Internal structures for parsing webauthn registrations and challenges. This *may* change
+//! at anytime and should not be relied on in your library.
+
 use crate::attestation::AttestationFormat;
 use crate::error::WebauthnError;
 use crate::proto::*;
@@ -373,7 +376,7 @@ pub struct AuthenticatorData<T: Ceremony> {
     /// present on multiple devices.
     pub backup_state: bool,
     /// The optional attestation.
-    pub(crate) acd: Option<AttestedCredentialData>,
+    pub acd: Option<AttestedCredentialData>,
     /// Extensions supplied by the device.
     pub extensions: T::SignedExtensions,
 }
@@ -852,7 +855,7 @@ fn parse_tpmteccscheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtEccScheme
 // 6.4 TPM_ECC_CURVE
 #[derive(Debug, Clone, Copy)]
 #[repr(u16)]
-pub enum TpmiEccCurve {
+pub(crate) enum TpmiEccCurve {
     None = 0x0000,
     NistP192 = 0x0001,
     NistP224 = 0x0002,
@@ -919,7 +922,7 @@ fn parse_tpmtrsascheme(input: &[u8]) -> nom::IResult<&[u8], Option<TpmtRsaScheme
 
 #[derive(Debug)]
 /// Rsa Parameters.
-pub struct TpmsRsaParms {
+pub(crate) struct TpmsRsaParms {
     // TPMT_SYM_DEF_OBJECT + ALG_NULL
     _symmetric: Option<TpmtSymDefObject>,
     // TPMT_RSA_SCHEME+ (rsapss, rsassa, null)
@@ -928,7 +931,7 @@ pub struct TpmsRsaParms {
     _keybits: u16,
     // u32
     /// The Rsa Exponent
-    pub exponent: u32,
+    _exponent: u32,
 }
 
 fn tpmsrsaparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsRsaParms> {
@@ -942,7 +945,7 @@ fn tpmsrsaparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsRsaParms> {
             _symmetric: symmetric,
             _scheme: scheme,
             _keybits: keybits,
-            exponent,
+            _exponent: exponent,
         },
     ))
     /*
@@ -983,7 +986,7 @@ fn tpmseccparms_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsEccParms> {
 }
 
 #[derive(Debug)]
-pub struct TpmsEccParms {
+pub(crate) struct TpmsEccParms {
     _symmetric: Option<TpmtSymDefObject>,
     _scheme: Option<TpmtEccScheme>,
     /// The ID of the ECC curve in use
@@ -993,7 +996,7 @@ pub struct TpmsEccParms {
 
 #[derive(Debug)]
 /// Asymmetric Public Parameters
-pub enum TpmuPublicParms {
+pub(crate) enum TpmuPublicParms {
     // KeyedHash
     // Symcipher
     /// Rsa
@@ -1023,7 +1026,7 @@ fn parse_tpmupublicparms(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], Tpm
 
 /// 11.2.5.2 TPMS_ECC_POINT
 #[derive(Debug)]
-pub struct TpmsEccPoint {
+pub(crate) struct TpmsEccPoint {
     pub x: Vec<u8>,
     pub y: Vec<u8>,
 }
@@ -1050,7 +1053,7 @@ fn tpmseccpoint_parser(i: &[u8]) -> nom::IResult<&[u8], TpmsEccPoint> {
 
 #[derive(Debug)]
 /// Asymmetric Public Key
-pub enum TpmuPublicId {
+pub(crate) enum TpmuPublicId {
     // KeyedHash
     // Symcipher
     /// Rsa
@@ -1092,16 +1095,16 @@ fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPu
 
 #[derive(Debug)]
 /// Tpm Public Key Structure
-pub struct TpmtPublic {
+pub(crate) struct TpmtPublic {
     /// The type of public parms and key IE Ecdsa or Rsa
-    pub type_: TpmAlgId,
+    pub _type_: TpmAlgId,
     /// The hash type over pubarea (webauthn specific)
     pub name_alg: TpmAlgId,
     // TPMA_OBJECT
     /// Unused in webauthn.
-    pub object_attributes: u32,
+    pub _object_attributes: u32,
     /// Unused in webauthn.
-    pub auth_policy: Option<Vec<u8>>,
+    pub _auth_policy: Option<Vec<u8>>,
     //
     // TPMU_PUBLIC_PARMS
     /// Public Parameters
@@ -1139,18 +1142,18 @@ fn tpm2b_digest(i: &[u8]) -> nom::IResult<&[u8], Option<Vec<u8>>> {
 fn tpmtpublic_parser(i: &[u8]) -> nom::IResult<&[u8], TpmtPublic> {
     let (i, type_) = map_opt(be_u16, TpmAlgId::new)(i)?;
     let (i, name_alg) = map_opt(be_u16, TpmAlgId::new)(i)?;
-    let (i, object_attributes) = be_u32(i)?;
-    let (i, auth_policy) = tpm2b_digest(i)?;
+    let (i, _object_attributes) = be_u32(i)?;
+    let (i, _auth_policy) = tpm2b_digest(i)?;
     let (i, parameters) = parse_tpmupublicparms(i, type_)?;
     let (i, unique) = parse_tpmupublicid(i, type_)?;
 
     Ok((
         i,
         TpmtPublic {
-            type_,
+            _type_: type_,
             name_alg,
-            object_attributes,
-            auth_policy,
+            _object_attributes,
+            _auth_policy,
             parameters,
             unique,
         },
@@ -1197,7 +1200,7 @@ fn tpmtsignature_parser(input: &[u8]) -> nom::IResult<&[u8], TpmtSignature> {
 /// [1]: https://trustedcomputinggroup.org/wp-content/uploads/TCG-TPM-VendorIDRegistry-v1p06-r0p91-pub.pdf
 #[derive(Debug)]
 #[allow(clippy::upper_case_acronyms)]
-pub enum TpmVendor {
+pub(crate) enum TpmVendor {
     AMD,
     Atmel,
     Broadcom,

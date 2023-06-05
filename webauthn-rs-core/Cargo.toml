@@ -25,7 +25,6 @@ serde.workspace = true
 serde_cbor.workspace = true
 serde_json.workspace = true
 nom.workspace = true
-sshkeys = { path = "/Users/william/development/rust-sshkeys", features = ["serde"] }
 thiserror.workspace = true
 tracing.workspace = true
 openssl.workspace = true

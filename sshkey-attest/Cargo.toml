@@ -1,0 +1,26 @@
+[package]
+name = "sshkey-attest"
+version = "0.5.0-dev"
+authors = ["William Brown <william@blackhats.net.au>"]
+edition = "2021"
+rust-version = "1.66.0"
+description = "FIDO SK SSH Key Attestation"
+repository = "https://github.com/kanidm/webauthn-rs"
+readme = "README.md"
+keywords = ["ssh", "openssh", "parser", "attestation", "fido"]
+categories = ["authentication", "cryptography", "parser-implementations", "encoding"]
+license = "MPL-2.0"
+
+[dependencies]
+base64urlsafedata.workspace = true
+nom.workspace = true
+openssl.workspace = true
+serde.workspace = true
+serde_cbor.workspace = true
+sshkeys = { git = "https://github.com/dnaeon/rust-sshkeys.git", rev = "fa5bd02dd6e90ee724fdb981253c1e7726a7f534", features = ["serde"] }
+tracing.workspace = true
+uuid = { workspace = true, features = ["serde"] }
+webauthn-rs-core.workspace = true
+
+[dev-dependencies]
+tracing-subscriber.workspace = true
