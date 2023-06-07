@@ -7,7 +7,7 @@ description = "webauthn-rs caBLE tunnel server frontend"
 edition = "2021"
 keywords = ["cable", "hybrid", "fido", "webauthn"]
 license = "MPL-2.0"
-readme = "README.md"
+# readme = "README.md"
 repository = "https://github.com/kanidm/webauthn-rs/"
 rust-version = "1.66.0"
 
