@@ -21,7 +21,7 @@ use nix::{
     sys::signalfd::SigSet,
 };
 use num_traits::FromPrimitive;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, task::spawn_blocking};
 use tokio_stream::wrappers::ReceiverStream;
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
@@ -61,7 +61,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
         // udev::MonitorSocket and tokio_udev::AsyncMonitorSocket are not
         // Send/Sync), so we have to use a thread and ppoll() the fd:
         // https://github.com/jeandudey/tokio-udev/issues/13
-        thread::spawn(move || {
+        spawn_blocking(move || {
             let monitor = match MonitorBuilder::new()
                 .and_then(|b| b.match_subsystem("hidraw"))
                 .and_then(|b| b.listen())
