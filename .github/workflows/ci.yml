@@ -48,7 +48,7 @@ jobs:
       - if: runner.os != 'windows'
         run: |
           sudo apt-get update && \
-          sudo apt-get -y install libudev-dev libpcsclite-dev libusb-1.0-0-dev
+          sudo apt-get -y install libdbus-1-dev libpcsclite-dev libudev-dev libusb-1.0-0-dev
 
       - if: runner.os == 'windows'
         uses: johnwason/vcpkg-action@v4
@@ -199,7 +199,7 @@ jobs:
       # This tests that all the stubs work properly for optional dependencies,
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
-      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --exclude fido-hid-rs --no-deps --document-private-items
+      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v3
