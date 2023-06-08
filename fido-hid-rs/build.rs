@@ -2,7 +2,7 @@
 mod linux {
     use std::{env, path::PathBuf};
 
-    const WRAPPER_H: &'static str = "src/usb/platform/linux/wrapper.h";
+    const WRAPPER_H: &'static str = "src/linux/wrapper.h";
 
     pub fn headers() {
         println!("cargo:rerun-if-changed={WRAPPER_H}");

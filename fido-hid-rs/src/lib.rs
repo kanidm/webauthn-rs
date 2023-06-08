@@ -24,6 +24,7 @@ extern crate num_derive;
 #[macro_use]
 extern crate tracing;
 
+mod error;
 pub mod traits;
 
 #[cfg(any(test, target_os = "linux"))]
@@ -34,7 +35,7 @@ mod descriptors;
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 pub mod os;
 
-use thiserror::Error;
+pub use crate::error::{HidError, Result};
 
 // u2f_hid.h
 const FIDO_USAGE_PAGE: u16 = 0xf1d0;
@@ -45,19 +46,3 @@ const U2FHID_TRANS_TIMEOUT: i32 = 3000;
 
 pub type HidReportBytes = [u8; HID_RPT_SIZE];
 pub type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
-
-pub type Result<T> = std::result::Result<T, HidError>;
-
-#[derive(Debug, Error, PartialEq, Eq, PartialOrd, Ord)]
-pub enum HidError {
-    #[error("I/O error communicating with device: {0}")]
-    IoError(String),
-    #[error("internal error, likely library bug")]
-    Internal,
-    #[error("attempted to communicate with a closed device")]
-    Closed,
-    #[error("device sent an unexpected message length")]
-    InvalidMessageLength,
-    #[error("could not send data to device")]
-    SendError,
-}
