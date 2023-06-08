@@ -83,13 +83,6 @@ impl<'b> Transport<'b> for AnyTransport {
 
     #[allow(unreachable_code)]
     async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
-        // TODO: Bluetooth will probably be much slower (tens of seconds) to
-        // complete than the other transports (1 - 2 seconds), so it may be
-        // worth making "enumeration complete" optional for some transports.
-        //
-        // It could also be a problem if a delayed Bluetooth enumeration event
-        // means that a USB event after it "completed" would be missed.
-
         // Bluetooth
         let mut bluetooth_complete = !cfg!(feature = "bluetooth");
         #[cfg(feature = "bluetooth")]

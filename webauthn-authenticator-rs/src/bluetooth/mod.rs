@@ -44,7 +44,7 @@ use btleplug::{
 use futures::{executor::block_on, stream::BoxStream, Stream, StreamExt};
 use tokio::{
     sync::mpsc,
-    task::{spawn_blocking, JoinHandle},
+    task::{spawn, spawn_blocking, JoinHandle},
     time::sleep,
 };
 use tokio_stream::wrappers::ReceiverStream;
@@ -128,8 +128,12 @@ impl BluetoothDeviceWatcher {
         adapter.start_scan(filter).await?;
 
         let mut events = adapter.events().await?;
+        if let Err(e) = tx.send(TokenEvent::EnumerationComplete).await {
+            error!("could not send Bluetooth EnumerationComplete: {e:?}");
+            return Err(WebauthnCError::Internal);
+        }
 
-        tokio::spawn(async move {
+        spawn(async move {
             // We need to track recently connected devices so that we don't get
             // stuck in loops. There's also Hideez which continues transmitting
             // advertisements for 30 seconds after use, even when the LED is
@@ -339,68 +343,32 @@ impl BluetoothTransport {
             manager: Manager::new().await?,
         })
     }
-
-    async fn scan(&self) -> Result<Vec<BluetoothToken>, WebauthnCError> {
-        // https://github.com/deviceplug/btleplug/blob/master/examples/subscribe_notify_characteristic.rs
-        let adapters = self.manager.adapters().await?;
-        let adapter = adapters
-            .into_iter()
-            .next()
-            .ok_or(WebauthnCError::NoBluetoothAdapter)?;
-        // TODO: filtering
-        adapter.start_scan(ScanFilter::default()).await?;
-        // TODO: this should probably be longer because you need to press a button
-        trace!("waiting for scan");
-        sleep(Duration::from_secs(5)).await;
-        adapter.stop_scan().await?;
-        let peripherals = adapter.peripherals().await?;
-        let mut o = Vec::new();
-
-        if peripherals.is_empty() {
-            trace!("No devices found");
-            return Ok(o);
-        }
-
-        for peripheral in peripherals.into_iter() {
-            let properties = peripheral.properties().await?;
-            trace!(?peripheral);
-            trace!(?properties);
-            let properties = if let Some(p) = properties {
-                p
-            } else {
-                trace!("No properties available, skipping");
-                continue;
-            };
-
-            if !properties.services.contains(&FIDO_GATT_SERVICE) {
-                trace!("Device is not a FIDO token, skipping");
-                continue;
-            }
-
-            // let local_name = properties
-            //     .local_name
-            //     .unwrap_or(String::from("(peripheral name unknown)"));
-            // trace!(
-            //     "Peripheral {:?} is connected: {:?}",
-            //     &local_name,
-            //     is_connected
-            // );
-            o.push(BluetoothToken::new(peripheral));
-        }
-
-        Ok(o)
-    }
 }
 
 #[async_trait]
 impl<'b> Transport<'b> for BluetoothTransport {
     type Token = BluetoothToken;
 
+    /// ## Important
+    ///
+    /// [`get_devices`] is unsupported for [BluetoothTransport], as BTLE
+    /// authenticator connections are very short-lived and timing sensitive.
+    /// 
+    /// This method will always return an empty `Vec` of devices.
+    /// 
+    /// Use [`watch_tokens`] instead.
     async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
         warn!("get_devices is not supported for Bluetooth devices, use watch_tokens");
         Ok(vec![])
     }
 
+    /// Watches for and connects to nearby Bluetooth Low Energy authenticators.
+    /// 
+    /// ## Note
+    /// 
+    /// Due to the nature of the Bluetooth Low Energy transport,
+    /// [BluetoothTransport] immediately emits a
+    /// [TokenEvent::EnumerationComplete] event as soon as it starts.
     async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         trace!("Scanning for BTLE tokens");
         let stream = BluetoothDeviceWatcher::new(self, Duration::from_secs(10)).await?;
