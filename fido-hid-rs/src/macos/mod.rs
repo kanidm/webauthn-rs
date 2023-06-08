@@ -32,10 +32,12 @@ use core_foundation::{
 use futures::{stream::BoxStream, Stream};
 use libc::c_void;
 use std::{
-    fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, thread,
-    time::Duration,
+    fmt, marker::PhantomPinned, mem::size_of, pin::Pin, slice::from_raw_parts, time::Duration,
 };
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    sync::mpsc::{self, Receiver, Sender},
+    task::spawn_blocking,
+};
 use tokio_stream::wrappers::ReceiverStream;
 
 mod iokit;
@@ -44,7 +46,10 @@ use self::iokit::{
     CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef,
     IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn, Sendable,
 };
-use crate::{traits::*, HidError, HidReportBytes, HidSendReportBytes, Result};
+use crate::{
+    HidError, HidReportBytes, HidSendReportBytes, Result, USBDevice, USBDeviceInfo,
+    USBDeviceManager, WatchEvent,
+};
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
 
@@ -66,7 +71,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
         let (observer_tx, mut observer_rx) = mpsc::channel(1);
         let stream = ReceiverStream::from(rx);
 
-        tokio::task::spawn_blocking(move || {
+        spawn_blocking(move || {
             let context = &observer_tx as *const _ as *mut c_void;
             let obs = CFRunLoopEntryObserver::new(Self::observe, context);
             obs.add_to_current_runloop();
@@ -267,7 +272,7 @@ impl USBDeviceImpl {
 
         let (observer_tx, mut observer_rx) = mpsc::channel(1);
 
-        thread::spawn(move || {
+        spawn_blocking(move || {
             // trace!("started device thread");
             let context = &observer_tx as *const _ as *mut c_void;
             let obs = CFRunLoopEntryObserver::new(Self::observe, context);
