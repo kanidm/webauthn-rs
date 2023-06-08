@@ -35,6 +35,8 @@ pub enum WebauthnCError {
     MissingRequiredField,
     /// The provided `friendly_name` was too long.
     FriendlyNameTooLong,
+    #[cfg(feature = "usb")]
+    HidError(fido_hid_rs::HidError),
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),
     /// No HID devices were detected **at all**. This may indicate a permissions
@@ -73,6 +75,13 @@ pub enum WebauthnCError {
 impl From<pcsc::Error> for WebauthnCError {
     fn from(e: pcsc::Error) -> Self {
         Self::PcscError(e)
+    }
+}
+
+#[cfg(feature = "usb")]
+impl From<fido_hid_rs::HidError> for WebauthnCError {
+    fn from(e: fido_hid_rs::HidError) -> Self {
+        Self::HidError(e)
     }
 }
 

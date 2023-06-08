@@ -20,11 +20,8 @@ use windows::{
 };
 
 use crate::{
-    error::WebauthnCError,
-    usb::{
-        platform::traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
-        HidReportBytes, HidSendReportBytes, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID,
-    },
+    traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
+    HidError, HidReportBytes, HidSendReportBytes, Result, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID,
 };
 
 pub struct WindowsDeviceWatcher {
@@ -39,24 +36,24 @@ lazy_static! {
 }
 
 trait WindowsErrorMapper<T> {
-    fn map_win_err(self, msg: &str) -> Result<T, WebauthnCError>;
+    fn map_win_err(self, msg: &str) -> Result<T>;
 }
 
 impl<T> WindowsErrorMapper<T> for windows::core::Result<T> {
-    fn map_win_err(self, msg: &str) -> Result<T, WebauthnCError> {
+    fn map_win_err(self, msg: &str) -> Result<T> {
         self.map_err(|e| {
             // TODO: sensible things
             error!("{msg}: {e}");
-            WebauthnCError::Internal
+            HidError::Internal
         })
     }
 }
 
 impl WindowsDeviceWatcher {
-    fn new() -> Result<Self, WebauthnCError> {
+    fn new() -> Result<Self> {
         let watcher = DeviceInformation::CreateWatcherAqsFilter(&FIDO_SELECTOR).map_err(|e| {
             error!("creating DeviceWatcher: {e}");
-            WebauthnCError::Internal
+            HidError::Internal
         })?;
 
         let watcher = Box::pin(watcher);
@@ -133,12 +130,14 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     type DeviceInfo = USBDeviceInfoImpl;
     type DeviceId = HSTRING;
 
-    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>, WebauthnCError> {
+    async fn watch_devices(
+        &mut self,
+    ) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
         trace!("watch_devices");
         Ok(Box::pin(WindowsDeviceWatcher::new()?))
     }
 
-    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>, WebauthnCError> {
+    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>> {
         let ret = DeviceInformation::FindAllAsyncAqsFilter(&FIDO_SELECTOR)
             .map_win_err("getting DeviceInformation::FindAllAsyncAqsFilter future")?
             .await
@@ -152,7 +151,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
             .collect())
     }
 
-    fn new() -> Result<Self, WebauthnCError> {
+    fn new() -> Result<Self> {
         Ok(Self {})
     }
 }
@@ -166,7 +165,7 @@ impl USBDeviceInfo for USBDeviceInfoImpl {
     type Device = USBDeviceImpl;
     type Id = HSTRING;
 
-    async fn open(self) -> Result<Self::Device, WebauthnCError> {
+    async fn open(self) -> Result<Self::Device> {
         USBDeviceImpl::new(self).await
     }
 }
@@ -197,7 +196,7 @@ impl Drop for USBDeviceImpl {
 }
 
 impl USBDeviceImpl {
-    async fn new(info: USBDeviceInfoImpl) -> Result<Self, WebauthnCError> {
+    async fn new(info: USBDeviceInfoImpl) -> Result<Self> {
         trace!("Opening device: {info:?}");
         let device_id = info.info.Id().map_win_err("unable to get device ID")?;
 
@@ -238,9 +237,9 @@ impl USBDevice for USBDeviceImpl {
         &self.info
     }
 
-    async fn read(&mut self) -> Result<HidReportBytes, WebauthnCError> {
+    async fn read(&mut self) -> Result<HidReportBytes> {
         let ret = self.rx.recv().await;
-        let ret = ret.ok_or(WebauthnCError::Closed)?;
+        let ret = ret.ok_or(HidError::Closed)?;
         let buf = ret
             .Data()
             .map_win_err("reading HidInputReport (HidInputReport::Data)")?;
@@ -248,7 +247,7 @@ impl USBDevice for USBDeviceImpl {
             .Length()
             .map_win_err("reading HidInputReport (IBuffer::Length)")? as usize;
         if len != size_of::<HidReportBytes>() + 1 {
-            return Err(WebauthnCError::InvalidMessageLength);
+            return Err(HidError::InvalidMessageLength);
         }
         let dr = DataReader::FromBuffer(&buf)
             .map_win_err("reading HidInputReport (DataReader::FromBuffer)")?;
@@ -262,7 +261,7 @@ impl USBDevice for USBDeviceImpl {
         Ok(o)
     }
 
-    async fn write(&mut self, data: HidSendReportBytes) -> Result<(), WebauthnCError> {
+    async fn write(&mut self, data: HidSendReportBytes) -> Result<()> {
         let report = self
             .device
             .CreateOutputReportById(data[0] as u16)
@@ -289,7 +288,7 @@ impl USBDevice for USBDeviceImpl {
 
         if ret as usize != size_of::<HidSendReportBytes>() {
             error!("unexpected HidDevice::SendOutputReportAsync length ({ret})");
-            return Err(WebauthnCError::ApduTransmission);
+            return Err(HidError::SendError);
         }
         Ok(())
     }

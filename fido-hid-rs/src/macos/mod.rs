@@ -41,18 +41,12 @@ use tokio_stream::wrappers::ReceiverStream;
 mod iokit;
 
 use crate::{
-    error::{Result, WebauthnCError},
-    usb::{
-        platform::{
-            os::iokit::{
-                CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher,
-                IOHIDDeviceRef, IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn,
-                Sendable,
-            },
-            traits::*,
-        },
-        HidReportBytes, HidSendReportBytes,
+    os::iokit::{
+        CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher,
+        IOHIDDeviceRef, IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn, Sendable,
     },
+    traits::*,
+    HidError, HidReportBytes, HidSendReportBytes, Result,
 };
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
@@ -85,7 +79,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
         // trace!("Waiting for manager runloop");
         let runloop = observer_rx.recv().await.ok_or_else(|| {
             error!("failed to receive MacDeviceMatcher CFRunLoop");
-            WebauthnCError::Internal
+            HidError::Internal
         })?;
         // trace!("Got a manager runloop");
 
@@ -287,7 +281,7 @@ impl USBDeviceImpl {
         // trace!("waiting for a runloop for device");
         let runloop = observer_rx.recv().await.ok_or_else(|| {
             error!("failed to receive MacUSBDeviceWorker CFRunLoop");
-            WebauthnCError::Internal
+            HidError::Internal
         })?;
         // trace!("got device runloop");
 
@@ -380,7 +374,7 @@ impl USBDevice for USBDeviceImpl {
 
     async fn read(&mut self) -> Result<HidReportBytes> {
         let ret = self.rx.recv().await;
-        ret.ok_or(WebauthnCError::Closed)
+        ret.ok_or(HidError::Closed)
     }
 
     async fn write(&mut self, data: HidSendReportBytes) -> Result<()> {

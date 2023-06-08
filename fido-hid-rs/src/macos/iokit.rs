@@ -34,8 +34,7 @@ use std::{
 };
 
 use crate::{
-    error::WebauthnCError,
-    usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID},
+    HidError, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID,
 };
 
 type IOOptionBits = u32;
@@ -70,9 +69,9 @@ impl IOReturn {
     }
 }
 
-impl From<IOReturn> for WebauthnCError {
+impl From<IOReturn> for HidError {
     fn from(e: IOReturn) -> Self {
-        WebauthnCError::IoError(format!("{e:?}"))
+        HidError::IoError(format!("{e:?}"))
     }
 }
 

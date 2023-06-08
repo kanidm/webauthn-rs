@@ -26,14 +26,9 @@ use tokio_stream::wrappers::ReceiverStream;
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
 
 use crate::{
-    error::{Result, WebauthnCError},
-    usb::{
-        platform::{
-            descriptors::is_fido_authenticator,
-            traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
-        },
-        HidReportBytes, HidSendReportBytes,
-    },
+    descriptors::is_fido_authenticator,
+    traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
+    HidError, HidReportBytes, HidSendReportBytes, Result,
 };
 
 use self::wrapper::{
@@ -222,7 +217,10 @@ impl USBDeviceInfoImpl {
                 return None;
             }
             if descriptor.size > HID_MAX_DESCRIPTOR_SIZE {
-                error!("HID descriptor exceeded maximum size ({} > {HID_MAX_DESCRIPTOR_SIZE})", descriptor.size);
+                error!(
+                    "HID descriptor exceeded maximum size ({} > {HID_MAX_DESCRIPTOR_SIZE})",
+                    descriptor.size
+                );
                 return None;
             }
             hid_ioc_rd_desc(fd.as_raw_fd(), &mut descriptor).ok()?;
@@ -279,7 +277,7 @@ impl USBDevice for USBDeviceImpl {
         let len = self.device.write(&data)?;
         if len != data.len() {
             error!("incomplete write: wrote {len} of {} bytes", data.len());
-            Err(WebauthnCError::ApduTransmission)
+            Err(HidError::SendError)
         } else {
             Ok(())
         }

@@ -2,10 +2,7 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 use std::fmt::Debug;
 
-use crate::{
-    error::Result,
-    usb::{HidReportBytes, HidSendReportBytes},
-};
+use crate::{HidReportBytes, HidSendReportBytes, Result};
 
 /// Platform-specific USB device manager.
 #[async_trait]

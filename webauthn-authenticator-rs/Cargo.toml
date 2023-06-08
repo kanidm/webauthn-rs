@@ -41,7 +41,7 @@ nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
 softpasskey = ["crypto", "softtoken"]
 softtoken = ["crypto", "ctap2"]
-usb = ["ctap2", "dep:windows", "dep:tokio", "dep:tokio-stream"]
+usb = ["ctap2", "dep:fido-hid-rs", "dep:tokio", "dep:tokio-stream"]
 win10 = ["dep:windows"]
 
 default = []
@@ -55,7 +55,6 @@ base64urlsafedata.workspace = true
 webauthn-rs-proto.workspace = true
 webauthn-rs-core = { workspace = true, optional = true }
 
-lazy_static = "1.4.0"
 tracing.workspace = true
 url.workspace = true
 uuid.workspace = true
@@ -65,6 +64,7 @@ serde_cbor.workspace = true
 serde_bytes = { version = "0.11", optional = true }
 openssl = { workspace = true, optional = true }
 rpassword = { version = "5.0", optional = true }
+fido-hid-rs = { workspace = true, optional = true }
 
 # authenticator = { path = "../../../authenticator-rs", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
 authenticator = { version = "0.3.2-dev.1", optional = true, default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
@@ -113,17 +113,9 @@ windows = { version = "0.41.0", optional = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.41.0", optional = true, features = ["Win32_Graphics_Gdi", "Win32_Networking_WindowsWebServices", "Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_LibraryLoader", "Win32_Graphics_Dwm", "Win32_Devices_HumanInterfaceDevice", "Devices_Enumeration", "Devices_HumanInterfaceDevice", "Foundation", "Foundation_Collections", "Storage", "Storage_Streams" ] }
 
-[target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.9"
-libc = "0.2"
-mach2 = "0.4"
 
-[target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.26.2", features = ["ioctl", "poll"] }
-udev = "0.7.0"
 
-[target.'cfg(target_os = "linux")'.build-dependencies]
-bindgen = "0.65.1"
+
 
 [[example]]
 name = "authenticate"

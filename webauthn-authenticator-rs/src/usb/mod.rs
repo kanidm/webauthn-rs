@@ -12,15 +12,19 @@
 //! Use [Win10][crate::win10::Win10] (available with the `win10` feature) on
 //! Windows instead.
 mod framing;
-mod platform;
 mod responses;
+
+use fido_hid_rs::{
+    os::*,
+    traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
+    HidReportBytes, HidSendReportBytes,
+};
 
 use crate::error::WebauthnCError;
 use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT};
 use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
-use crate::usb::platform::traits::WatchEvent;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt as _;
@@ -33,21 +37,10 @@ use std::fmt;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
-use self::platform::os::*;
-use self::platform::traits::{USBDevice, USBDeviceInfo, USBDeviceManager};
 pub(crate) use self::responses::InitResponse;
 
 // u2f_hid.h
-const FIDO_USAGE_PAGE: u16 = 0xf1d0;
-const FIDO_USAGE_U2FHID: u16 = 0x01;
-const HID_RPT_SIZE: usize = 64;
-const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
-const U2FHID_TRANS_TIMEOUT: i32 = 3000;
-
 const CID_BROADCAST: u32 = 0xffffffff;
-
-type HidReportBytes = [u8; HID_RPT_SIZE];
-type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
 
 pub struct USBTransport {
     manager: USBDeviceManagerImpl,
@@ -268,7 +261,7 @@ impl Token for USBToken {
     async fn init(&mut self) -> Result<(), WebauthnCError> {
         if self.initialised {
             warn!("attempted to init an already-initialised token");
-            return Ok(())
+            return Ok(());
         }
 
         // Setup a channel to communicate with the device (CTAPHID_INIT).
