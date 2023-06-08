@@ -16,12 +16,6 @@ pub mod authenticator {
     pub struct StatusUpdate {}
 }
 
-#[cfg(not(feature = "usb"))]
-pub mod hidapi {
-    pub struct HidApi {}
-    pub struct HidDevice {}
-}
-
 #[cfg(not(feature = "nfc"))]
 pub mod pcsc {
     pub struct Context {}

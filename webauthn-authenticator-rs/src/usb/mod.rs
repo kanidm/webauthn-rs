@@ -1,4 +1,4 @@
-//! [USBTransport] communicates with a FIDO token over USB HID, using [hidapi].
+//! [USBTransport] communicates with a FIDO token over USB HID.
 //!
 //! This module should work on most platforms with USB support, provided that
 //! the user has permissions.
@@ -15,7 +15,6 @@ mod framing;
 mod platform;
 mod responses;
 
-use crate::ctap2::CtapAuthenticator;
 use crate::error::WebauthnCError;
 use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT};
 use crate::transport::*;
@@ -23,24 +22,14 @@ use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use crate::usb::platform::traits::WatchEvent;
 use async_trait::async_trait;
-use futures::executor::block_on;
 use futures::stream::BoxStream;
-use futures::Stream;
 use futures::StreamExt as _;
-use tokio::sync::mpsc;
-use tokio::time::Interval;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::{StreamMap, Timeout};
 
 #[cfg(doc)]
 use crate::stubs::*;
 
-// use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use std::fmt;
-use std::ops::Deref;
-use std::pin::Pin;
-use std::sync::Mutex;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
@@ -62,7 +51,6 @@ type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
 
 pub struct USBTransport {
     manager: USBDeviceManagerImpl,
-    // api: HidApi,
 }
 
 pub struct USBToken {
@@ -94,7 +82,6 @@ impl USBTransport {
     pub fn new() -> Result<Self, WebauthnCError> {
         Ok(Self {
             manager: USBDeviceManager::new()?,
-            // api: HidApi::new()?,
         })
     }
 }
