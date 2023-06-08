@@ -403,9 +403,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
 
     async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         trace!("Scanning for BTLE tokens");
-
-        let stream = BluetoothDeviceWatcher::new(&self, Duration::from_secs(10)).await?;
-
+        let stream = BluetoothDeviceWatcher::new(self, Duration::from_secs(10)).await?;
         Ok(Box::pin(stream))
     }
 }

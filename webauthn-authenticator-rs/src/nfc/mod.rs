@@ -257,7 +257,7 @@ impl NFCDeviceWatcher {
                     if state.event_state().contains(State::PRESENT)
                         && !state.current_state().contains(State::PRESENT)
                     {
-                        if let Ok(mut card) = NFCCard::new(ctx.clone(), state.name(), state.atr()) {
+                        if let Ok(mut card) = NFCCard::new(&ctx, state.name(), state.atr()) {
                             let tx = tx.clone();
                             tokio::spawn(async move {
                                 match card.init().await {
@@ -270,7 +270,7 @@ impl NFCDeviceWatcher {
                                 };
                             });
                         }
-                    } else if state.current_state().contains(State::EMPTY)
+                    } else if state.event_state().contains(State::EMPTY)
                         && !state.current_state().contains(State::EMPTY)
                     {
                         if tx
@@ -394,7 +394,7 @@ impl<'b> Transport<'b> for NFCTransport {
                     continue;
                 }
 
-                let c = match NFCCard::new(self.ctx.clone(), state.name(), state.atr()) {
+                let c = match NFCCard::new(&self.ctx, state.name(), state.atr()) {
                     Err(_) => continue,
                     Ok(c) => c,
                 };
@@ -499,7 +499,7 @@ const DESELECT_APPLET: ISO7816RequestAPDU = ISO7816RequestAPDU {
 };
 
 impl NFCCard {
-    pub fn new(ctx: Context, reader_name: &CStr, atr: &[u8]) -> Result<NFCCard, WebauthnCError> {
+    pub fn new(ctx: &Context, reader_name: &CStr, atr: &[u8]) -> Result<NFCCard, WebauthnCError> {
         trace!("ATR: {}", hex::encode(atr));
         let atr = Atr::try_from(atr)?;
         trace!("Parsed: {:?}", &atr);
@@ -657,14 +657,14 @@ mod test {
         let _ = tracing_subscriber::fmt().try_init();
 
         // CCID interfaces on tokens
-        const IGNORED: [&'static str; 3] = [
+        const IGNORED: [&str; 3] = [
             "Nitrokey Nitrokey 3",
             "Nitrokey Nitrokey 3 [CCID/ICCD Interface] 00 00",
             "Yubico YubiKey FIDO+CCID",
         ];
 
         // Smartcard readers
-        const ALLOWED: [&'static str; 4] = [
+        const ALLOWED: [&str; 4] = [
             "ACS ACR122U 00 00",
             "ACS ACR122U 01 00",
             "ACS ACR122U PICC Interface",

@@ -10,7 +10,6 @@ use std::{
     mem::size_of,
     os::fd::AsRawFd,
     path::Path,
-    thread,
     time::Duration,
 };
 
