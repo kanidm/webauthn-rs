@@ -37,7 +37,7 @@ exclude = [
 
 [workspace.dependencies]
 base64urlsafedata = { path = "./base64urlsafedata" }
-cable-tunnel-server-common = { path = "./cable-tunnel-server/common" }
+cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
 webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs" }
 webauthn-rs = { path = "./webauthn-rs" }
 webauthn-rs-core = { path = "./webauthn-rs-core" }
