@@ -41,7 +41,6 @@ use std::fmt;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Mutex;
-use std::thread;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
@@ -255,7 +254,7 @@ impl Token for USBToken {
                     ui.request_touch();
                 }
                 // TODO: maybe time out at some point
-                thread::sleep(Duration::from_millis(100));
+                tokio::time::sleep(Duration::from_millis(100)).await;
             } else {
                 break resp;
             }

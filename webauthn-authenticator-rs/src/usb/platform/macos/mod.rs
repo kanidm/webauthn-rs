@@ -24,7 +24,7 @@
 
 use async_trait::async_trait;
 use core_foundation::{
-    mach_port::CFIndex,
+    base::CFIndex,
     runloop::{
         CFRunLoop, CFRunLoopActivity, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopTimerRef,
     },
@@ -46,15 +46,14 @@ use crate::{
         platform::{
             os::iokit::{
                 CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher,
-                IOHIDDeviceRef, IOHIDManager, IOHIDReportType, IOReturn, Sendable,
+                IOHIDDeviceRef, IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn,
+                Sendable,
             },
             traits::*,
         },
         HidReportBytes, HidSendReportBytes,
     },
 };
-
-use self::iokit::IOHIDManagerOptions;
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
 
@@ -76,7 +75,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
         let (observer_tx, mut observer_rx) = mpsc::channel(1);
         let stream = ReceiverStream::from(rx);
 
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             let context = &observer_tx as *const _ as *mut c_void;
             let obs = CFRunLoopEntryObserver::new(Self::observe, context);
             obs.add_to_current_runloop();

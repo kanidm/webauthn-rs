@@ -4,24 +4,34 @@
 
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
+use bitflags::bitflags;
+use core_foundation::{
+    base::{
+        kCFAllocatorDefault, Boolean, CFAllocatorRef, CFIndex, CFIndexConvertible, CFTypeID,
+        TCFType, TCFTypeRef,
+    },
+    date::CFDate,
+    dictionary::{CFDictionary, CFDictionaryRef},
+    number::CFNumber,
+    runloop::{
+        kCFRunLoopDefaultMode, kCFRunLoopEntry, CFRunLoop, CFRunLoopObserver,
+        CFRunLoopObserverCallBack, CFRunLoopObserverContext, CFRunLoopObserverCreate, CFRunLoopRef,
+        CFRunLoopTimer, CFRunLoopTimerCallBack, CFRunLoopTimerContext,
+    },
+    set::{CFSet, CFSetGetValues, CFSetRef},
+    string::{CFString, CFStringRef},
+};
 use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
 
-use bitflags::bitflags;
-use core_foundation::array::*;
-use core_foundation::base::*;
-use core_foundation::date::CFAbsoluteTimeGetCurrent;
-use core_foundation::dictionary::*;
-use core_foundation::number::*;
-use core_foundation::runloop::*;
-use core_foundation::set::{CFSet, CFSetGetValues, CFSetRef};
-use core_foundation::string::*;
-use std::error::Error;
-use std::ffi::{c_char, CStr};
-use std::fmt::{self, Debug, Display};
-use std::ops::Deref;
-use std::os::raw::{c_int, c_void};
-use std::ptr;
-use std::time::Duration;
+use std::{
+    error::Error,
+    ffi::{c_char, CStr},
+    fmt::{self, Debug, Display},
+    ops::Deref,
+    os::raw::{c_int, c_void},
+    ptr,
+    time::Duration,
+};
 
 use crate::{
     error::WebauthnCError,
@@ -191,10 +201,8 @@ impl CFRunLoopTimerHelper {
             copyDescription: None,
         };
 
-        let timer = unsafe {
-            let fire_date = CFAbsoluteTimeGetCurrent() + delay.as_secs_f64();
-            CFRunLoopTimer::new(fire_date, 0., 0, 0, callback, &mut context)
-        };
+        let fire_date = CFDate::now().abs_time() + delay.as_secs_f64();
+        let timer = CFRunLoopTimer::new(fire_date, 0., 0, 0, callback, &mut context);
 
         Self { timer }
     }
@@ -237,9 +245,7 @@ impl CFRunLoopEntryObserver {
     }
 
     pub fn add_to_current_runloop(&self) {
-        unsafe {
-            CFRunLoop::get_current().add_observer(&self.observer, kCFRunLoopDefaultMode);
-        }
+        CFRunLoop::get_current().add_observer(&self.observer, unsafe { kCFRunLoopDefaultMode });
     }
 }
 
@@ -488,52 +494,57 @@ extern "C" {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core_foundation::runloop::{CFRunLoopActivity, CFRunLoopObserverRef, CFRunLoopRun};
     use std::os::raw::c_void;
-    use std::sync::mpsc::{channel, Sender};
-    use std::thread;
+    use tokio::{
+        sync::mpsc::{channel, Sender},
+        task::spawn_blocking,
+    };
 
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
+        assert!(!context.is_null());
         let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
 
         // Send the current runloop to the receiver to unblock it.
-        let _ = tx.send(Sendable(CFRunLoop::get_current()));
+        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
     }
 
-    #[test]
-    fn test_sendable_runloop() {
-        let (tx, rx) = channel();
+    #[tokio::test]
+    async fn test_sendable_runloop() {
+        let (tx, mut rx) = channel(1);
 
-        let thread = thread::spawn(move || {
+        let thread = spawn_blocking(move || {
             // Send the runloop to the owning thread.
             let context = &tx as *const _ as *mut c_void;
             let obs = CFRunLoopEntryObserver::new(observe, context);
             obs.add_to_current_runloop();
 
+            // We need some source for the runloop to run.
+            let runloop = CFRunLoop::get_current();
+            let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
+            manager.schedule_with_run_loop(&runloop);
+
+            // Set an explicit device filter so that we don't need "Input Monitoring" permissions.
+            let matcher = IOHIDDeviceMatcher::new();
+            manager.set_device_matching(Some(&matcher));
+            manager.open(IOHIDManagerOptions::empty()).unwrap();
+
+            // This will run until `CFRunLoopStop()` is called.
             unsafe {
-                // We need some source for the runloop to run.
-                let runloop = CFRunLoop::get_current();
-                let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
-                manager.schedule_with_run_loop(&runloop);
-
-                // Set an explicit device filter so that we don't need "Input Monitoring" permissions.
-                let matcher = IOHIDDeviceMatcher::new();
-                manager.set_device_matching(Some(&matcher));
-                manager.open(IOHIDManagerOptions::empty()).unwrap();
-
-                // This will run until `CFRunLoopStop()` is called.
                 CFRunLoopRun();
-                manager.close(IOHIDManagerOptions::empty()).unwrap();
             }
+            manager.close(IOHIDManagerOptions::empty()).unwrap();
+            drop(tx);
         });
 
         // Block until we enter the CFRunLoop.
-        let runloop: Sendable<CFRunLoop> = rx.recv().expect("failed to receive runloop");
+        let runloop: Sendable<CFRunLoop> = rx.recv().await.expect("failed to receive runloop");
 
         // Stop the runloop.
         runloop.stop();
 
         // Stop the thread.
-        thread.join().expect("failed to join the thread");
+        thread.await.expect("failed to join the thread");
 
         // Try to stop the runloop again (without crashing).
         runloop.stop();
