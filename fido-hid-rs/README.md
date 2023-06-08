@@ -12,8 +12,7 @@ communicating with FIDO authenticators.
 > If you want to interface with USB HID FIDO authenticators, use
 > [webauthn-authenticator-rs][0] instead of this library.
 >
-> If you're looking for a general-purpose Rust USB HID library, look at
-> [hidapi][].
+> If you're looking for a general-purpose Rust USB HID library, try [hidapi][].
 
 This library currently targets (and is regularly tested on):
 

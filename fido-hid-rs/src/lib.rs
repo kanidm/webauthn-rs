@@ -1,11 +1,20 @@
-//! `fido-hid-rs` is a low-level library for communicating with USB HID FIDO
-//! authenticators.
-//! 
-//! This is an internal implementation detail of [webauthn-authenticator-rs][0].
-//! It has **no guarantees of API stability**, and is not intended for use by
-//! other parties.
-//! 
+//! `fido-hid-rs` implements a minimal set of platform-specific USB HID bindings
+//! for communicating with FIDO authenticators.
+//!
+//! **Important:** this library is an _internal implementation detail_ of
+//! [webauthn-authenticator-rs][0] to work around Cargo limitations.
+//!
+//! **This library has no guarantees of API stability, and is not intended for
+//! use by other parties.**
+//!
+//! If you want to interface with USB HID FIDO authenticators, use
+//! [webauthn-authenticator-rs][0] instead of this library.
+//!
+//! If you're looking for a general-purpose Rust USB HID library, try
+//! [hidapi][].
+//!
 //! [0]: https://github.com/kanidm/webauthn-rs/tree/master/webauthn-authenticator-rs
+//! [hidapi]: https://docs.rs/hidapi/latest/hidapi/
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 compile_error!("USB support is not implemented on this platform");
 
@@ -25,7 +34,7 @@ extern crate num_derive;
 extern crate tracing;
 
 mod error;
-pub mod traits;
+mod traits;
 
 #[cfg(any(test, target_os = "linux"))]
 mod descriptors;
@@ -33,9 +42,14 @@ mod descriptors;
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
 #[cfg_attr(target_os = "macos", path = "macos/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
-pub mod os;
+mod os;
 
-pub use crate::error::{HidError, Result};
+#[doc(inline)]
+pub use crate::{
+    error::{HidError, Result},
+    os::{USBDeviceManagerImpl, USBDeviceInfoImpl, USBDeviceImpl},
+    traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
+};
 
 // u2f_hid.h
 const FIDO_USAGE_PAGE: u16 = 0xf1d0;

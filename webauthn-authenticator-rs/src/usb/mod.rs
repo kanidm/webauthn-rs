@@ -15,9 +15,8 @@ mod framing;
 mod responses;
 
 use fido_hid_rs::{
-    os::*,
-    traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
-    HidReportBytes, HidSendReportBytes,
+    HidReportBytes, HidSendReportBytes, USBDevice, USBDeviceImpl, USBDeviceInfo, USBDeviceInfoImpl,
+    USBDeviceManager, USBDeviceManagerImpl, WatchEvent,
 };
 
 use crate::error::WebauthnCError;
