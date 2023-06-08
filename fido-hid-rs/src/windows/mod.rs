@@ -2,7 +2,7 @@ use std::{fmt, mem::size_of, pin::Pin};
 
 use async_trait::async_trait;
 use futures::{stream::BoxStream, Stream};
-use tokio::sync::mpsc::{self};
+use tokio::sync::mpsc;
 
 use tokio_stream::wrappers::ReceiverStream;
 use windows::{

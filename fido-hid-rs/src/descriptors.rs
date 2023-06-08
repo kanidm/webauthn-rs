@@ -9,7 +9,7 @@
 
 use num_traits::FromPrimitive;
 
-use crate::usb::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
+use crate::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 
 /// HID descriptor tags; shifted right by 2 bits (removing the `bSize` field).
 #[derive(FromPrimitive)]

@@ -17,6 +17,10 @@ extern crate core_foundation;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(any(test, target_os = "linux"))]
+#[macro_use]
+extern crate num_derive;
+
 #[macro_use]
 extern crate tracing;
 

@@ -40,14 +40,11 @@ use tokio_stream::wrappers::ReceiverStream;
 
 mod iokit;
 
-use crate::{
-    os::iokit::{
-        CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher,
-        IOHIDDeviceRef, IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn, Sendable,
-    },
-    traits::*,
-    HidError, HidReportBytes, HidSendReportBytes, Result,
+use self::iokit::{
+    CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef,
+    IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn, Sendable,
 };
+use crate::{traits::*, HidError, HidReportBytes, HidSendReportBytes, Result};
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
 
