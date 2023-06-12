@@ -13,6 +13,7 @@ use clap::{Parser, Subcommand};
 use tokio_tungstenite::tungstenite::http::uri::Builder;
 #[cfg(feature = "cable-override-tunnel")]
 use tokio_tungstenite::tungstenite::http::{uri::Parts, Uri};
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
 #[cfg(feature = "ctap2")]
 use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
 use webauthn_authenticator_rs::prelude::Url;
@@ -61,16 +62,28 @@ impl From<UvPolicy> for UserVerificationPolicy {
 
 #[cfg(feature = "ctap2")]
 async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
+    use futures::StreamExt;
+
     let mut reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
 
-    match reader.watch_tokens() {
+    match reader.watch_tokens().await {
         Ok(mut tokens) => {
-            while let Some(card) = tokens.pop() {
-                let auth = CtapAuthenticator::new(card, ui).await;
+            while let Some(event) = tokens.next().await {
+                match event {
+                    TokenEvent::Added(token) => {
+                        let auth = CtapAuthenticator::new(token, ui).await;
 
-                if let Some(auth) = auth {
-                    return auth;
+                        if let Some(auth) = auth {
+                            return auth;
+                        }
+                    }
+
+                    TokenEvent::EnumerationComplete => {
+                        info!("device enumeration completed without detecting a FIDO2 authenticator, connect one to authenticate!");
+                    }
+
+                    TokenEvent::Removed(_) => {}
                 }
             }
         }
@@ -202,9 +215,16 @@ impl Provider {
 
 #[tokio::main]
 async fn main() {
-    let opt = CliParser::parse();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .compact()
+        .init();
 
-    tracing_subscriber::fmt::init();
+    let opt = CliParser::parse();
     let ui = Cli {};
     let provider = opt.provider;
     let mut u = provider

@@ -28,7 +28,12 @@
 //!
 //! Use [Win10][crate::win10::Win10] (available with `--features win10`) on
 //! Windows instead.
-use std::{ops::RangeInclusive, pin::Pin, time::{Duration, Instant}, collections::{HashMap, HashSet}};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+    pin::Pin,
+    time::{Duration, Instant},
+};
 
 #[cfg(doc)]
 use crate::stubs::*;
@@ -42,11 +47,7 @@ use btleplug::{
     platform::{Manager, Peripheral, PeripheralId},
 };
 use futures::{executor::block_on, stream::BoxStream, Stream, StreamExt};
-use tokio::{
-    sync::mpsc,
-    task::{spawn, spawn_blocking, JoinHandle},
-    time::sleep,
-};
+use tokio::{sync::mpsc, task::spawn};
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::{uuid, Uuid};
 use webauthn_rs_proto::AuthenticatorTransport;
@@ -114,7 +115,10 @@ pub struct BluetoothDeviceWatcher {
 }
 
 impl BluetoothDeviceWatcher {
-    async fn new(transport: &BluetoothTransport, debounce: Duration) -> Result<BluetoothDeviceWatcher, WebauthnCError> {
+    async fn new(
+        transport: &BluetoothTransport,
+        debounce: Duration,
+    ) -> Result<BluetoothDeviceWatcher, WebauthnCError> {
         let (tx, rx) = mpsc::channel(16);
         let stream = ReceiverStream::from(rx);
 
@@ -124,7 +128,9 @@ impl BluetoothDeviceWatcher {
             .next()
             .ok_or(WebauthnCError::NoBluetoothAdapter)?;
 
-        let filter = ScanFilter { services: vec![FIDO_GATT_SERVICE] };
+        let filter = ScanFilter {
+            services: vec![FIDO_GATT_SERVICE],
+        };
         adapter.start_scan(filter).await?;
 
         let mut events = adapter.events().await?;
@@ -211,7 +217,7 @@ impl BluetoothDeviceWatcher {
 
                             recents.remove(&id);
                         }
-                        
+
                         let peripheral = match adapter.peripheral(&id).await {
                             Ok(p) => p,
                             Err(e) => {
@@ -261,7 +267,7 @@ impl BluetoothDeviceWatcher {
                             trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
                             continue;
                         }
-            
+
                         let peripheral = match adapter.peripheral(&id).await {
                             Ok(p) => p,
                             Err(e) => {
@@ -284,7 +290,6 @@ impl BluetoothDeviceWatcher {
 
                             recents.remove(&id);
                         }
-            
 
                         let properties = match peripheral.properties().await {
                             Ok(Some(p)) => p,
@@ -353,9 +358,9 @@ impl<'b> Transport<'b> for BluetoothTransport {
     ///
     /// [`get_devices`] is unsupported for [BluetoothTransport], as BTLE
     /// authenticator connections are very short-lived and timing sensitive.
-    /// 
+    ///
     /// This method will always return an empty `Vec` of devices.
-    /// 
+    ///
     /// Use [`watch_tokens`] instead.
     async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
         warn!("get_devices is not supported for Bluetooth devices, use watch_tokens");
@@ -363,9 +368,9 @@ impl<'b> Transport<'b> for BluetoothTransport {
     }
 
     /// Watches for and connects to nearby Bluetooth Low Energy authenticators.
-    /// 
+    ///
     /// ## Note
-    /// 
+    ///
     /// Due to the nature of the Bluetooth Low Energy transport,
     /// [BluetoothTransport] immediately emits a
     /// [TokenEvent::EnumerationComplete] event as soon as it starts.
