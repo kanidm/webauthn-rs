@@ -13,9 +13,6 @@
 //! macOS' platform Rust bindings aren't nearly as well-polished as Windows'.
 //! This module attempts to work around that as best as possible.
 //!
-//! [`USBDeviceManagerImpl::watch_devices`] creates an [`IOHIDManager`], then
-//! sets up a new thread to drive its [`CFRunLoop`].
-//!
 //! When new devices are discovered, [`USBDeviceImpl`] starts up a new thread to
 //! drive the [`CFRunLoop`] for [`IOHIDDevice`].
 //!
@@ -29,18 +26,23 @@ use core_foundation::{
         CFRunLoop, CFRunLoopActivity, CFRunLoopObserverRef, CFRunLoopRun, CFRunLoopTimerRef,
     },
 };
-use futures::{stream::BoxStream, Stream, StreamExt};
+use futures::{
+    stream::{self, BoxStream},
+    Stream, StreamExt,
+};
 use libc::c_void;
 use std::{
     fmt,
     marker::{PhantomData, PhantomPinned},
     mem::size_of,
+    ops::Deref,
     pin::Pin,
     slice::from_raw_parts,
     sync::Arc,
     time::Duration,
 };
 use tokio::{
+    spawn,
     sync::{
         broadcast,
         mpsc::{self, Receiver, Sender},
@@ -52,7 +54,7 @@ use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 mod iokit;
 
 use self::iokit::{
-    CFRunLoopEntryObserver, CFRunLoopTimerHelper, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef,
+    CFRunLoopEntryObserver, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef,
     IOHIDManager, IOHIDManagerOptions, IOHIDReportType, IOReturn, Sendable,
 };
 use crate::{
@@ -62,37 +64,31 @@ use crate::{
 
 const MESSAGE_QUEUE_LENGTH: usize = 16;
 
+/// Wrapper for [IOHIDManager] to keep its [CFRunLoop] running while there are
+/// active usages of [IOHIDDevice] objects created by the manager.
+/// 
+/// The intended usage of this object is wrapped in an [Arc], so that it stays
+/// alive as long as anything needs it.
 #[derive(Debug)]
-pub struct USBDeviceManagerImpl<'a> {
+struct IOHIDManagerWrapper {
     manager: IOHIDManager,
-    rx: broadcast::Receiver<WatchEvent<USBDeviceInfoImpl<'a>>>,
     runloop: Sendable<CFRunLoop>,
-    _pin: PhantomPinned,
 }
 
+#[derive(Debug)]
+enum IOHIDManagerEvent {
+    Matching(IOHIDDevice),
+    Removal(IOHIDDevice),
+    // todo
+}
 
-
-#[async_trait]
-impl<'a> USBDeviceManager for USBDeviceManagerImpl<'a> {
-    // type Device = USBDeviceImpl<'a>;
-    type DeviceInfo = USBDeviceInfoImpl<'a>;
-    type DeviceId = IOHIDDevice;
-
-    async fn new() -> Result<Self> {
+impl IOHIDManagerWrapper {
+    async fn new(tx: Sender<IOHIDManagerEvent>) -> Option<Self> {
+        let tx = Box::pin(tx);
         let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
-
-        let (tx, rx) = broadcast::channel(MESSAGE_QUEUE_LENGTH);
-
         let (observer_tx, mut observer_rx) = mpsc::channel(1);
-        let mut o = Self {
-            manager,
-            rx,
-            runloop: Sendable(CFRunLoop::get_current()),
-            _pin: PhantomPinned,
-        };
 
-        let manager = o.manager.clone();
-
+        let manager_worker = manager.clone();
         spawn_blocking(move || {
             let context = &observer_tx as *const _ as *mut c_void;
             let obs = CFRunLoopEntryObserver::new(Self::observe, context);
@@ -103,27 +99,117 @@ impl<'a> USBDeviceManager for USBDeviceManagerImpl<'a> {
 
             // Match FIDO devices only.
             let matcher = IOHIDDeviceMatcher::new();
-            manager.set_device_matching(Some(&matcher));
-            manager.register_device_matching_callback(Self::on_device_matching, context);
-            manager.register_device_removal_callback(Self::on_device_removal, context);
-            manager.schedule_with_run_loop(&runloop);
-            manager.open(IOHIDManagerOptions::empty()).unwrap();
+            manager_worker.set_device_matching(Some(&matcher));
+            manager_worker.register_device_matching_callback(Self::on_device_matching, context);
+            manager_worker.register_device_removal_callback(Self::on_device_removal, context);
+            manager_worker.schedule_with_run_loop(&runloop);
+            manager_worker.open(IOHIDManagerOptions::empty()).unwrap();
 
-            // trace!("starting MacDeviceMatcher runloop");
+            // trace!("starting IOHIDManagerWrapper runloop");
             unsafe {
                 CFRunLoopRun();
             }
 
-            // trace!("MacDeviceMatcher runloop done, cleaning up");
-            manager.unschedule_from_run_loop(&runloop);
-            manager.close(IOHIDManagerOptions::empty()).unwrap();
+            // trace!("IOHIDManagerWrapper runloop done, cleaning up");
+            manager_worker.unschedule_from_run_loop(&runloop);
+            manager_worker.close(IOHIDManagerOptions::empty()).unwrap();
             // trace!("MacDeviceMatcher finished");
             return;
         });
 
-        o.runloop = observer_rx.recv().await.unwrap();
+        let runloop = observer_rx.recv().await?;
 
-        Ok(o)
+        Some(Self { manager, runloop })
+    }
+
+    extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
+        // trace!("fetching MacDeviceMatcher RunLoop...");
+        let tx: &Sender<Sendable<CFRunLoop>> = unsafe { &*(context as *mut _) };
+        let _ = tx.blocking_send(Sendable(CFRunLoop::get_current()));
+    }
+
+    extern "C" fn on_device_matching(
+        context: *mut c_void,
+        _: IOReturn,
+        _: *mut c_void,
+        device_ref: IOHIDDeviceRef,
+    ) {
+        assert!(!context.is_null());
+        let tx: &Pin<Box<Sender<IOHIDManagerEvent>>> = unsafe { &*(context as *mut _) };
+        let device = device_ref.into();
+        // trace!("on_device_matching: {device:?}");
+        let _ = tx.blocking_send(IOHIDManagerEvent::Matching(device));
+    }
+
+    extern "C" fn on_device_removal(
+        context: *mut c_void,
+        _: IOReturn,
+        _: *mut c_void,
+        device_ref: IOHIDDeviceRef,
+    ) {
+        assert!(!context.is_null());
+        let tx: &Pin<Box<Sender<IOHIDManagerEvent>>> = unsafe { &*(context as *mut _) };
+        let device = device_ref.into();
+        // trace!("on_device_removal: {device:?}");
+        let _ = tx.blocking_send(IOHIDManagerEvent::Removal(device));
+    }
+}
+
+impl Deref for IOHIDManagerWrapper {
+    type Target = IOHIDManager;
+
+    fn deref(&self) -> &Self::Target {
+        &self.manager
+    }
+}
+
+impl Drop for IOHIDManagerWrapper {
+    fn drop(&mut self) {
+        trace!("dropping IOHIDManagerWrapper");
+        self.runloop.stop();
+    }
+}
+
+#[derive(Debug)]
+pub struct USBDeviceManagerImpl {
+    manager: Arc<IOHIDManagerWrapper>,
+    rx: broadcast::Receiver<WatchEvent<USBDeviceInfoImpl>>,
+}
+
+#[async_trait]
+impl USBDeviceManager for USBDeviceManagerImpl {
+    type Device = USBDeviceImpl;
+    type DeviceInfo = USBDeviceInfoImpl;
+    type DeviceId = IOHIDDevice;
+
+    async fn new() -> Result<Self> {
+        let (native_tx, mut native_rx) = mpsc::channel(MESSAGE_QUEUE_LENGTH);
+        let manager = Arc::new(IOHIDManagerWrapper::new(native_tx).await.ok_or_else(|| {
+            error!("could not setup IOHIDManagerWrapper thread");
+            HidError::Internal
+        })?);
+
+        let (tx, rx) = broadcast::channel(MESSAGE_QUEUE_LENGTH);
+        let manager_wrapper = manager.clone();
+        spawn(async move {
+            // Worker to handle the native events
+            while let Some(e) = native_rx.recv().await {
+                let o = match e {
+                    IOHIDManagerEvent::Matching(device) => WatchEvent::Added(USBDeviceInfoImpl {
+                        device,
+                        manager_wrapper: manager_wrapper.clone(),
+                    }),
+                    IOHIDManagerEvent::Removal(device) => WatchEvent::Removed(device),
+                };
+
+                if let Err(e) = tx.send(o) {
+                    error!("could not broadcast native event: {e:?}");
+                    break;
+                }
+            }
+        });
+
+        Ok(Self { manager, rx })
     }
 
     /*
@@ -150,19 +236,18 @@ impl<'a> USBDeviceManager for USBDeviceManagerImpl<'a> {
        }
     */
 
-    async fn watch_devices<'b>(&'b self) -> Result<BoxStream<'b, WatchEvent<Self::DeviceInfo>>> {
-        // TODO: insert synthetic event for existing devices, as this subscriber
-        // will have already dropped existing devices
+    async fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
+        let existing_devices =
+            stream::iter(self.get_devices().await?.into_iter().map(WatchEvent::Added));
+        let enumeration_completed = stream::iter(vec![WatchEvent::EnumerationComplete]);
         let receiver = self.rx.resubscribe();
-        Ok(Box::pin(BroadcastStream::new(receiver).filter_map(
-            |x| async move {
-                if x.is_ok() {
-                    Some(x.unwrap())
-                } else {
-                    None
-                }
-            },
-        )))
+        let broadcast = BroadcastStream::new(receiver).filter_map(|x| async move { x.ok() });
+
+        Ok(Box::pin(
+            existing_devices
+                .chain(enumeration_completed)
+                .chain(broadcast),
+        ))
     }
 
     async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>> {
@@ -172,19 +257,13 @@ impl<'a> USBDeviceManager for USBDeviceManagerImpl<'a> {
             .into_iter()
             .map(|device| USBDeviceInfoImpl {
                 device,
-                _phantom: PhantomData,
+                manager_wrapper: self.manager.clone(),
             })
             .collect())
     }
 }
 
-impl<'a> Drop for USBDeviceManagerImpl<'a> {
-    fn drop(&mut self) {
-        trace!("dropping devicemanager");
-        self.runloop.stop();
-    }
-}
-
+/*
 impl<'a> USBDeviceManagerImpl<'a> {
     extern "C" fn observe(_: CFRunLoopObserverRef, _: CFRunLoopActivity, context: *mut c_void) {
         // trace!("fetching MacDeviceMatcher RunLoop...");
@@ -205,7 +284,6 @@ impl<'a> USBDeviceManagerImpl<'a> {
         // trace!("on_device_matching: {device:?}");
         let _ = tx.send(WatchEvent::Added(USBDeviceInfoImpl {
             device,
-            _phantom: PhantomData,
         }));
     }
 
@@ -223,7 +301,7 @@ impl<'a> USBDeviceManagerImpl<'a> {
         let _ = tx.send(WatchEvent::Removed(device));
     }
 }
-
+ */
 struct MacRunLoopStream<T> {
     runloop: Sendable<CFRunLoop>,
     stream: ReceiverStream<T>,
@@ -339,14 +417,14 @@ impl MacDeviceMatcher {
 */
 
 #[derive(Clone, Debug)]
-pub struct USBDeviceInfoImpl<'a> {
+pub struct USBDeviceInfoImpl {
     device: IOHIDDevice,
-    _phantom: PhantomData<&'a ()>,
+    manager_wrapper: Arc<IOHIDManagerWrapper>,
 }
 
 #[async_trait]
-impl<'a> USBDeviceInfo for USBDeviceInfoImpl<'a> {
-    type Device = USBDeviceImpl<'a>;
+impl USBDeviceInfo for USBDeviceInfoImpl {
+    type Device = USBDeviceImpl;
     type Id = IOHIDDevice;
 
     async fn open(self) -> Result<Self::Device> {
@@ -354,16 +432,16 @@ impl<'a> USBDeviceInfo for USBDeviceInfoImpl<'a> {
     }
 }
 
-pub struct USBDeviceImpl<'a> {
-    info: USBDeviceInfoImpl<'a>,
+pub struct USBDeviceImpl {
+    info: USBDeviceInfoImpl,
     rx: mpsc::Receiver<HidReportBytes>,
     runloop: Sendable<CFRunLoop>,
 }
 
-unsafe impl Send for USBDeviceImpl<'_> {}
-unsafe impl Sync for USBDeviceImpl<'_> {}
+unsafe impl Send for USBDeviceImpl {}
+unsafe impl Sync for USBDeviceImpl {}
 
-impl fmt::Debug for USBDeviceImpl<'_> {
+impl fmt::Debug for USBDeviceImpl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("USBDeviceImpl")
             .field("info", &self.info)
@@ -372,14 +450,14 @@ impl fmt::Debug for USBDeviceImpl<'_> {
     }
 }
 
-impl Drop for USBDeviceImpl<'_> {
+impl Drop for USBDeviceImpl {
     fn drop(&mut self) {
         self.runloop.stop();
     }
 }
 
-impl<'a> USBDeviceImpl<'a> {
-    async fn new(info: USBDeviceInfoImpl<'a>) -> Result<USBDeviceImpl<'a>> {
+impl USBDeviceImpl {
+    async fn new(info: USBDeviceInfoImpl) -> Result<USBDeviceImpl> {
         // trace!("Opening device: {info:?}");
 
         let device = IOHIDDevice::create(info.device.get_port());
@@ -482,14 +560,13 @@ impl MacUSBDeviceWorker {
 }
 
 #[async_trait]
-impl USBDevice for USBDeviceImpl<'_> {
-    /*
-    type Info = USBDeviceInfoImpl<'a>;
+impl USBDevice for USBDeviceImpl {
+    type Info = USBDeviceInfoImpl;
 
     fn get_info(&self) -> &Self::Info {
         &self.info
     }
- */
+
     async fn read(&mut self) -> Result<HidReportBytes> {
         let ret = self.rx.recv().await;
         ret.ok_or(HidError::Closed)

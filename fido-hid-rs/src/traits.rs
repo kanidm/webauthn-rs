@@ -8,10 +8,8 @@ use crate::{HidReportBytes, HidSendReportBytes, Result};
 /// Platform-specific USB device manager.
 #[async_trait]
 pub trait USBDeviceManager: Sized {
-    /*
     /// The type used for USB device connections on this platform.
-    type Device: USBDevice<'a> + 'a;
-    */
+    type Device: USBDevice;
     /// The type used for USB device information produced on this platform.
     type DeviceInfo: USBDeviceInfo<Id = Self::DeviceId>;
     /// The type used for USB device IDs on this platform.
@@ -25,10 +23,10 @@ pub trait USBDeviceManager: Sized {
     ///
     /// This method fires [`WatchEvent::Added`] events for any USB devices
     /// *already* connected, followed by [`WatchEvent::EnumerationComplete`].
-    async fn watch_devices<'a>(&'a self) -> Result<BoxStream<'a, WatchEvent<Self::DeviceInfo>>>;
+    async fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>>;
 
     /// Gets a list of currently-connected USB authenticators.
-    async fn get_devices<'a>(&'a self) -> Result<Vec<Self::DeviceInfo>>;
+    async fn get_devices(&self) -> Result<Vec<Self::DeviceInfo>>;
 }
 
 #[derive(Clone, Debug)]
@@ -60,13 +58,12 @@ pub trait USBDeviceInfo: Clone + Debug + Send {
 /// Platform-specific USB device connection structure.
 #[async_trait]
 pub trait USBDevice: Send {
-    /*
-        /// The type used for USB device information on this platform.
-        type Info: USBDeviceInfo<'a, Device = Self>;
+    /// The type used for USB device information on this platform.
+    type Info: USBDeviceInfo<Device = Self>;
 
-        /// Gets the device info used to create this connection.
-        fn get_info(&self) -> &Self::Info;
-    */
+    /// Gets the device info used to create this connection.
+    fn get_info(&self) -> &Self::Info;
+
     /// Read some bytes from the FIDO device's HID input report descriptor.
     async fn read(&mut self) -> Result<HidReportBytes>;
 
