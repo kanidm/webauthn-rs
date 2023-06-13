@@ -130,9 +130,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     type DeviceInfo = USBDeviceInfoImpl;
     type DeviceId = HSTRING;
 
-    async fn watch_devices(
-        &mut self,
-    ) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
+    async fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
         trace!("watch_devices");
         Ok(Box::pin(WindowsDeviceWatcher::new()?))
     }
@@ -151,11 +149,12 @@ impl USBDeviceManager for USBDeviceManagerImpl {
             .collect())
     }
 
-    fn new() -> Result<Self> {
+    async fn new() -> Result<Self> {
         Ok(Self {})
     }
 }
 
+#[derive(Clone)]
 pub struct USBDeviceInfoImpl {
     info: DeviceInformation,
 }
