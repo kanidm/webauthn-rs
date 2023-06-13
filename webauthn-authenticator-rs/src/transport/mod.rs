@@ -36,7 +36,7 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     /// This will initially send synthetic [`TokenEvent::Added`] for all
     /// currently-connected tokens, followed by
     /// [`TokenEvent::EnumerationComplete`].
-    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
+    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError>;
 
     async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
 }

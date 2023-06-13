@@ -72,7 +72,7 @@ impl AnyTransport {
                 Err(e) => return Err(e),
             },
             #[cfg(feature = "usb")]
-            usb: USBTransport::new()?,
+            usb: USBTransport::new().await?,
         })
     }
 }
@@ -82,7 +82,7 @@ impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]
-    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
         // Bluetooth
         let mut bluetooth_complete = !cfg!(feature = "bluetooth");
         #[cfg(feature = "bluetooth")]
@@ -104,7 +104,7 @@ impl<'b> Transport<'b> for AnyTransport {
         // NFC
         let mut nfc_complete = !cfg!(feature = "nfc");
         #[cfg(feature = "nfc")]
-        let nfc: BoxStream<TokenEvent<NFCCard>> = if let Some(nfc) = &mut self.nfc {
+        let nfc: BoxStream<TokenEvent<NFCCard>> = if let Some(nfc) = &self.nfc {
             match nfc.watch_tokens().await {
                 Err(e) => {
                     error!("NFC transport failure: {e:?}");

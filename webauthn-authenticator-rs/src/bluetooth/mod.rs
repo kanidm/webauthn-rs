@@ -374,7 +374,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// Due to the nature of the Bluetooth Low Energy transport,
     /// [BluetoothTransport] immediately emits a
     /// [TokenEvent::EnumerationComplete] event as soon as it starts.
-    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
         trace!("Scanning for BTLE tokens");
         let stream = BluetoothDeviceWatcher::new(self, Duration::from_secs(10)).await?;
         Ok(Box::pin(stream))

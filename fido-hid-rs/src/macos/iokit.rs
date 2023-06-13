@@ -7,8 +7,8 @@
 use bitflags::bitflags;
 use core_foundation::{
     base::{
-        kCFAllocatorDefault, Boolean, CFAllocatorRef, CFIndex, CFIndexConvertible, CFTypeID,
-        TCFType, TCFTypeRef,
+        kCFAllocatorDefault, mach_port_t, Boolean, CFAllocatorRef, CFIndex, CFIndexConvertible,
+        CFTypeID, TCFType, TCFTypeRef,
     },
     date::CFDate,
     dictionary::{CFDictionary, CFDictionaryRef},
@@ -33,9 +33,7 @@ use std::{
     time::Duration,
 };
 
-use crate::{
-    HidError, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID,
-};
+use crate::{HidError, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 
 type IOOptionBits = u32;
 
@@ -170,6 +168,7 @@ unsafe impl Sync for IOHIDDevice {}
 pub struct Sendable<T: TCFType>(pub T);
 
 unsafe impl<T: TCFType> Send for Sendable<T> {}
+unsafe impl<T: TCFType> Sync for Sendable<T> {}
 
 impl<T: TCFType> Deref for Sendable<T> {
     type Target = T;
@@ -351,6 +350,14 @@ impl IOHIDManager {
 }
 
 impl IOHIDDevice {
+    pub fn create(service: mach_port_t) -> Self {
+        unsafe { TCFType::wrap_under_create_rule(IOHIDDeviceCreate(kCFAllocatorDefault, service)) }
+    }
+
+    pub fn get_port(&self) -> mach_port_t {
+        unsafe { IOHIDDeviceGetService(self.as_concrete_TypeRef()) }
+    }
+
     pub fn set_report(
         &self,
         reportType: IOHIDReportType,
@@ -457,6 +464,8 @@ extern "C" {
     );
 
     // IOHIDDevice
+    fn IOHIDDeviceCreate(allocator: CFAllocatorRef, service: mach_port_t) -> IOHIDDeviceRef;
+    fn IOHIDDeviceGetService(device: IOHIDDeviceRef) -> mach_port_t;
     fn IOHIDDeviceGetTypeID() -> CFTypeID;
     fn IOHIDDeviceSetReport(
         device: IOHIDDeviceRef,

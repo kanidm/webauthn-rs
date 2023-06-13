@@ -71,9 +71,9 @@ impl fmt::Debug for USBToken {
 }
 
 impl USBTransport {
-    pub fn new() -> Result<Self, WebauthnCError> {
+    pub async fn new() -> Result<Self, WebauthnCError> {
         Ok(Self {
-            manager: USBDeviceManager::new()?,
+            manager: USBDeviceManager::new().await?,
         })
     }
 }
@@ -82,7 +82,7 @@ impl USBTransport {
 impl<'b> Transport<'b> for USBTransport {
     type Token = USBToken;
 
-    async fn watch_tokens(&mut self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
         let ret = self.manager.watch_devices().await?;
 
         Ok(Box::pin(ret.filter_map(|event| async move {
