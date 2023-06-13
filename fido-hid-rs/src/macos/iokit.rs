@@ -1,14 +1,10 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
 #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
 
 use bitflags::bitflags;
 use core_foundation::{
     base::{
-        kCFAllocatorDefault, mach_port_t, Boolean, CFAllocatorRef, CFIndex, CFIndexConvertible,
-        CFTypeID, TCFType, TCFTypeRef,
+        kCFAllocatorDefault, Boolean, CFAllocatorRef, CFIndex, CFIndexConvertible, CFTypeID,
+        TCFType, TCFTypeRef,
     },
     dictionary::{CFDictionary, CFDictionaryRef},
     number::CFNumber,
@@ -215,12 +211,14 @@ impl CFRunLoopEntryObserver {
     }
 }
 
-pub struct IOHIDDeviceMatcher {
-    pub dict: CFDictionary<CFString, CFNumber>,
+struct IOHIDDeviceMatcher {
+    dict: CFDictionary<CFString, CFNumber>,
 }
 
 impl IOHIDDeviceMatcher {
-    pub fn new() -> Self {
+    /// Creates an [IOHIDDeviceMatcher] which matches devices with FIDO USB HID
+    /// usage pages.
+    pub fn fido_hid() -> Self {
         let dict = CFDictionary::<CFString, CFNumber>::from_CFType_pairs(&[
             (
                 CFString::from_static_string("DeviceUsage"),
@@ -237,7 +235,13 @@ impl IOHIDDeviceMatcher {
 
 impl IOHIDManager {
     pub fn create(options: IOHIDManagerOptions) -> Self {
-        unsafe { TCFType::wrap_under_create_rule(IOHIDManagerCreate(kCFAllocatorDefault, options)) }
+        let manager: Self = unsafe {
+            TCFType::wrap_under_create_rule(IOHIDManagerCreate(kCFAllocatorDefault, options))
+        };
+
+        let matcher = IOHIDDeviceMatcher::fido_hid();
+        manager.set_device_matching(Some(&matcher));
+        manager
     }
 
     pub fn copy_devices(&self) -> Vec<IOHIDDevice> {
@@ -261,7 +265,13 @@ impl IOHIDManager {
         }
     }
 
-    pub fn set_device_matching(&self, matching: Option<&IOHIDDeviceMatcher>) {
+    /// Sets [a device matching filter][0] for this [IOHIDManager].
+    ///
+    /// Setting `matching` to [None] (or not setting a device matching filter)
+    /// requires "Input Monitoring" permissions.
+    ///
+    /// [0]: https://developer.apple.com/documentation/iokit/1438371-iohidmanagersetdevicematching
+    fn set_device_matching(&self, matching: Option<&IOHIDDeviceMatcher>) {
         unsafe {
             IOHIDManagerSetDeviceMatching(
                 self.as_concrete_TypeRef(),
@@ -324,14 +334,6 @@ impl IOHIDManager {
 }
 
 impl IOHIDDevice {
-    pub fn create(service: mach_port_t) -> Self {
-        unsafe { TCFType::wrap_under_create_rule(IOHIDDeviceCreate(kCFAllocatorDefault, service)) }
-    }
-
-    pub fn get_port(&self) -> mach_port_t {
-        unsafe { IOHIDDeviceGetService(self.as_concrete_TypeRef()) }
-    }
-
     pub fn set_report(
         &self,
         reportType: IOHIDReportType,
@@ -438,8 +440,6 @@ extern "C" {
     );
 
     // IOHIDDevice
-    fn IOHIDDeviceCreate(allocator: CFAllocatorRef, service: mach_port_t) -> IOHIDDeviceRef;
-    fn IOHIDDeviceGetService(device: IOHIDDeviceRef) -> mach_port_t;
     fn IOHIDDeviceGetTypeID() -> CFTypeID;
     fn IOHIDDeviceSetReport(
         device: IOHIDDeviceRef,
@@ -506,9 +506,6 @@ mod tests {
             let manager = IOHIDManager::create(IOHIDManagerOptions::empty());
             manager.schedule_with_run_loop(&runloop);
 
-            // Set an explicit device filter so that we don't need "Input Monitoring" permissions.
-            let matcher = IOHIDDeviceMatcher::new();
-            manager.set_device_matching(Some(&matcher));
             manager.open(IOHIDManagerOptions::empty()).unwrap();
 
             // This will run until `CFRunLoopStop()` is called.

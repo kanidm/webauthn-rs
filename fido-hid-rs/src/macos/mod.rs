@@ -1,7 +1,3 @@
-/* This Source Code Form is subject to the terms of the Mozilla Public
- * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
 //! macOS / IOKit USB HID implementation.
 //!
 //! This module is based on [Mozilla authenticator-rs][0]' macOS platform
@@ -11,13 +7,25 @@
 //!
 //! **Rant:** IOKit is a giant pain to work with outside a [`CFRunLoop`], and
 //! macOS' platform Rust bindings aren't nearly as well-polished as Windows'.
-//! This module attempts to work around that as best as possible.
+//! This module attempts to shoe-horn these structures into Rust (and `tokio`)
+//! as best as possible.
 //!
-//! When new devices are discovered, [`USBDeviceImpl`] starts up a new thread to
-//! drive the [`CFRunLoop`] for [`IOHIDDevice`].
+//! We need to keep [`IOHIDManager`] and its [`CFRunLoop`] around for as long as
+//! there are *any* [`IOHIDDevice`] references created by it, because otherwise
+//! they'll be [automatically closed][1] (and [there's no way around that][1]).
+//! For that we use [`IOHIDManagerWrapper`], which gets wrapped in an [`Arc`]
+//! and shared between [`USBDeviceManagerImpl`] and [`USBDeviceInfoImpl`].
+//!
+//! Whenever a device is opened, [`USBDeviceImpl`] starts up a new thread with
+//! another [`CFRunLoop`] to drive events from [`IOHIDDevice`]. This gets
+//! terminated once the [`USBDeviceImpl`] gets dropped.
+//! 
+//! Internally these use `tokio` channels to pass state from callbacks in the
+//! [`CFRunLoop`] into Rust async land.
 //!
 //! [0]: https://github.com/mozilla/authenticator-rs
-//! [`CFRunLoop`]: core_foundation::runloop::CFRunLoop
+//! [1]: https://developer.apple.com/library/archive/technotes/tn2187/_index.html#//apple_ref/doc/uid/DTS10004224-CH1-SOURCECODE15
+//! [2]: https://github.com/apple-oss-distributions/IOKitUser/blob/b0b3f822b7507c265aa8a1e37c3100c03ca82039/hid.subproj/IOHIDManager.c#L974-L975
 
 use async_trait::async_trait;
 use core_foundation::{
@@ -51,8 +59,8 @@ use tokio_stream::wrappers::BroadcastStream;
 mod iokit;
 
 use self::iokit::{
-    CFRunLoopEntryObserver, IOHIDDevice, IOHIDDeviceMatcher, IOHIDDeviceRef, IOHIDManager,
-    IOHIDManagerOptions, IOHIDReportType, IOReturn, Sendable,
+    CFRunLoopEntryObserver, IOHIDDevice, IOHIDDeviceRef, IOHIDManager, IOHIDManagerOptions,
+    IOHIDReportType, IOReturn, Sendable,
 };
 use crate::{
     HidError, HidReportBytes, HidSendReportBytes, Result, USBDevice, USBDeviceInfo,
@@ -96,9 +104,6 @@ impl IOHIDManagerWrapper {
             let context = &tx as *const _ as *mut c_void;
             let runloop = CFRunLoop::get_current();
 
-            // Match FIDO devices only.
-            let matcher = IOHIDDeviceMatcher::new();
-            manager_worker.set_device_matching(Some(&matcher));
             manager_worker.register_device_matching_callback(Self::on_device_matching, context);
             manager_worker.register_device_removal_callback(Self::on_device_removal, context);
             manager_worker.schedule_with_run_loop(&runloop);
