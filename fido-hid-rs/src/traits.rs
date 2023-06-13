@@ -1,7 +1,6 @@
 use async_trait::async_trait;
-use futures::{stream::BoxStream, Stream};
-use std::{fmt::Debug, sync::Arc};
-use tokio_stream::wrappers::ReceiverStream;
+use futures::stream::BoxStream;
+use std::fmt::Debug;
 
 use crate::{HidReportBytes, HidSendReportBytes, Result};
 

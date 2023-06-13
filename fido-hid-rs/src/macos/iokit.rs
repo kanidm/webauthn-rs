@@ -10,13 +10,11 @@ use core_foundation::{
         kCFAllocatorDefault, mach_port_t, Boolean, CFAllocatorRef, CFIndex, CFIndexConvertible,
         CFTypeID, TCFType, TCFTypeRef,
     },
-    date::CFDate,
     dictionary::{CFDictionary, CFDictionaryRef},
     number::CFNumber,
     runloop::{
         kCFRunLoopDefaultMode, kCFRunLoopEntry, CFRunLoop, CFRunLoopObserver,
         CFRunLoopObserverCallBack, CFRunLoopObserverContext, CFRunLoopObserverCreate, CFRunLoopRef,
-        CFRunLoopTimer, CFRunLoopTimerCallBack, CFRunLoopTimerContext,
     },
     set::{CFSet, CFSetGetValues, CFSetRef},
     string::{CFString, CFStringRef},
@@ -30,7 +28,6 @@ use std::{
     ops::Deref,
     os::raw::{c_int, c_void},
     ptr,
-    time::Duration,
 };
 
 use crate::{HidError, FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
@@ -183,35 +180,6 @@ impl<T: TCFType + Debug> Debug for Sendable<T> {
     }
 }
 
-pub struct CFRunLoopTimerHelper {
-    timer: CFRunLoopTimer,
-}
-
-impl CFRunLoopTimerHelper {
-    pub fn new(callback: CFRunLoopTimerCallBack, info: *mut c_void, delay: Duration) -> Self {
-        // CFRunLoopTimerCreate copies the CFRunLoopTimerContext, so there is no
-        // need to persist it beyond that function call.
-        let mut context = CFRunLoopTimerContext {
-            version: 0,
-            info,
-            retain: None,
-            release: None,
-            copyDescription: None,
-        };
-
-        let fire_date = CFDate::now().abs_time() + delay.as_secs_f64();
-        let timer = CFRunLoopTimer::new(fire_date, 0., 0, 0, callback, &mut context);
-
-        Self { timer }
-    }
-
-    pub fn add_to_current_runloop(&self) {
-        unsafe {
-            CFRunLoop::get_current().add_timer(&self.timer, kCFRunLoopDefaultMode);
-        }
-    }
-}
-
 pub struct CFRunLoopEntryObserver {
     observer: CFRunLoopObserver,
 }
@@ -274,8 +242,14 @@ impl IOHIDManager {
 
     pub fn copy_devices(&self) -> Vec<IOHIDDevice> {
         unsafe {
-            let s: CFSet<c_void> =
-                CFSet::wrap_under_get_rule(IOHIDManagerCopyDevices(self.as_concrete_TypeRef()));
+            let devices = IOHIDManagerCopyDevices(self.as_concrete_TypeRef());
+            if devices.is_null() {
+                // If there's no discovered devices, IOHIDManagerCopyDevices
+                // returns null (undocumented!)
+                return Vec::with_capacity(0);
+            }
+
+            let s: CFSet<c_void> = CFSet::wrap_under_get_rule(devices);
             let mut refs: Vec<*const c_void> = Vec::with_capacity(s.len());
 
             CFSetGetValues(s.as_concrete_TypeRef(), refs.as_mut_ptr());
