@@ -12,7 +12,7 @@
 //!
 //! We need to keep [`IOHIDManager`] and its [`CFRunLoop`] around for as long as
 //! there are *any* [`IOHIDDevice`] references created by it, because otherwise
-//! they'll be [automatically closed][1] (and [there's no way around that][1]).
+//! they'll be [automatically closed][1] (and [there's no way around that][2]).
 //! For that we use [`IOHIDManagerWrapper`], which gets wrapped in an [`Arc`]
 //! and shared between [`USBDeviceManagerImpl`] and [`USBDeviceInfoImpl`].
 //!
