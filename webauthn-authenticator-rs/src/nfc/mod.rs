@@ -372,13 +372,13 @@ impl NFCTransport {
 impl<'b> Transport<'b> for NFCTransport {
     type Token = NFCCard;
 
-    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         let watcher = NFCDeviceWatcher::new(self.ctx.clone())?;
 
         Ok(Box::pin(watcher))
     }
 
-    async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         let mut r = Vec::new();
         {
             let readers = self.ctx.list_readers_owned()?;

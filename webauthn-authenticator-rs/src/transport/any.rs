@@ -82,7 +82,7 @@ impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]
-    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         // Bluetooth
         let mut bluetooth_complete = !cfg!(feature = "bluetooth");
         #[cfg(feature = "bluetooth")]
@@ -196,7 +196,7 @@ impl<'b> Transport<'b> for AnyTransport {
         Ok(Box::pin(s))
     }
 
-    async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
         {
             error!("No transports available!");
@@ -215,7 +215,7 @@ impl<'b> Transport<'b> for AnyTransport {
         );
 
         #[cfg(feature = "nfc")]
-        if let Some(nfc) = &mut self.nfc {
+        if let Some(nfc) = &self.nfc {
             o.extend(nfc.get_devices().await?.into_iter().map(AnyToken::Nfc));
         }
 

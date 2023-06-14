@@ -82,7 +82,7 @@ impl USBTransport {
 impl<'b> Transport<'b> for USBTransport {
     type Token = USBToken;
 
-    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         let ret = self.manager.watch_devices().await?;
 
         Ok(Box::pin(ret.filter_map(|event| async move {
@@ -127,7 +127,7 @@ impl<'b> Transport<'b> for USBTransport {
     ///
     /// On Windows 10 build 1903 or later, this will not return any devices
     /// unless the program is run as Administrator.
-    async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         Ok(futures::stream::iter(self.manager.get_devices().await?)
             .filter_map(|d| async move {
                 if let Ok(dev) = d.open().await {

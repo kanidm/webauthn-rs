@@ -7,7 +7,8 @@
 //! ## Warning
 //!
 //! There are [API design issues][0] with [Transport] which make
-//! [BluetoothTransport::tokens] **extremely** flaky and timing sensitive.
+//! [BluetoothTransport] **extremely** flaky and timing sensitive. These have
+//! been partially addressed, but there is still some way to go.
 //!
 //! The [long term goal][0] is that this API (and its UI) will become as easy to
 //! use as Windows WebAuthn API, but it's not there just yet.
@@ -19,6 +20,20 @@
 //! To use a caBLE / hybrid authenticator, use the [cable][crate::cable] module
 //! (avaliable with `--features cable`) instead.
 //!
+//! ## Linux support
+//! 
+//! Seems to be extremely flakey.
+//! 
+//! ## macOS support
+//! 
+//! Works fine.
+//! 
+//! Non-paired (but discoverable) Bluetooth FIDO tokens do not appear in the
+//! System Settings Bluetooth pane – it can only be triggered by an application
+//! attempting to connect to an authenticator.
+//!
+//! This will attempt to connect to any nearby FIDO token.
+//! 
 //! ## Windows support
 //!
 //! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
@@ -28,6 +43,9 @@
 //!
 //! Use [Win10][crate::win10::Win10] (available with `--features win10`) on
 //! Windows instead.
+//! 
+//! You'll need to manually pair your authenticator in Device Manager before
+//! using it with this or Windows' WebAuthn API.
 use std::{
     collections::{HashMap, HashSet},
     ops::RangeInclusive,
@@ -243,14 +261,11 @@ impl BluetoothDeviceWatcher {
                         };
 
                         trace!("services: {:?}", properties.services);
-                        if properties.services.is_empty() {
-                            // Hideez key seems to lack this?
+                        // Hideez key seems to lack services on rediscovery?
+                        if !properties.services.is_empty() && !properties.services.contains(&FIDO_GATT_SERVICE) {
+                            trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
                             continue;
                         }
-                        // if !properties.services.contains(&FIDO_GATT_SERVICE) {
-                        //     trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
-                        //     continue;
-                        // }
 
                         trace!("device name: {:?}", properties.local_name);
                         recents.insert(id, Instant::now());
@@ -262,7 +277,7 @@ impl BluetoothDeviceWatcher {
                     CentralEvent::ServicesAdvertisement { id, services } => {
                         // macOS doesn't fire another DeviceDiscovered event if
                         // a device goes away and then comes back.
-                        trace!("services advertisement: {id:?}");
+                        trace!("services advertisement: {id:?} {services:?}");
                         if !services.contains(&FIDO_GATT_SERVICE) {
                             trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
                             continue;
@@ -362,7 +377,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// This method will always return an empty `Vec` of devices.
     ///
     /// Use [`watch_tokens`] instead.
-    async fn get_devices(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         warn!("get_devices is not supported for Bluetooth devices, use watch_tokens");
         Ok(vec![])
     }
@@ -374,7 +389,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// Due to the nature of the Bluetooth Low Energy transport,
     /// [BluetoothTransport] immediately emits a
     /// [TokenEvent::EnumerationComplete] event as soon as it starts.
-    async fn watch_tokens(&'b self) -> Result<BoxStream<'b, TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         trace!("Scanning for BTLE tokens");
         let stream = BluetoothDeviceWatcher::new(self, Duration::from_secs(10)).await?;
         Ok(Box::pin(stream))
@@ -419,7 +434,7 @@ impl BluetoothToken {
                     .as_ref()
                     .ok_or(WebauthnCError::UnexpectedState)?,
                 &d,
-                WriteType::WithoutResponse,
+                WriteType::WithResponse,
             )
             .await?;
         Ok(())
