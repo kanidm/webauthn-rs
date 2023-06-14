@@ -44,7 +44,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     type DeviceInfo = USBDeviceInfoImpl;
     type DeviceId = Box<Path>;
 
-    async fn watch_devices(&mut self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
+    async fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
         // udev only tells us about newly-connected devices, so we need to
         // explicitly look for any existing devices first!
         let existing_devices = self.get_devices().await?;
@@ -164,12 +164,12 @@ impl USBDeviceManager for USBDeviceManagerImpl {
         Ok(o)
     }
 
-    fn new() -> Result<Self> {
+    async fn new() -> Result<Self> {
         Ok(Self {})
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct USBDeviceInfoImpl {
     path: Box<Path>,
     vendor: u16,
