@@ -274,6 +274,21 @@ pub enum WebauthnError {
 
     #[error("The attestation ca list can not be empty")]
     MissingAttestationCaList,
+
+    #[error("This key has an invalid backup state flag")]
+    SshPublicKeyBackupState,
+
+    #[error("ED25519 and ED448 keys are not supported by this implementation")]
+    SshPublicKeyEDUnsupported,
+
+    #[error("The requested ssh public key curve is invalid")]
+    SshPublicKeyInvalidCurve,
+
+    #[error("The SSH public key is invalid")]
+    SshPublicKeyInvalidPubkey,
+
+    #[error("The attestation requst indicates cred protect was required, but user verification was not performed")]
+    SshPublicKeyInconsistentUserVerification,
 }
 
 impl PartialEq for WebauthnError {

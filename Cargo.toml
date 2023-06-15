@@ -28,6 +28,8 @@ members = [
     # The compat tester
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
+    # Ssh Key Attestation
+    "sshkey-attest",
 ]
 
 # Due to --cfg=web_sys_unstable_apis

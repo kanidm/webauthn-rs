@@ -34,14 +34,13 @@ mod macros;
 
 mod constants;
 
-mod attestation;
-mod crypto;
+pub mod attestation;
+pub mod crypto;
 
 pub mod core;
 pub mod error;
-
 pub mod interface;
-mod internals;
+pub mod internals;
 
 /// Protocol bindings
 pub mod proto {

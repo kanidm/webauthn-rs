@@ -377,7 +377,7 @@ where
 }
 
 /// The set of extensions that were registered by this credential.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct RegisteredExtensions {
     // ⚠️  It's critical we place serde default here so that we
     // can deserialise in the future as we add new types!

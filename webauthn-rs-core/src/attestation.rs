@@ -24,7 +24,7 @@ use x509_parser::oid_registry::Oid;
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
 /// that the value of the extension is equal to some other value
-pub(crate) trait AttestationX509Extension {
+pub trait AttestationX509Extension {
     /// the type of the value in the certificate extension
     type Output: Eq;
 
@@ -43,7 +43,8 @@ pub(crate) trait AttestationX509Extension {
     const VALIDATION_ERROR: WebauthnError;
 }
 
-pub(crate) struct FidoGenCeAaguid;
+/// The Fido AAGUID x509 extension
+pub struct FidoGenCeAaguid;
 pub(crate) struct AppleAnonymousNonce;
 
 pub(crate) struct AndroidKeyAttestationExtensionData;
@@ -306,7 +307,8 @@ impl AttestationX509Extension for AppleAnonymousNonce {
     const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateNonceMismatch;
 }
 
-pub(crate) fn validate_extension<T>(
+/// Validate an x509 extension is present in an x509 certificate
+pub fn validate_extension<T>(
     x509: &x509::X509,
     data: &<T as AttestationX509Extension>::Output,
 ) -> Result<AttestationMetadata, WebauthnError>

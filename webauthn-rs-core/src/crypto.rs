@@ -98,7 +98,8 @@ impl TryFrom<(&[u8], COSEAlgorithm)> for X509PublicKey {
 }
 */
 
-pub(crate) fn verify_signature(
+/// Validate an x509 signature is valid for the supplied data
+pub fn verify_signature(
     alg: COSEAlgorithm,
     pubk: &x509::X509,
     signature: &[u8],
@@ -143,10 +144,10 @@ where
     }
 }
 
-pub struct TpmSanData<'a> {
+struct TpmSanData<'a> {
     pub manufacturer: &'a str,
-    pub model: &'a str,
-    pub version: &'a str,
+    pub _model: &'a str,
+    pub _version: &'a str,
 }
 
 #[derive(Default)]
@@ -182,8 +183,8 @@ impl<'a> TpmSanDataBuilder<'a> {
             .zip(self.version)
             .map(|((manufacturer, model), version)| TpmSanData {
                 manufacturer,
-                model,
-                version,
+                _model: model,
+                _version: version,
             })
             .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)
     }
@@ -302,9 +303,11 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
     Ok(())
 }
 
-pub(crate) fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
-    // Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
-    // Statement Certificate Requirements.
+/// Verify that attestnCert meets the requirements in
+/// [§ 8.2.1 Packed Attestation Statement Certificate Requirements][0]
+///
+/// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
+pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
     let der_bytes = pubk.to_der()?;
     let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
@@ -726,7 +729,8 @@ impl COSEKey {
         }
     }
 
-    fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
+    /// Retrieve the public key of this COSEKey as an OpenSSL structure
+    pub fn get_openssl_pkey(&self) -> Result<pkey::PKey<pkey::Public>, WebauthnError> {
         match &self.key {
             COSEKeyType::EC_EC2(ec2k) => {
                 // Get the curve type

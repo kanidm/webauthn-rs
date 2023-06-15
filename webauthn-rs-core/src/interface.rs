@@ -268,7 +268,7 @@ pub struct Credential {
     /// component interacts with the device, i.e. an always verified authenticator
     /// vs one that can dynamically request it.
     pub registration_policy: UserVerificationPolicy,
-    /// The set of registrations that were verified at registration, that can
+    /// The set of extensions that were verified at registration, that can
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
     /// The attestation certificate of this credential, including parsed metadata from the
@@ -495,6 +495,7 @@ pub enum ParsedAttestationData {
     /// be trustworthy in all cases. If in doubt, reject this type.
     Uncertain,
 }
+
 #[allow(clippy::from_over_into)]
 impl Into<SerialisableAttestationData> for ParsedAttestationData {
     fn into(self) -> SerialisableAttestationData {
@@ -621,13 +622,13 @@ pub struct AuthenticationSignedExtensions {
 
 /// Attested Credential Data
 #[derive(Debug, Clone)]
-pub(crate) struct AttestedCredentialData {
+pub struct AttestedCredentialData {
     /// The guid of the authenticator. May indicate manufacturer.
-    pub(crate) aaguid: Aaguid,
+    pub aaguid: Aaguid,
     /// The credential ID.
-    pub(crate) credential_id: CredentialID,
+    pub credential_id: CredentialID,
     /// The credentials public Key.
-    pub(crate) credential_pk: serde_cbor::Value,
+    pub credential_pk: serde_cbor::Value,
 }
 
 /// Information about the authentication that occured.
