@@ -5,6 +5,7 @@
 include!(concat!(env!("OUT_DIR"), "/linux_wrapper.rs"));
 
 use nix::ioctl_read;
+use num_derive::FromPrimitive;
 
 // The userspace API is lies: https://bugzilla.kernel.org/show_bug.cgi?id=217463
 ioctl_read!(hid_ioc_rd_desc_size, b'H', 0x01, u32);
