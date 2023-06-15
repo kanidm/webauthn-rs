@@ -508,4 +508,86 @@ mod tests {
         ));
         */
     }
+
+    #[test]
+    fn test_ssh_ecdsa_sk_reject_attest_aaguid() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        // Create with:
+        //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
+        //  ssh-keygen -t ecdsa-sk -O challenge=/Users/william/.ssh/id_ecdsa_sk.chal -O write-attestation=/Users/william/.ssh/id_ecdsa_sk.attest -f /Users/william/.ssh/id_ecdsa_sk
+
+        let attest = Base64UrlSafeData::try_from("AAAAEXNzaC1zay1hdHRlc3QtdjAxAAACwTCCAr0wggGloAMCAQICBBisRsAwDQYJKoZIhvcNAQELBQAwLjEsMCoGA1UEAxMjWXViaWNvIFUyRiBSb290IENBIFNlcmlhbCA0NTcyMDA2MzEwIBcNMTQwODAxMDAwMDAwWhgPMjA1MDA5MDQwMDAwMDBaMG4xCzAJBgNVBAYTAlNFMRIwEAYDVQQKDAlZdWJpY28gQUIxIjAgBgNVBAsMGUF1dGhlbnRpY2F0b3IgQXR0ZXN0YXRpb24xJzAlBgNVBAMMHll1YmljbyBVMkYgRUUgU2VyaWFsIDQxMzk0MzQ4ODBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABHnqOyx8SXAQYiMM0j/rYOUpMXHUg/EAvoWdaw+DlwMBtUbN1G7PyuPj8w+B6e1ivSaNTB69N7O8vpKowq7rTjqjbDBqMCIGCSsGAQQBgsQKAgQVMS4zLjYuMS40LjEuNDE0ODIuMS43MBMGCysGAQQBguUcAgEBBAQDAgUgMCEGCysGAQQBguUcAQEEBBIEEMtpSB6P90A5k+wKJymhVKgwDAYDVR0TAQH/BAIwADANBgkqhkiG9w0BAQsFAAOCAQEAl50Dl9hg+C7hXTEceW66+yL6p+CE2bq0xhu7V/PmtMGKSDe4XDxO2+SDQ/TWpdmxztqK4f7UkSkhcwWOXuHL3WvawHVXxqDo02gluhWef7WtjNr4BIaM+Q6PH4rqF8AWtVwqetSXyJT7cddT15uaSEtsN21yO5mNLh1DBr8QM7Wu+Myly7JWi2kkIm0io1irfYfkrF8uCRqnFXnzpWkJSX1y9U4GusHDtEE7ul6vlMO2TzT566Qay2rig3dtNkZTeEj+6IS93fWxuleYVM/9zrrDRAWVJ+Vt1Zj49WZxWr5DAd0ZETDmufDGQDkSU+IpgD867ydL7b/eP8u9QurWeQAAAEYwRAIgeYp6mYVsuaj0NpHps1qkGkJYroyurnuCKdSYWUCCsVgCIAhFdmhNWGG0cY5l3sZUhjmrwCHpuQ1A0QXbhuEtjM7sAAAAxljE4wYQ6KFiEVlg/h7CI+ZSnJ9LboAgDcteXDIcivHisb9FAAALNMtpSB6P90A5k+wKJymhVKgAQPQVE6m4sayalwAfqHVZBGEP32y5ju2Vo7U3k1zPFKQGLDhpA0dRHWvYbsvTPmqVzSGuxSyRW/ugWzPqsveALlSlAQIDJiABIVggQ25tmKStvyG74d5VF1nSmn9UCTaq/gkNu4mG8PTI11YiWCAMvZ7dwFsRGIN40+RbHnxDitWfGRtXV9rwTbBpG1P3XAAAAAAAAAAA")
+            .expect("Failed to decode attestation");
+
+        let challenge = Base64UrlSafeData::try_from("VzCkpMNVYVgXHBuDP74v9A==")
+            .expect("Failed to decode attestation");
+
+        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+
+        // The device signature above is from a yk5nano, however we have an attestation policy
+        // to only allow the yk5 fips.
+
+        // Aaguid for yubikey 5 nano
+        // att_ca.insert_aaguid(uuid::uuid!("cb69481e-8ff7-4039-93ec-0a2729a154a8"));
+        // Aaguid for yubikey 5 fips
+        att_ca.insert_aaguid(uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"));
+        let att_ca_list: AttestationCaList =
+            att_ca.try_into().expect("Failed to build att ca list");
+
+        // Parse
+        let att = verify_fido_sk_ssh_attestation(
+            attest.0.as_slice(),
+            challenge.0.as_slice(),
+            &att_ca_list,
+            false,
+        );
+
+        trace!("att full {:?}", att);
+
+        assert!(matches!(
+            att,
+            Err(WebauthnError::AttestationUntrustedAaguid)
+        ));
+    }
+
+    #[test]
+    fn test_ssh_ecdsa_sk_reject_attest_ca() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        // Create with:
+        //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
+        //  ssh-keygen -t ecdsa-sk -O challenge=/Users/william/.ssh/id_ecdsa_sk.chal -O write-attestation=/Users/william/.ssh/id_ecdsa_sk.attest -f /Users/william/.ssh/id_ecdsa_sk
+
+        let attest = Base64UrlSafeData::try_from("AAAAEXNzaC1zay1hdHRlc3QtdjAxAAADGzCCAxcwggK+oAMCAQICCQDFabHRsxYpGTAKBggqhkjOPQQDAjCBnDELMAkGA1UEBhMCQ0gxDzANBgNVBAgMBkdlbmV2YTEQMA4GA1UEBwwHVmVyc29peDEPMA0GA1UECgwGVE9LRU4yMSIwIAYDVQQLDBlBdXRoZW50aWNhdG9yIEF0dGVzdGF0aW9uMRMwEQYDVQQDDAp0b2tlbjIuY29tMSAwHgYJKoZIhvcNAQkBFhFvZmZpY2VAdG9rZW4yLmNvbTAeFw0xOTEyMDQwNzAyMjJaFw0zOTExMjkwNzAyMjJaMF4xCzAJBgNVBAYTAkNIMQ8wDQYDVQQKDAZUT0tFTjIxIjAgBgNVBAsMGUF1dGhlbnRpY2F0b3IgQXR0ZXN0YXRpb24xGjAYBgNVBAMMEW9mZmljZUB0b2tlbjIuY29tMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEC/l7QJNMxtrBu91XScVYjFlqTFza0N/9RRYWPItzgmppWvjUPwyCres27Lo3Waf7OVMdmc5ML5HB+eECnVWqg6OCASQwggEgMAkGA1UdEwQCMAAwHQYDVR0OBBYEFFCysnSFvKuvrSVyB3ToAQshmMpjMIG7BgNVHSMEgbMwgbChgaKkgZ8wgZwxCzAJBgNVBAYTAkNIMQ8wDQYDVQQIDAZHZW5ldmExEDAOBgNVBAcMB1ZlcnNvaXgxDzANBgNVBAoMBlRPS0VOMjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjETMBEGA1UEAwwKdG9rZW4yLmNvbTEgMB4GCSqGSIb3DQEJARYRb2ZmaWNlQHRva2VuMi5jb22CCQCv1vlqKeW5ejATBgsrBgEEAYLlHAIBAQQEAwIFIDAhBgsrBgEEAYLlHAEBBAQSBBCrMvDGIjmvu8Rw0u9OJU23MAoGCCqGSM49BAMCA0cAMEQCIGgzWHRCvlMLEPA+qAk+33KwVVyvTKnBxC7jESc0vSV1AiBXPi/VVvaIiDh0vtnBmMSP1WCUGHhY7RReYNm9cbe8swAAAEYwRAIgfxtWfDli/pqS0/DqyaXvLn5C4BNRXoHx1ofpU4WZqfICIEzUSXKUI4/DezfU9MtW3t5ua5fhgL7EoMdaXBRGmNnLAAAA5ljk4wYQ6KFiEVlg/h7CI+ZSnJ9LboAgDcteXDIcivHisb9FAAADIasy8MYiOa+7xHDS704lTbcAYCnb4hHUYvEK9Dp4gjgJer+Wtcj0GglGtd5ubraTzUc19amoIyg/+/lNKrntsFSalESwu7fNNRPjWldzr2zyueB9MyJZDXkOrkP1iK/B836pudmGcJq6vfV1Da2Bieks16UBAgMmIAEhWCAe32mzSUWbouK4KOykaK3dGczNTUoTqBjengeoL6DhyCJYIIogmo+NOwfBZgF5xEORNffCk+4dA+preNaQE9mSv506AAAAAAAAAAA=")
+            .expect("Failed to decode attestation");
+
+        let challenge = Base64UrlSafeData::try_from("aAqBnywP0Vbv3SUgqmnMRQ==")
+            .expect("Failed to decode attestation");
+
+        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+
+        // The device signature above is from a token 2 however we have an attestation policy
+        // to only allow the yk5 fips.
+
+        // Aaguid for yubikey 5 fips
+        att_ca.insert_aaguid(uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"));
+        let att_ca_list: AttestationCaList =
+            att_ca.try_into().expect("Failed to build att ca list");
+
+        // Parse
+        let att = verify_fido_sk_ssh_attestation(
+            attest.0.as_slice(),
+            challenge.0.as_slice(),
+            &att_ca_list,
+            false,
+        );
+
+        trace!("att full {:?}", att);
+
+        assert!(matches!(
+            att,
+            Err(WebauthnError::AttestationChainNotTrusted(_))
+        ));
+    }
 }
