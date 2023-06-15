@@ -11,6 +11,7 @@ use bluetooth_hci::{
     BdAddr, BdAddrType,
 };
 use clap::{ArgGroup, Parser};
+use futures::StreamExt;
 use openssl::rand::rand_bytes;
 use serialport::FlowControl;
 use serialport_hci::{
@@ -31,7 +32,7 @@ use webauthn_authenticator_rs::{
     cable::{share_cable_authenticator, Advertiser, ShareCableAuthenticatorOptions},
     ctap2::CtapAuthenticator,
     error::WebauthnCError,
-    transport::{AnyTransport, Transport},
+    transport::{AnyTransport, TokenEvent, Transport},
     ui::Cli,
 };
 
@@ -264,8 +265,23 @@ async fn main() {
     }
 
     // Use a physical authenticator
-    let mut transport = AnyTransport::new().await.unwrap();
-    let token = transport.watch_tokens().unwrap().pop().unwrap();
+    let transport = AnyTransport::new().await.unwrap();
+    let mut events = transport.watch_tokens().await.unwrap();
+
+    let token = loop {
+        match events.next().await.unwrap() {
+            TokenEvent::Added(t) => {
+                break t;
+            }
+            TokenEvent::EnumerationComplete => {
+                info!("enumeration completed without detecting authenticator, connect one!");
+            }
+            TokenEvent::Removed(i) => {
+                info!("token disconnected: {i:?}");
+            }
+        }
+    };
+
     let mut authenticator = CtapAuthenticator::new(token, &ui).await.unwrap();
     let info = authenticator.get_info().to_owned();
 
