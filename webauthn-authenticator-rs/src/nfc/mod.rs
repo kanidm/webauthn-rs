@@ -536,6 +536,10 @@ impl NFCCard {
         let guard = self.card.lock()?;
         transmit(guard.deref(), request, form)
     }
+
+    pub fn reader_name(&self) -> Option<&str> {
+        self.reader_name.to_str().ok()
+    }
 }
 
 #[async_trait]

@@ -1,21 +1,37 @@
+//! Conformance tests for FIDO 2.x NFC authenticators.
+
 #[macro_use]
 extern crate tracing;
 
-use tracing_subscriber::{filter::LevelFilter, EnvFilter};
-
-use pcsc::Scope;
 use futures::StreamExt;
-use webauthn_authenticator_rs::ctap2::commands::*;
-use webauthn_authenticator_rs::error::Result;
-use webauthn_authenticator_rs::nfc::*;
-use webauthn_authenticator_rs::transport::{iso7816::*, Transport, TokenEvent};
+use pcsc::Scope;
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+use webauthn_authenticator_rs::{
+    ctap2::{
+        commands::{to_extended_apdu, GetInfoRequest},
+        CBORCommand, CBORResponse, GetInfoResponse,
+    },
+    error::Result,
+    nfc::{NFCCard, NFCTransport, APPLET_DF, APPLET_FIDO_2_0, APPLET_U2F_V2},
+    transport::{iso7816::*, Token, TokenEvent, Transport},
+    ui::Cli,
+};
 
 #[allow(dead_code)]
 #[derive(Debug)]
 enum TestResult {
-    Skipped(&'static str),
+    Skipped(String),
     Pass,
-    Fail(&'static str),
+    Fail(String),
+}
+
+/// Fails a [Test] and returns a [formatted][] failure message.
+///
+/// [formatted]: format!
+macro_rules! fail {
+    ($($arg:tt)*) => {{
+        return TestResult::Fail(format!($($arg)*))
+    }}
 }
 
 type Test = fn(&NFCCard) -> TestResult;
@@ -25,7 +41,7 @@ type Test = fn(&NFCCard) -> TestResult;
 fn test_extended_lc_select(card: &NFCCard) -> TestResult {
     if card.atr.extended_lc != Some(true) {
         // https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#nfc-framing
-        return TestResult::Fail("FIDO 2.x authenticators MUST support extended Lc/Le, but this authenticator does not declare support for extended APDUs in the historical bytes");
+        fail!("FIDO 2.x authenticators MUST support extended Lc/Le, but this authenticator does not declare support for extended APDUs in the historical bytes");
     }
 
     // Test with Le = 256 in extended mode
@@ -40,7 +56,7 @@ fn test_extended_lc_select(card: &NFCCard) -> TestResult {
     if resp.is_ok() {
         TestResult::Pass
     } else {
-        TestResult::Fail("Card reports supporting extended Lc/Le in the historical bytes, but doesn't support it for SELECT")
+        fail!("Card reports supporting extended Lc/Le in the historical bytes, but doesn't support it for SELECT");
     }
 }
 
@@ -49,7 +65,7 @@ fn test_extended_lc_select(card: &NFCCard) -> TestResult {
 fn test_extended_lc_info(card: &NFCCard) -> TestResult {
     if card.atr.extended_lc != Some(true) {
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#nfc-framing
-        return TestResult::Fail("FIDO 2.1 authenticators MUST support extended Lc/Le, but this authenticator does not declare support for extended APDUs in the historical bytes");
+        fail!("FIDO 2.1 authenticators MUST support extended Lc/Le, but this authenticator does not declare support for extended APDUs in the historical bytes");
     }
 
     // Select the applet, but only use short form
@@ -61,12 +77,12 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
         .expect("Failed to select applet");
 
     if !resp.is_ok() {
-        return TestResult::Fail("Could not select CTAP applet");
+        fail!("Could not select CTAP applet");
     }
 
     // Check return value
-    if resp.data != APPLET_U2F_V2 {
-        return TestResult::Fail("Unsupported CTAP applet");
+    if resp.data != APPLET_U2F_V2 && resp.data != APPLET_FIDO_2_0 {
+        fail!("Unsupported CTAP applet");
     }
 
     let mut get_info = to_extended_apdu((GetInfoRequest {}).cbor().unwrap());
@@ -76,20 +92,21 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
         .expect("Failed to get info, ne=65536");
 
     if !resp.is_ok() {
-        return TestResult::Fail(
-            "Authenticator did not return 'OK' response for GetInfo and ne=65536",
-        );
+        fail!("Authenticator did not return 'OK' response for GetInfo and ne=65536");
     }
 
     if resp.data.is_empty() || resp.data[0] != 0 {
-        return TestResult::Fail("Authenticator did not return 'SUCCESS' CTAP error code.");
+        fail!(
+            "Authenticator did not return 'SUCCESS' CTAP error code: {:?}",
+            hex::encode(resp.data)
+        );
     }
 
     // We should be able to parse it, too...
     let info = <GetInfoResponse as CBORResponse>::try_from(&resp.data[1..]);
 
     if info.is_err() {
-        return TestResult::Fail("Error parsing CBOR response");
+        fail!("Error parsing CBOR response");
     }
 
     trace!("{:?}", info.unwrap());
@@ -112,12 +129,16 @@ fn test_extended_lc_info(card: &NFCCard) -> TestResult {
         if resp.data == resp2.data {
             TestResult::Pass
         } else {
-            TestResult::Fail("Authenticator gave different responses for ne<256 and ne=65536")
+            fail!(
+                "Authenticator gave different responses for ne<256 and ne=65536: {:?} != {:?}",
+                hex::encode(resp.data),
+                hex::encode(resp2.data),
+            );
         }
     } else {
-        TestResult::Fail(
-            "Authenticator did not return 'OK' response for GetInfo in extended form and ne=256",
-        )
+        fail!(
+            "Authenticator did not return 'OK' response for GetInfo in extended form and ne=256: {:?}", hex::encode(resp2.data)
+        );
     }
 }
 
@@ -137,7 +158,7 @@ fn test_incorrect_aid(card: &NFCCard) -> TestResult {
             .expect("Failed to select applet");
 
         if resp.is_ok() {
-            return TestResult::Fail("Selecting applet DF with extra bytes unexpectedly succeeded");
+            fail!("Selecting applet DF with extra bytes unexpectedly succeeded");
         }
     }
 
@@ -184,23 +205,26 @@ fn test_select_zero_ne(card: &NFCCard) -> TestResult {
         .expect("Failed to select applet");
 
     if !resp.is_success() {
-        return TestResult::Fail("Selecting CTAP applet should always give success");
+        fail!("Selecting CTAP applet should always give success");
     }
 
     if resp.ctap_needs_get_response() {
-        return TestResult::Fail(
-            "Card responded to interindustry SELECT command with NFCCTAP_GETRESPONSE expectation",
+        fail!(
+            "Card responded to interindustry SELECT command with NFCCTAP_GETRESPONSE expectation"
         );
     }
 
     if !resp.data.is_empty() {
         // We got some data back.
         // This suggests the card is reading the command buffer out of bounds.
-        return TestResult::Fail("Expected no response data for Ne=0, card is reading from the command buffer out of bounds!");
+        fail!(
+            "Expected no response data for Ne=0, card returned: {:?}",
+            hex::encode(resp.data)
+        );
     }
 
     if resp.bytes_available() == 0 {
-        return TestResult::Fail("Card didn't report a corrected response length");
+        fail!("Card didn't report a corrected response length");
     }
 
     // Repeat with correct length
@@ -211,12 +235,16 @@ fn test_select_zero_ne(card: &NFCCard) -> TestResult {
 
     if !resp.is_ok() {
         // Correct Ne should have worked?
-        return TestResult::Fail("Selecting with correct Ne should succeed");
+        fail!("Selecting with correct Ne should succeed");
     }
 
     if req.ne as usize != resp.data.len() {
         // Incorrect extra bytes
-        TestResult::Fail("Corrected response length wasn't correct")
+        fail!(
+            "Corrected response length wasn't correct: {} != {}",
+            req.ne,
+            resp.data.len()
+        );
     } else {
         TestResult::Pass
     }
@@ -234,12 +262,15 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
 
         if !resp.is_success() {
             // We should always get a success response...
-            return TestResult::Fail("Selecting applet with short Ne should succeed");
+            fail!("Selecting applet with short Ne should succeed");
         }
 
         if resp.data.len() > ne {
             // Limit
-            return TestResult::Fail("Card responded with too many bytes for Ne");
+            fail!(
+                "Card response too long for Ne = {ne}: got {} bytes",
+                resp.data.len()
+            );
         }
 
         if resp.bytes_available() > 0 {
@@ -247,7 +278,10 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
                 true_len = ne + resp.bytes_available();
             } else if true_len != ne + resp.bytes_available() {
                 // changed mind
-                return TestResult::Fail("Card changed Ne between commands");
+                fail!(
+                    "Card changed true response length between commands: {true_len} != {}",
+                    ne + resp.bytes_available()
+                );
             }
         } else {
             // We reached the end
@@ -258,23 +292,14 @@ fn test_select_truncation(card: &NFCCard) -> TestResult {
     TestResult::Pass
 }
 
-fn test_card(card: NFCCard) {
-    info!("Card detected ...");
-    // Check that we're not a storage card
-    if card.atr.storage_card {
-        panic!("Detected storage card - only FIDO2 tokens are supported");
-    }
+async fn test_card(mut card: NFCCard) {
+    info!("Card detected: {}", card.reader_name().unwrap_or_default());
 
-    // Try to select the applet in short form.
-    let resp = card
-        .transmit(
-            &select_by_df_name(&APPLET_DF),
-            &ISO7816LengthForm::ShortOnly,
-        )
-        .expect("Failed to select applet");
-    if !resp.is_ok() {
-        panic!("Could not select FIDO2 applet, is this a FIDO2 token?");
-    }
+    // Get info in short form
+    let ui = Cli {};
+    let info = Token::transmit(&mut card, GetInfoRequest {}, &ui)
+        .await
+        .expect("could not get token info");
 
     const TESTS: [(&str, Test); 5] = [
         ("Select applet with extended Lc/Le", test_extended_lc_select),
@@ -288,13 +313,13 @@ fn test_card(card: NFCCard) {
     ];
 
     let mut passes: Vec<&str> = Vec::with_capacity(TESTS.len());
-    let mut skips: Vec<(&str, &str)> = Vec::with_capacity(TESTS.len());
-    let mut failures: Vec<(&str, &str)> = Vec::with_capacity(TESTS.len());
+    let mut skips: Vec<(&str, String)> = Vec::with_capacity(TESTS.len());
+    let mut failures: Vec<(&str, String)> = Vec::with_capacity(TESTS.len());
 
     for (name, testfn) in &TESTS {
-        println!("Started test: {}", name);
+        println!("Started test: {name}");
         let res = testfn(&card);
-        println!("Finished test: {}, Result: {:?}", name, res);
+        println!("Finished test: {name}, Result: {res:?}");
 
         match res {
             TestResult::Pass => passes.push(name),
@@ -305,12 +330,22 @@ fn test_card(card: NFCCard) {
 
     println!("# Conformance tests finished!");
     println!();
+    match card.reader_name() {
+        Some(n) => println!("Card reader: {n:?}"),
+        None => println!("Unknown card reader name"),
+    }
+    if let Some(aaguid) = info.aaguid {
+        println!(
+            "Authenticator AAGUID: {aaguid}, versions: {:?}",
+            info.versions
+        );
+    }
     println!("{:?}", card.atr);
     match card.atr.card_issuers_data_str() {
-        Some(s) => println!("Card issuer's data: {}", s),
+        Some(s) => println!("Card issuer's data: {s:?}"),
         None => {
             if let Some(d) = card.atr.card_issuers_data {
-                println!("Card issuer's data: {:02x?}", d);
+                println!("Card issuer's data (hex): {}", hex::encode(d));
             }
         }
     }
@@ -318,14 +353,14 @@ fn test_card(card: NFCCard) {
     println!("## {}/{} tests passed:", passes.len(), TESTS.len());
     println!();
     for n in passes {
-        println!("* {}", n);
+        println!("* {n}");
     }
     println!();
     if !skips.is_empty() {
         println!("## {}/{} tests skipped:", skips.len(), TESTS.len());
         println!();
         for (n, m) in skips {
-            println!("* {} ({})", n, m);
+            println!("* {n} ({m})");
         }
         println!();
     }
@@ -335,7 +370,7 @@ fn test_card(card: NFCCard) {
         println!("## {}/{} tests failed:", failures.len(), TESTS.len());
         println!();
         for (n, m) in failures {
-            println!("* {} ({})", n, m);
+            println!("* {n} ({m})");
         }
     }
     println!();
@@ -352,18 +387,21 @@ async fn main() -> Result<()> {
         )
         .compact()
         .init();
+    println!("Conformance test program for FIDO 2.x NFC authenticators");
+
     let reader = NFCTransport::new(Scope::User).expect("Failed to establish PC/SC context");
     let mut events = reader.watch_tokens().await?;
 
     while let Some(event) = events.next().await {
         match event {
             TokenEvent::Added(token) => {
-                test_card(token);
+                // watch_tokens() ensures that we got a FIDO authenticator
+                test_card(token).await;
                 break;
-            },
+            }
             TokenEvent::EnumerationComplete => {
                 info!("enumeration complete without any cards detected, waiting...");
-            },
+            }
             TokenEvent::Removed(id) => {
                 info!("card removed: {id:?}");
             }
