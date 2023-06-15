@@ -371,14 +371,16 @@ impl<'b> Transport<'b> for BluetoothTransport {
 
     /// ## Important
     ///
-    /// [`get_devices`] is unsupported for [BluetoothTransport], as BTLE
+    /// [`tokens`] is unsupported for [BluetoothTransport], as BTLE
     /// authenticator connections are very short-lived and timing sensitive.
     ///
     /// This method will always return an empty `Vec` of devices.
     ///
-    /// Use [`watch_tokens`] instead.
-    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
-        warn!("get_devices is not supported for Bluetooth devices, use watch_tokens");
+    /// Use [`watch()`][] instead.
+    /// 
+    /// [`watch()`]: BluetoothTransport::watch
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
+        warn!("tokens() is not supported for Bluetooth devices, use watch()");
         Ok(vec![])
     }
 
@@ -389,7 +391,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// Due to the nature of the Bluetooth Low Energy transport,
     /// [BluetoothTransport] immediately emits a
     /// [TokenEvent::EnumerationComplete] event as soon as it starts.
-    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         trace!("Scanning for BTLE tokens");
         let stream = BluetoothDeviceWatcher::new(self, Duration::from_secs(10)).await?;
         Ok(Box::pin(stream))

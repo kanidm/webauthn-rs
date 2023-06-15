@@ -36,15 +36,15 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     /// Initially, this send synthetic [`TokenEvent::Added`] for all
     /// currently-connected tokens, followed by
     /// [`TokenEvent::EnumerationComplete`].
-    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
 
     /// Gets all currently-connected devices associated with this [Transport].
     ///
     /// This method does not work for Bluetooth devices. Use
-    /// [`watch_tokens()`][] instead.
+    /// [`watch()`][] instead.
     /// 
-    /// [`watch_tokens()`]: Transport::watch_tokens
-    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError>;
+    /// [`watch()`]: Transport::watch
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError>;
 }
 
 /// Represents a connection to a single FIDO token over a [Transport].

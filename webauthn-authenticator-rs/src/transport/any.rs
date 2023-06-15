@@ -82,12 +82,12 @@ impl<'b> Transport<'b> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]
-    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         // Bluetooth
         let mut bluetooth_complete = !cfg!(feature = "bluetooth");
         #[cfg(feature = "bluetooth")]
         let bluetooth: BoxStream<TokenEvent<BluetoothToken>> =
-            match self.bluetooth.watch_tokens().await {
+            match self.bluetooth.watch().await {
                 Err(e) => {
                     error!("Bluetooth transport failure: {e:?}");
                     bluetooth_complete = true;
@@ -105,7 +105,7 @@ impl<'b> Transport<'b> for AnyTransport {
         let mut nfc_complete = !cfg!(feature = "nfc");
         #[cfg(feature = "nfc")]
         let nfc: BoxStream<TokenEvent<NFCCard>> = if let Some(nfc) = &self.nfc {
-            match nfc.watch_tokens().await {
+            match nfc.watch().await {
                 Err(e) => {
                     error!("NFC transport failure: {e:?}");
                     nfc_complete = true;
@@ -126,7 +126,7 @@ impl<'b> Transport<'b> for AnyTransport {
         // USB HID
         let mut usb_complete = !cfg!(feature = "usb");
         #[cfg(feature = "usb")]
-        let usb: BoxStream<TokenEvent<USBToken>> = match self.usb.watch_tokens().await {
+        let usb: BoxStream<TokenEvent<USBToken>> = match self.usb.watch().await {
             Err(e) => {
                 error!("USB transport failure: {e:?}");
                 usb_complete = true;
@@ -196,7 +196,7 @@ impl<'b> Transport<'b> for AnyTransport {
         Ok(Box::pin(s))
     }
 
-    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
         {
             error!("No transports available!");
@@ -208,7 +208,7 @@ impl<'b> Transport<'b> for AnyTransport {
         #[cfg(feature = "bluetooth")]
         o.extend(
             self.bluetooth
-                .get_devices()
+                .tokens()
                 .await?
                 .into_iter()
                 .map(AnyToken::Bluetooth),
@@ -216,11 +216,11 @@ impl<'b> Transport<'b> for AnyTransport {
 
         #[cfg(feature = "nfc")]
         if let Some(nfc) = &self.nfc {
-            o.extend(nfc.get_devices().await?.into_iter().map(AnyToken::Nfc));
+            o.extend(nfc.tokens().await?.into_iter().map(AnyToken::Nfc));
         }
 
         #[cfg(feature = "usb")]
-        o.extend(self.usb.get_devices().await?.into_iter().map(AnyToken::Usb));
+        o.extend(self.usb.tokens().await?.into_iter().map(AnyToken::Usb));
 
         Ok(o)
     }

@@ -6,6 +6,7 @@ compile_error!(
 extern crate tracing;
 
 use hex::{FromHex, FromHexError};
+use webauthn_authenticator_rs::ctap2::select_one_device;
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use webauthn_authenticator_rs::ctap2::commands::UserCM;
@@ -252,7 +253,7 @@ async fn main() {
     // drop(stream);
     // todo!()
 
-    let mut stream = transport.watch_tokens().await.unwrap();
+    let mut stream = transport.watch().await.unwrap();
 
     // if tokens.is_empty() {
     //     println!("No tokens available!");
@@ -266,9 +267,8 @@ async fn main() {
     // TODO: reimplement to use stream
     match opt.commands {
         Opt::Selection => {
-            todo!()
-            //let token = select_one_token(tokens.iter_mut()).await;
-            //println!("selected token: {token:?}");
+            let token = select_one_device(stream, &ui).await;
+            println!("selected token: {token:?}");
         }
 
         Opt::Info(o) => {

@@ -390,12 +390,12 @@ async fn main() -> Result<()> {
     println!("Conformance test program for FIDO 2.x NFC authenticators");
 
     let reader = NFCTransport::new(Scope::User).expect("Failed to establish PC/SC context");
-    let mut events = reader.watch_tokens().await?;
+    let mut events = reader.watch().await?;
 
     while let Some(event) = events.next().await {
         match event {
             TokenEvent::Added(token) => {
-                // watch_tokens() ensures that we got a FIDO authenticator
+                // watch() ensures that we got a FIDO authenticator
                 test_card(token).await;
                 break;
             }

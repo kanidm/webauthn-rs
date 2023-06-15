@@ -61,6 +61,7 @@ use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
 use async_trait::async_trait;
+use futures::executor::block_on;
 use futures::{stream::BoxStream, Stream};
 use tokio::sync::mpsc;
 use tokio::task::{spawn_blocking, JoinHandle};
@@ -116,7 +117,7 @@ fn ignored_reader(reader_name: &CStr) -> bool {
             return false;
         }
     };
-    
+
     let r = IGNORED_READERS.iter().any(|i| reader_name.contains(i));
 
     #[cfg(nfc_allow_ignored_readers)]
@@ -220,7 +221,7 @@ impl NFCDeviceWatcher {
                     match e {
                         Timeout | UnknownReader => {
                             continue;
-                        },
+                        }
 
                         e => {
                             error!("while watching for PC/SC status changes: {e:?}");
@@ -230,6 +231,7 @@ impl NFCDeviceWatcher {
                 }
 
                 // trace!("Updated reader states");
+                let mut tasks = Vec::new();
                 for state in &reader_states {
                     if state.name() == PNP_NOTIFICATION()
                         || !state.event_state().contains(State::CHANGED)
@@ -259,7 +261,7 @@ impl NFCDeviceWatcher {
                     {
                         if let Ok(mut card) = NFCCard::new(&ctx, state.name(), state.atr()) {
                             let tx = tx.clone();
-                            tokio::spawn(async move {
+                            tasks.push(tokio::spawn(async move {
                                 match card.init().await {
                                     Ok(()) => {
                                         let _ = tx.send(TokenEvent::Added(card)).await;
@@ -268,7 +270,7 @@ impl NFCDeviceWatcher {
                                         error!("initialising card: {e:?}");
                                     }
                                 };
-                            });
+                            }));
                         }
                     } else if state.event_state().contains(State::EMPTY)
                         && !state.current_state().contains(State::EMPTY)
@@ -288,6 +290,13 @@ impl NFCDeviceWatcher {
                     // reader connected on the first loop (which was in the
                     // UNAWARE state).
                     enumeration_complete = true;
+
+                    // Wait for outstanding tasks which could signal "added"
+                    // before EnumerationCompleted.
+                    for task in tasks {
+                        let _ = block_on(task);
+                    }
+
                     if tx.blocking_send(TokenEvent::EnumerationComplete).is_err() {
                         // Channel lost!
                         break 'main;
@@ -372,13 +381,13 @@ impl NFCTransport {
 impl<'b> Transport<'b> for NFCTransport {
     type Token = NFCCard;
 
-    async fn watch_tokens(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         let watcher = NFCDeviceWatcher::new(self.ctx.clone())?;
 
         Ok(Box::pin(watcher))
     }
 
-    async fn get_devices(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         let mut r = Vec::new();
         {
             let readers = self.ctx.list_readers_owned()?;
@@ -537,6 +546,8 @@ impl NFCCard {
         transmit(guard.deref(), request, form)
     }
 
+    /// Gets the name of the card reader being used to communicate with this
+    /// token.
     pub fn reader_name(&self) -> Option<&str> {
         self.reader_name.to_str().ok()
     }
@@ -590,7 +601,7 @@ impl Token for NFCCard {
     async fn init(&mut self) -> Result<(), WebauthnCError> {
         if self.initialised {
             warn!("attempted to init an already-initialised card");
-            return Ok(())
+            return Ok(());
         } else {
             // FIXME: macOS likes to drop in on our **exclusive** connection with a
             // SELECT(a0 00 00 03 08 00 00 10 00 01 00) (for the PIV applet). This

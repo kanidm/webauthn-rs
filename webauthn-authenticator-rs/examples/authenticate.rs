@@ -67,7 +67,7 @@ async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + 
     let mut reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
 
-    match reader.watch_tokens().await {
+    match reader.watch().await {
         Ok(mut tokens) => {
             while let Some(event) = tokens.next().await {
                 match event {

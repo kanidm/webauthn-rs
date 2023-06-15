@@ -266,7 +266,7 @@ async fn main() {
 
     // Use a physical authenticator
     let transport = AnyTransport::new().await.unwrap();
-    let mut events = transport.watch_tokens().await.unwrap();
+    let mut events = transport.watch().await.unwrap();
 
     let token = loop {
         match events.next().await.unwrap() {
