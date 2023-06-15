@@ -67,7 +67,7 @@ tide = "0.16"
 thiserror = "^1.0.37"
 tokio = { version = "1.22.0", features = ["sync", "test-util", "macros", "rt-multi-thread", "time"] }
 tokio-native-tls = "^0.3.1"
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
 tracing = "^0.1.35"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "std", "fmt"] }

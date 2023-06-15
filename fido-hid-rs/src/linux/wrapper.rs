@@ -2,7 +2,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-include!(concat!(env!("OUT_DIR"), "/usb_linux_wrapper.rs"));
+include!(concat!(env!("OUT_DIR"), "/linux_wrapper.rs"));
 
 use nix::ioctl_read;
 

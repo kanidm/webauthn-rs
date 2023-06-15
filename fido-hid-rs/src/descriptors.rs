@@ -7,6 +7,7 @@
 //!
 //! [0]: https://www.usb.org/sites/default/files/documents/hid1_11.pdf
 
+use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 use crate::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
