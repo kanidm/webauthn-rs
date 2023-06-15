@@ -121,5 +121,9 @@ name = "cable_tunnel"
 required-features = ["cable", "ui-cli"]
 
 [[example]]
+name = "conformance"
+required-features = ["nfc", "nfc_raw_transmit", "ui-cli"]
+
+[[example]]
 name = "softtoken"
 required-features = ["softtoken"]

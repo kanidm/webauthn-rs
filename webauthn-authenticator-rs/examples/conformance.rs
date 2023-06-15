@@ -1,7 +1,14 @@
+#[macro_use]
+extern crate tracing;
+
+use tracing_subscriber::{filter::LevelFilter, EnvFilter};
+
 use pcsc::Scope;
+use futures::StreamExt;
 use webauthn_authenticator_rs::ctap2::commands::*;
+use webauthn_authenticator_rs::error::Result;
 use webauthn_authenticator_rs::nfc::*;
-use webauthn_authenticator_rs::transport::iso7816::*;
+use webauthn_authenticator_rs::transport::{iso7816::*, Transport, TokenEvent};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -335,10 +342,33 @@ fn test_card(card: NFCCard) {
     println!("Tip: run with `RUST_LOG=trace` to see raw APDUs");
 }
 
-pub(crate) fn main() {
-    let mut reader = NFCReader::new(Scope::User).expect("Failed to establish PC/SC context");
-    info!("Using reader: {:?}", reader);
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .compact()
+        .init();
+    let reader = NFCTransport::new(Scope::User).expect("Failed to establish PC/SC context");
+    let mut events = reader.watch_tokens().await?;
 
-    let card = reader.wait_for_card().expect("Error getting card");
-    test_card(card);
+    while let Some(event) = events.next().await {
+        match event {
+            TokenEvent::Added(token) => {
+                test_card(token);
+                break;
+            },
+            TokenEvent::EnumerationComplete => {
+                info!("enumeration complete without any cards detected, waiting...");
+            },
+            TokenEvent::Removed(id) => {
+                info!("card removed: {id:?}");
+            }
+        }
+    }
+
+    Ok(())
 }
