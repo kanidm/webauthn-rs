@@ -22,32 +22,28 @@ extern crate tracing;
 pub mod proto;
 
 use uuid::Uuid;
-use webauthn_rs_core::attestation::verify_attestation_ca_chain;
-use webauthn_rs_core::crypto::compute_sha256;
-use webauthn_rs_core::crypto::verify_signature;
-use webauthn_rs_core::internals::AuthenticatorData;
-use webauthn_rs_core::proto::COSEKey;
-use webauthn_rs_core::proto::ExtnState;
-use webauthn_rs_core::proto::RegisteredExtensions;
-use webauthn_rs_core::proto::Registration;
-use webauthn_rs_core::proto::{AttestationCaList, CredentialProtectionPolicy};
+use webauthn_rs_core::{
+    attestation::{
+        validate_extension, verify_attestation_ca_chain, AttestationFormat, FidoGenCeAaguid,
+    },
+    crypto::{assert_packed_attest_req, compute_sha256, verify_signature},
+    error::WebauthnError,
+    internals::AuthenticatorData,
+    proto::{
+        AttestationCaList, AttestationMetadata, COSEAlgorithm, COSEKey, COSEKeyType,
+        CredentialProtectionPolicy, ExtnState, ParsedAttestation, ParsedAttestationData,
+        RegisteredExtensions, Registration,
+    },
+};
 
-use nom::bytes::complete::{tag, take};
-use nom::number::complete::be_u32;
+use nom::{
+    bytes::complete::{tag, take},
+    number::complete::be_u32,
+};
 
 use openssl::{bn, ec, nid, x509};
 
-use webauthn_rs_core::error::WebauthnError;
-
-use webauthn_rs_core::proto::{
-    AttestationMetadata, COSEAlgorithm, COSEKeyType, ParsedAttestation, ParsedAttestationData,
-};
-
 use sshkeys::{Curve, EcdsaPublicKey, KeyType, KeyTypeKind, PublicKey, PublicKeyKind};
-
-use webauthn_rs_core::attestation::AttestationFormat;
-use webauthn_rs_core::attestation::{validate_extension, FidoGenCeAaguid};
-use webauthn_rs_core::crypto::assert_packed_attest_req;
 
 use crate::proto::AttestedPublicKey;
 
@@ -62,8 +58,8 @@ use crate::proto::AttestedPublicKey;
 ///    -O write-attestation=/Users/username/.ssh/id_ecdsa_sk.attest -f /Users/username/.ssh/id_ecdsa_sk
 /// ```
 ///
-/// The content of `id_ecdsa_sk.attest` and `id_ecdsa_sk.chal` correspond to the parameters
-/// `attestation` and `challenge` respectively.
+/// The contents of `id_ecdsa_sk.attest` and `id_ecdsa_sk.chal` correspond to the
+/// `attestation` and `challenge` parameters respectively.
 pub fn verify_fido_sk_ssh_attestation(
     attestation: &[u8],
     challenge: &[u8],
@@ -75,10 +71,6 @@ pub fn verify_fido_sk_ssh_attestation(
     }
 
     let alg = COSEAlgorithm::ES256;
-
-    // There doesn't seem to be much in the way of docs about the format of
-    // the ssh attestation binary, but reading the source, we see it is setup
-    // per: https://github.com/openssh/openssh-portable/blob/master/ssh-sk.c#L436
 
     let ssh_sk_attest = SshSkAttestation::try_from(attestation)?;
 
@@ -151,13 +143,12 @@ pub fn verify_fido_sk_ssh_attestation(
         AttestationMetadata::Packed { aaguid } | AttestationMetadata::Tpm { aaguid, .. } => {
             // If not present, fail.
             if !ca_crt.aaguids.contains(aaguid) {
-                trace!(?aaguid, "aaguid not trust by this CA");
+                error!(?aaguid, "aaguid not trusted by this CA");
                 return Err(WebauthnError::AttestationUntrustedAaguid);
             }
         }
         _ => {
-            // Fail
-            trace!("this attestation format does not contain an aaguid and can not proceed");
+            error!("this attestation format does not contain an aaguid and can not proceed");
             return Err(WebauthnError::AttestationFormatMissingAaguid);
         }
     };
@@ -179,7 +170,7 @@ pub fn verify_fido_sk_ssh_attestation(
         ..Default::default()
     };
 
-    // Assert that backup eligible and state are both false.
+    // Assert that the key is not backup-eligible and not backed up.
 
     if ssh_sk_attest.auth_data.backup_eligible || ssh_sk_attest.auth_data.backup_state {
         error!("Fido ssh sk keys may not be backed up or backup eligible");
@@ -234,9 +225,15 @@ impl TryFrom<&[u8]> for SshSkAttestation {
     type Error = WebauthnError;
 
     fn try_from(data: &[u8]) -> Result<SshSkAttestation, WebauthnError> {
-        let sk_raw = ssh_sk_attestation_parser(data)
+        // There doesn't seem to be much in the way of docs about the format of
+        // the ssh attestation binary, but reading the source, we see it is setup
+        // per: https://github.com/openssh/openssh-portable/blob/master/ssh-sk.c#L436
+        //
+        // Update: There are docs, but they are hard to find :(
+        // https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/PROTOCOL.u2f#L151-L174
+        let sk_raw = parse_ssh_sk_attestation(data)
             .map_err(|e| {
-                error!(?e, "try_from ssh_sk_attestation_parser");
+                error!(?e, "try_from parse_ssh_sk_attestation");
                 WebauthnError::ParseNOMFailure
             })
             // Discard the remaining bytes.
@@ -272,7 +269,7 @@ impl TryFrom<&[u8]> for SshSkAttestation {
     }
 }
 
-fn ssh_sk_attestation_parser(i: &[u8]) -> nom::IResult<&[u8], SshSkAttestationRaw> {
+fn parse_ssh_sk_attestation(i: &[u8]) -> nom::IResult<&[u8], SshSkAttestationRaw> {
     // Starts with a 4 byte u32 for the len of the header.
 
     let (i, _tag_len) = tag([0, 0, 0, 17])(i)?;
@@ -342,8 +339,8 @@ fn to_ssh_pubkey(cose: COSEKey) -> Result<PublicKey, WebauthnError> {
             })
         }
         _ => {
-            debug!("to_ssh_pubkey");
-            Err(WebauthnError::SshPublicKeyInvalidType)
+            error!("ed25519 or ed448 public keys are not supported");
+            Err(WebauthnError::SshPublicKeyEDUnsupported)
         }
     }
 }
@@ -370,7 +367,7 @@ mod tests {
         let challenge = Base64UrlSafeData::try_from("VzCkpMNVYVgXHBuDP74v9A==")
             .expect("Failed to decode attestation");
 
-        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBENubZikrb8hu+HeVRdZ0pp/VAk2qv4JDbuJhvD0yNdWDL2e3cBbERiDeNPkWx58Q4rVnxkbV1fa8E2waRtT91wAAAAEc3NoOg== william@maxixe.dev.blackhats.net.au";
+        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBENubZikrb8hu+HeVRdZ0pp/VAk2qv4JDbuJhvD0yNdWDL2e3cBbERiDeNPkWx58Q4rVnxkbV1fa8E2waRtT91wAAAAEc3NoOg== william@hostname";
         let mut key = sshkeys::PublicKey::from_string(pubkey).unwrap();
         // Blank the comment
         key.comment = None;
@@ -395,7 +392,7 @@ mod tests {
         trace!("att full {:?}", att);
 
         // Check the supplied pubkey and the attested pubkey are the same.
-        assert!(att.pubkey == key);
+        assert_eq!(att.pubkey, key);
 
         // Assert that cred protect isn't set.
         assert!(matches!(
@@ -417,7 +414,7 @@ mod tests {
         let challenge = Base64UrlSafeData::try_from("VzCkpMNVYVgXHBuDP74v9A==")
             .expect("Failed to decode attestation");
 
-        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBMD4M0oQcZZURp0PhmabT3X+rvYak+JdnMwDTlJ/zBzZrec0hNPMTEy2/BSWTiX/LCtOIuxSUAzRFG07JAwxxTwAAAAEc3NoOg== william@maxixe.dev.blackhats.net.au";
+        let pubkey = "sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBMD4M0oQcZZURp0PhmabT3X+rvYak+JdnMwDTlJ/zBzZrec0hNPMTEy2/BSWTiX/LCtOIuxSUAzRFG07JAwxxTwAAAAEc3NoOg== william@hostname";
         let mut key = sshkeys::PublicKey::from_string(pubkey).unwrap();
         // Blank the comment
         key.comment = None;
@@ -442,7 +439,7 @@ mod tests {
         trace!("att full {:?}", att);
 
         // Check the supplied pubkey and the attested pubkey are the same.
-        assert!(att.pubkey == key);
+        assert_eq!(att.pubkey, key);
 
         // Assert that cred protect is present.
         assert!(matches!(

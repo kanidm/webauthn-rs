@@ -1097,7 +1097,7 @@ fn parse_tpmupublicid(input: &[u8], alg: TpmAlgId) -> nom::IResult<&[u8], TpmuPu
 /// Tpm Public Key Structure
 pub(crate) struct TpmtPublic {
     /// The type of public parms and key IE Ecdsa or Rsa
-    pub _type_: TpmAlgId,
+    pub _type: TpmAlgId,
     /// The hash type over pubarea (webauthn specific)
     pub name_alg: TpmAlgId,
     // TPMA_OBJECT
@@ -1150,7 +1150,7 @@ fn tpmtpublic_parser(i: &[u8]) -> nom::IResult<&[u8], TpmtPublic> {
     Ok((
         i,
         TpmtPublic {
-            _type_: type_,
+            _type: type_,
             name_alg,
             _object_attributes,
             _auth_policy,

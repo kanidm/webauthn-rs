@@ -268,7 +268,7 @@ pub struct Credential {
     /// component interacts with the device, i.e. an always verified authenticator
     /// vs one that can dynamically request it.
     pub registration_policy: UserVerificationPolicy,
-    /// The set of registrations that were verified at registration, that can
+    /// The set of extensions that were verified at registration, that can
     /// be used in future authentication attempts
     pub extensions: RegisteredExtensions,
     /// The attestation certificate of this credential, including parsed metadata from the

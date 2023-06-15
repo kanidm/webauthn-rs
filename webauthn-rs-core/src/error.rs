@@ -278,13 +278,13 @@ pub enum WebauthnError {
     #[error("This key has an invalid backup state flag")]
     SshPublicKeyBackupState,
 
-    #[error("This key is not a valid ssh public key")]
-    SshPublicKeyInvalidType,
+    #[error("ED25519 and ED448 keys are not supported by this implementation")]
+    SshPublicKeyEDUnsupported,
 
-    #[error("This requested ssh public key curve is invalid")]
+    #[error("The requested ssh public key curve is invalid")]
     SshPublicKeyInvalidCurve,
 
-    #[error("This public key string is not a valid public key")]
+    #[error("The SSH public key is invalid")]
     SshPublicKeyInvalidPubkey,
 
     #[error("The attestation requst indicates cred protect was required, but user verification was not performed")]

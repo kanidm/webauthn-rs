@@ -144,14 +144,10 @@ where
     }
 }
 
-/// TpmSanData
-pub struct TpmSanData<'a> {
-    /// Manufacturer
+struct TpmSanData<'a> {
     pub manufacturer: &'a str,
-    /// Model
-    pub model: &'a str,
-    /// Version
-    pub version: &'a str,
+    pub _model: &'a str,
+    pub _version: &'a str,
 }
 
 #[derive(Default)]
@@ -187,8 +183,8 @@ impl<'a> TpmSanDataBuilder<'a> {
             .zip(self.version)
             .map(|((manufacturer, model), version)| TpmSanData {
                 manufacturer,
-                model,
-                version,
+                _model: model,
+                _version: version,
             })
             .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)
     }
@@ -309,6 +305,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
 
 /// Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation
 /// Statement Certificate Requirements.
+/// https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
 pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
     let der_bytes = pubk.to_der()?;
