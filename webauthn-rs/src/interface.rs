@@ -135,9 +135,9 @@ impl PartialEq for Passkey {
     }
 }
 
-// PasswordlessKey
+// AttestedPasskeyKey
 
-/// An in progress registration session for a [PasswordlessKey].
+/// An in progress registration session for a [AttestedPasskeyKey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -152,12 +152,12 @@ impl PartialEq for Passkey {
     derive(Serialize, Deserialize)
 )]
 #[cfg(feature = "preview-features")]
-pub struct PasswordlessKeyRegistration {
+pub struct AttestedPasskeyKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
 }
 
-/// An in progress authentication session for a [PasswordlessKey].
+/// An in progress authentication session for a [AttestedPasskeyKey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -172,24 +172,24 @@ pub struct PasswordlessKeyRegistration {
     derive(Serialize, Deserialize)
 )]
 #[cfg(feature = "preview-features")]
-pub struct PasswordlessKeyAuthentication {
+pub struct AttestedPasskeyKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A passwordless key for a user. This is a specialisation of [Passkey] as you can
+/// An attested passkey for a user. This is a specialisation of [Passkey] as you can
 /// limit the make and models of authenticators that a user may register. Additionally
 /// these keys will always enforce userverification.
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "preview-features")]
-pub struct PasswordlessKey {
+pub struct AttestedPasskeyKey {
     pub(crate) cred: Credential,
 }
 
 #[cfg(feature = "preview-features")]
-impl PasswordlessKey {
-    /// Retrieve a reference to this Passwordless Key's credential ID.
+impl AttestedPasskeyKey {
+    /// Retrieve a reference to this AttestedPasskey Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
         &self.cred.cred_id
     }
@@ -237,17 +237,17 @@ impl PasswordlessKey {
 }
 
 #[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
-impl From<PasswordlessKey> for Credential {
-    fn from(pk: PasswordlessKey) -> Self {
+impl From<AttestedPasskeyKey> for Credential {
+    fn from(pk: AttestedPasskeyKey) -> Self {
         pk.cred
     }
 }
 
 #[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
-impl From<Credential> for PasswordlessKey {
+impl From<Credential> for AttestedPasskeyKey {
     /// Convert a generic webauthn credential into a Passkey
     fn from(cred: Credential) -> Self {
-        PasswordlessKey { cred }
+        AttestedPasskeyKey { cred }
     }
 }
 
@@ -290,7 +290,7 @@ pub struct SecurityKeyAuthentication {
 
 /// A Security Key for a user. These are the legacy "second factor" method of security tokens.
 ///
-/// You should avoid this type in favour of [Passkey] or [PasswordlessKey]
+/// You should avoid this type in favour of [Passkey] or [AttestedPasskeyKey]
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -367,7 +367,7 @@ impl From<Credential> for SecurityKey {
     }
 }
 
-/// An in progress registration session for a [DeviceKey].
+/// An in progress registration session for a [AttestedResidentKey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -382,12 +382,12 @@ impl From<Credential> for SecurityKey {
     derive(Serialize, Deserialize)
 )]
 #[cfg(feature = "resident-key-support")]
-pub struct DeviceKeyRegistration {
+pub struct AttestedResidentKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
 }
 
-/// An in progress authentication session for a [DeviceKey].
+/// An in progress authentication session for a [AttestedResidentKey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -402,11 +402,11 @@ pub struct DeviceKeyRegistration {
     derive(Serialize, Deserialize)
 )]
 #[cfg(feature = "resident-key-support")]
-pub struct DeviceKeyAuthentication {
+pub struct AttestedResidentKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// A device key belonging to a user. These are a specialisation of [PasswordlessKey] where
+/// An attested resident key belonging to a user. These are a specialisation of [AttestedPasskeyKey] where
 /// the devices in use can be attested. In addition this type enforces keys to be resident on the
 /// authenticator.
 ///
@@ -420,12 +420,12 @@ pub struct DeviceKeyAuthentication {
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "resident-key-support")]
-pub struct DeviceKey {
+pub struct AttestedResidentKey {
     pub(crate) cred: Credential,
 }
 
 #[cfg(feature = "resident-key-support")]
-impl DeviceKey {
+impl AttestedResidentKey {
     /// Retrieve a reference to this Resident Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
         &self.cred.cred_id
@@ -474,28 +474,28 @@ impl DeviceKey {
 }
 
 #[cfg(feature = "resident-key-support")]
-impl PartialEq for DeviceKey {
+impl PartialEq for AttestedResidentKey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
     }
 }
 
 #[cfg(feature = "danger-credential-internals")]
-impl From<DeviceKey> for Credential {
-    fn from(dk: DeviceKey) -> Self {
+impl From<AttestedResidentKey> for Credential {
+    fn from(dk: AttestedResidentKey) -> Self {
         dk.cred
     }
 }
 
 #[cfg(feature = "danger-credential-internals")]
-impl From<Credential> for DeviceKey {
+impl From<Credential> for AttestedResidentKey {
     /// Convert a generic webauthn credential into a security key
     fn from(cred: Credential) -> Self {
-        DeviceKey { cred }
+        AttestedResidentKey { cred }
     }
 }
 
-/// An in progress authentication session for a [DiscoverableKey]. [Passkey] and [DeviceKey]
+/// An in progress authentication session for a [DiscoverableKey]. [Passkey] and [AttestedResidentKey]
 /// can be used with these workflows.
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
@@ -516,7 +516,7 @@ pub struct DiscoverableAuthentication {
 }
 
 /// A key that can be used in discoverable workflows. Within this library [Passkey]s may be
-/// discoverable on an opportunistic bases, and [DeviceKey]s will always be discoverable.
+/// discoverable on an opportunistic bases, and [AttestedResidentKey]s will always be discoverable.
 ///
 /// Generally this is used as part of conditional ui which allows autofill of discovered
 /// credentials in username fields.
@@ -527,8 +527,8 @@ pub struct DiscoverableKey {
 }
 
 #[cfg(feature = "preview-features")]
-impl From<&DeviceKey> for DiscoverableKey {
-    fn from(k: &DeviceKey) -> Self {
+impl From<&AttestedResidentKey> for DiscoverableKey {
+    fn from(k: &AttestedResidentKey) -> Self {
         DiscoverableKey {
             cred: k.cred.clone(),
         }

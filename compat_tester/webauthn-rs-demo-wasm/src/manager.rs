@@ -3,8 +3,8 @@ use yew::functional::*;
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use crate::condui::ConduiTest;
 use crate::compat::CompatTest;
+use crate::condui::ConduiTest;
 use crate::demo::Demo;
 // use crate::uv::UvInconsistent;
 

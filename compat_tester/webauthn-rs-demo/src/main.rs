@@ -13,8 +13,8 @@ use rand::prelude::*;
 
 use webauthn_rs::prelude::Uuid;
 use webauthn_rs::prelude::{
-    DeviceKey,
-    DeviceKeyRegistration,
+    AttestedResidentKey,
+    AttestedResidentKeyRegistration,
     // Passkey,
     // PasskeyRegistration,
 };
@@ -515,7 +515,7 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
 }
 
 async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Result {
-    let reg_start: RegisterStart = request.body_json().await?;
+    let username: String = request.body_json().await?;
 
     let session = request.session_mut();
     session.remove("cu_rs");
@@ -523,18 +523,15 @@ async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Re
     // Setup the uuid to name map.
     let mut uuid_map: BTreeMap<String, Uuid> = session.get("cu_id_map").unwrap_or_default();
 
-    let u = if let Some(u) = uuid_map.get(&reg_start.username) {
+    let u = if let Some(u) = uuid_map.get(&username) {
         *u
     } else {
         let u = Uuid::new_v4();
-        uuid_map.insert(reg_start.username.clone(), u);
+        uuid_map.insert(username.clone(), u);
         u
     };
 
-    let actor_res = request
-        .state()
-        .condui_start_register(u, reg_start.username)
-        .await;
+    let actor_res = request.state().condui_start_register(u, username).await;
 
     let res = match actor_res {
         Ok((chal, rs)) => {
@@ -559,7 +556,7 @@ async fn condui_start_register(mut request: tide::Request<AppState>) -> tide::Re
 async fn condui_finish_register(mut request: tide::Request<AppState>) -> tide::Result {
     debug!("session - {:?}", request.session().get_raw("cu_cred_map"));
     let session = request.session_mut();
-    let (u, rs): (Uuid, DeviceKeyRegistration) = match session.get("cu_rs") {
+    let (u, rs): (Uuid, AttestedResidentKeyRegistration) = match session.get("cu_rs") {
         Some(v) => v,
         None => {
             error!("no reg session state");
@@ -570,7 +567,7 @@ async fn condui_finish_register(mut request: tide::Request<AppState>) -> tide::R
     };
     session.remove("cu_rs");
 
-    let mut cred_map: BTreeMap<Uuid, Vec<DeviceKey>> =
+    let mut cred_map: BTreeMap<Uuid, Vec<AttestedResidentKey>> =
         session.get("cu_cred_map").unwrap_or_default();
 
     // Safe to remove, since we aren't mutating the session.
@@ -652,7 +649,8 @@ async fn condui_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
     };
     session.remove("cu_st");
 
-    let cred_map: BTreeMap<Uuid, Vec<DeviceKey>> = session.get("cu_cred_map").unwrap_or_default();
+    let cred_map: BTreeMap<Uuid, Vec<AttestedResidentKey>> =
+        session.get("cu_cred_map").unwrap_or_default();
 
     let lgn = request.body_json::<PublicKeyCredential>().await?;
 
