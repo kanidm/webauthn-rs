@@ -99,7 +99,7 @@
 //! ## Credential Internals and Type Changes
 //!
 //! By default the type wrappers around the keys are opaque. However in some cases you
-//! may wish to migrate a key between types (security key to passkey, attested_passkeykey to passkey)
+//! may wish to migrate a key between types (security key to passkey, attested_passkey to passkey)
 //! for example. Alternately, you may wish to access the internals of a credential to implement
 //! an alternate serialisation or storage mechanism. In these cases you can access the underlying
 //! [Credential] type via Into and From by enabling the feature `danger-credential-internals`. The
@@ -343,7 +343,7 @@ impl<'a> WebauthnBuilder<'a> {
 /// This type requires `preview-features` enabled as the current form of the Attestation CA List
 /// may change in the future.
 ///
-/// > You should use [`start_attested_passkeykey_registration`](Webauthn::start_attested_passkeykey_registration)
+/// > You should use [`start_attested_passkey_registration`](Webauthn::start_attested_passkey_registration)
 ///
 ///
 /// __I want users to have their identites stored on their devices, and for them to authenticate with
@@ -360,7 +360,7 @@ impl<'a> WebauthnBuilder<'a> {
 /// __I want a security token along with an external password to create multi-factor authentication__
 ///
 /// If possible, consider [`start_passkey_registration`](Webauthn::start_passkey_registration) OR
-/// [`start_attested_passkeykey_registration`](Webauthn::start_attested_passkeykey_registration)
+/// [`start_attested_passkey_registration`](Webauthn::start_attested_passkey_registration)
 /// instead - it's likely to provide a better user experience over security keys as MFA!
 ///
 /// > If you really want a security key, you should use [`start_securitykey_registration`](Webauthn::start_securitykey_registration)
@@ -903,7 +903,7 @@ impl Webauthn {
     /// on the server the `AttestedPasskeyKeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// Finally you need to call [`finish_attested_passkeykey_registration`](Webauthn::finish_attested_passkeykey_registration)
+    /// Finally you need to call [`finish_attested_passkey_registration`](Webauthn::finish_attested_passkey_registration)
     /// to complete the registration.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyKeyRegistration] VALUE SERVER SIDE.
@@ -930,7 +930,7 @@ impl Webauthn {
     /// // Hint (but do not enforce) that we prefer this to be a token/key like a yubikey.
     /// // To enforce this you can validate the properties of the returned device aaguid.
     /// let (ccr, skr) = webauthn
-    ///     .start_attested_passkeykey_registration(
+    ///     .start_attested_passkey_registration(
     ///         user_unique_id,
     ///         "claire",
     ///         "Claire",
@@ -945,7 +945,7 @@ impl Webauthn {
     /// // Hint (but do not enforce) that we prefer this to be a device like TouchID.
     /// // To enforce this you can validate the attestation ca used along with the returned device aaguid
     /// let (ccr, skr) = webauthn
-    ///     .start_attested_passkeykey_registration(
+    ///     .start_attested_passkey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
     ///         "Claire",
@@ -955,7 +955,7 @@ impl Webauthn {
     ///     )
     ///     .expect("Failed to start registration.");
     /// ```
-    pub fn start_attested_passkeykey_registration(
+    pub fn start_attested_passkey_registration(
         &self,
         user_unique_id: Uuid,
         user_name: &str,
@@ -1024,14 +1024,14 @@ impl Webauthn {
     ///
     /// # Returns
     /// The returned [AttestedPasskeyKey] must be associated to the users account, and is used for future
-    /// authentications via [crate::Webauthn::start_attested_passkeykey_authentication].
+    /// authentications via [crate::Webauthn::start_attested_passkey_authentication].
     ///
     /// # Verifying specific device models
     /// If you wish to assert a specifc type of device model is in use, you can inspect the
     /// AttestedPasskeyKey `attestation()` and it's associated metadata. You can use this to check for
     /// specific device aaguids for example.
     ///
-    pub fn finish_attested_passkeykey_registration(
+    pub fn finish_attested_passkey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
         state: &AttestedPasskeyKeyRegistration,
@@ -1046,14 +1046,14 @@ impl Webauthn {
     /// The server must persist the [AttestedPasskeyKeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// Finally you need to call [`finish_attested_passkeykey_authentication`](Webauthn::finish_attested_passkeykey_authentication)
+    /// Finally you need to call [`finish_attested_passkey_authentication`](Webauthn::finish_attested_passkey_authentication)
     /// to complete the authentication.
     ///
     /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyKeyAuthentication] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
-    pub fn start_attested_passkeykey_authentication(
+    pub fn start_attested_passkey_authentication(
         &self,
         creds: &[AttestedPasskeyKey],
     ) -> WebauthnResult<(RequestChallengeResponse, AttestedPasskeyKeyAuthentication)> {
@@ -1101,7 +1101,7 @@ impl Webauthn {
     /// user verification flag).
     ///
     /// In *some* cases, you *may* be able to identify the user by examinin
-    pub fn finish_attested_passkeykey_authentication(
+    pub fn finish_attested_passkey_authentication(
         &self,
         reg: &PublicKeyCredential,
         state: &AttestedPasskeyKeyAuthentication,

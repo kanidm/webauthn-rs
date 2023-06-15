@@ -105,7 +105,7 @@ impl WebauthnActor {
             RegisterWithType::AttestedPasskey(strict) => {
                 let att_ca: Option<_> = strict.into();
                 self.swan
-                    .start_attested_passkeykey_registration(
+                    .start_attested_passkey_registration(
                         user_unique_id,
                         &username,
                         &username,
@@ -150,7 +150,7 @@ impl WebauthnActor {
                 .map(TypedCredential::Passkey),
             RegistrationTypedState::AttestedPasskey(rs) => self
                 .swan
-                .finish_attested_passkeykey_registration(reg, &rs)
+                .finish_attested_passkey_registration(reg, &rs)
                 .map(TypedCredential::AttestedPasskey),
             RegistrationTypedState::SecurityKey(rs) => self
                 .swan
@@ -192,7 +192,7 @@ impl WebauthnActor {
                     })
                     .collect();
                 self.swan
-                    .start_attested_passkeykey_authentication(&creds)
+                    .start_attested_passkey_authentication(&creds)
                     .map(|(acr, ast)| (acr, AuthenticationTypedState::AttestedPasskey(ast)))?
             }
             AuthenticateWithType::SecurityKey => {
@@ -228,9 +228,9 @@ impl WebauthnActor {
             AuthenticationTypedState::Passkey(ast) => {
                 self.swan.finish_passkey_authentication(lgn, &ast)
             }
-            AuthenticationTypedState::AttestedPasskey(ast) => self
-                .swan
-                .finish_attested_passkeykey_authentication(lgn, &ast),
+            AuthenticationTypedState::AttestedPasskey(ast) => {
+                self.swan.finish_attested_passkey_authentication(lgn, &ast)
+            }
             AuthenticationTypedState::SecurityKey(ast) => {
                 self.swan.finish_securitykey_authentication(lgn, &ast)
             }
