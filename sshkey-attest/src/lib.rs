@@ -189,7 +189,7 @@ pub fn verify_fido_sk_ssh_attestation(
     })?;
     trace!(?ck);
 
-    let pubkey = to_ssh_pubkey(ck)?;
+    let pubkey = to_ssh_pubkey(&ck)?;
 
     Ok(AttestedPublicKey {
         pubkey,
@@ -303,7 +303,7 @@ fn parse_ssh_sk_attestation(i: &[u8]) -> nom::IResult<&[u8], SshSkAttestationRaw
     ))
 }
 
-fn to_ssh_pubkey(cose: COSEKey) -> Result<PublicKey, WebauthnError> {
+fn to_ssh_pubkey(cose: &COSEKey) -> Result<PublicKey, WebauthnError> {
     match &cose.key {
         COSEKeyType::EC_EC2(_ec2k) => {
             let pubkey = cose.get_openssl_pkey()?;
