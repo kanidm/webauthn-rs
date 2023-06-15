@@ -305,6 +305,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnErr
 
 /// Verify that attestnCert meets the requirements in
 /// [§ 8.2.1 Packed Attestation Statement Certificate Requirements][0]
+///
 /// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
 pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
