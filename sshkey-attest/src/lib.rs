@@ -22,12 +22,12 @@ extern crate tracing;
 pub mod proto;
 
 use uuid::Uuid;
+pub use webauthn_rs_core::error::WebauthnError;
 use webauthn_rs_core::{
     attestation::{
         validate_extension, verify_attestation_ca_chain, AttestationFormat, FidoGenCeAaguid,
     },
     crypto::{assert_packed_attest_req, compute_sha256, verify_signature},
-    error::WebauthnError,
     internals::AuthenticatorData,
     proto::{
         AttestationCaList, AttestationMetadata, COSEAlgorithm, COSEKey, COSEKeyType,
@@ -180,7 +180,13 @@ pub fn verify_fido_sk_ssh_attestation(
     // If attestation passes, extract the public key from the attestation.
     //
     // https://github.com/openssh/openssh-portable/blob/c46f6fed419167c1671e4227459e108036c760f8/ssh-sk.c#L291
-    let ck = COSEKey::try_from(&acd.credential_pk)?;
+    let ck = COSEKey::try_from(&acd.credential_pk).map_err(|e| {
+        if matches!(e, WebauthnError::COSEKeyEDUnsupported) {
+            WebauthnError::SshPublicKeyEDUnsupported
+        } else {
+            e
+        }
+    })?;
     trace!(?ck);
 
     let pubkey = to_ssh_pubkey(ck)?;
@@ -347,7 +353,7 @@ fn to_ssh_pubkey(cose: COSEKey) -> Result<PublicKey, WebauthnError> {
 
 #[cfg(test)]
 mod tests {
-    use super::verify_fido_sk_ssh_attestation;
+    use super::{verify_fido_sk_ssh_attestation, WebauthnError};
     use base64urlsafedata::Base64UrlSafeData;
     use webauthn_rs_core::proto::{
         AttestationCa, AttestationCaList, CredentialProtectionPolicy, ExtnState,
@@ -446,5 +452,60 @@ mod tests {
             att.extensions.cred_protect,
             ExtnState::Set(CredentialProtectionPolicy::UserVerificationRequired)
         ));
+    }
+
+    #[test]
+    fn test_ssh_ed25519_sk_attest() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        // Create with:
+        // dd if=/dev/urandom of=/tmp/id_ed25519_sk.chal bs=16 count=1
+        // ssh-keygen -t ed25519-sk  -O challenge=/tmp/id_ed25519_sk.chal -O write-attestation=/tmp/id_ed25519_sk.attest -f /tmp/id_ed25519_sk
+
+        let attest = Base64UrlSafeData::try_from("AAAAEXNzaC1zay1hdHRlc3QtdjAxAAAC8DCCAuwwggHUoAMCAQICCQCIobnFT2wgvjANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbzELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEoMCYGA1UEAwwfWXViaWNvIFUyRiBFRSBTZXJpYWwgMTE2OTc5MzQxNjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABP3N+hZ2qRVyajtVRGx/tdK/YAcNNGY++kDoDODSHk4cAqXSZ7jZepIkLdQXk7JP2dD0gVMpP5WzOJpEv8J6tRejgZQwgZEwEwYKKwYBBAGCxAoNAQQFBAMFBAMwEAYJKwYBBAGCxAoMBAMCAQcwIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCBSAwIQYLKwYBBAGC5RwBAQQEEgQQc7sM1OUCSbicb7WURb9yCzAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQA8JczOIP9yDzuYizYwoJwGCwmYbUWNuokPu/NOMRLKTHvRfZRhf5LRHX7WjD0kJwifo725l/O7b+G4Y+3w9a1tK00wBGCMxw3F/oGcxsn+Tg6zWQZW3HXN8Qxfb5vtnX7lK5omugUPyq7XBqiBqFi2oqHFxjPjZSYFqQLE1DxDfJVtxXysvG1q/tkTkRagkAaqLb59SitNKsSXJ14Y9aG6liaFpSL8q+BeIe6XBHZ8NGxGhZdnhOu6qzYcTpSXlYHjeUoVF2/crpnQocjl59cgarJgS2aJV/jlSWnyZVhKbq14up6YUg0UsO60+UYm5rKuxS5OvAsvgKbl+71jhxCSAAAARzBFAiEA9wvGXR0jdmlx41KiDgVnHng/u+aABcL0T7Mcla5RY1cCIG3w7FmnUCC9cN4OTsF0YIUKREVl7YZ/ULpgG9r3gbGcAAAA41jh4wYQ6KFiEVlg/h7CI+ZSnJ9LboAgDcteXDIcivHisb9FAAAAAnO7DNTlAkm4nG+1lEW/cgsAgOlyrDirl7wov1VQfV/0peGGSiOf4dfQ/MwcKRxhWA7OIEczExGaaoiNJZBKyVUnte5FWF4xz+g2yY1LA9DYizkHRyuH3V6nOqaBl56+pImD7oJA2sMGgFaK7OawkNInLrZn+kK1KwDwAuqGyraYxUwOimcyj3iO0cmnx8Kl3VsbpAEBAycgBiFYIJrDpo9OvZ479Kr/+2n9IY88++eEu1g+RqRgrNsGWyCLAAAAAAAAAAA=")
+            .expect("Failed to decode attestation");
+
+        let challenge = Base64UrlSafeData::try_from("aAqBnywP0Vbv3SUgqmnMRQ==")
+            .expect("Failed to decode attestation");
+
+        /*
+        let pubkey = "sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29tAAAAIJrDpo9OvZ479Kr/+2n9IY88++eEu1g+RqRgrNsGWyCLAAAABHNzaDo= william@hostname";
+        let mut key = sshkeys::PublicKey::from_string(pubkey).unwrap();
+        // Blank the comment
+        key.comment = None;
+        */
+
+        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        // Aaguid for yubikey 5 fips
+        att_ca.insert_aaguid(uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"));
+        let att_ca_list: AttestationCaList =
+            att_ca.try_into().expect("Failed to build att ca list");
+
+        // Parse
+        let att = verify_fido_sk_ssh_attestation(
+            attest.0.as_slice(),
+            challenge.0.as_slice(),
+            &att_ca_list,
+            false,
+        );
+
+        trace!("att full {:?}", att);
+
+        assert!(matches!(att, Err(WebauthnError::SshPublicKeyEDUnsupported)));
+
+        /*
+        trace!("key {:?}", key);
+        trace!("att {:?}", att.pubkey);
+        trace!("att full {:?}", att);
+
+        // Check the supplied pubkey and the attested pubkey are the same.
+        assert_eq!(att.pubkey, key);
+
+        // Assert that cred protect isn't set.
+        assert!(matches!(
+            att.extensions.cred_protect,
+            ExtnState::NotRequested
+        ));
+        */
     }
 }
