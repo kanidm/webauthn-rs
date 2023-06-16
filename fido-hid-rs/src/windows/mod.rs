@@ -43,7 +43,7 @@ impl<T> WindowsErrorMapper<T> for windows::core::Result<T> {
     fn map_win_err(self, msg: &str) -> Result<T> {
         self.map_err(|e| {
             // TODO: sensible things
-            error!("{msg}: {e}");
+            error!("{msg}: 0x{:08X}: {e}", e.code().0);
             HidError::Internal
         })
     }
@@ -94,7 +94,7 @@ impl WindowsDeviceWatcher {
             }))
             .map_win_err("adding DeviceWatcher::EnumerationCompleted listener")?;
 
-        trace!("Starting WindowsDeviceWatcher");
+        // trace!("Starting WindowsDeviceWatcher");
         watcher.Start().map_win_err("DeviceWatcher::Start")?;
 
         Ok(Self { watcher, stream })
@@ -103,7 +103,6 @@ impl WindowsDeviceWatcher {
 
 impl Drop for WindowsDeviceWatcher {
     fn drop(&mut self) {
-        trace!("Dropping WindowsDeviceWatcher");
         if let Err(e) = self.watcher.Stop() {
             error!("DeviceWatcher::Stop: {e}");
         }
@@ -131,7 +130,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
     type DeviceId = HSTRING;
 
     async fn watch_devices(&self) -> Result<BoxStream<WatchEvent<Self::DeviceInfo>>> {
-        trace!("watch_devices");
+        // trace!("watch_devices");
         Ok(Box::pin(WindowsDeviceWatcher::new()?))
     }
 
@@ -199,10 +198,28 @@ impl USBDeviceImpl {
         trace!("Opening device: {info:?}");
         let device_id = info.info.Id().map_win_err("unable to get device ID")?;
 
-        let device = HidDevice::FromIdAsync(&device_id, FileAccessMode::ReadWrite)
+        // For USB HID FIDO authenticators when *not* running as Administrator,
+        // HidDevice::FromIdAsync returns `null` and HRESULT = 0, so you end up
+        // with `Err(The operation completed successfully.)`:
+        // https://learn.microsoft.com/en-us/uwp/api/windows.devices.humaninterfacedevice?view=winrt-22621#troubleshooting
+        //
+        // Unhelpfully, DeviceAccessInformation::CurrentStatus returns "Allowed"
+        // for non-UWP apps, so we can't even use the approach described here:
+        // https://learn.microsoft.com/en-us/answers/questions/35914/hiddevice-fromidasync-returns-null-for-my-usb-keyb#comment-36699
+        let device = match HidDevice::FromIdAsync(&device_id, FileAccessMode::ReadWrite)
             .map_win_err("getting HidDevice::FromIdAsync future")?
             .await
-            .map_win_err("opening device (HidDevice::FromIdAsync)")?;
+        {
+            Ok(d) => d,
+            Err(e) => {
+                if e.code() == HRESULT(0) {
+                    error!("cannot open {device_id:?}, are you running as Administrator?");
+                    return Err(HidError::PermissionDenied);
+                } else {
+                    return Err(e).map_win_err("opening device (HidDevice::FromIdAsync)");
+                }
+            }
+        };
 
         // HidDevice returns data using the InputReportReceived event. Stash the
         // data into a channel to pick up later.

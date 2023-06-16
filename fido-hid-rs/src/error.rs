@@ -14,6 +14,8 @@ pub enum HidError {
     InvalidMessageLength,
     #[error("could not send data to device")]
     SendError,
+    #[error("permission denied")]
+    PermissionDenied,
 }
 
 impl From<std::io::Error> for HidError {
