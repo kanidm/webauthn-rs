@@ -5,9 +5,10 @@ use crate::util::check_pin;
 use crate::{
     authenticator_hashed::AuthenticatorBackendHashedClientData,
     ctap2::{commands::*, pin_uv::*},
-    error::{WebauthnCError, CtapError},
+    error::{CtapError, WebauthnCError},
     transport::Token,
-    ui::UiCallback, SHA256Hash,
+    ui::UiCallback,
+    SHA256Hash,
 };
 
 use base64urlsafedata::Base64UrlSafeData;
@@ -15,8 +16,9 @@ use futures::executor::block_on;
 
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
-    AuthenticatorAttestationResponseRaw, PublicKeyCredential, RegisterPublicKeyCredential,
-    RegistrationExtensionsClientOutputs, UserVerificationPolicy, User, RelyingParty, PubKeyCredParams,
+    AuthenticatorAttestationResponseRaw, PubKeyCredParams, PublicKeyCredential,
+    RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, RelyingParty, User,
+    UserVerificationPolicy,
 };
 
 #[derive(Debug, Clone)]
@@ -451,10 +453,23 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     }
 
     /// Prompt for user presence on an authenticator using CTAP 2.0 semantics.
-    pub async fn selection(&mut self) -> Result<(), WebauthnCError> {
-        // 6.1.2. authenticatorMakeCredential Algorithm, step 1
-        // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-authnr-alg
+    ///
+    /// Because CTAP 2.0 has no notion of authenticator solection, this performs
+    /// a [MakeCredentialRequest] with *invalid* PIN/UV auth parameters, using
+    /// the process described in CTAP 2.1
+    /// [§ 6.1.2 authenticatorMakeCredential Algorithm][0] step 1.
+    ///
+    /// While according to the spec this *shouldn't* result in an authenticator
+    /// lock-out, it has been observed that some authenticators will decrement
+    /// the
+    ///
+    /// ## References
+    ///
+    /// * CTAP 2.1 [§6.1.2 authenticatorMakeCredential Algorithm][0], step 1.
+    ///
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-authnr-alg
 
+    pub async fn selection(&mut self) -> Result<(), WebauthnCError> {
         let mc = MakeCredentialRequest {
             client_data_hash: vec![0; size_of::<SHA256Hash>()],
             rp: RelyingParty {
@@ -488,7 +503,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         };
 
         let ret = self.token.transmit(mc, self.ui_callback).await;
-        
+
         if let Err(WebauthnCError::Ctap(e)) = ret {
             if e == CtapError::Ctap2PinAuthInvalid || e == CtapError::Ctap2PinNotSet {
                 // User pressed the button
@@ -507,7 +522,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             // Some other error
             ret?;
         }
-        
+
         error!("got unexpected OK response from authenticator");
         return Err(WebauthnCError::Internal);
     }
