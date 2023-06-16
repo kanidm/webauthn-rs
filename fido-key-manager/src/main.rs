@@ -3,16 +3,20 @@ compile_error!(
     "you must build this tool with either the 'bluetooth', 'nfc' and/or 'usb' feature(s) for it to do something useful"
 );
 
+#[macro_use]
 extern crate tracing;
 
 use hex::{FromHex, FromHexError};
-use webauthn_authenticator_rs::ctap2::select_one_device;
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use webauthn_authenticator_rs::ctap2::commands::UserCM;
+use webauthn_authenticator_rs::ctap2::{
+    select_one_device, select_one_device_predicate, select_one_device_version, Ctap21Authenticator,
+};
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 
+use tokio_stream::StreamExt;
 use webauthn_authenticator_rs::{
     ctap2::{select_one_token, CtapAuthenticator},
     transport::*,
@@ -20,7 +24,6 @@ use webauthn_authenticator_rs::{
     SHA256Hash,
 };
 use webauthn_rs_core::interface::COSEKeyType;
-use tokio_stream::StreamExt;
 
 /// Parses a Base-16 encoded string.
 ///
@@ -170,7 +173,7 @@ pub enum Opt {
     /// Enables the "Enterprise Attestation" feature.
     EnableEnterpriseAttestation,
     /// Gets information about biometric authentication on the device.
-    BioInfo,
+    BioInfo(InfoOpt),
     /// Enrolls a fingerprint on the device.
     ///
     /// Note: you must set a PIN on the device before you can enroll any
@@ -203,10 +206,9 @@ pub enum Opt {
 pub struct CliParser {
     #[clap(subcommand)]
     pub commands: Opt,
-
     // /// Select a key by waiting for an insertion event after initial device
     // /// enumeration.
-    // /// 
+    // ///
     // /// Otherwise, this runs on the first key.
     // #[clap(long)]
     // pub wait_for_key_insertion: bool,
@@ -235,7 +237,6 @@ async fn main() {
 
     let ui = Cli {};
     let mut transport = AnyTransport::new().await.unwrap();
-    
 
     // let stream = transport.watch_tokens().await.unwrap();
 
@@ -263,7 +264,7 @@ async fn main() {
     // let token_count = tokens.len();
     // let authenticator = select_transport(&ui);
     // let authenticator = &mut tokens[0];
-    
+
     // TODO: reimplement to use stream
     match opt.commands {
         Opt::Selection => {
@@ -280,7 +281,7 @@ async fn main() {
                             None => continue,
                         };
                         println!("{}", authenticator.get_info());
-                    },
+                    }
                     TokenEvent::EnumerationComplete => {
                         if o.watch {
                             println!("Initial enumeration completed, watching for more devices...");
@@ -288,7 +289,7 @@ async fn main() {
                         } else {
                             break;
                         }
-                    },
+                    }
                     _ => (),
                 }
             }
@@ -331,59 +332,74 @@ async fn main() {
             }
         }
 
-        _ => todo!()
-/*
         Opt::ToggleAlwaysUv => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter_map(|t| match t {
-                    CtapAuthenticator::Fido21(a) => Some(a),
-                    _ => None,
+            let mut token: Ctap21Authenticator<AnyToken, Cli> =
+                select_one_device_version(stream, &ui, |a| {
+                    let o = Ctap21Authenticator::supports_config(a);
+                    if !o {
+                        warn!("token does not support CTAP 2.1 config");
+                    }
+                    o
                 })
-                .filter(|t| t.supports_config())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
-            );
-            tokens[0]
-                .toggle_always_uv()
                 .await
-                .expect("Error toggling UV");
+                .unwrap();
+
+            token.toggle_always_uv().await.expect("Error toggling UV");
         }
 
         Opt::EnableEnterpriseAttestation => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter_map(|t| match t {
-                    CtapAuthenticator::Fido21(a) => Some(a),
-                    _ => None,
+            let mut token: Ctap21Authenticator<AnyToken, Cli> =
+                select_one_device_version(stream, &ui, |a| {
+                    if !Ctap21Authenticator::supports_config(a) {
+                        warn!("token does not support CTAP 2.1 config");
+                        return false;
+                    }
+
+                    if !a.supports_enterprise_attestation() {
+                        warn!("token does not support CTAP 2.1 enterprise attestation");
+                        return false;
+                    }
+
+                    true
                 })
-                .filter(|t| t.supports_config() && t.supports_enterprise_attestation())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
-            );
-            tokens[0]
+                .await
+                .unwrap();
+
+            token
                 .enable_enterprise_attestation()
                 .await
                 .expect("Error enabling enterprise attestation");
         }
 
-        Opt::BioInfo => {
-            for token in &mut tokens {
-                if let Some(b) = token.bio() {
-                    let i = b.get_fingerprint_sensor_info().await;
-                    println!("Fingerprint sensor info: {i:?}");
-                } else {
-                    println!("Authenticator does not support biometrics")
+        Opt::BioInfo(o) => {
+            while let Some(event) = stream.next().await {
+                match event {
+                    TokenEvent::Added(t) => {
+                        let mut authenticator = match CtapAuthenticator::new(t, &ui).await {
+                            Some(a) => a,
+                            None => continue,
+                        };
+                        if let Some(b) = authenticator.bio() {
+                            let i = b.get_fingerprint_sensor_info().await;
+                            println!("Fingerprint sensor info: {i:?}");
+                        } else {
+                            println!("Authenticator does not support biometrics");
+                        }
+                    }
+                    TokenEvent::EnumerationComplete => {
+                        if o.watch {
+                            println!("Initial enumeration completed, watching for more devices...");
+                            println!("Press Ctrl-C to stop watching.");
+                        } else {
+                            break;
+                        }
+                    }
+                    _ => (),
                 }
             }
         }
 
+/*
         Opt::EnrollFingerprint(o) => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
@@ -735,5 +751,6 @@ async fn main() {
                 .expect("Error updating credential");
         }
          */
+        _ => todo!(),
     }
 }
