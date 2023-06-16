@@ -462,7 +462,7 @@ pub async fn select_one_device<'a, T: Token + 'a, U: UiCallback + 'a>(
 pub async fn select_one_device_predicate<'a, T: Token + 'a, U: UiCallback + 'a>(
     stream: BoxStream<'a, TokenEvent<T>>,
     ui_callback: &'a U,
-    predicate: fn(&mut CtapAuthenticator<'a, T, U>) -> bool,
+    predicate: fn(&CtapAuthenticator<'a, T, U>) -> bool,
 ) -> Option<CtapAuthenticator<'a, T, U>> {
     let mut tasks = FuturesUnordered::new();
     let mut enumerated = false;
@@ -487,7 +487,7 @@ pub async fn select_one_device_predicate<'a, T: Token + 'a, U: UiCallback + 'a>(
                             continue;
                         };
 
-                        if !predicate(&mut authenticator) {
+                        if !predicate(&authenticator) {
                             continue;
                         }
 
@@ -517,7 +517,6 @@ pub async fn select_one_device_predicate<'a, T: Token + 'a, U: UiCallback + 'a>(
         }
     }
 }
-
 
 /// Selects an authenticator device to use from a [`TokenEvent`] stream, using
 /// a specific CTAP version.
@@ -583,7 +582,6 @@ pub async fn select_one_device_version<
                             // implicitly choose the new device
                             return Some(authenticator);
                         } else {
-                            // CTAP 2.0/2.1-PRE tokens
                             tasks.push(Box::pin(async move {
                                 authenticator.selection().await.ok()?;
                                 Some(authenticator)
