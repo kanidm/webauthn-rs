@@ -11,7 +11,7 @@ use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
 
 use webauthn_rs::prelude::{
-    AttestedPasskeyKey, AttestedPasskeyKeyAuthentication, AttestedPasskeyKeyRegistration, Passkey,
+    AttestedPasskey, AttestedPasskeyAuthentication, AttestedPasskeyRegistration, Passkey,
     PasskeyAuthentication, PasskeyRegistration, SecurityKey, SecurityKeyAuthentication,
     SecurityKeyRegistration,
 };
@@ -28,21 +28,21 @@ use std::collections::BTreeMap;
 pub enum RegistrationTypedState {
     Passkey(PasskeyRegistration),
     SecurityKey(SecurityKeyRegistration),
-    AttestedPasskey(AttestedPasskeyKeyRegistration),
+    AttestedPasskey(AttestedPasskeyRegistration),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum AuthenticationTypedState {
     Passkey(PasskeyAuthentication),
     SecurityKey(SecurityKeyAuthentication),
-    AttestedPasskey(AttestedPasskeyKeyAuthentication),
+    AttestedPasskey(AttestedPasskeyAuthentication),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum TypedCredential {
     Passkey(Passkey),
     SecurityKey(SecurityKey),
-    AttestedPasskey(AttestedPasskeyKey),
+    AttestedPasskey(AttestedPasskey),
 }
 
 pub struct WebauthnActor {

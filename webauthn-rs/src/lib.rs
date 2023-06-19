@@ -582,7 +582,7 @@ impl Webauthn {
     ///
     /// Some examples of security keys include Yubikeys, Feitian ePass, and others.
     ///
-    /// We don't recommend this over [Passkey] or [AttestedPasskeyKey], as today in Webauthn most devices
+    /// We don't recommend this over [Passkey] or [AttestedPasskey], as today in Webauthn most devices
     /// due to their construction require userVerification to be maintained for user trust. What this
     /// means is that most users will require a password, their security key, and a pin or biometric
     /// on the security key for a total of three factors. This adds friction to the user experience
@@ -900,13 +900,13 @@ impl Webauthn {
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
-    /// on the server the `AttestedPasskeyKeyRegistration` which contains the state of this registration
+    /// on the server the `AttestedPasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
     /// Finally you need to call [`finish_attested_passkey_registration`](Webauthn::finish_attested_passkey_registration)
     /// to complete the registration.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyKeyRegistration] VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyRegistration] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -964,7 +964,7 @@ impl Webauthn {
         attestation_ca_list: AttestationCaList,
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
         // extensions
-    ) -> WebauthnResult<(CreationChallengeResponse, AttestedPasskeyKeyRegistration)> {
+    ) -> WebauthnResult<(CreationChallengeResponse, AttestedPasskeyRegistration)> {
         let attestation = AttestationConveyancePreference::Direct;
         if attestation_ca_list.is_empty() {
             return Err(WebauthnError::MissingAttestationCaList);
@@ -1007,7 +1007,7 @@ impl Webauthn {
             .map(|(ccr, rs)| {
                 (
                     ccr,
-                    AttestedPasskeyKeyRegistration {
+                    AttestedPasskeyRegistration {
                         rs,
                         ca_list: attestation_ca_list,
                     },
@@ -1016,47 +1016,47 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [AttestedPasskeyKeyRegistration]. The details of the Authenticator
+    /// and the server provides it's paired [AttestedPasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
-    /// The returned [AttestedPasskeyKey] must be associated to the users account, and is used for future
+    /// The returned [AttestedPasskey] must be associated to the users account, and is used for future
     /// authentications via [crate::Webauthn::start_attested_passkey_authentication].
     ///
     /// # Verifying specific device models
     /// If you wish to assert a specifc type of device model is in use, you can inspect the
-    /// AttestedPasskeyKey `attestation()` and it's associated metadata. You can use this to check for
+    /// AttestedPasskey `attestation()` and it's associated metadata. You can use this to check for
     /// specific device aaguids for example.
     ///
     pub fn finish_attested_passkey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: &AttestedPasskeyKeyRegistration,
-    ) -> WebauthnResult<AttestedPasskeyKey> {
+        state: &AttestedPasskeyRegistration,
+    ) -> WebauthnResult<AttestedPasskey> {
         self.core
             .register_credential(reg, &state.rs, Some(&state.ca_list))
-            .map(|cred| AttestedPasskeyKey { cred })
+            .map(|cred| AttestedPasskey { cred })
     }
 
-    /// Given a set of `AttestedPasskeyKey`'s, begin an authentication of the user. This returns
+    /// Given a set of `AttestedPasskey`'s, begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the [AttestedPasskeyKeyAuthentication] state as it is paired to the
+    /// The server must persist the [AttestedPasskeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
     /// Finally you need to call [`finish_attested_passkey_authentication`](Webauthn::finish_attested_passkey_authentication)
     /// to complete the authentication.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyKeyAuthentication] VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyAuthentication] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
     pub fn start_attested_passkey_authentication(
         &self,
-        creds: &[AttestedPasskeyKey],
-    ) -> WebauthnResult<(RequestChallengeResponse, AttestedPasskeyKeyAuthentication)> {
+        creds: &[AttestedPasskey],
+    ) -> WebauthnResult<(RequestChallengeResponse, AttestedPasskeyAuthentication)> {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
         let extensions = Some(RequestAuthenticationExtensions {
@@ -1075,10 +1075,10 @@ impl Webauthn {
                 extensions,
                 allow_backup_eligible_upgrade,
             )
-            .map(|(rcr, ast)| (rcr, AttestedPasskeyKeyAuthentication { ast }))
+            .map(|(rcr, ast)| (rcr, AttestedPasskeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [AttestedPasskeyKeyAuthentication]
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [AttestedPasskeyAuthentication]
     /// complete the authentication of the user. This asserts that user verification must have been correctly
     /// performed allowing you to trust this as a MFA interfaction.
     ///
@@ -1104,7 +1104,7 @@ impl Webauthn {
     pub fn finish_attested_passkey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        state: &AttestedPasskeyKeyAuthentication,
+        state: &AttestedPasskeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
     }

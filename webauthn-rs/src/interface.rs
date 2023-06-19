@@ -135,9 +135,9 @@ impl PartialEq for Passkey {
     }
 }
 
-// AttestedPasskeyKey
+// AttestedPasskey
 
-/// An in progress registration session for a [AttestedPasskeyKey].
+/// An in progress registration session for a [AttestedPasskey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -152,12 +152,12 @@ impl PartialEq for Passkey {
     derive(Serialize, Deserialize)
 )]
 #[cfg(feature = "preview-features")]
-pub struct AttestedPasskeyKeyRegistration {
+pub struct AttestedPasskeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
 }
 
-/// An in progress authentication session for a [AttestedPasskeyKey].
+/// An in progress authentication session for a [AttestedPasskey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -172,7 +172,7 @@ pub struct AttestedPasskeyKeyRegistration {
     derive(Serialize, Deserialize)
 )]
 #[cfg(feature = "preview-features")]
-pub struct AttestedPasskeyKeyAuthentication {
+pub struct AttestedPasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
@@ -183,12 +183,12 @@ pub struct AttestedPasskeyKeyAuthentication {
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg(feature = "preview-features")]
-pub struct AttestedPasskeyKey {
+pub struct AttestedPasskey {
     pub(crate) cred: Credential,
 }
 
 #[cfg(feature = "preview-features")]
-impl AttestedPasskeyKey {
+impl AttestedPasskey {
     /// Retrieve a reference to this AttestedPasskey Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
         &self.cred.cred_id
@@ -237,17 +237,17 @@ impl AttestedPasskeyKey {
 }
 
 #[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
-impl From<AttestedPasskeyKey> for Credential {
-    fn from(pk: AttestedPasskeyKey) -> Self {
+impl From<AttestedPasskey> for Credential {
+    fn from(pk: AttestedPasskey) -> Self {
         pk.cred
     }
 }
 
 #[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
-impl From<Credential> for AttestedPasskeyKey {
+impl From<Credential> for AttestedPasskey {
     /// Convert a generic webauthn credential into a Passkey
     fn from(cred: Credential) -> Self {
-        AttestedPasskeyKey { cred }
+        AttestedPasskey { cred }
     }
 }
 
@@ -290,7 +290,7 @@ pub struct SecurityKeyAuthentication {
 
 /// A Security Key for a user. These are the legacy "second factor" method of security tokens.
 ///
-/// You should avoid this type in favour of [Passkey] or [AttestedPasskeyKey]
+/// You should avoid this type in favour of [Passkey] or [AttestedPasskey]
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -406,7 +406,7 @@ pub struct AttestedResidentKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
 
-/// An attested resident key belonging to a user. These are a specialisation of [AttestedPasskeyKey] where
+/// An attested resident key belonging to a user. These are a specialisation of [AttestedPasskey] where
 /// the devices in use can be attested. In addition this type enforces keys to be resident on the
 /// authenticator.
 ///
