@@ -43,7 +43,7 @@ pub struct RegisterStart {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum RegisterWithType {
     Passkey,
-    Passwordless(AttestationLevel),
+    AttestedPasskey(AttestationLevel),
     SecurityKey(AttestationLevel),
     // Device(bool),
 }
@@ -69,7 +69,7 @@ pub struct AuthenticateFinish {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum AuthenticateWithType {
     Passkey,
-    Passwordless,
+    AttestedPasskey,
     SecurityKey,
     // Device
 }
@@ -78,7 +78,7 @@ impl From<&RegisterWithType> for AuthenticateWithType {
     fn from(regsettings: &RegisterWithType) -> AuthenticateWithType {
         match regsettings {
             RegisterWithType::Passkey => AuthenticateWithType::Passkey,
-            RegisterWithType::Passwordless(_) => AuthenticateWithType::Passwordless,
+            RegisterWithType::AttestedPasskey(_) => AuthenticateWithType::AttestedPasskey,
             RegisterWithType::SecurityKey(_) => AuthenticateWithType::SecurityKey,
         }
     }

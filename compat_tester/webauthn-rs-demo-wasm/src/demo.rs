@@ -55,7 +55,10 @@ impl Demo {
         username: String,
         reg_type: RegisterWithType,
     ) -> Result<AppMsg, FetchError> {
-        let reg_start = RegisterStart { username: username.to_owned(), reg_type };
+        let reg_start = RegisterStart {
+            username: username.to_owned(),
+            reg_type,
+        };
         let req_jsvalue = serde_json::to_string(&reg_start)
             .map(|s| JsValue::from(&s))
             .expect_throw("Failed to serialise settings");
@@ -195,9 +198,7 @@ impl Demo {
     ) -> Result<AppMsg, FetchError> {
         let pkc = PublicKeyCredential::from(data);
         console::log!(format!("pkc -> {:?}", pkc).as_str());
-        let auth_finish = AuthenticateFinish {
-            username, pkc
-        };
+        let auth_finish = AuthenticateFinish { username, pkc };
 
         let req_jsvalue = serde_json::to_string(&auth_finish)
             .map(|s| JsValue::from(&s))
@@ -294,7 +295,7 @@ impl Demo {
                               <td>
                                 <select class="form-select" id="credential_type">
                                   <option selected=true value="pk">{ "Passkey" }</option>
-                                  <option value="pl">{ "Passwordless" }</option>
+                                  <option value="pl">{ "Attested Passkey" }</option>
                                   <option value="sk">{ "Security Key" }</option>
                                 </select>
                               </td>
@@ -489,7 +490,7 @@ impl Component for Demo {
                     .and_then(|v| match v.as_str() {
                         "pk" => Some(RegisterWithType::Passkey),
                         "sk" => Some(RegisterWithType::SecurityKey(attest_req)),
-                        "pl" => Some(RegisterWithType::Passwordless(attest_req)),
+                        "pl" => Some(RegisterWithType::AttestedPasskey(attest_req)),
                         _ => None,
                     })
                     .unwrap_or(RegisterWithType::Passkey);

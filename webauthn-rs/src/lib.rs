@@ -99,7 +99,7 @@
 //! ## Credential Internals and Type Changes
 //!
 //! By default the type wrappers around the keys are opaque. However in some cases you
-//! may wish to migrate a key between types (security key to passkey, passwordlesskey to passkey)
+//! may wish to migrate a key between types (security key to passkey, attested_passkey to passkey)
 //! for example. Alternately, you may wish to access the internals of a credential to implement
 //! an alternate serialisation or storage mechanism. In these cases you can access the underlying
 //! [Credential] type via Into and From by enabling the feature `danger-credential-internals`. The
@@ -343,7 +343,7 @@ impl<'a> WebauthnBuilder<'a> {
 /// This type requires `preview-features` enabled as the current form of the Attestation CA List
 /// may change in the future.
 ///
-/// > You should use [`start_passwordlesskey_registration`](Webauthn::start_passwordlesskey_registration)
+/// > You should use [`start_attested_passkey_registration`](Webauthn::start_attested_passkey_registration)
 ///
 ///
 /// __I want users to have their identites stored on their devices, and for them to authenticate with
@@ -354,13 +354,13 @@ impl<'a> WebauthnBuilder<'a> {
 /// You **MUST** only use it in tightly controlled environments where you supply devices to your
 /// users.
 ///
-/// > You should use [`start_devicekey_registration`](Webauthn::start_devicekey_registration) (still in development)
+/// > You should use [`start_attested_resident_key_registration`](Webauthn::start_attested_resident_key_registration) (still in development)
 ///
 ///
 /// __I want a security token along with an external password to create multi-factor authentication__
 ///
 /// If possible, consider [`start_passkey_registration`](Webauthn::start_passkey_registration) OR
-/// [`start_passwordlesskey_registration`](Webauthn::start_passwordlesskey_registration)
+/// [`start_attested_passkey_registration`](Webauthn::start_attested_passkey_registration)
 /// instead - it's likely to provide a better user experience over security keys as MFA!
 ///
 /// > If you really want a security key, you should use [`start_securitykey_registration`](Webauthn::start_securitykey_registration)
@@ -582,7 +582,7 @@ impl Webauthn {
     ///
     /// Some examples of security keys include Yubikeys, Feitian ePass, and others.
     ///
-    /// We don't recommend this over [Passkey] or [PasswordlessKey], as today in Webauthn most devices
+    /// We don't recommend this over [Passkey] or [AttestedPasskey], as today in Webauthn most devices
     /// due to their construction require userVerification to be maintained for user trust. What this
     /// means is that most users will require a password, their security key, and a pin or biometric
     /// on the security key for a total of three factors. This adds friction to the user experience
@@ -771,7 +771,7 @@ impl Webauthn {
     ///
     /// # Verifying specific device models
     /// If you wish to assert a specifc type of device model is in use, you can inspect the
-    /// PasswordlessKey `attestation()` and it's associated metadata. You can use this to check for
+    /// SecurityKey `attestation()` and it's associated metadata. You can use this to check for
     /// specific device aaguids for example.
     ///
     pub fn finish_securitykey_registration(
@@ -843,13 +843,13 @@ impl Webauthn {
 
 #[cfg(feature = "preview-features")]
 impl Webauthn {
-    /// Initiate the registration of a new passwordless key for a user. A passwordless key is a
+    /// Initiate the registration of a new attested_passkey key for a user. A attested_passkey key is a
     /// cryptographic authenticator that is a self-contained multifactor authenticator. This means
     /// that the device (such as a yubikey) verifies the user is who they say they are via a PIN,
     /// biometric or other factor. Only if this verification passes, is the signature released
     /// and provided.
     ///
-    /// As a result, the server *only* requires this passwordless key to authenticator the user
+    /// As a result, the server *only* requires this attested_passkey key to authenticator the user
     /// and assert their identity. Because of this reliance on the authenticator, attestation of
     /// the authenticator and it's properties is strongly recommended.
     ///
@@ -860,7 +860,7 @@ impl Webauthn {
     /// Additionally, these credentials can have an attestation or certificate of authenticity
     /// validated to give you stronger assertions in the types of devices in use.
     ///
-    /// You *should* recommend to the user to register multiple passwordless keys to their account on
+    /// You *should* recommend to the user to register multiple attested_passkey keys to their account on
     /// seperate devices so that they have fall back authentication.
     ///
     /// You *should* have a workflow that allows a user to register new devices without a need to register
@@ -900,13 +900,13 @@ impl Webauthn {
     ///
     /// This function returns a `CreationChallengeResponse` which you must serialise to json and
     /// send to the user agent (e.g. a browser) for it to conduct the registration. You must persist
-    /// on the server the `PasswordlessKeyRegistration` which contains the state of this registration
+    /// on the server the `AttestedPasskeyRegistration` which contains the state of this registration
     /// attempt and is paired to the `CreationChallengeResponse`.
     ///
-    /// Finally you need to call [`finish_passwordlesskey_registration`](Webauthn::finish_passwordlesskey_registration)
+    /// Finally you need to call [`finish_attested_passkey_registration`](Webauthn::finish_attested_passkey_registration)
     /// to complete the registration.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyRegistration] VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyRegistration] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
@@ -930,7 +930,7 @@ impl Webauthn {
     /// // Hint (but do not enforce) that we prefer this to be a token/key like a yubikey.
     /// // To enforce this you can validate the properties of the returned device aaguid.
     /// let (ccr, skr) = webauthn
-    ///     .start_passwordlesskey_registration(
+    ///     .start_attested_passkey_registration(
     ///         user_unique_id,
     ///         "claire",
     ///         "Claire",
@@ -945,7 +945,7 @@ impl Webauthn {
     /// // Hint (but do not enforce) that we prefer this to be a device like TouchID.
     /// // To enforce this you can validate the attestation ca used along with the returned device aaguid
     /// let (ccr, skr) = webauthn
-    ///     .start_passwordlesskey_registration(
+    ///     .start_attested_passkey_registration(
     ///         Uuid::new_v4(),
     ///         "claire",
     ///         "Claire",
@@ -955,7 +955,7 @@ impl Webauthn {
     ///     )
     ///     .expect("Failed to start registration.");
     /// ```
-    pub fn start_passwordlesskey_registration(
+    pub fn start_attested_passkey_registration(
         &self,
         user_unique_id: Uuid,
         user_name: &str,
@@ -964,7 +964,7 @@ impl Webauthn {
         attestation_ca_list: AttestationCaList,
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
         // extensions
-    ) -> WebauthnResult<(CreationChallengeResponse, PasswordlessKeyRegistration)> {
+    ) -> WebauthnResult<(CreationChallengeResponse, AttestedPasskeyRegistration)> {
         let attestation = AttestationConveyancePreference::Direct;
         if attestation_ca_list.is_empty() {
             return Err(WebauthnError::MissingAttestationCaList);
@@ -1007,7 +1007,7 @@ impl Webauthn {
             .map(|(ccr, rs)| {
                 (
                     ccr,
-                    PasswordlessKeyRegistration {
+                    AttestedPasskeyRegistration {
                         rs,
                         ca_list: attestation_ca_list,
                     },
@@ -1016,47 +1016,47 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [PasswordlessKeyRegistration]. The details of the Authenticator
+    /// and the server provides it's paired [AttestedPasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
     ///
     /// # Returns
-    /// The returned [PasswordlessKey] must be associated to the users account, and is used for future
-    /// authentications via [crate::Webauthn::start_passwordlesskey_authentication].
+    /// The returned [AttestedPasskey] must be associated to the users account, and is used for future
+    /// authentications via [crate::Webauthn::start_attested_passkey_authentication].
     ///
     /// # Verifying specific device models
     /// If you wish to assert a specifc type of device model is in use, you can inspect the
-    /// PasswordlessKey `attestation()` and it's associated metadata. You can use this to check for
+    /// AttestedPasskey `attestation()` and it's associated metadata. You can use this to check for
     /// specific device aaguids for example.
     ///
-    pub fn finish_passwordlesskey_registration(
+    pub fn finish_attested_passkey_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: &PasswordlessKeyRegistration,
-    ) -> WebauthnResult<PasswordlessKey> {
+        state: &AttestedPasskeyRegistration,
+    ) -> WebauthnResult<AttestedPasskey> {
         self.core
             .register_credential(reg, &state.rs, Some(&state.ca_list))
-            .map(|cred| PasswordlessKey { cred })
+            .map(|cred| AttestedPasskey { cred })
     }
 
-    /// Given a set of `PasswordlessKey`'s, begin an authentication of the user. This returns
+    /// Given a set of `AttestedPasskey`'s, begin an authentication of the user. This returns
     /// a `RequestChallengeResponse`, which should be serialised to json and sent to the user agent (e.g. a browser).
-    /// The server must persist the [PasswordlessKeyAuthentication] state as it is paired to the
+    /// The server must persist the [AttestedPasskeyAuthentication] state as it is paired to the
     /// `RequestChallengeResponse` and required to complete the authentication.
     ///
-    /// Finally you need to call [`finish_passwordlesskey_authentication`](Webauthn::finish_passwordlesskey_authentication)
+    /// Finally you need to call [`finish_attested_passkey_authentication`](Webauthn::finish_attested_passkey_authentication)
     /// to complete the authentication.
     ///
-    /// WARNING ⚠️  YOU MUST STORE THE [PasswordlessKeyAuthentication] VALUE SERVER SIDE.
+    /// WARNING ⚠️  YOU MUST STORE THE [AttestedPasskeyAuthentication] VALUE SERVER SIDE.
     ///
     /// Failure to do so *may* open you to replay attacks which can significantly weaken the
     /// security of this system.
-    pub fn start_passwordlesskey_authentication(
+    pub fn start_attested_passkey_authentication(
         &self,
-        creds: &[PasswordlessKey],
-    ) -> WebauthnResult<(RequestChallengeResponse, PasswordlessKeyAuthentication)> {
+        creds: &[AttestedPasskey],
+    ) -> WebauthnResult<(RequestChallengeResponse, AttestedPasskeyAuthentication)> {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
 
         let extensions = Some(RequestAuthenticationExtensions {
@@ -1075,10 +1075,10 @@ impl Webauthn {
                 extensions,
                 allow_backup_eligible_upgrade,
             )
-            .map(|(rcr, ast)| (rcr, PasswordlessKeyAuthentication { ast }))
+            .map(|(rcr, ast)| (rcr, AttestedPasskeyAuthentication { ast }))
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [PasswordlessKeyAuthentication]
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), and the stored [AttestedPasskeyAuthentication]
     /// complete the authentication of the user. This asserts that user verification must have been correctly
     /// performed allowing you to trust this as a MFA interfaction.
     ///
@@ -1101,10 +1101,10 @@ impl Webauthn {
     /// user verification flag).
     ///
     /// In *some* cases, you *may* be able to identify the user by examinin
-    pub fn finish_passwordlesskey_authentication(
+    pub fn finish_attested_passkey_authentication(
         &self,
         reg: &PublicKeyCredential,
-        state: &PasswordlessKeyAuthentication,
+        state: &AttestedPasskeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
     }
@@ -1153,7 +1153,7 @@ impl Webauthn {
 #[cfg(feature = "resident-key-support")]
 impl Webauthn {
     /// TODO
-    pub fn start_devicekey_registration(
+    pub fn start_attested_resident_key_registration(
         &self,
         user_unique_id: Uuid,
         user_name: &str,
@@ -1161,7 +1161,7 @@ impl Webauthn {
         exclude_credentials: Option<Vec<CredentialID>>,
         attestation_ca_list: AttestationCaList,
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
-    ) -> WebauthnResult<(CreationChallengeResponse, DeviceKeyRegistration)> {
+    ) -> WebauthnResult<(CreationChallengeResponse, AttestedResidentKeyRegistration)> {
         if attestation_ca_list.is_empty() {
             return Err(WebauthnError::MissingAttestationCaList);
         }
@@ -1206,7 +1206,7 @@ impl Webauthn {
             .map(|(ccr, rs)| {
                 (
                     ccr,
-                    DeviceKeyRegistration {
+                    AttestedResidentKeyRegistration {
                         rs,
                         ca_list: attestation_ca_list,
                     },
@@ -1215,16 +1215,16 @@ impl Webauthn {
     }
 
     /// TODO
-    pub fn finish_devicekey_registration(
+    pub fn finish_attested_resident_key_registration(
         &self,
         reg: &RegisterPublicKeyCredential,
-        state: &DeviceKeyRegistration,
-    ) -> WebauthnResult<DeviceKey> {
+        state: &AttestedResidentKeyRegistration,
+    ) -> WebauthnResult<AttestedResidentKey> {
         let cred = self
             .core
             .register_credential(reg, &state.rs, Some(&state.ca_list))?;
 
-        trace!("finish devicekey -> {:?}", cred);
+        trace!("finish attested_resident_key -> {:?}", cred);
 
         // cred protect ignored :(
         // Is the pin long enough?
@@ -1233,14 +1233,14 @@ impl Webauthn {
 
         // Is it an approved cred / aaguid?
 
-        Ok(DeviceKey { cred })
+        Ok(AttestedResidentKey { cred })
     }
 
     /// TODO
-    pub fn start_devicekey_authentication(
+    pub fn start_attested_resident_key_authentication(
         &self,
-        creds: &[DeviceKey],
-    ) -> WebauthnResult<(RequestChallengeResponse, DeviceKeyAuthentication)> {
+        creds: &[AttestedResidentKey],
+    ) -> WebauthnResult<(RequestChallengeResponse, AttestedResidentKeyAuthentication)> {
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let extensions = Some(RequestAuthenticationExtensions {
             appid: None,
@@ -1258,14 +1258,14 @@ impl Webauthn {
                 extensions,
                 allow_backup_eligible_upgrade,
             )
-            .map(|(rcr, ast)| (rcr, DeviceKeyAuthentication { ast }))
+            .map(|(rcr, ast)| (rcr, AttestedResidentKeyAuthentication { ast }))
     }
 
     /// TODO
-    pub fn finish_devicekey_authentication(
+    pub fn finish_attested_resident_key_authentication(
         &self,
         reg: &PublicKeyCredential,
-        state: &DeviceKeyAuthentication,
+        state: &AttestedResidentKeyAuthentication,
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
     }

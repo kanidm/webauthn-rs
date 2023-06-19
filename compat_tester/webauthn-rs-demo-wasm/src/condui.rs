@@ -5,10 +5,10 @@ use gloo::console;
 use yew::prelude::*;
 
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen::UnwrapThrowExt;
+use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response, AbortController};
+use web_sys::{AbortController, Request, RequestInit, RequestMode, Response};
 
 use webauthn_rs_demo_shared::*;
 
@@ -16,7 +16,7 @@ use webauthn_rs_demo_shared::*;
 enum ChallengeState {
     Waiting,
     Presented(RequestChallengeResponse),
-    Cancelled
+    Cancelled,
 }
 
 #[derive(Debug, Clone)]
@@ -84,15 +84,15 @@ impl Component for ConduiTest {
                 console::log!(&msg);
                 ConduiTestState::Error(msg)
             }
-            (_, AppMsg::Main) |
-            (ConduiTestState::Waiting, AppMsg::RegisterSuccess) => ConduiTestState::Main(ChallengeState::Waiting),
+            (_, AppMsg::Main) | (ConduiTestState::Waiting, AppMsg::RegisterSuccess) => {
+                ConduiTestState::Main(ChallengeState::Waiting)
+            }
             (ConduiTestState::Main(_), AppMsg::Register) => {
                 let username = utils::get_value_from_element_id("autofocus").expect("No username");
 
                 if username == "" {
-                    ctx.link().send_message(AppMsg::Error(
-                        "A username must be provided".to_string(),
-                    ));
+                    ctx.link()
+                        .send_message(AppMsg::Error("A username must be provided".to_string()));
                     return false;
                 }
 
@@ -109,7 +109,6 @@ impl Component for ConduiTest {
                 ConduiTestState::Waiting
             }
             (ConduiTestState::Waiting, AppMsg::BeginRegisterChallenge(ccr)) => {
-
                 // We need a way to cancel any dangling promises from
                 // condui here.
 
@@ -134,11 +133,7 @@ impl Component for ConduiTest {
             }
             (ConduiTestState::Waiting, AppMsg::CompleteRegisterChallenge(jsval)) => {
                 ctx.link().send_future(async {
-                    match Self::register_complete(
-                        web_sys::PublicKeyCredential::from(jsval),
-                    )
-                    .await
-                    {
+                    match Self::register_complete(web_sys::PublicKeyCredential::from(jsval)).await {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }
@@ -146,7 +141,10 @@ impl Component for ConduiTest {
                 ConduiTestState::Waiting
             }
 
-            (ConduiTestState::Main(ChallengeState::Waiting), AppMsg::BeginLoginChallenge(mut ccr)) => {
+            (
+                ConduiTestState::Main(ChallengeState::Waiting),
+                AppMsg::BeginLoginChallenge(mut ccr),
+            ) => {
                 // Setup conditional mediation.
                 ccr.mediation = Some(Mediation::Conditional);
 
@@ -155,9 +153,7 @@ impl Component for ConduiTest {
             }
             (ConduiTestState::Main(_), AppMsg::CompleteLoginChallenge(jsv)) => {
                 ctx.link().send_future(async {
-                    match Self::login_complete(web_sys::PublicKeyCredential::from(jsv))
-                        .await
-                    {
+                    match Self::login_complete(web_sys::PublicKeyCredential::from(jsv)).await {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }
@@ -240,9 +236,8 @@ impl Component for ConduiTest {
                 console::log!(format!("raw c_options {:?}", c_options).as_str());
 
                 // Setup the abort controller.
-                let mut abort_controller = AbortController::new().expect(
-                    "Failed to build abort controller"
-                );
+                let mut abort_controller =
+                    AbortController::new().expect("Failed to build abort controller");
 
                 std::mem::swap(&mut self.abort_controller, &mut abort_controller);
                 let abort_signal = self.abort_controller.signal();
@@ -255,7 +250,6 @@ impl Component for ConduiTest {
                     .get_with_options(&c_options)
                     .expect("Unable to create promise");
                 let fut = JsFuture::from(promise);
-
 
                 ctx.link().send_future(async {
                     console::log!("Started future for navigator cred get");
@@ -272,8 +266,6 @@ impl Component for ConduiTest {
                         }
                     }
                 });
-
-
             }
             ConduiTestState::Main(ChallengeState::Cancelled) => {
                 console::log!("Condui dialog canceled or errored");
@@ -291,7 +283,6 @@ extern "C" {
     fn is_conditional_mediation_available() -> js_sys::Promise;
 }
 */
-
 
 impl ConduiTest {
     /*
@@ -445,15 +436,17 @@ impl ConduiTest {
         }
     }
 
-    async fn register_begin(
-        username: String,
-    ) -> Result<AppMsg, FetchError> {
+    async fn register_begin(username: String) -> Result<AppMsg, FetchError> {
         let mut opts = RequestInit::new();
         opts.method("POST");
         opts.mode(RequestMode::SameOrigin);
 
-        let dest = format!("/condui/register_start/{}", username);
-        let request = Request::new_with_str_and_init(&dest, &opts)?;
+        let req_jsvalue = serde_json::to_string(&username)
+            .map(|s| JsValue::from(&s))
+            .expect("Failed to serialise rpkc");
+        opts.body(Some(&req_jsvalue));
+
+        let request = Request::new_with_str_and_init("/condui/register_start", &opts)?;
 
         request
             .headers()
@@ -478,14 +471,14 @@ impl ConduiTest {
         } else {
             // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "No error message".to_string());
+            let emsg = text
+                .as_string()
+                .unwrap_or_else(|| "No error message".to_string());
             Ok(AppMsg::Error(emsg))
         }
     }
 
-    async fn register_complete(
-        data: web_sys::PublicKeyCredential,
-    ) -> Result<AppMsg, FetchError> {
+    async fn register_complete(data: web_sys::PublicKeyCredential) -> Result<AppMsg, FetchError> {
         console::log!("register_complete()");
 
         let rpkc = RegisterPublicKeyCredential::from(data);
@@ -522,7 +515,9 @@ impl ConduiTest {
         } else {
             // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "No error message".to_string());
+            let emsg = text
+                .as_string()
+                .unwrap_or_else(|| "No error message".to_string());
             Ok(AppMsg::Error(emsg))
         }
     }
@@ -566,14 +561,14 @@ impl ConduiTest {
         } else {
             // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "No error message".to_string());
+            let emsg = text
+                .as_string()
+                .unwrap_or_else(|| "No error message".to_string());
             Ok(AppMsg::Error(emsg))
         }
     }
 
-    async fn login_complete(
-        data: web_sys::PublicKeyCredential,
-    ) -> Result<AppMsg, FetchError> {
+    async fn login_complete(data: web_sys::PublicKeyCredential) -> Result<AppMsg, FetchError> {
         console::log!(format!("pkc -> {:?}", data).as_str());
         let pkc = PublicKeyCredential::from(data);
         console::log!(format!("rp pkc -> {:?}", pkc).as_str());
@@ -608,7 +603,9 @@ impl ConduiTest {
         } else {
             // let headers = resp.headers();
             let text = JsFuture::from(resp.text()?).await?;
-            let emsg = text.as_string().unwrap_or_else(|| "No error message".to_string());
+            let emsg = text
+                .as_string()
+                .unwrap_or_else(|| "No error message".to_string());
             Ok(AppMsg::Error(emsg))
         }
     }
