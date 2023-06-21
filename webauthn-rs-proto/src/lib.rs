@@ -13,8 +13,14 @@ pub mod cose;
 pub mod extensions;
 pub mod options;
 
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
 pub use attest::*;
 pub use auth::*;
 pub use cose::*;
 pub use extensions::*;
 pub use options::*;
+
+#[cfg(feature = "wasm")]
+pub use wasm::*;

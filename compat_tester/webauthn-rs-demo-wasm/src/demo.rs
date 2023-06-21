@@ -8,6 +8,7 @@ use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestInit, RequestMode, Response};
 use webauthn_rs_demo_shared::*;
+use webauthn_rs_proto::wasm::PublicKeyCredentialExt;
 use yew::prelude::*;
 
 // JsValue(NotAllowedError: The operation either timed out or was not allowed. See: https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client. undefined)
@@ -15,11 +16,12 @@ use yew::prelude::*;
 #[derive(Debug)]
 pub struct Demo {
     state: DemoState,
+    ctap2_supported: bool,
     reg_settings: RegisterWithType,
     last_username: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DemoState {
     Waiting,
     Register,
@@ -30,6 +32,7 @@ pub enum DemoState {
 
 #[derive(Debug)]
 pub enum AppMsg {
+    SetCtap2Support { ctap2_supported: bool },
     // This can probably go ...
     Register,
     BeginRegisterChallenge(web_sys::CredentialCreationOptions, String),
@@ -238,6 +241,18 @@ impl Demo {
     fn view_register(&self, ctx: &Context<Self>) -> Html {
         let last_username = self.last_username.clone();
 
+        let ctap2_support = if self.ctap2_supported {
+            html! {
+                <></>
+            }
+        } else {
+            html! {
+                <p>
+                  { "⚠️ Your browser appears to lack support for CTAP2. This site may not perform as expected." }
+                </p>
+            }
+        };
+
         html! {
           <>
             <div class="form-description">
@@ -252,6 +267,7 @@ impl Demo {
             </div>
             <main class="text-center form-signin">
               <h3 class="h3 mb-3 fw-normal">{ "Register a Webauthn Credential" }</h3>
+              { ctap2_support }
               <form
                     onsubmit={ ctx.link().callback(|e: FocusEvent| {
                     console::log!("prevent_default()");
@@ -434,10 +450,44 @@ impl Component for Demo {
     type Message = AppMsg;
     type Properties = ();
 
-    fn create(_ctx: &Context<Self>) -> Self {
+    fn create(ctx: &Context<Self>) -> Self {
         console::log!(format!("create").as_str());
+
+        // Fire off the check for ctap2 support.
+        match PublicKeyCredentialExt::is_external_ctap2_securitykey_supported() {
+            Ok(promise) => {
+                ctx.link().send_future(async {
+                    let x = wasm_bindgen_futures::JsFuture::from(promise).await;
+
+                    console::log!(format!("{:?}", x).as_str());
+
+                    match x.map(|i| i.as_bool()) {
+                        Ok(Some(true)) => AppMsg::SetCtap2Support {
+                            ctap2_supported: true,
+                        },
+                        Ok(Some(false)) => AppMsg::SetCtap2Support {
+                            ctap2_supported: false,
+                        },
+                        Ok(None) => AppMsg::SetCtap2Support {
+                            ctap2_supported: true,
+                        },
+                        Err(e) => {
+                            console::log!(format!("isctap2 error {:?}", e).as_str());
+                            AppMsg::SetCtap2Support {
+                                ctap2_supported: true,
+                            }
+                        }
+                    }
+                });
+            }
+            Err(e) => {
+                console::log!(format!("isExternalCTAP2SecurityKeySupported() does not exist in this browser - assuming ctap2 is supported - error {:?}", e).as_str());
+            }
+        };
+
         Demo {
             state: DemoState::Register,
+            ctap2_supported: true,
             reg_settings: RegisterWithType::Passkey,
             last_username: String::default(),
         }
@@ -449,6 +499,10 @@ impl Component for Demo {
 
     fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         let mut state_change = match (&self.state, msg) {
+            (state, AppMsg::SetCtap2Support { ctap2_supported }) => {
+                self.ctap2_supported = ctap2_supported;
+                state.clone()
+            }
             (_, AppMsg::Error(None)) => {
                 let msg = "No error message available".to_string();
                 console::log!(&msg);
