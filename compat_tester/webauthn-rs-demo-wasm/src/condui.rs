@@ -9,6 +9,7 @@ use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{AbortController, Request, RequestInit, RequestMode, Response};
+use webauthn_rs_proto::wasm::PublicKeyCredentialExt;
 
 use webauthn_rs_demo_shared::*;
 
@@ -201,35 +202,29 @@ impl Component for ConduiTest {
         crate::utils::autofocus("autofocus");
         match &self.state {
             ConduiTestState::Main(ChallengeState::Waiting) => {
-                // Because of course this doesn't fucking work right.
-                /*
-                let promise = is_conditional_mediation_available();
-                console::log!(format!("{:?}", promise).as_str());
-                let fut = JsFuture::from(promise);
-                // We are on the main page, lets try to trigger a conditional UI challenge ...
-                ctx.link().send_future(async {
-                    let x = fut.await;
-                    console::log!(format!("{:?}", x).as_str());
+                match PublicKeyCredentialExt::is_conditional_mediation_available() {
+                    Ok(promise) => ctx.link().send_future(async {
+                        let x = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
 
-                    if x.ok().and_then(|v| v.as_bool()) == Some(true) {
-                        console::log!("conditional mediation is available");
-                        match Self::conditional_login_begin().await {
-                            Ok(v) => v,
-                            Err(v) => v.into(),
+                        console::log!(format!("{:?}", x).as_str());
+
+                        if x.as_bool() == Some(true) {
+                            console::log!("conditional mediation is available");
+                            match Self::conditional_login_begin().await {
+                                Ok(v) => v,
+                                Err(v) => v.into(),
+                            }
+                        } else {
+                            console::log!("conditional mediation is NOT available");
+                            AppMsg::Error(
+                                "Condition Mediation is NOT available on this platform".to_string(),
+                            )
                         }
-                    } else {
-                        console::log!("conditional mediation is NOT available");
-                        AppMsg::Error("Condition Mediation is NOT available on this platform".to_string())
+                    }),
+                    Err(e) => {
+                        console::log!(format!("isConditionalMediationAvailable() does not exist in this browser. Assuming unsupported. error {:?}", e).as_str());
                     }
-                });
-                */
-                ctx.link().send_future(async {
-                    console::log!("we hope conditional mediation is available!");
-                    match Self::conditional_login_begin().await {
-                        Ok(v) => v,
-                        Err(v) => v.into(),
-                    }
-                });
+                };
             }
             ConduiTestState::Main(ChallengeState::Presented(ccr)) => {
                 let mut c_options: web_sys::CredentialRequestOptions = ccr.clone().into();
@@ -275,43 +270,7 @@ impl Component for ConduiTest {
     }
 }
 
-/*
-#[wasm_bindgen(inline_js = "export async function is_conditional_mediation_available() {
-    PublicKeyCredential.isConditionalMediationAvailable()
-}")]
-extern "C" {
-    fn is_conditional_mediation_available() -> js_sys::Promise;
-}
-*/
-
 impl ConduiTest {
-    /*
-    fn do_registration(&mut self, ctx: &Context<Self>, settings: RegisterWithSettings) {
-        ctx.link().send_future(async move {
-            match Self::register_begin(settings).await {
-                Ok(v) => v,
-                Err(v) => v.into(),
-            }
-        });
-    }
-
-    fn do_auth(&mut self, ctx: &Context<Self>, settings: AuthenticateWithSettings) {
-        ctx.link().send_future(async move {
-            match Self::login_begin(settings).await {
-                Ok(v) => v,
-                Err(v) => v.into(),
-            }
-        });
-    }
-    */
-
-    /*
-          <div class="form-floating">
-            <input type="password" name="password" autocomplete="current-password webauthn" class="form-control"/>
-            <label for="password">{ "Password:" }</label>
-          </div>
-    */
-
     fn view_main(&self, ctx: &Context<Self>) -> Html {
         html! {
             <div class="form-description">
