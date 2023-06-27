@@ -6,19 +6,16 @@ compile_error!(
 #[macro_use]
 extern crate tracing;
 
+use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
 use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
-use webauthn_authenticator_rs::ctap2::commands::UserCM;
-use webauthn_authenticator_rs::ctap2::{
-    select_one_device, select_one_device_predicate, select_one_device_version, Ctap21Authenticator, BiometricAuthenticator,
-};
-
-use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
-
 use tokio_stream::StreamExt;
 use webauthn_authenticator_rs::{
-    ctap2::{select_one_token, CtapAuthenticator},
+    ctap2::{
+        commands::UserCM, select_one_device, select_one_device_predicate,
+        select_one_device_version, Ctap21Authenticator, CtapAuthenticator,
+    },
     transport::*,
     ui::Cli,
     SHA256Hash,
@@ -37,7 +34,8 @@ where
 
 #[derive(Debug, Args)]
 pub struct InfoOpt {
-    /// Continue watching for more connected devices forever.
+    /// Continue watching for connected devices until the program is explicitly
+    /// terminated (Ctrl + C).
     #[clap(long)]
     pub watch: bool,
 }
@@ -160,7 +158,7 @@ pub struct UpdateCredentialUserOpt {
 pub enum Opt {
     /// Request user presence on a connected FIDO token.
     Selection,
-    /// Show information about the connected FIDO token.
+    /// Show information about all connected FIDO tokens.
     Info(InfoOpt),
     /// Resets the connected FIDO token to factory settings, deleting all keys.
     ///
@@ -206,12 +204,6 @@ pub enum Opt {
 pub struct CliParser {
     #[clap(subcommand)]
     pub commands: Opt,
-    // /// Select a key by waiting for an insertion event after initial device
-    // /// enumeration.
-    // ///
-    // /// Otherwise, this runs on the first key.
-    // #[clap(long)]
-    // pub wait_for_key_insertion: bool,
 }
 
 pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
@@ -231,41 +223,13 @@ pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
 
 #[tokio::main]
 async fn main() {
-    println!("DANGER: make sure you only have one key connected");
     let opt = CliParser::parse();
     tracing_subscriber::fmt::init();
 
     let ui = Cli {};
-    let mut transport = AnyTransport::new().await.unwrap();
-
-    // let stream = transport.watch_tokens().await.unwrap();
-
-    // let stream = stream.timeout(Duration::from_secs(10));
-    // tokio::pin!(stream);
-
-    // while let Some(Ok(event)) = stream.next().await {
-    //     // println!("event: {event:?}");
-    //     if let TokenEvent::Added(t) = event {
-    //         let authenticator = CtapAuthenticator::new(t, &ui).await.unwrap();
-    //         println!("{}", authenticator.get_info());
-    //     }
-    // }
-
-    // drop(stream);
-    // todo!()
-
+    let transport = AnyTransport::new().await.unwrap();
     let mut stream = transport.watch().await.unwrap();
 
-    // if tokens.is_empty() {
-    //     println!("No tokens available!");
-    //     return;
-    // }
-
-    // let token_count = tokens.len();
-    // let authenticator = select_transport(&ui);
-    // let authenticator = &mut tokens[0];
-
-    // TODO: reimplement to use stream
     match opt.commands {
         Opt::Selection => {
             let token = select_one_device(stream, &ui).await;
@@ -285,7 +249,7 @@ async fn main() {
                     TokenEvent::EnumerationComplete => {
                         if o.watch {
                             println!("Initial enumeration completed, watching for more devices...");
-                            println!("Press Ctrl-C to stop watching.");
+                            println!("Press Ctrl + C to stop watching.");
                         } else {
                             break;
                         }
@@ -401,11 +365,9 @@ async fn main() {
 
         Opt::EnrollFingerprint(o) => {
             let mut token: CtapAuthenticator<AnyToken, Cli> =
-                select_one_device_predicate(stream, &ui, |a| {
-                    a.supports_biometrics()
-                })
-                .await
-                .unwrap();
+                select_one_device_predicate(stream, &ui, |a| a.supports_biometrics())
+                    .await
+                    .unwrap();
 
             let id = token
                 .bio()
@@ -418,11 +380,9 @@ async fn main() {
 
         Opt::ListFingerprints => {
             let mut token: CtapAuthenticator<AnyToken, Cli> =
-                select_one_device_predicate(stream, &ui, |a| {
-                    a.supports_biometrics()
-                })
-                .await
-                .unwrap();
+                select_one_device_predicate(stream, &ui, |a| a.supports_biometrics())
+                    .await
+                    .unwrap();
 
             let fingerprints = token
                 .bio()
@@ -443,11 +403,9 @@ async fn main() {
 
         Opt::RenameFingerprint(o) => {
             let mut token: CtapAuthenticator<AnyToken, Cli> =
-                select_one_device_predicate(stream, &ui, |a| {
-                    a.supports_biometrics()
-                })
-                .await
-                .unwrap();
+                select_one_device_predicate(stream, &ui, |a| a.supports_biometrics())
+                    .await
+                    .unwrap();
 
             token
                 .bio()
@@ -459,11 +417,9 @@ async fn main() {
 
         Opt::RemoveFingerprint(o) => {
             let mut token: CtapAuthenticator<AnyToken, Cli> =
-                select_one_device_predicate(stream, &ui, |a| {
-                    a.supports_biometrics()
-                })
-                .await
-                .unwrap();
+                select_one_device_predicate(stream, &ui, |a| a.supports_biometrics())
+                    .await
+                    .unwrap();
 
             let ids: Vec<Vec<u8>> =
                 o.id.iter()
@@ -476,22 +432,20 @@ async fn main() {
                 .await
                 .expect("removing fingerprint");
         }
-/*
+
         Opt::SetPinPolicy(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter_map(|t| match t {
-                    CtapAuthenticator::Fido21(a) => Some(a),
-                    _ => None,
+            let mut token: Ctap21Authenticator<AnyToken, Cli> =
+                select_one_device_version(stream, &ui, |a| {
+                    if !Ctap21Authenticator::supports_config(a) {
+                        warn!("token does not support CTAP 2.1 config");
+                        return false;
+                    }
+                    true
                 })
-                .filter(|t| t.supports_config())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting CTAP 2.1 authenticatorConfig"
-            );
-            tokens[0]
+                .await
+                .unwrap();
+
+            token
                 .set_min_pin_length(
                     o.length,
                     o.rpids.unwrap_or_default(),
@@ -502,33 +456,32 @@ async fn main() {
         }
 
         Opt::SetPin(o) => {
-            assert_eq!(token_count, 1);
-            authenticator
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device(stream, &ui).await.unwrap();
+
+            token
                 .set_new_pin(&o.new_pin)
                 .await
                 .expect("Error setting PIN");
         }
 
         Opt::ChangePin(o) => {
-            assert_eq!(token_count, 1);
-            authenticator
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device(stream, &ui).await.unwrap();
+
+            token
                 .change_pin(&o.old_pin, &o.new_pin)
                 .await
                 .expect("Error changing PIN");
         }
 
         Opt::GetCredentialMetadata => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_credential_management())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting credential management"
-            );
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| a.supports_credential_management())
+                    .await
+                    .unwrap();
 
-            let metadata = tokens[0]
+            let metadata = token
                 .credential_management()
                 .unwrap()
                 .get_credentials_metadata()
@@ -542,17 +495,12 @@ async fn main() {
         }
 
         Opt::ListCredentials(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_credential_management())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting credential management"
-            );
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| a.supports_credential_management())
+                    .await
+                    .unwrap();
 
-            let cm = tokens[0].credential_management().unwrap();
+            let cm = token.credential_management().unwrap();
 
             let (creds, rp) = if let Some(rpid) = o.rpid {
                 (cm.enumerate_credentials_by_rpid(&rpid).await, rpid)
@@ -691,18 +639,13 @@ async fn main() {
         }
 
         Opt::DeleteCredential(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_credential_management())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting credential management"
-            );
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| a.supports_credential_management())
+                    .await
+                    .unwrap();
 
             println!("Deleting credential {}...", hex::encode(&o.id));
-            tokens[0]
+            token
                 .credential_management()
                 .unwrap()
                 .delete_credential(o.id.into())
@@ -711,19 +654,17 @@ async fn main() {
         }
 
         Opt::UpdateCredentialUser(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter_map(|t| match t {
-                    CtapAuthenticator::Fido21(a) => Some(a),
-                    _ => None,
+            let mut token: Ctap21Authenticator<AnyToken, Cli> =
+                select_one_device_version(stream, &ui, |a| {
+                    if !Ctap21Authenticator::supports_ctap21_credential_management(a) {
+                        warn!("token does not support CTAP 2.1 credential management");
+                        return false;
+                    }
+                    true
                 })
-                .filter(|t| t.supports_ctap21_credential_management())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting CTAP 2.1 credential management"
-            );
+                .await
+                .unwrap();
+
             let user = UserCM {
                 id: o.user_id,
                 name: o.name,
@@ -734,12 +675,10 @@ async fn main() {
                 "Updating user information for credential {}...",
                 hex::encode(&o.credential_id)
             );
-            tokens[0]
+            token
                 .update_credential_user(o.credential_id.into(), user)
                 .await
                 .expect("Error updating credential");
         }
-         */
-        _ => todo!(),
     }
 }
