@@ -11,7 +11,7 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use webauthn_authenticator_rs::ctap2::commands::UserCM;
 use webauthn_authenticator_rs::ctap2::{
-    select_one_device, select_one_device_predicate, select_one_device_version, Ctap21Authenticator,
+    select_one_device, select_one_device_predicate, select_one_device_version, Ctap21Authenticator, BiometricAuthenticator,
 };
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
@@ -399,18 +399,15 @@ async fn main() {
             }
         }
 
-/*
         Opt::EnrollFingerprint(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_biometrics())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting biometrics"
-            );
-            let id = tokens[0]
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| {
+                    a.supports_biometrics()
+                })
+                .await
+                .unwrap();
+
+            let id = token
                 .bio()
                 .unwrap()
                 .enroll_fingerprint(Duration::from_secs(30), o.friendly_name)
@@ -420,16 +417,14 @@ async fn main() {
         }
 
         Opt::ListFingerprints => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_biometrics())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting biometrics"
-            );
-            let fingerprints = tokens[0]
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| {
+                    a.supports_biometrics()
+                })
+                .await
+                .unwrap();
+
+            let fingerprints = token
                 .bio()
                 .unwrap()
                 .list_fingerprints()
@@ -447,17 +442,14 @@ async fn main() {
         }
 
         Opt::RenameFingerprint(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_biometrics())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting biometrics"
-            );
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| {
+                    a.supports_biometrics()
+                })
+                .await
+                .unwrap();
 
-            tokens[0]
+            token
                 .bio()
                 .unwrap()
                 .rename_fingerprint(base16_decode(&o.id).expect("decoding ID"), o.friendly_name)
@@ -466,28 +458,25 @@ async fn main() {
         }
 
         Opt::RemoveFingerprint(o) => {
-            let mut tokens: Vec<_> = tokens
-                .drain(..)
-                .filter(|t| t.supports_biometrics())
-                .collect();
-            assert_eq!(
-                tokens.len(),
-                1,
-                "Expected exactly one authenticator supporting biometrics"
-            );
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device_predicate(stream, &ui, |a| {
+                    a.supports_biometrics()
+                })
+                .await
+                .unwrap();
 
             let ids: Vec<Vec<u8>> =
                 o.id.iter()
                     .map(|i| base16_decode(i).expect("decoding ID"))
                     .collect();
-            tokens[0]
+            token
                 .bio()
                 .unwrap()
                 .remove_fingerprints(ids)
                 .await
                 .expect("removing fingerprint");
         }
-
+/*
         Opt::SetPinPolicy(o) => {
             let mut tokens: Vec<_> = tokens
                 .drain(..)
