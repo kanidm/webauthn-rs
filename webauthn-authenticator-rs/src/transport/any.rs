@@ -63,13 +63,10 @@ impl AnyTransport {
             #[cfg(feature = "nfc")]
             nfc: match NFCTransport::new(pcsc::Scope::User) {
                 Ok(reader) => Some(reader),
-                Err(WebauthnCError::PcscError(pcsc::Error::NoService))
-                | Err(WebauthnCError::PcscError(pcsc::Error::NoAccess))
-                | Err(WebauthnCError::PcscError(pcsc::Error::ServiceStopped)) => {
-                    warn!("PC/SC service not available, continuing without NFC support...");
+                Err(e) => {
+                    warn!("PC/SC service not available ({e:?}), continuing without NFC support...");
                     None
                 }
-                Err(e) => return Err(e),
             },
             #[cfg(feature = "usb")]
             usb: USBTransport::new().await?,
@@ -86,15 +83,14 @@ impl<'b> Transport<'b> for AnyTransport {
         // Bluetooth
         let mut bluetooth_complete = !cfg!(feature = "bluetooth");
         #[cfg(feature = "bluetooth")]
-        let bluetooth: BoxStream<TokenEvent<BluetoothToken>> =
-            match self.bluetooth.watch().await {
-                Err(e) => {
-                    error!("Bluetooth transport failure: {e:?}");
-                    bluetooth_complete = true;
-                    Box::pin(futures::stream::empty())
-                }
-                Ok(s) => s,
-            };
+        let bluetooth: BoxStream<TokenEvent<BluetoothToken>> = match self.bluetooth.watch().await {
+            Err(e) => {
+                error!("Bluetooth transport failure: {e:?}");
+                bluetooth_complete = true;
+                Box::pin(futures::stream::empty())
+            }
+            Ok(s) => s,
+        };
 
         #[cfg(not(feature = "bluetooth"))]
         let bluetooth: BoxStream<TokenEvent<AnyToken>> = Box::pin(futures::stream::empty());
