@@ -25,7 +25,7 @@ pub mod pcsc {
     pub struct ReaderState {}
 }
 
-#[cfg(not(any(feature = "bluetooth", feature = "cable")))]
+#[cfg(not(any(feature = "ctap2", feature = "cable")))]
 pub mod tokio {
     pub mod net {
         pub struct TcpStream {}

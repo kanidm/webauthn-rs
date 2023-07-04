@@ -60,15 +60,15 @@ use crate::ctap2::commands::to_short_apdus;
 use crate::error::{CtapError, WebauthnCError};
 use crate::ui::UiCallback;
 
+#[cfg(doc)]
+use crate::stubs::*;
+
 use async_trait::async_trait;
 use futures::executor::block_on;
 use futures::{stream::BoxStream, Stream};
 use tokio::sync::mpsc;
 use tokio::task::{spawn_blocking, JoinHandle};
 use tokio_stream::wrappers::ReceiverStream;
-
-#[cfg(doc)]
-use crate::stubs::*;
 
 use pcsc::*;
 use std::ffi::{CStr, CString};
