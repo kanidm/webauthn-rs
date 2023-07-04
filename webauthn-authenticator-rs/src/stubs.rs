@@ -16,6 +16,27 @@ pub mod authenticator {
     pub struct StatusUpdate {}
 }
 
+#[cfg(not(feature = "usb"))]
+pub mod fido_hid_rs {
+    const HID_RPT_SIZE: usize = 64;
+    const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
+    
+    pub type HidReportBytes = [u8; HID_RPT_SIZE];
+    pub type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
+    pub trait USBDevice {}
+    pub struct USBDeviceImpl {}
+    pub trait USBDeviceInfo {
+        type Id;
+    }
+    pub struct USBDeviceInfoImpl {}
+    impl USBDeviceInfo for USBDeviceInfoImpl {
+        type Id = String;        
+    }
+    pub trait USBDeviceManager {}
+    pub struct USBDeviceManagerImpl {}
+    pub enum WatchEvent {}
+}
+
 #[cfg(not(feature = "nfc"))]
 pub mod pcsc {
     pub struct Context {}
@@ -23,6 +44,7 @@ pub mod pcsc {
     pub struct State {}
     pub struct Card {}
     pub struct ReaderState {}
+    pub enum Error {}
 }
 
 #[cfg(not(any(feature = "ctap2", feature = "cable")))]
@@ -38,6 +60,18 @@ pub mod tokio {
     }
     pub mod time {
         pub async fn sleep(_: std::time::Duration) {}
+    }
+    pub mod task {
+        pub struct JoinHandle<T> {}
+        pub fn spawn<A, B>(future: A) -> JoinHandle<B> {}
+        pub fn spawn_blocking() {}
+    }
+}
+
+#[cfg(not(feature = "ctap2"))]
+pub mod tokio_stream {
+    pub mod wrappers {
+        pub struct ReceiverStream<T> {}
     }
 }
 
@@ -74,6 +108,8 @@ pub mod btleplug {
     pub mod platform {
         pub struct Manager {}
         pub struct Peripheral {}
+        #[derive(Debug)]
+        pub struct PeripheralId {}
     }
 }
 

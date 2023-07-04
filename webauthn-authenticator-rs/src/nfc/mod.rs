@@ -1,4 +1,4 @@
-//! [NFCReader] communicates with a FIDO authenticator using the PC/SC API.
+//! [NFCTransport] communicates with a FIDO authenticator using the PC/SC API.
 //!
 //! ## Transport
 //!
@@ -49,7 +49,7 @@
 //! * the user has explicitly disabled the service (in `services.msc`)
 //!
 //! Instead, Windows returns an error ([`NoService`][4]) when establishing a
-//! context (in [`NFCReader::new()`]).
+//! context (in [`NFCTransport::new()`]).
 //!
 //! [`AnyTransport`] will ignore unavailability of `SCardSvr`, as it is presumed
 //! that PC/SC is one of many potentially-available transports.
@@ -98,7 +98,7 @@ pub const APPLET_DF: [u8; 8] = [
 /// List of strings, which if they appear in a PC/SC card reader's name,
 /// indicate we should ignore it.
 ///
-/// **See:** [`is_ignored_reader()`]
+/// **See:** [`ignored_reader()`]
 const IGNORED_READERS: [&str; 2] = [
     // Nitrokey 3 exposes a CCID interface, which we can select the FIDO applet
     // on, but it doesn't actually work.
@@ -337,7 +337,7 @@ pub struct NFCCard {
 
 impl fmt::Debug for NFCTransport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NFCReader").finish()
+        f.debug_struct("NFCTransport").finish()
     }
 }
 
@@ -352,7 +352,7 @@ impl fmt::Debug for NFCCard {
 }
 
 impl NFCTransport {
-    /// Creates a new [NFCReader] instance in a given [Scope].
+    /// Creates a new [NFCTransport] instance in a given [Scope].
     ///
     /// Example:
     ///
@@ -360,10 +360,10 @@ impl NFCTransport {
     /// # #[cfg(feature = "nfc")]
     /// use pcsc::Scope;
     /// # #[cfg(feature = "nfc")]
-    /// use webauthn_authenticator_rs::nfc::NFCReader;
+    /// use webauthn_authenticator_rs::nfc::NFCTransport;
     ///
     /// # #[cfg(feature = "nfc")]
-    /// let reader = NFCReader::new(Scope::User);
+    /// let reader = NFCTransport::new(Scope::User);
     /// // TODO: Handle errors
     /// ```
     ///

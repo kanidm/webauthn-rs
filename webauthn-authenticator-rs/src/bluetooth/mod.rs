@@ -373,13 +373,14 @@ impl<'b> Transport<'b> for BluetoothTransport {
 
     /// ## Important
     ///
-    /// [`tokens`] is unsupported for [BluetoothTransport], as BTLE
+    /// [`tokens()`] is unsupported for [BluetoothTransport], as BTLE
     /// authenticator connections are very short-lived and timing sensitive.
     ///
     /// This method will always return an empty `Vec` of devices.
     ///
     /// Use [`watch()`][] instead.
     ///
+    /// [`tokens()`]: BluetoothTransport::tokens
     /// [`watch()`]: BluetoothTransport::watch
     async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         warn!("tokens() is not supported for Bluetooth devices, use watch()");

@@ -2,6 +2,9 @@
 //!
 //! This is still a work in progress, and doesn't yet handle tokens quite as
 //! well as we'd like.
+#[cfg(doc)]
+use crate::stubs::*;
+
 use async_stream::stream;
 use futures::{stream::FusedStream, StreamExt};
 
@@ -143,6 +146,7 @@ impl<'b> Transport<'b> for AnyTransport {
 
         // Main stream
         let s = stream! {
+            #[cfg(not(doc))]
             while !bluetooth.is_terminated() || !nfc.is_terminated() || !usb.is_terminated() {
                 tokio::select! {
                     Some(b) = bluetooth.next() => {
