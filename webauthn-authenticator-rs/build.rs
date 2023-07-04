@@ -63,7 +63,6 @@ Please upgrade to OpenSSL v3.0.0 or later.
     }
 }
 
-
 fn main() {
     #[cfg(feature = "crypto")]
     crypto::test_openssl();

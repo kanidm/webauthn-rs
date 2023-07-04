@@ -21,19 +21,19 @@
 //! (avaliable with `--features cable`) instead.
 //!
 //! ## Linux support
-//! 
+//!
 //! Seems to be extremely flakey.
-//! 
+//!
 //! ## macOS support
-//! 
+//!
 //! Works fine.
-//! 
+//!
 //! Non-paired (but discoverable) Bluetooth FIDO tokens do not appear in the
 //! System Settings Bluetooth pane – it can only be triggered by an application
 //! attempting to connect to an authenticator.
 //!
 //! This will attempt to connect to any nearby FIDO token.
-//! 
+//!
 //! ## Windows support
 //!
 //! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
@@ -43,7 +43,7 @@
 //!
 //! Use [Win10][crate::win10::Win10] (available with `--features win10`) on
 //! Windows instead.
-//! 
+//!
 //! You'll need to manually pair your authenticator in Device Manager before
 //! using it with this or Windows' WebAuthn API.
 use std::{
@@ -262,7 +262,9 @@ impl BluetoothDeviceWatcher {
 
                         trace!("services: {:?}", properties.services);
                         // Hideez key seems to lack services on rediscovery?
-                        if !properties.services.is_empty() && !properties.services.contains(&FIDO_GATT_SERVICE) {
+                        if !properties.services.is_empty()
+                            && !properties.services.contains(&FIDO_GATT_SERVICE)
+                        {
                             trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
                             continue;
                         }
@@ -377,7 +379,7 @@ impl<'b> Transport<'b> for BluetoothTransport {
     /// This method will always return an empty `Vec` of devices.
     ///
     /// Use [`watch()`][] instead.
-    /// 
+    ///
     /// [`watch()`]: BluetoothTransport::watch
     async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         warn!("tokens() is not supported for Bluetooth devices, use watch()");

@@ -42,7 +42,7 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     ///
     /// This method does not work for Bluetooth devices. Use
     /// [`watch()`][] instead.
-    /// 
+    ///
     /// [`watch()`]: Transport::watch
     async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError>;
 }

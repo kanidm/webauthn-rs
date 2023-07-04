@@ -43,7 +43,7 @@ mod os;
 #[doc(inline)]
 pub use crate::{
     error::{HidError, Result},
-    os::{USBDeviceManagerImpl, USBDeviceInfoImpl, USBDeviceImpl},
+    os::{USBDeviceImpl, USBDeviceInfoImpl, USBDeviceManagerImpl},
     traits::{USBDevice, USBDeviceInfo, USBDeviceManager, WatchEvent},
 };
 

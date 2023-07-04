@@ -460,7 +460,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     }
 
     /// Prompt for user presence on an authenticator.
-    /// 
+    ///
     /// On CTAP 2.1 authenticators, this sends a [SelectionRequest].
     ///
     /// On CTAP 2.0 and 2.1-PRE authenticators (where there is no
@@ -485,9 +485,14 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             return Ok(());
         }
 
-        if self.info.versions.contains(Ctap21Authenticator::<'a, T, U>::VERSION) {
+        if self
+            .info
+            .versions
+            .contains(Ctap21Authenticator::<'a, T, U>::VERSION)
+        {
             let ui_callback = self.ui_callback;
-            return self.token
+            return self
+                .token
                 .transmit(SelectionRequest {}, ui_callback)
                 .await
                 .map(|_| ());

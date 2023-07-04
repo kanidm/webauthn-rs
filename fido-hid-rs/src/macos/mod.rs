@@ -19,7 +19,7 @@
 //! Whenever a device is opened, [`USBDeviceImpl`] starts up a new thread with
 //! another [`CFRunLoop`] to drive events from [`IOHIDDevice`]. This gets
 //! terminated once the [`USBDeviceImpl`] gets dropped.
-//! 
+//!
 //! Internally these use `tokio` channels to pass state from callbacks in the
 //! [`CFRunLoop`] into Rust async land.
 //!

@@ -4,7 +4,8 @@ use crate::{transport::Token, ui::UiCallback};
 
 use super::{
     commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
-    ctap21_cred::CredentialManagementAuthenticatorInfo, Ctap20Authenticator, internal::CtapAuthenticatorVersion,
+    ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
+    Ctap20Authenticator,
 };
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
