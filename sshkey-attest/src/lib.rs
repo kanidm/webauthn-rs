@@ -358,6 +358,7 @@ mod tests {
     use webauthn_rs_core::proto::{
         AttestationCa, AttestationCaList, CredentialProtectionPolicy, ExtnState,
     };
+    use webauthn_rs_device_catalog::data::yubico::YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM;
 
     #[test]
     fn test_ssh_ecdsa_sk_attest() {
@@ -378,7 +379,7 @@ mod tests {
         // Blank the comment
         key.comment = None;
 
-        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
         // Aaguid for yubikey 5 nano
         att_ca.insert_aaguid(uuid::uuid!("cb69481e-8ff7-4039-93ec-0a2729a154a8"));
         let att_ca_list: AttestationCaList =
@@ -425,7 +426,7 @@ mod tests {
         // Blank the comment
         key.comment = None;
 
-        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
         // Aaguid for yubikey 5c fips
         att_ca.insert_aaguid(uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"));
         let att_ca_list: AttestationCaList =
@@ -475,7 +476,7 @@ mod tests {
         key.comment = None;
         */
 
-        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
         // Aaguid for yubikey 5 fips
         att_ca.insert_aaguid(uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"));
         let att_ca_list: AttestationCaList =
@@ -523,7 +524,7 @@ mod tests {
         let challenge = Base64UrlSafeData::try_from("VzCkpMNVYVgXHBuDP74v9A==")
             .expect("Failed to decode attestation");
 
-        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
 
         // The device signature above is from a yk5nano, however we have an attestation policy
         // to only allow the yk5 fips.
@@ -565,7 +566,7 @@ mod tests {
         let challenge = Base64UrlSafeData::try_from("aAqBnywP0Vbv3SUgqmnMRQ==")
             .expect("Failed to decode attestation");
 
-        let mut att_ca = AttestationCa::yubico_u2f_root_ca_serial_457200631();
+        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
 
         // The device signature above is from a token 2 however we have an attestation policy
         // to only allow the yk5 fips.
