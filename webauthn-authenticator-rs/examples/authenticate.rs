@@ -64,7 +64,7 @@ impl From<UvPolicy> for UserVerificationPolicy {
 async fn select_transport<U: UiCallback>(ui: &U) -> impl AuthenticatorBackend + '_ {
     use futures::StreamExt;
 
-    let mut reader = AnyTransport::new().await.unwrap();
+    let reader = AnyTransport::new().await.unwrap();
     info!("Using reader: {:?}", reader);
 
     match reader.watch().await {

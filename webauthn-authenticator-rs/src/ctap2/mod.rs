@@ -133,7 +133,7 @@ use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 
 use futures::stream::{BoxStream, FuturesUnordered};
-use futures::{select, Future, Stream, StreamExt};
+use futures::{select, Future, StreamExt};
 
 use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::error::WebauthnCError;

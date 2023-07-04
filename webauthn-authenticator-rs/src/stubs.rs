@@ -20,7 +20,7 @@ pub mod authenticator {
 pub mod fido_hid_rs {
     const HID_RPT_SIZE: usize = 64;
     const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
-    
+
     pub type HidReportBytes = [u8; HID_RPT_SIZE];
     pub type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
     pub trait USBDevice {}
@@ -30,7 +30,7 @@ pub mod fido_hid_rs {
     }
     pub struct USBDeviceInfoImpl {}
     impl USBDeviceInfo for USBDeviceInfoImpl {
-        type Id = String;        
+        type Id = String;
     }
     pub trait USBDeviceManager {}
     pub struct USBDeviceManagerImpl {}

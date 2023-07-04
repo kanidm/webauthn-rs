@@ -1,6 +1,6 @@
 use std::{env, path::PathBuf};
 
-const LINUX_WRAPPER_H: &'static str = "src/linux/wrapper.h";
+const LINUX_WRAPPER_H: &str = "src/linux/wrapper.h";
 
 fn linux_headers() {
     println!("cargo:rerun-if-changed={LINUX_WRAPPER_H}");

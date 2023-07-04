@@ -150,41 +150,44 @@ impl<'b> Transport<'b> for AnyTransport {
             while !bluetooth.is_terminated() || !nfc.is_terminated() || !usb.is_terminated() {
                 tokio::select! {
                     Some(b) = bluetooth.next() => {
-                        let a: TokenEvent<AnyToken> = b.into();
-                        if matches!(a, TokenEvent::EnumerationComplete) {
+                        #[cfg(feature = "bluetooth")]
+                        let b: TokenEvent<AnyToken> = b.into();
+                        if matches!(b, TokenEvent::EnumerationComplete) {
                             if nfc_complete && usb_complete {
                                 trace!("Sending enumeration complete from Bluetooth");
                                 yield TokenEvent::EnumerationComplete;
                             }
                             bluetooth_complete = true;
                         } else {
-                            yield a;
+                            yield b;
                         }
                     }
 
                     Some(n) = nfc.next() => {
-                        let a: TokenEvent<AnyToken> = n.into();
-                        if matches!(a, TokenEvent::EnumerationComplete) {
+                        #[cfg(feature = "nfc")]
+                        let n: TokenEvent<AnyToken> = n.into();
+                        if matches!(n, TokenEvent::EnumerationComplete) {
                             if bluetooth_complete && usb_complete {
                                 trace!("Sending enumeration complete from NFC");
                                 yield TokenEvent::EnumerationComplete;
                             }
                             nfc_complete = true;
                         } else {
-                            yield a;
+                            yield n;
                         }
                     }
 
                     Some(u) = usb.next() => {
-                        let a: TokenEvent<AnyToken> = u.into();
-                        if matches!(a, TokenEvent::EnumerationComplete) {
+                        #[cfg(feature = "usb")]
+                        let u: TokenEvent<AnyToken> = u.into();
+                        if matches!(u, TokenEvent::EnumerationComplete) {
                             if bluetooth_complete && nfc_complete {
                                 trace!("Sending enumeration complete from USB");
                                 yield TokenEvent::EnumerationComplete;
                             }
                             usb_complete = true;
                         } else {
-                            yield a;
+                            yield u;
                         }
                     }
 

@@ -67,7 +67,7 @@ use async_trait::async_trait;
 use futures::executor::block_on;
 use futures::{stream::BoxStream, Stream};
 use tokio::sync::mpsc;
-use tokio::task::{spawn_blocking, JoinHandle};
+use tokio::task::spawn_blocking;
 use tokio_stream::wrappers::ReceiverStream;
 
 use pcsc::*;
@@ -130,24 +130,20 @@ fn ignored_reader(reader_name: &CStr) -> bool {
 }
 
 struct NFCDeviceWatcher {
-    handle: JoinHandle<Result<(), WebauthnCError>>,
     stream: ReceiverStream<TokenEvent<NFCCard>>,
 }
 
 impl NFCDeviceWatcher {
-    fn new(ctx: Context) -> Result<Self, WebauthnCError> {
+    fn new(ctx: Context) -> Self {
         let (tx, rx) = mpsc::channel(16);
         let stream = ReceiverStream::from(rx);
 
-        let handle = spawn_blocking(move || {
+        spawn_blocking(move || {
             let mut enumeration_complete = false;
             let mut reader_states: Vec<ReaderState> =
                 vec![ReaderState::new(PNP_NOTIFICATION(), State::UNAWARE)];
 
-            'main: loop {
-                if tx.is_closed() {
-                    break;
-                }
+            'main: while !tx.is_closed() {
                 // trace!(
                 //     "{} known reader(s), pruning ignored readers",
                 //     reader_states.len()
@@ -282,6 +278,8 @@ impl NFCDeviceWatcher {
                             // Channel lost!
                             break 'main;
                         }
+                    } else {
+                        // Unhandled state transition
                     }
                 }
 
@@ -304,10 +302,10 @@ impl NFCDeviceWatcher {
                 }
             }
 
-            Ok(())
+            Ok::<(), WebauthnCError>(())
         });
 
-        Ok(Self { handle, stream })
+        Self { stream }
     }
 }
 
@@ -382,7 +380,7 @@ impl<'b> Transport<'b> for NFCTransport {
     type Token = NFCCard;
 
     async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
-        let watcher = NFCDeviceWatcher::new(self.ctx.clone())?;
+        let watcher = NFCDeviceWatcher::new(self.ctx.clone());
 
         Ok(Box::pin(watcher))
     }

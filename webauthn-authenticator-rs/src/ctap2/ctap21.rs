@@ -6,10 +6,8 @@ use webauthn_rs_proto::UserVerificationPolicy;
 use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 
 use super::{
-    commands::{GetInfoResponse, SelectionRequest},
-    ctap21_bio::BiometricAuthenticatorInfo,
-    ctap21_cred::CredentialManagementAuthenticatorInfo,
-    internal::CtapAuthenticatorVersion,
+    commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
     Ctap20Authenticator,
 };
 

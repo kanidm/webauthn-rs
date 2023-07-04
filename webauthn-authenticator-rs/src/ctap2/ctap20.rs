@@ -552,7 +552,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         }
 
         error!("got unexpected OK response from authenticator");
-        return Err(WebauthnCError::Internal);
+        Err(WebauthnCError::Internal)
     }
 }
 
