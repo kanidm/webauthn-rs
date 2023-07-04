@@ -22,7 +22,7 @@ impl hidraw_report_descriptor {
 #[derive(Debug, FromPrimitive, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum BusType {
-    USB = BUS_USB,
+    Usb = BUS_USB,
     Bluetooth = BUS_BLUETOOTH,
     Virtual = BUS_VIRTUAL,
 }

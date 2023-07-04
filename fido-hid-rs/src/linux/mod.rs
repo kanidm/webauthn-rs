@@ -201,7 +201,7 @@ impl USBDeviceInfoImpl {
 
         // Drop unknown or non-USB BusTypes
         let bustype = BusType::from_u32(info.bustype);
-        if bustype != Some(BusType::USB) {
+        if bustype != Some(BusType::Usb) {
             // trace!(
             //     "{path:?} is not USB HID: {bustype:?} (0x{:x})",
             //     info.bustype
@@ -212,7 +212,7 @@ impl USBDeviceInfoImpl {
         let mut descriptor = hidraw_report_descriptor::default();
         unsafe {
             hid_ioc_rd_desc_size(fd.as_raw_fd(), &mut descriptor.size).ok()?;
-            if descriptor.size <= 0 {
+            if descriptor.size < 1 {
                 return None;
             }
             if descriptor.size > HID_MAX_DESCRIPTOR_SIZE {
@@ -268,8 +268,13 @@ impl USBDevice for USBDeviceImpl {
     async fn read(&mut self) -> Result<HidReportBytes> {
         // TODO: check for numbered reports?
         let mut o = [0; size_of::<HidReportBytes>()];
-        self.device.read(&mut o)?;
-        Ok(o)
+        let len = self.device.read(&mut o)?;
+        if len != o.len() {
+            error!("incomplete read: read {len} of {} bytes", o.len());
+            Err(HidError::InvalidMessageLength)
+        } else {
+            Ok(o)
+        }
     }
 
     async fn write(&mut self, data: HidSendReportBytes) -> Result<()> {
