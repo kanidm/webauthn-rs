@@ -10,6 +10,7 @@ pub struct Authority {
 
 impl fmt::Debug for Authority {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        /*
         let sname = self
             .ca
             .subject_name()
@@ -18,6 +19,7 @@ impl fmt::Debug for Authority {
                 acc.push_str(s.data().as_utf8().expect("invalid subject dn").as_ref());
                 acc
             });
+        */
 
         f.debug_struct("Authority")
             .field("subject", &self.ca.subject_name())

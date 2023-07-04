@@ -25,7 +25,7 @@ pub struct Sku {
 }
 
 impl Device {
-    pub(crate) fn query_match(&self, q: &Query) -> bool {
+    pub(crate) fn query_match(&self, _q: &Query) -> bool {
         todo!();
     }
 }

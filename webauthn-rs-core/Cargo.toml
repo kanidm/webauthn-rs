@@ -22,7 +22,6 @@ base64.workspace = true
 base64urlsafedata.workspace = true
 webauthn-attestation-ca.workspace = true
 webauthn-rs-proto.workspace = true
-base64urlsafedata.workspace = true
 serde.workspace = true
 serde_cbor.workspace = true
 serde_json.workspace = true

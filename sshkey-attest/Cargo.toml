@@ -24,3 +24,4 @@ webauthn-rs-core.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
+webauthn-rs-device-catalog.workspace = true

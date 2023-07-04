@@ -13,7 +13,6 @@ use std::fmt;
 
 use crate::device::*;
 use crate::query::Query;
-use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use webauthn_attestation_ca::AttestationCaList;
