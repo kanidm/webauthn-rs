@@ -141,4 +141,20 @@ which has some caveats:
 
 Always run this tool from within a terminal running as Administrator.
 
+You can disable the elevation manifest at build time with:
+
+```powershell
+$Env:RUSTFLAGS="--cfg disable_windows_manifest"
+cargo build --bin fido-key-manager
+```
+
+But the program may not be usable anymore.
+
+As long as you're running `fido-key-manager` as Administrator:
+
+* NFC support should "just work", provided your transceiver supports the PC/SC 
+  API.
+
+* USB support should "just work".
+
 [1]: https://learn.microsoft.com/en-us/previous-versions/bb756929(v=msdn.10)
