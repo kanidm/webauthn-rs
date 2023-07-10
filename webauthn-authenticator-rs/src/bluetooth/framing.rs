@@ -205,7 +205,7 @@ impl<'a> Sum<&'a BtleFrame> for BtleFrame {
     }
 }
 
-/// Deserialises bytes from a Bluetooth GATT notification into a [U2FHIDFrame].
+/// Deserialises bytes from a Bluetooth GATT notification into a [BtleFrame].
 impl TryFrom<&[u8]> for BtleFrame {
     type Error = WebauthnCError;
 

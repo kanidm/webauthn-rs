@@ -1,13 +1,14 @@
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{collections::BTreeMap, fmt::Debug, mem::size_of};
 
 #[cfg(feature = "ctap2-management")]
 use crate::util::check_pin;
 use crate::{
     authenticator_hashed::AuthenticatorBackendHashedClientData,
-    ctap2::{commands::*, pin_uv::*},
-    error::WebauthnCError,
+    ctap2::{commands::*, pin_uv::*, Ctap21Authenticator},
+    error::{CtapError, WebauthnCError},
     transport::Token,
     ui::UiCallback,
+    SHA256Hash,
 };
 
 use base64urlsafedata::Base64UrlSafeData;
@@ -15,9 +16,12 @@ use futures::executor::block_on;
 
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
-    AuthenticatorAttestationResponseRaw, PublicKeyCredential, RegisterPublicKeyCredential,
-    RegistrationExtensionsClientOutputs, UserVerificationPolicy,
+    AuthenticatorAttestationResponseRaw, PubKeyCredParams, PublicKeyCredential,
+    RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, RelyingParty, User,
+    UserVerificationPolicy,
 };
+
+use super::internal::CtapAuthenticatorVersion;
 
 #[derive(Debug, Clone)]
 pub(super) enum AuthToken {
@@ -54,15 +58,20 @@ pub struct Ctap20Authenticator<'a, T: Token, U: UiCallback> {
     pub(super) ui_callback: &'a U,
 }
 
-impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
-    pub(super) fn new(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
+impl<'a, T: Token, U: UiCallback> CtapAuthenticatorVersion<'a, T, U>
+    for Ctap20Authenticator<'a, T, U>
+{
+    const VERSION: &'static str = "FIDO_2_0";
+    fn new_with_info(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
         Self {
             info,
             token,
             ui_callback,
         }
     }
+}
 
+impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// Gets cached information about the authenticator.
     ///
     /// This does not transmit to the token.
@@ -448,6 +457,102 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         // TODO: handle lockouts
 
         ui_callback.request_pin().ok_or(WebauthnCError::Cancelled)
+    }
+
+    /// Prompt for user presence on an authenticator.
+    ///
+    /// On CTAP 2.1 authenticators, this sends a [SelectionRequest].
+    ///
+    /// On CTAP 2.0 and 2.1-PRE authenticators (where there is no
+    /// [SelectionRequest]), this performs a [MakeCredentialRequest] with
+    /// *invalid* PIN/UV auth parameters, using the process described in CTAP
+    /// 2.1 [§ 6.1.2 authenticatorMakeCredential Algorithm][0] step 1.
+    ///
+    /// While this *shouldn't* result in an authenticator lock-out (according to
+    /// the spec), it has been observed that some authenticators will decrement
+    /// their `pinAttempts` counter.
+    ///
+    /// ## References
+    ///
+    /// * CTAP 2.1 [§6.1.2 authenticatorMakeCredential Algorithm][0], step 1.
+    ///
+    /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-authnr-alg
+
+    pub async fn selection(&mut self) -> Result<(), WebauthnCError> {
+        if !self.token.has_button() {
+            // The token doesn't have a button on a transport level (ie: NFC),
+            // so immediately mark this as the "selected" token.
+            return Ok(());
+        }
+
+        if self
+            .info
+            .versions
+            .contains(Ctap21Authenticator::<'a, T, U>::VERSION)
+        {
+            let ui_callback = self.ui_callback;
+            return self
+                .token
+                .transmit(SelectionRequest {}, ui_callback)
+                .await
+                .map(|_| ());
+        }
+
+        let mc = MakeCredentialRequest {
+            client_data_hash: vec![0; size_of::<SHA256Hash>()],
+            rp: RelyingParty {
+                id: "SELECTION".to_string(),
+                name: "SELECTION".to_string(),
+            },
+            user: User {
+                id: Base64UrlSafeData(vec![0]),
+                name: "SELECTION".to_string(),
+                display_name: "SELECTION".to_string(),
+            },
+            pub_key_cred_params: vec![
+                PubKeyCredParams {
+                    type_: "public-key".to_owned(),
+                    alg: -7,
+                },
+                PubKeyCredParams {
+                    type_: "public-key".to_owned(),
+                    alg: -257,
+                },
+                PubKeyCredParams {
+                    type_: "public-key".to_owned(),
+                    alg: -37,
+                },
+            ],
+            exclude_list: vec![],
+            options: None,
+            pin_uv_auth_param: Some(vec![]),
+            pin_uv_auth_proto: None,
+            enterprise_attest: None,
+        };
+
+        let ret = self.token.transmit(mc, self.ui_callback).await;
+
+        if let Err(WebauthnCError::Ctap(e)) = ret {
+            if e == CtapError::Ctap2PinAuthInvalid || e == CtapError::Ctap2PinNotSet {
+                // User pressed the button
+                return Ok(());
+            }
+
+            if e == CtapError::Ctap2MissingParameter {
+                // Token2 seems to fall through to step 2 of the algorithm, but
+                // it still means the button was pressed.
+                return Ok(());
+            }
+
+            error!("unexpected error from authenticator: {e:?}");
+            return Err(WebauthnCError::Ctap(e));
+        } else {
+            // Some other error
+            ret?;
+        }
+
+        error!("got unexpected OK response from authenticator");
+        Err(WebauthnCError::Internal)
     }
 }
 

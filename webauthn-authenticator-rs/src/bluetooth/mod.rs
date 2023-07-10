@@ -7,7 +7,8 @@
 //! ## Warning
 //!
 //! There are [API design issues][0] with [Transport] which make
-//! [BluetoothTransport::tokens] **extremely** flaky and timing sensitive.
+//! [BluetoothTransport] **extremely** flaky and timing sensitive. These have
+//! been partially addressed, but there is still some way to go.
 //!
 //! The [long term goal][0] is that this API (and its UI) will become as easy to
 //! use as Windows WebAuthn API, but it's not there just yet.
@@ -19,6 +20,20 @@
 //! To use a caBLE / hybrid authenticator, use the [cable][crate::cable] module
 //! (avaliable with `--features cable`) instead.
 //!
+//! ## Linux support
+//!
+//! Seems to be extremely flakey.
+//!
+//! ## macOS support
+//!
+//! Works fine.
+//!
+//! Non-paired (but discoverable) Bluetooth FIDO tokens do not appear in the
+//! System Settings Bluetooth pane – it can only be triggered by an application
+//! attempting to connect to an authenticator.
+//!
+//! This will attempt to connect to any nearby FIDO token.
+//!
 //! ## Windows support
 //!
 //! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
@@ -28,7 +43,15 @@
 //!
 //! Use [Win10][crate::win10::Win10] (available with `--features win10`) on
 //! Windows instead.
-use std::{ops::RangeInclusive, time::Duration};
+//!
+//! You'll need to manually pair your authenticator in Device Manager before
+//! using it with this or Windows' WebAuthn API.
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+    pin::Pin,
+    time::{Duration, Instant},
+};
 
 #[cfg(doc)]
 use crate::stubs::*;
@@ -36,13 +59,14 @@ use crate::stubs::*;
 use async_trait::async_trait;
 use btleplug::{
     api::{
-        bleuuid::uuid_from_u16, Central, Characteristic, Manager as _, Peripheral as _, ScanFilter,
-        WriteType,
+        bleuuid::uuid_from_u16, Central, CentralEvent, Characteristic, Manager as _,
+        Peripheral as _, ScanFilter, WriteType,
     },
-    platform::{Manager, Peripheral},
+    platform::{Manager, Peripheral, PeripheralId},
 };
-use futures::{executor::block_on, StreamExt};
-use tokio::time::sleep;
+use futures::{executor::block_on, stream::BoxStream, Stream, StreamExt};
+use tokio::{sync::mpsc, task::spawn};
+use tokio_stream::wrappers::ReceiverStream;
 use uuid::{uuid, Uuid};
 use webauthn_rs_proto::AuthenticatorTransport;
 
@@ -53,7 +77,7 @@ use crate::{
             CBORResponse, KeepAliveStatus, Response, U2FError, BTLE_CANCEL, BTLE_KEEPALIVE,
             TYPE_INIT, U2FHID_ERROR, U2FHID_MSG, U2FHID_PING,
         },
-        Token, Transport,
+        Token, TokenEvent, Transport,
     },
     ui::UiCallback,
 };
@@ -103,6 +127,232 @@ const VALID_MTU_RANGE: RangeInclusive<usize> = 20..=512;
 /// authenticator supports CTAP2.
 const SERVICE_REVISION_CTAP2: u8 = 0x20;
 
+pub struct BluetoothDeviceWatcher {
+    // transport: &'a BluetoothTransport,
+    stream: ReceiverStream<TokenEvent<BluetoothToken>>,
+}
+
+impl BluetoothDeviceWatcher {
+    async fn new(
+        transport: &BluetoothTransport,
+        debounce: Duration,
+    ) -> Result<BluetoothDeviceWatcher, WebauthnCError> {
+        let (tx, rx) = mpsc::channel(16);
+        let stream = ReceiverStream::from(rx);
+
+        let adapters = transport.manager.adapters().await?;
+        let adapter = adapters
+            .into_iter()
+            .next()
+            .ok_or(WebauthnCError::NoBluetoothAdapter)?;
+
+        let filter = ScanFilter {
+            services: vec![FIDO_GATT_SERVICE],
+        };
+        adapter.start_scan(filter).await?;
+
+        let mut events = adapter.events().await?;
+        if let Err(e) = tx.send(TokenEvent::EnumerationComplete).await {
+            error!("could not send Bluetooth EnumerationComplete: {e:?}");
+            return Err(WebauthnCError::Internal);
+        }
+
+        spawn(async move {
+            // We need to track recently connected devices so that we don't get
+            // stuck in loops. There's also Hideez which continues transmitting
+            // advertisements for 30 seconds after use, even when the LED is
+            // off...
+            let mut recents: HashMap<PeripheralId, Instant> = HashMap::new();
+            let mut connected = HashSet::new();
+            while let Some(event) = events.next().await {
+                if tx.is_closed() {
+                    break;
+                }
+                match event {
+                    CentralEvent::DeviceConnected(id) => {
+                        trace!("device connected: {id:?}");
+                        let peripheral = match adapter.peripheral(&id).await {
+                            Ok(p) => p,
+                            Err(e) => {
+                                error!("could not get info for BTLE peripheral {id:?}: {e:?}");
+                                continue;
+                            }
+                        };
+
+                        let properties = match peripheral.properties().await {
+                            Ok(Some(p)) => p,
+                            Ok(None) => {
+                                error!(
+                                    "no properties available for BTLE peripheral {id:?}, ignoring"
+                                );
+                                continue;
+                            }
+                            Err(e) => {
+                                error!(
+                                    "could not get properties for BTLE peripheral {id:?}: {e:?}"
+                                );
+                                continue;
+                            }
+                        };
+
+                        if !properties.services.contains(&FIDO_GATT_SERVICE) {
+                            trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
+                            continue;
+                        }
+
+                        connected.insert(id);
+                        if tx
+                            .send(TokenEvent::Added(BluetoothToken::new(peripheral)))
+                            .await
+                            .is_err()
+                        {
+                            // channel lost!
+                            break;
+                        }
+                    }
+
+                    CentralEvent::DeviceDisconnected(id) => {
+                        trace!("device disconnected: {id:?}");
+                        if !connected.remove(&id) {
+                            // Don't notify about the same device twice
+                            continue;
+                        }
+
+                        if tx.send(TokenEvent::Removed(id)).await.is_err() {
+                            // channel lost!
+                            break;
+                        }
+                    }
+
+                    CentralEvent::DeviceDiscovered(id) => {
+                        trace!("device discovered: {id:?}");
+                        if let Some(last_seen) = recents.get(&id) {
+                            if last_seen.elapsed() < debounce {
+                                trace!("ignoring recently-seen device: {id:?}");
+                                recents.insert(id, Instant::now());
+                                continue;
+                            }
+
+                            recents.remove(&id);
+                        }
+
+                        let peripheral = match adapter.peripheral(&id).await {
+                            Ok(p) => p,
+                            Err(e) => {
+                                error!("could not get info for BTLE peripheral {id:?}: {e:?}");
+                                continue;
+                            }
+                        };
+
+                        let properties = match peripheral.properties().await {
+                            Ok(Some(p)) => p,
+                            Ok(None) => {
+                                error!(
+                                    "no properties available for BTLE peripheral {id:?}, ignoring"
+                                );
+                                continue;
+                            }
+                            Err(e) => {
+                                error!(
+                                    "could not get properties for BTLE peripheral {id:?}: {e:?}"
+                                );
+                                continue;
+                            }
+                        };
+
+                        trace!("services: {:?}", properties.services);
+                        // Hideez key seems to lack services on rediscovery?
+                        if !properties.services.is_empty()
+                            && !properties.services.contains(&FIDO_GATT_SERVICE)
+                        {
+                            trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
+                            continue;
+                        }
+
+                        trace!("device name: {:?}", properties.local_name);
+                        recents.insert(id, Instant::now());
+                        if let Err(e) = peripheral.connect().await {
+                            error!("could not connect: {e:?}");
+                        }
+                    }
+
+                    CentralEvent::ServicesAdvertisement { id, services } => {
+                        // macOS doesn't fire another DeviceDiscovered event if
+                        // a device goes away and then comes back.
+                        trace!("services advertisement: {id:?} {services:?}");
+                        if !services.contains(&FIDO_GATT_SERVICE) {
+                            trace!("BTLE peripheral {id:?} is not a FIDO token, skipping");
+                            continue;
+                        }
+
+                        let peripheral = match adapter.peripheral(&id).await {
+                            Ok(p) => p,
+                            Err(e) => {
+                                error!("could not get info for BTLE peripheral {id:?}: {e:?}");
+                                continue;
+                            }
+                        };
+
+                        if peripheral.is_connected().await? {
+                            trace!("ignoring connected peripheral: {id:?}");
+                            continue;
+                        }
+
+                        if let Some(last_seen) = recents.get(&id) {
+                            if last_seen.elapsed() < debounce {
+                                trace!("ignoring recently-seen device: {id:?}");
+                                recents.insert(id, Instant::now());
+                                continue;
+                            }
+
+                            recents.remove(&id);
+                        }
+
+                        let properties = match peripheral.properties().await {
+                            Ok(Some(p)) => p,
+                            Ok(None) => {
+                                error!(
+                                    "no properties available for BTLE peripheral {id:?}, ignoring"
+                                );
+                                continue;
+                            }
+                            Err(e) => {
+                                error!(
+                                    "could not get properties for BTLE peripheral {id:?}: {e:?}"
+                                );
+                                continue;
+                            }
+                        };
+
+                        trace!("device name: {:?}", properties.local_name);
+                        recents.insert(id, Instant::now());
+                        if let Err(e) = peripheral.connect().await {
+                            error!("could not connect: {e:?}");
+                        }
+                    }
+
+                    _ => (),
+                }
+            }
+
+            adapter.stop_scan().await
+        });
+
+        Ok(Self { stream })
+    }
+}
+
+impl Stream for BluetoothDeviceWatcher {
+    type Item = TokenEvent<BluetoothToken>;
+
+    fn poll_next(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        ReceiverStream::poll_next(Pin::new(&mut Pin::get_mut(self).stream), cx)
+    }
+}
+
 #[derive(Debug)]
 pub struct BluetoothTransport {
     manager: Manager,
@@ -115,77 +365,39 @@ impl BluetoothTransport {
             manager: Manager::new().await?,
         })
     }
-
-    async fn scan(&self) -> Result<Vec<BluetoothToken>, WebauthnCError> {
-        // https://github.com/deviceplug/btleplug/blob/master/examples/subscribe_notify_characteristic.rs
-        let adapters = self.manager.adapters().await?;
-        let adapter = adapters
-            .into_iter()
-            .next()
-            .ok_or(WebauthnCError::NoBluetoothAdapter)?;
-        // TODO: filtering
-        adapter.start_scan(ScanFilter::default()).await?;
-        // TODO: this should probably be longer because you need to press a button
-        trace!("waiting for scan");
-        sleep(Duration::from_secs(5)).await;
-        adapter.stop_scan().await?;
-        let peripherals = adapter.peripherals().await?;
-        let mut o = Vec::new();
-
-        if peripherals.is_empty() {
-            trace!("No devices found");
-            return Ok(o);
-        }
-
-        for peripheral in peripherals.into_iter() {
-            let properties = peripheral.properties().await?;
-            trace!(?peripheral);
-            trace!(?properties);
-            let properties = if let Some(p) = properties {
-                p
-            } else {
-                trace!("No properties available, skipping");
-                continue;
-            };
-
-            if !properties.services.contains(&FIDO_GATT_SERVICE) {
-                trace!("Device is not a FIDO token, skipping");
-                continue;
-            }
-
-            // let local_name = properties
-            //     .local_name
-            //     .unwrap_or(String::from("(peripheral name unknown)"));
-            // trace!(
-            //     "Peripheral {:?} is connected: {:?}",
-            //     &local_name,
-            //     is_connected
-            // );
-            o.push(BluetoothToken::new(peripheral));
-        }
-
-        Ok(o)
-    }
 }
 
+#[async_trait]
 impl<'b> Transport<'b> for BluetoothTransport {
     type Token = BluetoothToken;
 
-    /// Scans for all *already-connected* Bluetooth Low Energy authenticators.
+    /// ## Important
     ///
-    /// ## Warning
+    /// [`tokens()`] is unsupported for [BluetoothTransport], as BTLE
+    /// authenticator connections are very short-lived and timing sensitive.
     ///
-    /// There are [API design issues][0] with [Transport] which make this
-    /// function **extremely** flaky and timing sensitive.
+    /// This method will always return an empty `Vec` of devices.
     ///
-    /// The [long term goal][0] is that this API (and its UI) will become as
-    /// easy to use as Windows WebAuthn API, but it's not there just yet.
+    /// Use [`watch()`][] instead.
     ///
-    /// [0]: https://github.com/kanidm/webauthn-rs/issues/214
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
-        // TODO: handle async properly
+    /// [`tokens()`]: BluetoothTransport::tokens
+    /// [`watch()`]: BluetoothTransport::watch
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
+        warn!("tokens() is not supported for Bluetooth devices, use watch()");
+        Ok(vec![])
+    }
+
+    /// Watches for and connects to nearby Bluetooth Low Energy authenticators.
+    ///
+    /// ## Note
+    ///
+    /// Due to the nature of the Bluetooth Low Energy transport,
+    /// [BluetoothTransport] immediately emits a
+    /// [TokenEvent::EnumerationComplete] event as soon as it starts.
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
         trace!("Scanning for BTLE tokens");
-        block_on(self.scan())
+        let stream = BluetoothDeviceWatcher::new(self, Duration::from_secs(10)).await?;
+        Ok(Box::pin(stream))
     }
 }
 
@@ -227,7 +439,7 @@ impl BluetoothToken {
                     .as_ref()
                     .ok_or(WebauthnCError::UnexpectedState)?,
                 &d,
-                WriteType::WithoutResponse,
+                WriteType::WithResponse,
             )
             .await?;
         Ok(())
@@ -245,6 +457,8 @@ impl BluetoothToken {
 
 #[async_trait]
 impl Token for BluetoothToken {
+    type Id = PeripheralId;
+
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         U: UiCallback,
@@ -446,7 +660,7 @@ impl Token for BluetoothToken {
         AuthenticatorTransport::Ble
     }
 
-    async fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&mut self) -> Result<(), WebauthnCError> {
         self.send_one(BtleFrame {
             cmd: BTLE_CANCEL,
             len: 0,

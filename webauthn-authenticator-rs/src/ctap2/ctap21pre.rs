@@ -4,7 +4,8 @@ use crate::{transport::Token, ui::UiCallback};
 
 use super::{
     commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
-    ctap21_cred::CredentialManagementAuthenticatorInfo, Ctap20Authenticator,
+    ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
+    Ctap20Authenticator,
 };
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
@@ -35,10 +36,13 @@ impl<'a, T: Token, U: UiCallback> DerefMut for Ctap21PreAuthenticator<'a, T, U> 
     }
 }
 
-impl<'a, T: Token, U: UiCallback> Ctap21PreAuthenticator<'a, T, U> {
-    pub(super) fn new(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
+impl<'a, T: Token, U: UiCallback> CtapAuthenticatorVersion<'a, T, U>
+    for Ctap21PreAuthenticator<'a, T, U>
+{
+    const VERSION: &'static str = "FIDO_2_1_PRE";
+    fn new_with_info(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
         Self {
-            authenticator: Ctap20Authenticator::new(info, token, ui_callback),
+            authenticator: Ctap20Authenticator::new_with_info(info, token, ui_callback),
         }
     }
 }

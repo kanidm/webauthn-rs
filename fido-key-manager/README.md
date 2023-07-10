@@ -1,6 +1,6 @@
 # fido-key-manager
 
-fido-key-manager is a command line tool for managing and configuring FIDO/CTAP
+`fido-key-manager` is a command line tool for managing and configuring FIDO/CTAP
 2-compatible authenticators (security keys), based on
 [the kanidm webauthn-authenticator-rs library][0].
 
@@ -9,6 +9,8 @@ fido-key-manager is a command line tool for managing and configuring FIDO/CTAP
 [0]: ../webauthn-authenticator-rs/README.md
 
 ## Building and running
+
+First, you'll need to [install OpenSSL's headers and libraries](../OpenSSL.md).
 
 On [Linux](#linux) and [macOS](#macos):
 
@@ -38,8 +40,16 @@ Start-Process -FilePath "powershell" -Verb RunAs
 
 ## Commands
 
-**Important:** to prevent accidents, make sure you have only **one**
-authenticator connected to your computer when running `fido-key-manager`.
+Most `fido-key-manager` commands (except `info` and `factory-reset`) will
+operate on the first *compatible* authenticator which:
+
+* is in a connected NFC reader's field
+* you press the button on an already-connected device
+* is connected while `fido-key-manager` is running
+
+This should fairly reliably mitigate accidental or unintentional selection, but
+it's a good idea to have only **one** authenticator connected to your computer
+when running `fido-key-manager`.
 
 More information about the commands listed below can be seen by running
 `fido-key-manager --help` or `fido-key-manager [command] --help`. Unless
@@ -49,7 +59,7 @@ otherwise specified below, all commands require an authenticator which supports
 Command | Description | Requirements
 ------- | ----------- | ------------
 `info` | get information about connected authenticators
-`selection` | request user presence on a connected authenticator | CTAP 2.1
+`selection` | request user presence on a connected authenticator
 `set-pin` | sets a PIN on an authenticator which doesn't already have a PIN set
 `change-pin` | changes a PIN on an authenticator which has a PIN set
 `factory-reset` | resets an authenticator to factory defaults, deleting all key material
@@ -72,7 +82,13 @@ Command | Description | Requirements
 
 ## Platform-specific notes
 
+Bluetooth is currently disabled by default, as it's not particularly reliable on
+anything but macOS, and can easily accidentally select nearby devices.
+
 ### Linux
+
+* Bluetooth support isn't particularly reliable, and may require pairing in
+  advance of using this tool.
 
 * NFC support requires [PC/SC Lite][], and a PC/SC initiator (driver) for your
   NFC transceiver (reader).
@@ -116,6 +132,16 @@ Command | Description | Requirements
 
 ### macOS
 
+* Bluetooth support works fairly reliably, but automatic pairing could allow a
+  nearby malicious device could open your computer up to long-term tracking over
+  Bluetooth.
+
+  It is not possible to pair a Bluetooth authenticator using `System Settings`,
+  and instead programs need to pair it for you (which
+  `webauthn-authenticator-rs` will do for you). However, it will try to pair
+  *any* nearby authenticator, and some authenticators will stay online for
+  several minutes after use.
+
 * NFC should "just work", provided you've installed a PC/SC initiator
   (driver) for your transciever (if it is not supported by `libccid`).
 
@@ -151,6 +177,9 @@ cargo build --bin fido-key-manager
 But the program may not be usable anymore.
 
 As long as you're running `fido-key-manager` as Administrator:
+
+* Bluetooth support requires pairing in advance in `Settings`, and is not
+  particularly reliable.
 
 * NFC support should "just work", provided your transceiver supports the PC/SC 
   API.

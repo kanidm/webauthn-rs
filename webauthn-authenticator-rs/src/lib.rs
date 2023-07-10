@@ -100,10 +100,9 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 #[macro_use]
-extern crate tracing;
-
-#[macro_use]
 extern crate num_derive;
+#[macro_use]
+extern crate tracing;
 
 use crate::error::WebauthnCError;
 use url::Url;

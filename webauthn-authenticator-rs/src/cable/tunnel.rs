@@ -371,6 +371,8 @@ impl Debug for Tunnel {
 
 #[async_trait]
 impl Token for Tunnel {
+    type Id = ();
+
     fn get_transport(&self) -> AuthenticatorTransport {
         AuthenticatorTransport::Hybrid
     }
@@ -414,7 +416,7 @@ impl Token for Tunnel {
         Ok(data)
     }
 
-    async fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&mut self) -> Result<(), WebauthnCError> {
         // There is no way to cancel transactions without closing in caBLE
         Ok(())
     }

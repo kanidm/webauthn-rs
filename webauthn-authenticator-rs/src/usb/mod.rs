@@ -1,4 +1,4 @@
-//! [USBTransport] communicates with a FIDO token over USB HID, using [hidapi].
+//! [USBTransport] communicates with a FIDO token over USB HID.
 //!
 //! This module should work on most platforms with USB support, provided that
 //! the user has permissions.
@@ -14,48 +14,43 @@
 mod framing;
 mod responses;
 
+use fido_hid_rs::{
+    HidReportBytes, HidSendReportBytes, USBDevice, USBDeviceImpl, USBDeviceInfo, USBDeviceInfoImpl,
+    USBDeviceManager, USBDeviceManagerImpl, WatchEvent,
+};
+
 use crate::error::WebauthnCError;
 use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT};
 use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use async_trait::async_trait;
+use futures::stream::BoxStream;
+use futures::StreamExt as _;
 
 #[cfg(doc)]
 use crate::stubs::*;
 
-use hidapi::{HidApi, HidDevice};
 use openssl::rand::rand_bytes;
 use std::fmt;
-use std::ops::Deref;
-use std::sync::Mutex;
-use std::thread;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 pub(crate) use self::responses::InitResponse;
 
 // u2f_hid.h
-const FIDO_USAGE_PAGE: u16 = 0xf1d0;
-const FIDO_USAGE_U2FHID: u16 = 0x01;
-const HID_RPT_SIZE: usize = 64;
-const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
-const U2FHID_TRANS_TIMEOUT: i32 = 3000;
-
 const CID_BROADCAST: u32 = 0xffffffff;
 
-type HidReportBytes = [u8; HID_RPT_SIZE];
-type HidSendReportBytes = [u8; HID_RPT_SEND_SIZE];
-
 pub struct USBTransport {
-    api: HidApi,
+    manager: USBDeviceManagerImpl,
 }
 
 pub struct USBToken {
-    device: Mutex<HidDevice>,
+    device: USBDeviceImpl,
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
+    initialised: bool,
 }
 
 impl fmt::Debug for USBTransport {
@@ -70,28 +65,50 @@ impl fmt::Debug for USBToken {
             .field("cid", &self.cid)
             .field("supports_ctap1", &self.supports_ctap1)
             .field("supports_ctap2", &self.supports_ctap2)
+            .field("initialised", &self.initialised)
             .finish()
     }
 }
 
 impl USBTransport {
-    pub fn new() -> Result<Self, WebauthnCError> {
+    pub async fn new() -> Result<Self, WebauthnCError> {
         Ok(Self {
-            api: HidApi::new()?,
+            manager: USBDeviceManager::new().await?,
         })
     }
 }
 
+#[async_trait]
 impl<'b> Transport<'b> for USBTransport {
     type Token = USBToken;
+
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
+        let ret = self.manager.watch_devices().await?;
+
+        Ok(Box::pin(ret.filter_map(|event| async move {
+            trace!("USB event: {event:?}");
+            match event {
+                WatchEvent::Added(d) => {
+                    if let Ok(dev) = d.open().await {
+                        let mut token = USBToken::new(dev);
+                        if let Ok(()) = token.init().await {
+                            Some(TokenEvent::Added(token))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                WatchEvent::Removed(i) => Some(TokenEvent::Removed(i)),
+                WatchEvent::EnumerationComplete => Some(TokenEvent::EnumerationComplete),
+            }
+        })))
+    }
 
     /// Gets a list of attached USB HID FIDO tokens.
     ///
     /// Any un-openable devices will be silently ignored.
-    ///
-    /// If `hidapi` fails to detect HID devices of *any* kind, this will return
-    /// [WebauthnCError::NoHidDevices]. This normally indicates a permission
-    /// issue.
     ///
     /// ## Platform-specific issues
     ///
@@ -104,80 +121,60 @@ impl<'b> Transport<'b> for USBTransport {
     /// Previously, most distributions used a fixed list of device IDs, which
     /// can be a problem for new or esoteric tokens.
     ///
-    /// This will **only** work correctly with `hidapi`'s `hidraw` backend. The
-    /// `libusb` backend does not provide access to the HID usage page
-    /// descriptor, and this will return [WebauthnCError::BrokenHidApi].
-    ///
     /// [1]: https://github.com/systemd/systemd/issues/11996
     ///
     /// ### Windows
     ///
     /// On Windows 10 build 1903 or later, this will not return any devices
     /// unless the program is run as Administrator.
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError> {
-        let tokens: Vec<Self::Token> = self
-            .api
-            .device_list()
-            .filter(|d| d.usage_page() == FIDO_USAGE_PAGE && d.usage() == FIDO_USAGE_U2FHID)
-            .map(|d| {
-                trace!(?d);
-                d
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
+        Ok(futures::stream::iter(self.manager.get_devices().await?)
+            .filter_map(|d| async move {
+                if let Ok(dev) = d.open().await {
+                    Some(USBToken::new(dev))
+                } else {
+                    None
+                }
             })
-            .filter_map(|d| d.open_device(&self.api).ok())
-            .map(USBToken::new)
-            .collect();
-
-        if tokens.is_empty() {
-            let devices: Vec<&hidapi::DeviceInfo> = self.api.device_list().collect();
-            if devices.is_empty() {
-                return Err(WebauthnCError::NoHidDevices);
-            } else if devices
-                .iter()
-                .all(|d| d.usage_page() == 0 && d.usage() == 0)
-            {
-                // https://github.com/ruabmbua/hidapi-rs/issues/94
-                return Err(WebauthnCError::BrokenHidApi);
-            }
-        }
-
-        Ok(tokens)
+            .collect()
+            .await)
     }
 }
 
 impl USBToken {
-    fn new(device: HidDevice) -> Self {
+    fn new(device: USBDeviceImpl) -> Self {
         USBToken {
-            device: Mutex::new(device),
+            device, // : Mutex::new(device),
             cid: 0,
             supports_ctap1: false,
             supports_ctap2: false,
+            initialised: false,
         }
     }
 
     /// Sends a single [U2FHIDFrame] to the device, without fragmentation.
-    fn send_one(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
+    async fn send_one(&mut self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         let d: HidSendReportBytes = frame.into();
         trace!(">>> {}", hex::encode(d));
-        let guard = self.device.lock()?;
-        guard.deref().write(&d)?;
+        // let guard = self.device.lock()?;
+        self.device.write(d).await?;
         Ok(())
     }
 
     /// Sends a [U2FHIDFrame] to the device, fragmenting the message to fit
     /// within the USB HID MTU.
-    fn send(&self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
+    async fn send(&mut self, frame: &U2FHIDFrame) -> Result<(), WebauthnCError> {
         for f in U2FHIDFrameIterator::new(frame)? {
-            self.send_one(&f)?;
+            self.send_one(&f).await?;
         }
         Ok(())
     }
 
     /// Receives a single [U2FHIDFrame] from the device, without fragmentation.
-    async fn recv_one(&self) -> Result<U2FHIDFrame, WebauthnCError> {
+    async fn recv_one(&mut self) -> Result<U2FHIDFrame, WebauthnCError> {
         let ret: HidReportBytes = async {
-            let mut ret: HidReportBytes = [0; HID_RPT_SIZE];
-            let guard = self.device.lock()?;
-            guard.deref().read_timeout(&mut ret, U2FHID_TRANS_TIMEOUT)?;
+            // let guard = self.device.lock()?;
+            let ret = self.device.read().await?;
             Ok::<HidReportBytes, WebauthnCError>(ret)
         }
         .await?;
@@ -188,7 +185,7 @@ impl USBToken {
 
     /// Recives a [Response] from the device, handling fragmented [U2FHIDFrame]
     /// responses if needed.
-    async fn recv(&self) -> Result<Response, WebauthnCError> {
+    async fn recv(&mut self) -> Result<Response, WebauthnCError> {
         // Recieve first chunk
         let mut f = self.recv_one().await?;
         let mut s: usize = f.data.len();
@@ -206,17 +203,25 @@ impl USBToken {
 
 #[async_trait]
 impl Token for USBToken {
+    // TODO: platform code
+    type Id = <USBDeviceInfoImpl as USBDeviceInfo>::Id;
+
     async fn transmit_raw<U>(&mut self, cmd: &[u8], ui: &U) -> Result<Vec<u8>, WebauthnCError>
     where
         U: UiCallback,
     {
+        if !self.initialised {
+            error!("attempted to transmit to uninitialised token");
+            return Err(WebauthnCError::Internal);
+        }
+
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CBOR,
             len: cmd.len() as u16,
             data: cmd.to_vec(),
         };
-        self.send(&cmd)?;
+        self.send(&cmd).await?;
 
         // Get a response, checking for keep-alive
         let resp = loop {
@@ -228,7 +233,7 @@ impl Token for USBToken {
                     ui.request_touch();
                 }
                 // TODO: maybe time out at some point
-                thread::sleep(Duration::from_millis(100));
+                tokio::time::sleep(Duration::from_millis(100)).await;
             } else {
                 break resp;
             }
@@ -253,6 +258,11 @@ impl Token for USBToken {
     }
 
     async fn init(&mut self) -> Result<(), WebauthnCError> {
+        if self.initialised {
+            warn!("attempted to init an already-initialised token");
+            return Ok(());
+        }
+
         // Setup a channel to communicate with the device (CTAPHID_INIT).
         let mut nonce: [u8; 8] = [0; 8];
         rand_bytes(&mut nonce)?;
@@ -262,7 +272,8 @@ impl Token for USBToken {
             cmd: U2FHID_INIT,
             len: nonce.len() as u16,
             data: nonce.to_vec(),
-        })?;
+        })
+        .await?;
 
         match self.recv().await? {
             Response::Init(i) => {
@@ -271,7 +282,14 @@ impl Token for USBToken {
                 self.cid = i.cid;
                 self.supports_ctap1 = i.supports_ctap1();
                 self.supports_ctap2 = i.supports_ctap2();
-                Ok(())
+
+                if self.supports_ctap2 {
+                    self.initialised = true;
+                    Ok(())
+                } else {
+                    error!("token does not support CTAP 2");
+                    Err(WebauthnCError::NotSupported)
+                }
             }
             e => {
                 error!("Unhandled response type: {:?}", e);
@@ -288,13 +306,18 @@ impl Token for USBToken {
         AuthenticatorTransport::Usb
     }
 
-    async fn cancel(&self) -> Result<(), WebauthnCError> {
+    async fn cancel(&mut self) -> Result<(), WebauthnCError> {
+        if !self.initialised {
+            error!("attempted to cancel uninitialised token");
+            return Err(WebauthnCError::Internal);
+        }
+
         let cmd = U2FHIDFrame {
             cid: self.cid,
             cmd: U2FHID_CANCEL,
             len: 0,
             data: vec![],
         };
-        self.send_one(&cmd)
+        self.send_one(&cmd).await
     }
 }

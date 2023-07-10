@@ -1,5 +1,7 @@
 use std::sync::PoisonError;
 
+pub type Result<T> = std::result::Result<T, WebauthnCError>;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum WebauthnCError {
     Json,
@@ -33,20 +35,13 @@ pub enum WebauthnCError {
     MissingRequiredField,
     /// The provided `friendly_name` was too long.
     FriendlyNameTooLong,
+    #[cfg(feature = "usb")]
+    HidError(fido_hid_rs::HidError),
     #[cfg(feature = "nfc")]
     PcscError(pcsc::Error),
-    /// Error returned by `hidapi`.
-    HidError(String),
     /// No HID devices were detected **at all**. This may indicate a permissions
     /// issue.
     NoHidDevices,
-    /// HID devices were detected, but none of them reported usage page
-    /// information, which is required to find FIDO-compatible authenticators.
-    ///
-    /// This indicates that `hidapi` was built with [a broken backend][libusb].
-    ///
-    /// [libusb]: https://github.com/ruabmbua/hidapi-rs/issues/94
-    BrokenHidApi,
     /// See [PoisonError]; generally indicates that a method holding a prior lock on the mutex failed.
     PoisonedMutex,
     /// The checksum of the value was incorrect.
@@ -84,9 +79,9 @@ impl From<pcsc::Error> for WebauthnCError {
 }
 
 #[cfg(feature = "usb")]
-impl From<hidapi::HidError> for WebauthnCError {
-    fn from(e: hidapi::HidError) -> Self {
-        Self::HidError(e.to_string())
+impl From<fido_hid_rs::HidError> for WebauthnCError {
+    fn from(e: fido_hid_rs::HidError) -> Self {
+        Self::HidError(e)
     }
 }
 

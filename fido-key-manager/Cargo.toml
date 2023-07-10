@@ -13,6 +13,8 @@ rust-version = "1.66.0"
 build = "build.rs"
 
 [features]
+# Bluetooth support is flakey on Linux and Windows, so not enabled by default.
+bluetooth = ["webauthn-authenticator-rs/bluetooth"]
 nfc = ["webauthn-authenticator-rs/nfc"]
 usb = ["webauthn-authenticator-rs/usb"]
 
@@ -24,6 +26,7 @@ webauthn-authenticator-rs = { workspace = true, features = ["ui-cli", "ctap2-man
 clap.workspace = true
 hex.workspace = true
 tokio.workspace = true
+tokio-stream.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 webauthn-rs-core.workspace = true

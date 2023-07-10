@@ -126,21 +126,23 @@ mod ctap21_bio;
 mod ctap21_cred;
 #[doc(hidden)]
 mod ctap21pre;
+mod internal;
 mod pin_uv;
 
 use std::ops::{Deref, DerefMut};
+use std::pin::Pin;
 
-use futures::stream::FuturesUnordered;
-use futures::{select, StreamExt};
+use futures::stream::{BoxStream, FuturesUnordered};
+use futures::{select, Future, StreamExt};
 
 use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::error::WebauthnCError;
-use crate::transport::Token;
+use crate::transport::{Token, TokenEvent};
 use crate::ui::UiCallback;
 
 use self::{
     commands::GetInfoRequest, ctap21_bio::BiometricAuthenticatorInfo,
-    ctap21_cred::CredentialManagementAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
 };
 
 #[doc(inline)]
@@ -170,10 +172,6 @@ pub enum CtapAuthenticator<'a, T: Token, U: UiCallback> {
     Fido21(Ctap21Authenticator<'a, T, U>),
 }
 
-const FIDO_2_0: &str = "FIDO_2_0";
-const FIDO_2_1: &str = "FIDO_2_1";
-const FIDO_2_1_PRE: &str = "FIDO_2_1_PRE";
-
 impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
     /// Initialises the token, and gets a reference to the highest supported FIDO version.
     ///
@@ -200,20 +198,29 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticator<'a, T, U> {
         token: T,
         ui_callback: &'a U,
     ) -> Option<CtapAuthenticator<'a, T, U>> {
-        if info.versions.contains(FIDO_2_1) {
-            Some(Self::Fido21(Ctap21Authenticator::new(
+        if info
+            .versions
+            .contains(Ctap21Authenticator::<'a, T, U>::VERSION)
+        {
+            Some(Self::Fido21(Ctap21Authenticator::new_with_info(
                 info,
                 token,
                 ui_callback,
             )))
-        } else if info.versions.contains(FIDO_2_1_PRE) {
-            Some(Self::Fido21Pre(Ctap21PreAuthenticator::new(
+        } else if info
+            .versions
+            .contains(Ctap21PreAuthenticator::<'a, T, U>::VERSION)
+        {
+            Some(Self::Fido21Pre(Ctap21PreAuthenticator::new_with_info(
                 info,
                 token,
                 ui_callback,
             )))
-        } else if info.versions.contains(FIDO_2_0) {
-            Some(Self::Fido20(Ctap20Authenticator::new(
+        } else if info
+            .versions
+            .contains(Ctap20Authenticator::<'a, T, U>::VERSION)
+        {
+            Some(Self::Fido20(Ctap20Authenticator::new_with_info(
                 info,
                 token,
                 ui_callback,
@@ -382,4 +389,218 @@ pub async fn select_one_token<'a, T: Token + 'a, U: UiCallback + 'a>(
 
     tasks.clear();
     token
+}
+
+/// Selects an authenticator device to use from a [`TokenEvent`] stream.
+///
+/// The first device matching these conditions is returned:
+///
+/// 1. any newly-connected device _after enumeration has completed_
+/// 2. any device without a button (ie: NFC authenticator)
+/// 3. a device which responds to [`Ctap20Authenticator::selection()`]
+pub async fn select_one_device<'a, T: Token + 'a, U: UiCallback + 'a>(
+    stream: BoxStream<'a, TokenEvent<T>>,
+    ui_callback: &'a U,
+) -> Option<CtapAuthenticator<'a, T, U>> {
+    let mut tasks = FuturesUnordered::new();
+    let mut enumerated = false;
+
+    let mut stream = stream.fuse();
+
+    loop {
+        select! {
+            event = stream.select_next_some() => {
+                match event {
+                    TokenEvent::EnumerationComplete => {
+                        trace!("now enumerated");
+                        enumerated = true;
+                    },
+                    TokenEvent::Added(token) => {
+                        trace!("added: {token:?}");
+                        let local_enumerated = enumerated;
+                        let mut authenticator = if let Some(a) = CtapAuthenticator::new(token, ui_callback).await {
+                            a
+                        } else {
+                            // Couldn't initialise
+                            continue;
+                        };
+
+                        if local_enumerated || !authenticator.token.has_button() {
+                            // implicitly choose the new or buttonless device
+                            return Some(authenticator);
+                        } else {
+                            tasks.push(async move {
+                                authenticator.selection().await.ok()?;
+                                Some(authenticator)
+                            });
+                        }
+                    }
+
+                    // Ignore removals
+                    TokenEvent::Removed(_) => (),
+                }
+            }
+
+            res = tasks.select_next_some() => {
+                if res.is_some() {
+                    return res;
+                }
+            }
+
+            complete => return None,
+        }
+    }
+}
+
+/// Selects an authenticator device to use from a [`TokenEvent`] stream.
+///
+/// The first device matching these conditions is returned:
+///
+/// 1. any newly-connected device _after enumeration has completed_
+/// 2. any device without a button (ie: NFC authenticator)
+/// 3. a device which responds to [`Ctap20Authenticator::selection()`]
+pub async fn select_one_device_predicate<'a, T: Token + 'a, U: UiCallback + 'a>(
+    stream: BoxStream<'a, TokenEvent<T>>,
+    ui_callback: &'a U,
+    predicate: fn(&CtapAuthenticator<'a, T, U>) -> bool,
+) -> Option<CtapAuthenticator<'a, T, U>> {
+    let mut tasks = FuturesUnordered::new();
+    let mut enumerated = false;
+
+    let mut stream = stream.fuse();
+
+    loop {
+        select! {
+            event = stream.select_next_some() => {
+                match event {
+                    TokenEvent::EnumerationComplete => {
+                        trace!("now enumerated");
+                        enumerated = true;
+                    },
+                    TokenEvent::Added(token) => {
+                        trace!("added: {token:?}");
+                        let local_enumerated = enumerated;
+                        let mut authenticator = if let Some(a) = CtapAuthenticator::new(token, ui_callback).await {
+                            a
+                        } else {
+                            // Couldn't initialise
+                            continue;
+                        };
+
+                        if !predicate(&authenticator) {
+                            continue;
+                        }
+
+                        if local_enumerated || !authenticator.token.has_button() {
+                            // implicitly choose the new or buttonless device
+                            return Some(authenticator);
+                        } else {
+                            tasks.push(async move {
+                                authenticator.selection().await.ok()?;
+                                Some(authenticator)
+                            });
+                        }
+                    }
+
+                    // Ignore removals
+                    TokenEvent::Removed(_) => (),
+                }
+            }
+
+            res = tasks.select_next_some() => {
+                if res.is_some() {
+                    return res;
+                }
+            }
+
+            complete => return None,
+        }
+    }
+}
+
+/// Selects an authenticator device to use from a [`TokenEvent`] stream, using
+/// a specific CTAP version.
+///
+/// The first device matching these conditions is returned:
+///
+/// 1. any newly-connected device _after enumeration has completed_
+/// 2. any device without a button (ie: NFC authenticator)
+/// 3. a device which responds to [`Ctap20Authenticator::selection()`]
+pub async fn select_one_device_version<
+    'a,
+    C: CtapAuthenticatorVersion<'a, T, U> + DerefMut<Target = Ctap20Authenticator<'a, T, U>>,
+    T: Token + 'a,
+    U: UiCallback + 'a,
+>(
+    stream: BoxStream<'a, TokenEvent<T>>,
+    ui_callback: &'a U,
+    predicate: fn(&C) -> bool,
+) -> Option<C> {
+    let mut tasks: FuturesUnordered<Pin<Box<dyn Future<Output = Option<C>>>>> =
+        FuturesUnordered::new();
+    let mut enumerated = false;
+
+    let mut stream = stream.fuse();
+
+    loop {
+        select! {
+            event = stream.select_next_some() => {
+                match event {
+                    TokenEvent::EnumerationComplete => {
+                        trace!("now enumerated");
+                        enumerated = true;
+                    },
+                    TokenEvent::Added(mut token) => {
+                        trace!("added: {token:?}");
+                        let local_enumerated = enumerated;
+
+                        if let Err(e) = token.init().await {
+                            error!("Error initialising token: {e:?}");
+                            continue;
+                        };
+
+                        let info = match token.transmit(GetInfoRequest {}, ui_callback).await {
+                            Ok(i) => i,
+                            Err(e) => {
+                                error!("error getting token info: {e:?}");
+                                continue;
+                            }
+                        };
+
+                        if !info.versions.contains(C::VERSION) {
+                            warn!("token does not support {:?}: {:?}", C::VERSION, info.versions);
+                            continue;
+                        }
+
+                        let mut authenticator = C::new_with_info(info, token, ui_callback);
+                        if !predicate(&authenticator) {
+                            continue;
+                        }
+
+                        trace!(?local_enumerated);
+                        if local_enumerated {
+                            // implicitly choose the new device
+                            return Some(authenticator);
+                        } else {
+                            tasks.push(Box::pin(async move {
+                                authenticator.selection().await.ok()?;
+                                Some(authenticator)
+                            }));
+                        }
+                    }
+
+                    // Ignore removals
+                    TokenEvent::Removed(_) => (),
+                }
+            }
+
+            res = tasks.select_next_some() => {
+                if res.is_some() {
+                    return res;
+                }
+            }
+
+            complete => return None,
+        }
+    }
 }

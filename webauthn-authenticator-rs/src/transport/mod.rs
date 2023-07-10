@@ -9,11 +9,18 @@ pub(crate) mod types;
 pub use crate::transport::any::{AnyToken, AnyTransport};
 
 use async_trait::async_trait;
-use futures::executor::block_on;
+use futures::stream::BoxStream;
 use std::fmt;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use crate::{ctap2::*, error::WebauthnCError, ui::UiCallback};
+
+#[derive(Debug)]
+pub enum TokenEvent<T: Token> {
+    Added(T),
+    Removed(T::Id),
+    EnumerationComplete,
+}
 
 /// Represents a transport layer protocol for [Token].
 ///
@@ -24,30 +31,20 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
     /// The type of [Token] returned by this [Transport].
     type Token: Token + 'b;
 
-    /// Gets a list of all connected tokens for this [Transport].
-    fn tokens(&mut self) -> Result<Vec<Self::Token>, WebauthnCError>;
+    /// Watches for token connection and disconnection on this [Transport].
+    ///
+    /// Initially, this send synthetic [`TokenEvent::Added`] for all
+    /// currently-connected tokens, followed by
+    /// [`TokenEvent::EnumerationComplete`].
+    async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError>;
 
-    fn connect_all<'a, U: UiCallback>(
-        &mut self,
-        ui: &'a U,
-    ) -> Result<Vec<CtapAuthenticator<'a, Self::Token, U>>, WebauthnCError> {
-        Ok(self
-            .tokens()?
-            .drain(..)
-            .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
-            .collect())
-    }
-
-    fn connect_one<'a, U: UiCallback>(
-        &mut self,
-        ui: &'a U,
-    ) -> Result<CtapAuthenticator<'a, Self::Token, U>, WebauthnCError> {
-        self.tokens()?
-            .drain(..)
-            .filter_map(|token| block_on(CtapAuthenticator::new(token, ui)))
-            .next()
-            .ok_or(WebauthnCError::NoSelectedToken)
-    }
+    /// Gets all currently-connected devices associated with this [Transport].
+    ///
+    /// This method does not work for Bluetooth devices. Use
+    /// [`watch()`][] instead.
+    ///
+    /// [`watch()`]: Transport::watch
+    async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError>;
 }
 
 /// Represents a connection to a single FIDO token over a [Transport].
@@ -56,6 +53,8 @@ pub trait Transport<'b>: Sized + fmt::Debug + Send {
 /// [crate::ctap2] provides a higher level abstraction.
 #[async_trait]
 pub trait Token: Sized + fmt::Debug + Sync + Send {
+    type Id: Sized + fmt::Debug + Sync + Send;
+
     fn has_button(&self) -> bool {
         true
     }
@@ -94,7 +93,7 @@ pub trait Token: Sized + fmt::Debug + Sync + Send {
         U: UiCallback;
 
     /// Cancels a pending request.
-    async fn cancel(&self) -> Result<(), WebauthnCError>;
+    async fn cancel(&mut self) -> Result<(), WebauthnCError>;
 
     /// Initializes the [Token]
     async fn init(&mut self) -> Result<(), WebauthnCError>;

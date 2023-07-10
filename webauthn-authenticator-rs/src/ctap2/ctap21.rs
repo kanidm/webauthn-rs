@@ -6,9 +6,8 @@ use webauthn_rs_proto::UserVerificationPolicy;
 use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
 
 use super::{
-    commands::{GetInfoResponse, SelectionRequest},
-    ctap21_bio::BiometricAuthenticatorInfo,
-    ctap21_cred::CredentialManagementAuthenticatorInfo,
+    commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
+    ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
     Ctap20Authenticator,
 };
 
@@ -48,30 +47,18 @@ impl<'a, T: Token, U: UiCallback> DerefMut for Ctap21Authenticator<'a, T, U> {
     }
 }
 
-impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
-    pub(super) fn new(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
+impl<'a, T: Token, U: UiCallback> CtapAuthenticatorVersion<'a, T, U>
+    for Ctap21Authenticator<'a, T, U>
+{
+    const VERSION: &'static str = "FIDO_2_1";
+    fn new_with_info(info: GetInfoResponse, token: T, ui_callback: &'a U) -> Self {
         Self {
-            authenticator: Ctap20Authenticator::new(info, token, ui_callback),
+            authenticator: Ctap20Authenticator::new_with_info(info, token, ui_callback),
         }
     }
+}
 
-    /// Requests user presence on a token.
-    ///
-    /// This feature is only available in `FIDO_V2_1`, and not available for NFC.
-    pub async fn selection(&mut self) -> Result<(), WebauthnCError> {
-        if !self.token.has_button() {
-            // The token doesn't have a button on a transport level (ie: NFC),
-            // so immediately mark this as the "selected" token.
-            Ok(())
-        } else {
-            let ui_callback = self.ui_callback;
-            self.token
-                .transmit(SelectionRequest {}, ui_callback)
-                .await
-                .map(|_| ())
-        }
-    }
-
+impl<'a, T: Token, U: UiCallback> Ctap21Authenticator<'a, T, U> {
     /// Returns `true` if the authenticator supports configuration commands.
     ///
     /// # See also

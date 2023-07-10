@@ -48,7 +48,7 @@ jobs:
       - if: runner.os != 'windows'
         run: |
           sudo apt-get update && \
-          sudo apt-get -y install libudev-dev libpcsclite-dev libusb-1.0-0-dev
+          sudo apt-get -y install libdbus-1-dev libpcsclite-dev libudev-dev libusb-1.0-0-dev
 
       - if: runner.os == 'windows'
         uses: johnwason/vcpkg-action@v4

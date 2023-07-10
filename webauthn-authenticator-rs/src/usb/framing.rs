@@ -7,16 +7,17 @@
 //! So, we need to be able to fragment our messages before sending them to a
 //! token, and then defragment them on the other side.
 use crate::error::WebauthnCError;
-use crate::usb::{HidReportBytes, HidSendReportBytes, HID_RPT_SEND_SIZE, HID_RPT_SIZE};
+use crate::usb::{HidReportBytes, HidSendReportBytes};
 use std::cmp::min;
 use std::iter::Sum;
+use std::mem::size_of;
 use std::ops::{Add, AddAssign};
 
 /// The maximum data payload for the initial fragment of a message, in bytes.
-const INITIAL_FRAGMENT_SIZE: usize = HID_RPT_SIZE - 7;
+const INITIAL_FRAGMENT_SIZE: usize = size_of::<HidReportBytes>() - 7;
 /// The maximum data payload for the second and subsequent fragments of a
 /// message, in bytes.
-const FRAGMENT_SIZE: usize = HID_RPT_SIZE - 5;
+const FRAGMENT_SIZE: usize = size_of::<HidReportBytes>() - 5;
 /// Maximum total size for a U2FHID message after chunking, in bytes.
 pub const MAX_SIZE: usize = INITIAL_FRAGMENT_SIZE + (0x80 * FRAGMENT_SIZE);
 
@@ -200,7 +201,7 @@ impl From<&U2FHIDFrame> for HidSendReportBytes {
     ///
     /// This does not fragment packets: see [U2FHIDFrameIterator].
     fn from(f: &U2FHIDFrame) -> HidSendReportBytes {
-        let mut o: HidSendReportBytes = [0; HID_RPT_SEND_SIZE];
+        let mut o: HidSendReportBytes = [0; size_of::<HidSendReportBytes>()];
 
         // o[0] = 0; (Report ID)
         o[1..5].copy_from_slice(&f.cid.to_be_bytes());
