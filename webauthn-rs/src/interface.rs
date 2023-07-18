@@ -23,8 +23,9 @@ use webauthn_rs_core::proto::{
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[allow(missing_docs)]
 pub struct PasskeyRegistration {
-    pub(crate) rs: RegistrationState,
+    pub rs: RegistrationState,
 }
 
 /// An in progress authentication session for a [Passkey].
@@ -41,8 +42,9 @@ pub struct PasskeyRegistration {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
+#[allow(missing_docs)]
 pub struct PasskeyAuthentication {
-    pub(crate) ast: AuthenticationState,
+    pub ast: AuthenticationState,
 }
 
 /// A Passkey for a user. A passkey is a term that covers all possible authenticators that may exist.
