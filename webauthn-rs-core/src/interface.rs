@@ -29,27 +29,29 @@ pub type Counter = u32;
 /// The in progress state of a credential registration attempt. You must persist this in a server
 /// side location associated to the active session requesting the registration. This contains the
 /// user unique id which you can use to reference the user requesting the registration.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistrationState {
-    pub(crate) policy: UserVerificationPolicy,
-    pub(crate) exclude_credentials: Vec<CredentialID>,
-    pub(crate) challenge: Base64UrlSafeData,
-    pub(crate) credential_algorithms: Vec<COSEAlgorithm>,
-    pub(crate) require_resident_key: bool,
-    pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
-    pub(crate) extensions: RequestRegistrationExtensions,
-    pub(crate) experimental_allow_passkeys: bool,
+    pub policy: UserVerificationPolicy,
+    pub exclude_credentials: Vec<CredentialID>,
+    pub challenge: Base64UrlSafeData,
+    pub credential_algorithms: Vec<COSEAlgorithm>,
+    pub require_resident_key: bool,
+    pub authenticator_attachment: Option<AuthenticatorAttachment>,
+    pub extensions: RequestRegistrationExtensions,
+    pub experimental_allow_passkeys: bool,
 }
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
 /// requesting the registration.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthenticationState {
-    pub(crate) credentials: Vec<Credential>,
-    pub(crate) policy: UserVerificationPolicy,
-    pub(crate) challenge: Base64UrlSafeData,
-    pub(crate) appid: Option<String>,
-    pub(crate) allow_backup_eligible_upgrade: bool,
+    pub credentials: Vec<Credential>,
+    pub policy: UserVerificationPolicy,
+    pub challenge: Base64UrlSafeData,
+    pub appid: Option<String>,
+    pub allow_backup_eligible_upgrade: bool,
 }
 
 impl AuthenticationState {
