@@ -496,6 +496,8 @@ impl TryFrom<RawStatusReport> for StatusReport {
 
 impl PartialEq<AuthenticatorStatus> for StatusReport {
     fn eq(&self, other: &AuthenticatorStatus) -> bool {
+        // Looks nicer code style wise this way.
+        #[allow(clippy::match_like_matches_macro)]
         match (self, other) {
             (StatusReport::NotFidoCertified { .. }, AuthenticatorStatus::NotFidoCertified)
             | (
@@ -606,7 +608,7 @@ impl Ord for StatusReport {
 
 /// An identifier of a user verification method. Some methods may contain an internal descriptor
 /// which provides information about certification or details of the user verification method.
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum UserVerificationMethod {
     /// No user verification is required
     None,
@@ -643,35 +645,30 @@ impl FromStr for UserVerificationMethod {
         match s {
             "none" => Ok(UserVerificationMethod::None),
             "presence" => Ok(UserVerificationMethod::PresenceInternal),
-            "pin_internal" |
-            "passcode_internal" => Ok(UserVerificationMethod::PasscodeInternal(None)),
-            "pin_external" |
-            "passcode_external" => Ok(UserVerificationMethod::PasscodeExternal(None)),
-            "fingerprint_internal" |
-            "fprint_internal" |
-            "fprint" => Ok(UserVerificationMethod::FingerprintInternal(None)),
-            "handprint_internal" |
-            "hprint_internal" |
-            "hprint" => Ok(UserVerificationMethod::HandprintInternal(None)),
-            "eyeprint_internal" |
-            "eprint_internal" |
-            "eprint" => Ok(UserVerificationMethod::EyeprintInternal(None)),
-            "voiceprint_internal" |
-            "vprint_internal" |
-            "vprint" => Ok(UserVerificationMethod::VoiceprintInternal(None)),
-            "faceprint_internal" |
-            "face_internal" |
-            "face" => Ok(UserVerificationMethod::FaceprintInternal(None)),
-            "pattern_internal" |
-            "pattern" => Ok(UserVerificationMethod::PatternInternal(None)),
+            "pin_internal" | "passcode_internal" => {
+                Ok(UserVerificationMethod::PasscodeInternal(None))
+            }
+            "pin_external" | "passcode_external" => {
+                Ok(UserVerificationMethod::PasscodeExternal(None))
+            }
+            "fingerprint_internal" | "fprint_internal" | "fprint" => {
+                Ok(UserVerificationMethod::FingerprintInternal(None))
+            }
+            "handprint_internal" | "hprint_internal" | "hprint" => {
+                Ok(UserVerificationMethod::HandprintInternal(None))
+            }
+            "eyeprint_internal" | "eprint_internal" | "eprint" => {
+                Ok(UserVerificationMethod::EyeprintInternal(None))
+            }
+            "voiceprint_internal" | "vprint_internal" | "vprint" => {
+                Ok(UserVerificationMethod::VoiceprintInternal(None))
+            }
+            "faceprint_internal" | "face_internal" | "face" => {
+                Ok(UserVerificationMethod::FaceprintInternal(None))
+            }
+            "pattern_internal" | "pattern" => Ok(UserVerificationMethod::PatternInternal(None)),
             _ => Err(()),
         }
-    }
-}
-
-impl PartialEq for UserVerificationMethod {
-    fn eq(&self, other: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
     }
 }
 
@@ -998,22 +995,17 @@ impl FIDO2 {
                 .last()
                 .map(|sr| sr == s)
                 .unwrap_or(false),
-            AttrValueAssertion::StatusGte(s) => self
-                .status_reports
-                .iter()
-                .all(|sr| sr.gte(s)),
-            AttrValueAssertion::TransportEq(t) =>
-                self.authenticator_get_info.as_ref()
-                    .map(|agi| agi
-                    .transports
-                    .contains(t)
-                    )
+            AttrValueAssertion::StatusGte(s) => self.status_reports.iter().all(|sr| sr.gte(s)),
+            AttrValueAssertion::TransportEq(t) => self
+                .authenticator_get_info
+                .as_ref()
+                .map(|agi| agi.transports.contains(t))
                 .unwrap_or(false),
-            AttrValueAssertion::UserVerificationCnt(u) => 
-                self.user_verification_details.iter()
-                    .map(|and| and.iter())
-                    .flatten()
-                    .any(|uvd| uvd == u)
+            AttrValueAssertion::UserVerificationCnt(u) => self
+                .user_verification_details
+                .iter()
+                .flat_map(|and| and.iter())
+                .any(|uvd| std::mem::discriminant(uvd) == std::mem::discriminant(u)),
         }
     }
 
@@ -1182,7 +1174,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                                     "Invalid user verification details located in: {:?}, {:?}, {:?}",
                                     aaid, aaguid, attestation_certificate_key_identifiers
                                 );
-                                assert!(!aaguid.is_some());
+                                assert!(aaguid.is_none());
                                 invalid_metadata = true;
                             })
                             .ok()
@@ -1214,7 +1206,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                     "Illogical user verification method located in - None may not exist with other UVM: {:?}, {:?}, {:?}",
                     aaid, aaguid, attestation_certificate_key_identifiers
                 );
-                assert!(!aaguid.is_some());
+                assert!(aaguid.is_none());
                 invalid_metadata = true;
             }
         }
@@ -1224,10 +1216,10 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
         // make the AGI is None since it's only populated by the fido MDS and not a true mds.
 
         let agi_invalid = if let Some(agi) = authenticator_get_info.as_ref() {
-            agi.extensions.is_empty() &&
-                agi.pin_uv_auth_protocols.is_empty() &&
-                agi.transports.is_empty() &&
-                agi.algorithms.is_empty()
+            agi.extensions.is_empty()
+                && agi.pin_uv_auth_protocols.is_empty()
+                && agi.transports.is_empty()
+                && agi.algorithms.is_empty()
         } else {
             false
         };
@@ -1266,12 +1258,11 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             }
         }
 
-        if aaguid.is_some() && authenticator_get_info.is_none() {
-            warn!(
-                "FIDO2 Device missing authenticator info - {:?}",
-                aaguid.unwrap()
-            );
-            invalid_metadata = true;
+        if let Some(aaguid) = aaguid.as_ref() {
+            if authenticator_get_info.is_none() {
+                warn!("FIDO2 Device missing authenticator info - {:?}", aaguid);
+                invalid_metadata = true;
+            }
         }
 
         if invalid_metadata {
@@ -1431,7 +1422,7 @@ impl FidoMds {
         }
     }
 
-    pub fn fido2_to_attestation_ca_list(fds: &[rc::Rc<FIDO2>]) -> Result<AttestationCaList, ()> {
+    pub fn fido2_to_attestation_ca_list(fds: &[rc::Rc<FIDO2>]) -> Option<AttestationCaList> {
         let data: Vec<_> = fds
             .iter()
             .flat_map(|fd| {
@@ -1441,6 +1432,10 @@ impl FidoMds {
             })
             .collect();
 
-        AttestationCaList::try_from(data.as_slice()).map_err(|_e| ())
+        AttestationCaList::try_from(data.as_slice())
+            .map_err(|e| {
+                error!(err = ?e, "Failed to process attestation ca list");
+            })
+            .ok()
     }
 }
