@@ -78,7 +78,7 @@ pub struct CodeAccuracyDescriptor {
     pub block_slowdown: Option<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 /// The BiometricAccuracyDescriptor describes relevant accuracy/complexity aspects in the case of a biometric user verification method.
 pub struct BiometricAccuracyDescriptor {

@@ -113,15 +113,21 @@ fn main() {
 
     let fmt_layer = fmt::layer().with_writer(std::io::stderr);
 
-    let filter_layer = EnvFilter::try_from_default_env()
-        .or_else(|_| {
-            if opt.commands.debug() {
-                EnvFilter::try_new("fido_mds=debug,fido_mds_tool=debug")
-            } else {
-                EnvFilter::try_new("fido_mds=info,fido_mds_tool=info")
-            }
-        })
-        .unwrap();
+    let filter_result = EnvFilter::try_from_default_env().or_else(|_| {
+        if opt.commands.debug() {
+            EnvFilter::try_new("fido_mds=debug,fido_mds_tool=debug")
+        } else {
+            EnvFilter::try_new("fido_mds=info,fido_mds_tool=info")
+        }
+    });
+
+    let filter_layer = match filter_result {
+        Ok(fr) => fr,
+        Err(e) => {
+            eprintln!("Failed to setup tracing filter layer {:?}", e);
+            return;
+        }
+    };
 
     tracing_subscriber::registry()
         .with(filter_layer)
@@ -130,7 +136,13 @@ fn main() {
 
     match opt.commands {
         Opt::Fetch(CommonOpt { debug: _, path }) => {
-            let mds_url = Url::parse(MDS_URL).expect("Invalid MDS URL");
+            let mds_url = match Url::parse(MDS_URL) {
+                Ok(mdsurl) => mdsurl,
+                Err(e) => {
+                    error!(err = ?e, "Error - invalid MDS URL");
+                    return;
+                }
+            };
 
             info!("Fetching from {} to {:?}", mds_url, path);
 
@@ -280,12 +292,14 @@ fn main() {
 
 fn display_cert_roots(fds: &[Rc<FIDO2>]) {
     match FidoMds::fido2_to_attestation_ca_list(fds) {
-        Ok(att_ca_list) => {
-            let list = serde_json::to_string(&att_ca_list).unwrap();
-            println!("{}", list)
-        }
-        Err(_) => {
-            eprintln!("Invalid MDS data")
+        Some(att_ca_list) => match serde_json::to_string(&att_ca_list) {
+            Ok(list) => println!("{}", list),
+            Err(e) => {
+                eprintln!("Failed to serialise CA list - {:?}", e);
+            }
+        },
+        None => {
+            eprintln!("Invalid MDS data - check errors for more details.")
         }
     }
 }

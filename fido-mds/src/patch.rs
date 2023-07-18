@@ -29,24 +29,21 @@ const AUTHENTON1: Uuid = uuid::uuid!("b267239b-954f-4041-a01b-ee4f33c145b6");
 const AUTHENTON1_HASH: u64 = 949927076393110872;
 
 pub(crate) fn mds_user_verification_method_code_accuracy_descriptor(
-    uvm: &mut Vec<Vec<VerificationMethodAndCombinations>>,
+    uvm: &mut [Vec<VerificationMethodAndCombinations>],
 ) -> bool {
     let mut changed = false;
 
     for uvm_and in uvm.iter_mut() {
         if uvm_and.len() == 2 {
             let (l, r) = uvm_and.split_at_mut(1);
-            if l[0].user_verification_method == RawUserVerificationMethod::PasscodeExternal
+            if (l[0].user_verification_method == RawUserVerificationMethod::PasscodeExternal
                 && l[0].ca_desc.is_none()
                 && r[0].user_verification_method == RawUserVerificationMethod::PresenceInternal
-                && r[0].ca_desc.is_some()
-            {
-                std::mem::swap(&mut l[0].ca_desc, &mut r[0].ca_desc);
-                changed = true;
-            } else if r[0].user_verification_method == RawUserVerificationMethod::PasscodeExternal
-                && r[0].ca_desc.is_none()
-                && l[0].user_verification_method == RawUserVerificationMethod::PresenceInternal
-                && l[0].ca_desc.is_some()
+                && r[0].ca_desc.is_some())
+                || (r[0].user_verification_method == RawUserVerificationMethod::PasscodeExternal
+                    && r[0].ca_desc.is_none()
+                    && l[0].user_verification_method == RawUserVerificationMethod::PresenceInternal
+                    && l[0].ca_desc.is_some())
             {
                 std::mem::swap(&mut l[0].ca_desc, &mut r[0].ca_desc);
                 changed = true;
@@ -58,7 +55,7 @@ pub(crate) fn mds_user_verification_method_code_accuracy_descriptor(
 }
 
 pub(crate) fn mds_user_verification_method_invalid_all_present(
-    uvm: &mut Vec<Vec<VerificationMethodAndCombinations>>,
+    uvm: &mut [Vec<VerificationMethodAndCombinations>],
 ) -> bool {
     let mut changed = false;
 
@@ -166,7 +163,7 @@ pub(crate) fn user_verification_method(
 /// actually be in the OR condition structure, and that PasscodeInternal is actually
 /// PresenceInternal + PasscodeExternal.
 fn user_verification_method_yk5lightning(
-    uvm_and: &Vec<Vec<UserVerificationMethod>>,
+    uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     // We know the
 
@@ -195,7 +192,7 @@ fn user_verification_method_yk5lightning(
 /// internally accept a PIN, this is likely correct. See
 /// https://www.rsa.com/resources/datasheets/id-plus-ds100-authenticator/
 fn user_verification_method_rsads100(
-    uvm_and: &Vec<Vec<UserVerificationMethod>>,
+    uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     let code_accuracy = match uvm_and.get(0).and_then(|inner| inner.get(1)) {
         Some(UserVerificationMethod::PasscodeExternal(cad)) => cad.clone(),
@@ -221,7 +218,7 @@ fn user_verification_method_rsads100(
 /// that affects the yk5ci is present here where the inputs were placed into an AND rather
 /// than the OR block.
 fn user_verification_method_fido_keypass_s3(
-    _uvm_and: &Vec<Vec<UserVerificationMethod>>,
+    _uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     // ORs
     Ok(vec![
@@ -234,7 +231,7 @@ fn user_verification_method_fido_keypass_s3(
 /// that affects the yk5ci is present here where the inputs were placed into an AND rather
 /// than the OR block.
 fn user_verification_method_vivokey_apex(
-    _uvm_and: &Vec<Vec<UserVerificationMethod>>,
+    _uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     // ORs
     Ok(vec![
@@ -248,7 +245,7 @@ fn user_verification_method_vivokey_apex(
 /// internally accept a PIN, this is likely correct. See
 /// https://www.kensington.com/software/verimark-setup/verimark-guard-setup-guide/
 fn user_verification_method_verimark_guard_fingerprint(
-    _uvm_and: &Vec<Vec<UserVerificationMethod>>,
+    _uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     Ok(vec![
         vec![UserVerificationMethod::PresenceInternal],
@@ -270,7 +267,7 @@ fn user_verification_method_verimark_guard_fingerprint(
 /// This issue affects multiple other FIDO devices. FIDO have inserted incorrect
 /// metadata that is not consistent.
 fn user_verification_method_authenton1(
-    uvm_and: &Vec<Vec<UserVerificationMethod>>,
+    uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     debug!(?uvm_and);
     let code_accuracy = match uvm_and.get(0).and_then(|inner| inner.get(2)) {

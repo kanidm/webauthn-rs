@@ -94,6 +94,8 @@ impl Data {
     }
 }
 
+// Allowed as AttestationCaList is foreign.
+#[allow(clippy::from_over_into)]
 impl Into<AttestationCaList> for &Data {
     fn into(self) -> AttestationCaList {
         AttestationCaList::from_iter(self.devices.iter().flat_map(|dev| {
