@@ -480,14 +480,14 @@ impl PartialEq for AttestedResidentKey {
     }
 }
 
-#[cfg(feature = "danger-credential-internals")]
+#[cfg(all(feature = "danger-credential-internals", feature = "resident-key-support"))]
 impl From<AttestedResidentKey> for Credential {
     fn from(dk: AttestedResidentKey) -> Self {
         dk.cred
     }
 }
 
-#[cfg(feature = "danger-credential-internals")]
+#[cfg(all(feature = "danger-credential-internals", feature = "resident-key-support"))]
 impl From<Credential> for AttestedResidentKey {
     /// Convert a generic webauthn credential into a security key
     fn from(cred: Credential) -> Self {
