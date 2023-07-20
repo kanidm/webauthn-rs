@@ -1,7 +1,7 @@
 # webauthn-rs Design Philosophy
 
-* **Published:** 2023-02-xx
-* **Last updated:** 2023-02-xx
+* **Published:** 2023-07-21
+* **Last updated:** 2023-07-21
 
 This document describes the design philosophy of `webauthn-rs`, as well as some
 of the critical design decisions we've made over time.
@@ -9,11 +9,12 @@ of the critical design decisions we've made over time.
 If you ever wondered *why* `webauthn-rs` does things a certain way, this is the
 document for you.
 
+We intend this document to evolve and expand over time with the project's
+requirements.
+
 ## Introduction
 
-`webauthn-rs` is fairly opinionated about how one should use WebAuthn.
-
-The WebAuthn API that most developers use comes from the browser:
+The WebAuthn API which most developers use comes from the browser:
 
 * `navigator.credentials.create` to register
 * `navigator.credentials.get` to authenticate
@@ -21,14 +22,24 @@ The WebAuthn API that most developers use comes from the browser:
 This API has many edge cases, and is easy to use in an insecure way, or in a way
 that can make your application inflexible.
 
-Our goal is that `webauthn-rs`:
+Our goals are that `webauthn-rs`:
 
 * has safe interfaces
 * encourages good design choices
 * is hard to use in an unsafe way
+* meets (or exceeds) security requirements set by the WebAuthn specification
+* allows a relying party to enforce reasonable, security-relevant policies
+  (such as requiring [attestation][att] or [user verification][uv])
+* [does not perform actions which harm certain types of authenticators by default][junk]
+* works with as many standards-compliant authenticators as possible
 
-This means we'll intentionally do some things differently to WebAuthn, or avoid
-some APIs.
+[att]: https://www.w3.org/TR/webauthn-3/#attestation
+[junk]: https://fy.blackhats.net.au/blog/html/2023/02/02/how_hype_will_turn_your_security_key_into_junk.html
+[uv]: https://www.w3.org/TR/webauthn-3/#user-verification
+
+**`webauthn-rs` is an "opinionated" library**: it will intentionally do some
+things differently to the letter of the WebAuthn specification, or avoid
+implementing problematic APIs or features.
 
 ## webauthn-rs-core: a low level interface
 
@@ -48,15 +59,25 @@ We want to constrain `webauthn-rs`'s complexity, and one way we do this is to
 not ship more platform-specific code than absolutely necessary.
 
 This means we'll aim to use existing libraries for interfacing with non-WebAuthn
-APIs (such as Bluetooth, smart cards and USB HID), and move as much
-platform-specific code as possible into upstream libraries.
+platform APIs, and move as much platform-specific code as possible into upstream
+libraries.
 
-For example, we delegate smart card access to PC/SC, and would expect any
-proposal to add an alternative smart card API to demonstrate why using PC/SC was
-not appropriate or possible on that platform.
+For example, we delegate smart card access to the widely-supported and
+cross-platform [PC/SC API][pcsc]. We would expect any proposal to add an
+alternative smart card API to demonstrate why using PC/SC was not appropriate or
+possible on that platform.
 
 For WebAuthn itself, we need to implement some platform-specific code where that
 platform has WebAuthn APIs (eg: on macOS and Windows), and we're okay with that.
+
+Should existing Rust libraries not fit our needs, we'll split these into a
+module which could eventually become a standalone project that `webauthn-rs`
+could depend on.
+
+For example, we ship our own USB HID library (`fido-hid-rs`), because existing
+Rust USB HID libraries do not provide `async`-friendly interfaces.
+
+[pcsc]: https://pcscworkgroup.com/
 
 ### User IDs are UUIDs
 
@@ -93,8 +114,8 @@ The WebAuthn specification itself addresses this issue by defining
   intended for determining the difference between accounts with the same
   `displayName`. This could be a username, email address or phone number.
 
-While the specification states that `id` *must not* contain personally
-identifying information (including usernames or email addresses), the
+While [the WebAuthn specification states that `id` *must not* contain personally
+identifying information][id-pii] (including usernames or email addresses), the
 `BufferSource` type is just a byte sequence (ie: `Vec<u8>`), and is easy to
 misuse. For example, an application could put a username in there:
 
@@ -110,30 +131,31 @@ impl User {
         let mut id = self.username.as_bytes().to_vec();
         id.truncate(64);
 
-        webauthn.start_passkey_registration(
+        let result = webauthn.start_passkey_registration(
             id,
             &self.username,
             &self.display_name,
-            /* ... */
-        )
+            // ...
+        );
+
+        // Do something with the result...
     }
 }
 ```
 
-Another related design weakness is a storage system which expresses record
-identifiers as an monotonically-incrementing integer (eg: MySQL's
-`AUTO_INCREMENT`). This mandates a single, perfectly-reliable point of authority
-to issue IDs. This not only becomes a single point of failure should that
-authority become unavailable or unreachable, but a replicated database which
-goes split-brain can end up causing severe data consistency problems should the
-same identifier be assigned to multiple records.
+A related design weakness is a storage system which expresses record identifiers
+as a monotonically-incrementing integer (eg: MySQL's `AUTO_INCREMENT`). This
+mandates a single, perfectly-reliable point of authority to issue IDs. This not
+only becomes a single point of failure should that authority become unavailable
+or unreachable, but a replicated database which goes split-brain can end up
+causing severe data consistency problems should the same identifier be assigned
+to multiple records.
 
-While there are strategies to mitigate these issues with a numeric identifier
-(such as using every `N`th integer), these need constant tweaking and careful
-coordination should the number of shards change, and to keep each shard's offset
-consistent.
+While there are strategies to mitigate this issue (such as using every `N`th
+integer), these need constant tweaking and careful coordination should the
+number of shards change, and to keep each shard's offset consistent.
 
-To mitigate both issues, `webauthn-rs`' interfaces define user ID as a
+To mitigate both issues, `webauthn-rs`' interfaces simply define user ID as a
 [`Uuid` type][uuid-type]:
 
 ```rust
@@ -150,11 +172,11 @@ pub fn start_passkey_registration(
 
 A UUID can be completely random (122 bits), or incorporate timestamps and/or
 node identifiers to provide extensible namespaces as desired. They're also
-well-established and have many implementations in database systems and
-programming languages. They are also sufficiently-long to have an extremely low
-chance of collision, even for huge data sets.
+well-established, and implemented in many database systems and programming
+languages. They are also sufficiently-long to have an extremely low chance of
+collision, even when dealing with billions of entities.
 
-The application's code is then forced into that model:
+By using a UUID type, applications are forced into that model:
 
 ```rust
 pub struct User {
@@ -175,21 +197,24 @@ impl User {
     }
 
     pub fn register_credential(&self) -> Result<T, E> {
-        webauthn.start_passkey_registration(
+        let result = webauthn.start_passkey_registration(
             &self.id,
             &self.username,
             &self.display_name,
-            /* ... */
-        )
+            // ...
+        );
+
+        // Do something with the result...
     }
 }
 ```
 
 While there *are* ways to bypass this (such as converting other types into a
-`Uuid`), the [`Uuid` type][uuid-type] better expresses the intended usage.
+`Uuid`), the [`Uuid` type][uuid-type] best expresses the *intended* usage.
 
 [^name]: [`name` is defined in `PublicKeyCredentialEntity`][name-attr].
 
 [uuid-type]: https://docs.rs/uuid/latest/uuid/
-[user]: https://w3c.github.io/webauthn/#dictionary-user-credential-params
-[name-attr]: https://w3c.github.io/webauthn/#dom-publickeycredentialentity-name
+[user]: https://www.w3.org/TR/webauthn-3/#dictdef-publickeycredentialuserentity
+[name-attr]: https://www.w3.org/TR/webauthn-3/#dom-publickeycredentialentity-name
+[id-pii]: https://www.w3.org/TR/webauthn-3/#sctn-user-handle-privacy
