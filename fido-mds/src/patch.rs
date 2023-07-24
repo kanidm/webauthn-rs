@@ -6,27 +6,25 @@ use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 use std::hash::{Hash, Hasher};
-
-#[allow(deprecated)]
-use std::hash::SipHasher;
+use crc32c::Crc32cHasher;
 
 const YK5LIGHTNING: Uuid = uuid::uuid!("c5ef55ff-ad9a-4b9f-b580-adebafe026d0");
-const YK5LIGHTNING_HASH: u64 = 9891217653727489461;
+const YK5LIGHTNING_HASH: u64 = 3670715709;
 
 const RSADS100: Uuid = uuid::uuid!("7e3f3d30-3557-4442-bdae-139312178b39");
-const RSADS100_HASH: u64 = 5496126100317123879;
+const RSADS100_HASH: u64 = 3336810553;
 
 const FIDO_KEYPASS_S3: Uuid = uuid::uuid!("f4c63eff-d26c-4248-801c-3736c7eaa93a");
-const FIDO_KEYPASS_S3_HASH: u64 = 2346657496361192329;
+const FIDO_KEYPASS_S3_HASH: u64 = 2407033003;
 
 const VIVOKEY_APEX: Uuid = uuid::uuid!("d7a423ad-3e19-4492-9200-78137dccc136");
-const VIVOKEY_APEX_HASH: u64 = 2346657496361192329;
+const VIVOKEY_APEX_HASH: u64 = 2407033003;
 
 const VERIMARK_GUARD_FINGERPRINT: Uuid = uuid::uuid!("d94a29d9-52dd-4247-9c2d-8b818b610389");
-const VERIMARK_GUARD_FINGERPRINT_HASH: u64 = 224376090321988812;
+const VERIMARK_GUARD_FINGERPRINT_HASH: u64 = 3483018605;
 
 const AUTHENTON1: Uuid = uuid::uuid!("b267239b-954f-4041-a01b-ee4f33c145b6");
-const AUTHENTON1_HASH: u64 = 949927076393110872;
+const AUTHENTON1_HASH: u64 = 1117557365;
 
 pub(crate) fn mds_user_verification_method_code_accuracy_descriptor(
     uvm: &mut [Vec<VerificationMethodAndCombinations>],
@@ -80,7 +78,7 @@ pub(crate) fn user_verification_method(
     uvm: &Vec<Vec<UserVerificationMethod>>,
 ) -> Result<Option<Vec<Vec<UserVerificationMethod>>>, ()> {
     #[allow(deprecated)]
-    let mut hasher = SipHasher::new();
+    let mut hasher = Crc32cHasher::default();
     uvm.hash(&mut hasher);
     let hash = hasher.finish();
 
