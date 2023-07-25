@@ -79,7 +79,7 @@ function login() {
                     authenticatorData: Base64.fromUint8Array(new Uint8Array(assertion.response.authenticatorData), true),
                     clientDataJSON: Base64.fromUint8Array(new Uint8Array(assertion.response.clientDataJSON), true),
                     signature: Base64.fromUint8Array(new Uint8Array(assertion.response.signature), true),
-                    userHandle: assertion.response.userHandle
+                    userHandle: Base64.fromUint8Array(new Uint8Array(assertion.response.userHandle), true)
                 },
             }),
         })
