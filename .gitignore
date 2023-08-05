@@ -5,3 +5,5 @@ webauthn-rs-demo-wasm/pkg
 .DS_Store
 local
 build.sh
+.swiftpm
+.build

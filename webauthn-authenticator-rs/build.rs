@@ -63,7 +63,17 @@ Please upgrade to OpenSSL v3.0.0 or later.
     }
 }
 
+#[cfg(feature = "macos")]
+fn macos() {
+    swift_rs::SwiftLinker::new("12")
+        .with_package("MacAuthn", "./src/MacAuthn")
+        .link();
+}
+
 fn main() {
     #[cfg(feature = "crypto")]
     crypto::test_openssl();
+
+    #[cfg(feature = "macos")]
+    macos();
 }
