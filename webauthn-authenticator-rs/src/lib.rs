@@ -45,6 +45,7 @@
 //! * `softtoken`: [SoftToken][] (for testing) [^openssl]
 //! * `usb`: [USB HID][] [^openssl]
 //! * `win10`: [Windows 10][] WebAuthn API
+//! * `macos`: [MacOS][] WebAuthn API
 //!
 //! [^openssl]: Feature requires OpenSSL.
 //!
@@ -83,6 +84,7 @@
 //! [SoftToken]: crate::softtoken
 //! [USB HID]: crate::usb
 //! [Windows 10]: crate::win10
+//! [MacOS]: crate::macos
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -168,6 +170,9 @@ pub mod u2fhid {
 
 #[cfg(any(all(doc, not(doctest)), feature = "win10"))]
 pub mod win10;
+
+#[cfg(any(all(doc, not(doctest)), feature = "macos"))]
+pub mod macos;
 
 #[cfg(doc)]
 #[doc(hidden)]

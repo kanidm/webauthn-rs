@@ -159,6 +159,10 @@ enum Provider {
     #[cfg(feature = "win10")]
     /// Windows 10 WebAuthn API, supporting BTLE, NFC and USB HID.
     Win10,
+
+    #[cfg(feature = "macos")]
+    /// MacOS Authorization API
+    MacOS,
 }
 
 impl Provider {
@@ -209,6 +213,8 @@ impl Provider {
             Provider::Mozilla => Box::<webauthn_authenticator_rs::mozilla::MozillaAuthenticator>::default(),
             #[cfg(feature = "win10")]
             Provider::Win10 => Box::<webauthn_authenticator_rs::win10::Win10>::default(),
+            #[cfg(feature = "macos")]
+            Provider::MacOS => Box::<webauthn_authenticator_rs::macos::MacOS>::default(),
         }
     }
 }

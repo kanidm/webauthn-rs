@@ -69,6 +69,10 @@ pub enum WebauthnCError {
     /// something has not been initialised correctly, or that the authenticator
     /// is sending unexpected messages.
     UnexpectedState,
+    /// An error occured in ASAuthorization.
+    #[cfg(feature = "macos")]
+    ASAuthorization(String),
+    SerdeJson,
 }
 
 #[cfg(feature = "nfc")]
@@ -138,6 +142,12 @@ impl From<btleplug::Error> for WebauthnCError {
             PermissionDenied => WebauthnCError::PermissionDenied,
             _ => Self::BluetoothError(v.to_string()),
         }
+    }
+}
+
+impl From<serde_json::Error> for WebauthnCError {
+    fn from(_v: serde_json::Error) -> Self {
+        WebauthnCError::SerdeJson
     }
 }
 
