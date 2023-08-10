@@ -365,7 +365,7 @@ impl<'a> WebauthnBuilder<'a> {
 ///
 /// > If you really want a security key, you should use [`start_securitykey_registration`](Webauthn::start_securitykey_registration)
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Webauthn {
     core: WebauthnCore,
     algorithms: Vec<COSEAlgorithm>,
