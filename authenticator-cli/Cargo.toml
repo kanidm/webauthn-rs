@@ -10,10 +10,11 @@ description = "Webauthn Authenticator Management Tool"
 
 [dependencies]
 
-authenticator = { version = "0.3.2-dev.1", default-features = false, features = ["crypto_openssl"], package = "authenticator-ctap2-2021" }
+authenticator = { version = "0.3.2-dev.1", default-features = false, features = [
+    "crypto_openssl",
+], package = "authenticator-ctap2-2021" }
 clap.workspace = true
 
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-log = { version = "0.1.3" }
-

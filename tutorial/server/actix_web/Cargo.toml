@@ -33,4 +33,6 @@ env_logger = { version = "~0.10" }
 log = { version = "~0.4" }
 
 # Webauthn framework
-webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
+webauthn-rs = { workspace = true, features = [
+    "danger-allow-state-serialisation",
+] }
