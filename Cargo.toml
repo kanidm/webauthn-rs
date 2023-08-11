@@ -58,7 +58,7 @@ hyper = { version = "=1.0.0-rc.3", default-features = false, features = [
     "http1",
 ] }
 nom = "7.1"
-openssl = "^0.10.41"
+openssl = "^0.10.56"
 rand = "0.8"
 serde = { version = "^1.0.141", features = ["derive"] }
 serde_cbor_2 = { version = "0.12.0-dev" }
