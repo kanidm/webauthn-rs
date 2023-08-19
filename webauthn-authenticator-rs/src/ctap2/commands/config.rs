@@ -1,5 +1,5 @@
 use serde::Serialize;
-use serde_cbor::Value;
+use serde_cbor_2::Value;
 
 use self::CBORCommand;
 use super::*;
@@ -102,7 +102,7 @@ impl ConfigSubCommand {
         o.push(sub_command);
         if let Some(p) = sub_command_params
             .as_ref()
-            .and_then(|p| serde_cbor::to_vec(p).ok())
+            .and_then(|p| serde_cbor_2::to_vec(p).ok())
         {
             o.extend_from_slice(p.as_slice())
         }

@@ -206,7 +206,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         trace!("{:?}", client_data);
 
         // Warning! In the future this may change!
-        // This currently relies on serde_json and serde_cbor being deterministic, and has
+        // This currently relies on serde_json and serde_cbor_2 being deterministic, and has
         // been brought up with MS.
 
         let raw_id = if let Some(cred_data) = &attestation_object.auth_data.credential_data {
@@ -216,7 +216,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         };
 
         // Based on the request attestation format, provide it
-        let attestation_object = serde_cbor::to_vec(&attestation_object)
+        let attestation_object = serde_cbor_2::to_vec(&attestation_object)
             .map(Base64UrlSafeData)
             .map_err(|_| WebauthnCError::Cbor)?;
 
@@ -323,7 +323,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         let user_handle = assertion.user.map(|u| Base64UrlSafeData(u.id));
         let signature = Base64UrlSafeData(assertion.signature);
 
-        // let authenticator_data = serde_cbor::to_vec(&assertion.auth_data)
+        // let authenticator_data = serde_cbor_2::to_vec(&assertion.auth_data)
         let authenticator_data = assertion
             .auth_data
             .to_vec()

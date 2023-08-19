@@ -1,6 +1,6 @@
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
-use serde_cbor::Value;
+use serde_cbor_2::Value;
 use std::{collections::BTreeMap, str::FromStr};
 use webauthn_rs_proto::{AllowCredentials, AuthenticatorTransport, PublicKeyCredentialDescriptor};
 

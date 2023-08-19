@@ -137,7 +137,7 @@ mod test {
     use std::collections::BTreeMap;
 
     use base64urlsafedata::Base64UrlSafeData;
-    use serde_cbor::Value;
+    use serde_cbor_2::Value;
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
     use crate::ctap2::commands::MakeCredentialResponse;
@@ -349,7 +349,7 @@ mod test {
 
         // Serialise expected response
         let resp: BTreeMap<u32, Value> = expected_response.clone().into();
-        let resp = serde_cbor::ser::to_vec_packed(&resp).unwrap();
+        let resp = serde_cbor_2::ser::to_vec_packed(&resp).unwrap();
         let frame = CableFrame {
             protocol_version: 1,
             message_type: CableFrameType::Ctap,

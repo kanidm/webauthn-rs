@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use serde_cbor::Value;
+use serde_cbor_2::Value;
 use std::fmt;
 use uuid::Uuid;
 use webauthn_rs_proto::AuthenticatorTransport;

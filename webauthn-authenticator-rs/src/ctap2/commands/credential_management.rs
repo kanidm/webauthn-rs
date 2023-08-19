@@ -3,7 +3,7 @@
 use crate::stubs::*;
 
 use serde::{Deserialize, Serialize};
-use serde_cbor::{
+use serde_cbor_2::{
     ser::to_vec_packed,
     value::{from_value, to_value},
     Value,

@@ -605,7 +605,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
         //
         // Alternatively, it may be possible to do this "more cheaply" by
         // remapping the keys of the map.
-        let raw = serde_cbor::to_vec(&ret).map_err(|e| {
+        let raw = serde_cbor_2::to_vec(&ret).map_err(|e| {
             error!("MakeCredentialResponse re-serialization: {:?}", e);
             WebauthnCError::Cbor
         })?;

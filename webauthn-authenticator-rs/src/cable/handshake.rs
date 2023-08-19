@@ -3,7 +3,7 @@ use crate::stubs::*;
 
 use openssl::{ec::EcKey, pkey::Public};
 use serde::Serialize;
-use serde_cbor::Value;
+use serde_cbor_2::Value;
 use std::{
     collections::BTreeMap,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -160,7 +160,7 @@ impl HandshakeV2 {
     /// Encodes a [HandshakeV2] into a `FIDO:/` QR code.
     pub fn to_qr_url(&self) -> Result<String, WebauthnCError> {
         let payload: Vec<u8> =
-            serde_cbor::ser::to_vec_packed(self).map_err(|_| WebauthnCError::Cbor)?;
+            serde_cbor_2::ser::to_vec_packed(self).map_err(|_| WebauthnCError::Cbor)?;
         Ok(format!("{}{}", URL_PREFIX, base10::encode(&payload)))
     }
 
@@ -174,7 +174,7 @@ impl HandshakeV2 {
         let (_, payload) = url.split_at(URL_PREFIX.len());
         let payload = base10::decode(payload)?;
         let v: BTreeMap<u32, Value> =
-            serde_cbor::from_slice(&payload).map_err(|_| WebauthnCError::Cbor)?;
+            serde_cbor_2::from_slice(&payload).map_err(|_| WebauthnCError::Cbor)?;
 
         Self::try_from(v)
     }

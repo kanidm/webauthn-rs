@@ -1,6 +1,6 @@
 //! CTAP 2 commands.
 use serde::Serialize;
-use serde_cbor::{ser::to_vec_packed, Value};
+use serde_cbor_2::{ser::to_vec_packed, Value};
 use std::borrow::Borrow;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -60,7 +60,7 @@ pub trait CBORCommand: Serialize + Sized + std::fmt::Debug + Send {
     type Response: CBORResponse;
 
     /// Converts a CTAP v2 command into a binary form.
-    fn cbor(&self) -> Result<Vec<u8>, serde_cbor::Error> {
+    fn cbor(&self) -> Result<Vec<u8>, serde_cbor_2::Error> {
         // CTAP v2.1, s8.2.9.1.2 (USB CTAPHID_CBOR), s8.3.5 (NFC framing).
         // Similar form used for caBLE.
         // TODO: BLE is different, it includes a u16 length after the command?
@@ -73,7 +73,7 @@ pub trait CBORCommand: Serialize + Sized + std::fmt::Debug + Send {
         trace!(
             "CBOR: cmd={}, cbor={:?}",
             Self::CMD,
-            serde_cbor::from_slice::<'_, serde_cbor::Value>(&b[..])
+            serde_cbor_2::from_slice::<'_, serde_cbor_2::Value>(&b[..])
         );
 
         b.reserve(1);
@@ -318,13 +318,14 @@ macro_rules! deserialize_cbor {
                     })
                 } else {
                     // Convert to Value (Value::Map)
-                    let v = serde_cbor::from_slice::<'_, serde_cbor::Value>(&i).map_err(|e| {
-                        error!("deserialise: {:?}", e);
-                        $crate::error::WebauthnCError::Cbor
-                    })?;
+                    let v =
+                        serde_cbor_2::from_slice::<'_, serde_cbor_2::Value>(&i).map_err(|e| {
+                            error!("deserialise: {:?}", e);
+                            $crate::error::WebauthnCError::Cbor
+                        })?;
 
                     // Extract the BTreeMap
-                    let v = if let serde_cbor::Value::Map(v) = v {
+                    let v = if let serde_cbor_2::Value::Map(v) = v {
                         Ok(v)
                     } else {
                         error!("deserialise: unexpected CBOR type {:?}", v);

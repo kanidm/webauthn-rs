@@ -9,7 +9,7 @@ authors = ["William Brown <william@blackhats.net.au>"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-webauthn-rs-proto = { workspace = true, default-features = false, features = ["wasm"] }
+webauthn-rs-proto = { workspace = true, features = ["wasm"] }
 
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
 serde-wasm-bindgen = "0.4"

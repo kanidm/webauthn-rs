@@ -8,7 +8,12 @@ description = "FIDO SK SSH Key Attestation"
 repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
 keywords = ["ssh", "openssh", "parser", "attestation", "fido"]
-categories = ["authentication", "cryptography", "parser-implementations", "encoding"]
+categories = [
+    "authentication",
+    "cryptography",
+    "parser-implementations",
+    "encoding",
+]
 license = "MPL-2.0"
 
 [dependencies]
@@ -16,8 +21,10 @@ base64urlsafedata.workspace = true
 nom.workspace = true
 openssl.workspace = true
 serde.workspace = true
-serde_cbor.workspace = true
-sshkeys = { git = "https://github.com/dnaeon/rust-sshkeys.git", rev = "fa5bd02dd6e90ee724fdb981253c1e7726a7f534", features = ["serde"] }
+serde_cbor_2.workspace = true
+sshkeys = { git = "https://github.com/dnaeon/rust-sshkeys.git", rev = "fa5bd02dd6e90ee724fdb981253c1e7726a7f534", features = [
+    "serde",
+] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 webauthn-rs-core.workspace = true

@@ -3,7 +3,7 @@ use crate::stubs::*;
 
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
-use serde_cbor::Value;
+use serde_cbor_2::Value;
 use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, ECDSACurve};
 use webauthn_rs_proto::COSEAlgorithm;
 
