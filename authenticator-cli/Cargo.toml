@@ -2,7 +2,7 @@
 name = "authenticator-cli"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.66.0"
+rust-version = "1.67.0"
 repository = "https://github.com/kanidm/webauthn-rs"
 license = "MPL-2.0"
 readme = "README.md"
