@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use base64urlsafedata::Base64UrlSafeData;
 
 #[cfg(feature = "ctap2")]
-use serde_cbor::{ser::to_vec_packed, Value};
+use serde_cbor_2::{ser::to_vec_packed, Value};
 #[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 use url::Url;
 #[cfg(feature = "ctap2")]
@@ -163,7 +163,7 @@ pub fn perform_register_with_request(
     // attestation_object is a MakeCredentialResponse, with string keys
     // rather than u32, we need to convert it.
     let resp: MakeCredentialResponse =
-        serde_cbor::de::from_slice(cred.response.attestation_object.0.as_slice())
+        serde_cbor_2::de::from_slice(cred.response.attestation_object.0.as_slice())
             .map_err(|_| WebauthnCError::Cbor)?;
 
     // Write value with u32 keys

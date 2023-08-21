@@ -2,7 +2,7 @@
 name = "webauthn-rs-demo-shared"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.66.0"
+rust-version = "1.67.0"
 
 [features]
 core = ["webauthn-rs-core"]
@@ -11,5 +11,4 @@ core = ["webauthn-rs-core"]
 serde.workspace = true
 
 webauthn-rs-core = { workspace = true, optional = true }
-webauthn-rs-proto.workspace = true
-
+webauthn-rs-proto = { workspace = true }

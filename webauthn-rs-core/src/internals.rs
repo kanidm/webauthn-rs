@@ -253,8 +253,8 @@ impl TryFrom<i128> for EDDSACurve {
     }
 }
 
-fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor::Value> {
-    let mut deserializer = serde_cbor::Deserializer::from_slice(i);
+fn cbor_parser(i: &[u8]) -> nom::IResult<&[u8], serde_cbor_2::Value> {
+    let mut deserializer = serde_cbor_2::Deserializer::from_slice(i);
     let v = serde::de::Deserialize::deserialize(&mut deserializer).map_err(|e| {
         error!(?e, "cbor_parser");
         nom::Err::Failure(nom::error::Error::from_error_kind(
@@ -272,7 +272,7 @@ fn extensions_parser<T: Ceremony>(i: &[u8]) -> nom::IResult<&[u8], T::SignedExte
     let (i, v) = cbor_parser(i)?;
     trace!(?v, "OK!");
 
-    let v: T::SignedExtensions = serde_cbor::value::from_value(v).map_err(|e| {
+    let v: T::SignedExtensions = serde_cbor_2::value::from_value(v).map_err(|e| {
         error!(?e, "extensions_parser");
         nom::Err::Failure(nom::error::Error::from_error_kind(
             i,
@@ -397,7 +397,7 @@ impl<T: Ceremony> TryFrom<&[u8]> for AuthenticatorData<T> {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AttestationObjectInner<'a> {
     pub(crate) fmt: &'a str,
-    pub(crate) att_stmt: serde_cbor::Value,
+    pub(crate) att_stmt: serde_cbor_2::Value,
     pub(crate) auth_data: &'a [u8],
     pub(crate) ep_att: Option<bool>,
     pub(crate) large_blob_key: Option<&'a [u8]>,
@@ -409,7 +409,7 @@ pub struct AttestationObject<T: Ceremony> {
     /// format.
     pub(crate) fmt: String,
     /// <https://w3c.github.io/webauthn/#generating-an-attestation-object>
-    pub(crate) att_stmt: serde_cbor::Value,
+    pub(crate) att_stmt: serde_cbor_2::Value,
     /// auth_data.
     pub(crate) auth_data: AuthenticatorData<T>,
     /// auth_data_bytes.
@@ -424,12 +424,12 @@ impl<T: Ceremony> TryFrom<&[u8]> for AttestationObject<T> {
     type Error = WebauthnError;
 
     fn try_from(data: &[u8]) -> Result<AttestationObject<T>, WebauthnError> {
-        let v: serde_cbor::Value =
-            serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
+        let v: serde_cbor_2::Value =
+            serde_cbor_2::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
         trace!(?v, "AttestationObjectInner");
 
         let aoi: AttestationObjectInner =
-            serde_cbor::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
+            serde_cbor_2::from_slice(data).map_err(WebauthnError::ParseCBORFailure)?;
         let auth_data_bytes: &[u8] = aoi.auth_data;
         let auth_data = AuthenticatorData::try_from(auth_data_bytes)?;
 
@@ -1406,7 +1406,7 @@ mod tests {
             161, 107, 99, 114, 101, 100, 80, 114, 111, 116, 101, 99, 116, 3,
         ];
 
-        let extensions: RegistrationSignedExtensions = serde_cbor::from_slice(&data).unwrap();
+        let extensions: RegistrationSignedExtensions = serde_cbor_2::from_slice(&data).unwrap();
 
         let cred_protect = extensions
             .cred_protect

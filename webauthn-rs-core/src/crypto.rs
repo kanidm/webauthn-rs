@@ -440,9 +440,9 @@ pub(crate) fn only_hash_from_type(
     }
 }
 
-impl TryFrom<&serde_cbor::Value> for COSEKey {
+impl TryFrom<&serde_cbor_2::Value> for COSEKey {
     type Error = WebauthnError;
-    fn try_from(d: &serde_cbor::Value) -> Result<COSEKey, Self::Error> {
+    fn try_from(d: &serde_cbor_2::Value) -> Result<COSEKey, Self::Error> {
         let m = cbor_try_map!(d)?;
 
         // See also https://tools.ietf.org/html/rfc8152#section-3.1
@@ -459,12 +459,12 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
         // First, value 1 for the key type.
 
         let key_type_value = m
-            .get(&serde_cbor::Value::Integer(1))
+            .get(&serde_cbor_2::Value::Integer(1))
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
         let key_type = cbor_try_i128!(key_type_value)?;
 
         let content_type_value = m
-            .get(&serde_cbor::Value::Integer(3))
+            .get(&serde_cbor_2::Value::Integer(3))
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
         let content_type = cbor_try_i128!(content_type_value)?;
 
@@ -485,19 +485,19 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             // Get these values now ....
 
             let curve_type_value = m
-                .get(&serde_cbor::Value::Integer(-1))
+                .get(&serde_cbor_2::Value::Integer(-1))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let curve_type = cbor_try_i128!(curve_type_value)?;
 
             let curve = ECDSACurve::try_from(curve_type)?;
 
             let x_value = m
-                .get(&serde_cbor::Value::Integer(-2))
+                .get(&serde_cbor_2::Value::Integer(-2))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let x = cbor_try_bytes!(x_value)?;
 
             let y_value = m
-                .get(&serde_cbor::Value::Integer(-3))
+                .get(&serde_cbor_2::Value::Integer(-3))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let y = cbor_try_bytes!(y_value)?;
 
@@ -534,12 +534,12 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             // -2 -> e 3 bytes
 
             let n_value = m
-                .get(&serde_cbor::Value::Integer(-1))
+                .get(&serde_cbor_2::Value::Integer(-1))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let n = cbor_try_bytes!(n_value)?;
 
             let e_value = m
-                .get(&serde_cbor::Value::Integer(-2))
+                .get(&serde_cbor_2::Value::Integer(-2))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let e = cbor_try_bytes!(e_value)?;
 
@@ -568,12 +568,12 @@ impl TryFrom<&serde_cbor::Value> for COSEKey {
             // https://datatracker.ietf.org/doc/html/rfc8152#section-13.2
 
             let curve_type_value = m
-                .get(&serde_cbor::Value::Integer(-1))
+                .get(&serde_cbor_2::Value::Integer(-1))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let curve_type = cbor_try_i128!(curve_type_value)?;
 
             let x_value = m
-                .get(&serde_cbor::Value::Integer(-2))
+                .get(&serde_cbor_2::Value::Integer(-2))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let x = cbor_try_bytes!(x_value)?;
 
@@ -795,7 +795,7 @@ mod tests {
 
     use super::*;
     use hex_literal::hex;
-    use serde_cbor::Value;
+    use serde_cbor_2::Value;
     #[test]
     fn nid_to_curve() {
         assert_eq!(
@@ -815,7 +815,7 @@ mod tests {
                 21 58 20   65eda5a12577c2bae829437fe338701a10aaa375e1bb5b5de108de439c08551d // -2:   x,  ; x-coordinate
                 22 58 20   1e52ed75701163f7f9e40ddf9f341b3dc9ba860af7e0ca7ca7e9eecd0084d19c // -3:   y,  ; y-coordinate");
 
-        let val: Value = serde_cbor::from_slice(&hex_data).unwrap();
+        let val: Value = serde_cbor_2::from_slice(&hex_data).unwrap();
         let key = COSEKey::try_from(&val).unwrap();
 
         assert_eq!(key.type_, COSEAlgorithm::ES256);
@@ -849,7 +849,7 @@ mod tests {
                            a8c25f391e9a38d79dd56b9427d1c7c70cfa778ab849b087 "
         );
 
-        let val: Value = serde_cbor::from_slice(&hex_data).unwrap();
+        let val: Value = serde_cbor_2::from_slice(&hex_data).unwrap();
         let key = COSEKey::try_from(&val).unwrap();
 
         assert_eq!(key.type_, COSEAlgorithm::ES384);
@@ -888,7 +888,7 @@ mod tests {
                 22 58 42   0089597a052a8d3c8b2b5692d467dea19f8e1b9ca17fa563a1a826855dade04811 // -3:   y,  ; y-coordinate
                            b2881819e72f1706daeaf7d3773b2e284983a0eec33c2fe3ff5697722e95b29536");
 
-        let val: Value = serde_cbor::from_slice(&hex_data).unwrap();
+        let val: Value = serde_cbor_2::from_slice(&hex_data).unwrap();
         let key = COSEKey::try_from(&val).unwrap();
 
         assert_eq!(key.type_, COSEAlgorithm::ES512);

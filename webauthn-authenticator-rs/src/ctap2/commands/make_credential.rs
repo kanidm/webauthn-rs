@@ -1,6 +1,6 @@
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
-use serde_cbor::{value::to_value, Value};
+use serde_cbor_2::{value::to_value, Value};
 use std::collections::BTreeMap;
 use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User};
 
@@ -197,7 +197,7 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialRequest {
                 .ok_or("parsing clientDataHash")?,
             rp: raw
                 .remove(&0x02)
-                .and_then(|v| serde_cbor::value::from_value(v).ok())
+                .and_then(|v| serde_cbor_2::value::from_value(v).ok())
                 .ok_or("parsing rp")?,
             user: raw
                 .remove(&0x03)
@@ -218,11 +218,11 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialRequest {
                 .ok_or("parsing user")?,
             pub_key_cred_params: raw
                 .remove(&0x04)
-                .and_then(|v| serde_cbor::value::from_value(v).ok())
+                .and_then(|v| serde_cbor_2::value::from_value(v).ok())
                 .ok_or("parsing pubKeyCredParams")?,
             exclude_list: raw
                 .remove(&0x05)
-                .and_then(|v| serde_cbor::value::from_value(v).ok())
+                .and_then(|v| serde_cbor_2::value::from_value(v).ok())
                 .unwrap_or_default(),
             options: raw
                 .remove(&0x07)
@@ -296,7 +296,7 @@ mod test {
 
     use super::*;
     use base64urlsafedata::Base64UrlSafeData;
-    use serde_cbor::{from_slice, to_vec, Value};
+    use serde_cbor_2::{from_slice, to_vec, Value};
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
     #[test]

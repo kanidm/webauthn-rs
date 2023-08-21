@@ -9,7 +9,7 @@ keywords = ["ctap", "fido", "passkeys", "webauthn"]
 license = "MPL-2.0"
 readme = "README.md"
 repository = "https://github.com/kanidm/webauthn-rs/"
-rust-version = "1.66.0"
+rust-version = "1.67.0"
 build = "build.rs"
 
 [features]

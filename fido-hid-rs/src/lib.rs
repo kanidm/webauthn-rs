@@ -52,6 +52,7 @@ const FIDO_USAGE_PAGE: u16 = 0xf1d0;
 const FIDO_USAGE_U2FHID: u16 = 0x01;
 const HID_RPT_SIZE: usize = 64;
 const HID_RPT_SEND_SIZE: usize = HID_RPT_SIZE + 1;
+#[allow(dead_code)]
 const U2FHID_TRANS_TIMEOUT: i32 = 3000;
 
 pub type HidReportBytes = [u8; HID_RPT_SIZE];

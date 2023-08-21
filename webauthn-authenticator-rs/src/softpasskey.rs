@@ -5,7 +5,7 @@ use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::crypto::{compute_sha256, get_group};
 use crate::error::WebauthnCError;
 use openssl::{bn, ec, hash, pkey, rand, sign};
-use serde_cbor::value::Value;
+use serde_cbor_2::value::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -262,7 +262,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         map.insert(Value::Integer(-3), Value::Bytes(public_key_y));
 
         let pk_cbor = Value::Map(map);
-        let pk_cbor_bytes = serde_cbor::to_vec(&pk_cbor).map_err(|e| {
+        let pk_cbor_bytes = serde_cbor_2::to_vec(&pk_cbor).map_err(|e| {
             error!("PK CBOR -> {:x?}", e);
             WebauthnCError::Cbor
         })?;
@@ -339,7 +339,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
 
         let ao = Value::Map(attest_map);
 
-        let ao_bytes = serde_cbor::to_vec(&ao).map_err(|e| {
+        let ao_bytes = serde_cbor_2::to_vec(&ao).map_err(|e| {
             error!("AO CBOR -> {:x?}", e);
             WebauthnCError::Cbor
         })?;

@@ -204,7 +204,7 @@ macro_rules! cbor_try_bytes {
         $v:expr
     ) => {{
         match $v {
-            serde_cbor::Value::Bytes(m) => Ok(m),
+            serde_cbor_2::Value::Bytes(m) => Ok(m),
             _ => Err(WebauthnError::COSEKeyInvalidCBORValue),
         }
     }};
@@ -252,7 +252,7 @@ impl TryFrom<&[u8]> for SshSkAttestation {
         let att_cert =
             x509::X509::from_der(sk_raw.att_cert_raw).map_err(WebauthnError::OpenSSLError)?;
 
-        let auth_data_bytes = serde_cbor::from_slice(sk_raw.auth_data_raw)
+        let auth_data_bytes = serde_cbor_2::from_slice(sk_raw.auth_data_raw)
             .map_err(|e| {
                 error!(?e, "invalid auth data cbor");
                 WebauthnError::ParseNOMFailure

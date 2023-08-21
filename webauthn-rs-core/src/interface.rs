@@ -605,7 +605,7 @@ pub struct RegistrationSignedExtensions {
     pub hmac_secret: Option<bool>,
     /// Extension key-values that we have parsed, but don't strictly recognise.
     #[serde(flatten)]
-    pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
+    pub unknown_keys: BTreeMap<String, serde_cbor_2::Value>,
 }
 
 /// The output for authentication cermeony extensions.
@@ -617,7 +617,7 @@ pub struct RegistrationSignedExtensions {
 pub struct AuthenticationSignedExtensions {
     /// Extension key-values that we have parsed, but don't strictly recognise.
     #[serde(flatten)]
-    pub unknown_keys: BTreeMap<String, serde_cbor::Value>,
+    pub unknown_keys: BTreeMap<String, serde_cbor_2::Value>,
 }
 
 /// Attested Credential Data
@@ -628,7 +628,7 @@ pub struct AttestedCredentialData {
     /// The credential ID.
     pub credential_id: CredentialID,
     /// The credentials public Key.
-    pub credential_pk: serde_cbor::Value,
+    pub credential_pk: serde_cbor_2::Value,
 }
 
 /// Information about the authentication that occured.

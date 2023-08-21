@@ -35,7 +35,7 @@ async fn main() {
         App::new()
             .wrap(Logger::default())
             .wrap(
-                SessionMiddleware::builder(MemorySession::default(), key.clone())
+                SessionMiddleware::builder(MemorySession, key.clone())
                     .cookie_name("webauthnrs".to_string())
                     .build(),
             )

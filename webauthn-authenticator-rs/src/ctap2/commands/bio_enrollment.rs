@@ -20,7 +20,7 @@ use std::{fmt::Debug, time::Duration};
 
 use num_traits::cast::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use serde_cbor::Value;
+use serde_cbor_2::Value;
 
 use crate::types::EnrollSampleStatus;
 
@@ -348,7 +348,7 @@ impl BioSubCommand {
         o.push(subcommand);
         if let Some(p) = sub_command_params
             .as_ref()
-            .and_then(|p| serde_cbor::to_vec(p).ok())
+            .and_then(|p| serde_cbor_2::to_vec(p).ok())
         {
             o.extend_from_slice(p.as_slice())
         }

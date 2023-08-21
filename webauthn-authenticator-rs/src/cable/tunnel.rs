@@ -12,7 +12,7 @@ use openssl::{
     pkey::{Private, Public},
 };
 use serde::Serialize;
-use serde_cbor::{ser::to_vec_packed, Value};
+use serde_cbor_2::{ser::to_vec_packed, Value};
 use tokio::net::TcpStream;
 #[cfg(feature = "cable")]
 use tokio_tungstenite::{
@@ -221,13 +221,13 @@ impl Tunnel {
         // linking info.
         //
         // As an initiator, Chromium will try to decode this message as v2.1,
-        // falling back to v2.0[1] on a parser error. However, serde_cbor is
+        // falling back to v2.0[1] on a parser error. However, serde_cbor_2 is
         // happy to parse the padded value regardless.
         //
         // [0]: https://source.chromium.org/chromium/chromium/src/+/main:chrome/android/features/cablev2_authenticator/native/cablev2_authenticator_android.cc;l=688-693;drc=9d8024e69625a0c457a4999f4d1aca32c24eb494
         // [1]: https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/fido_tunnel_device.cc;l=368-375;drc=52fa5a7f263b37149bcfbac06da00fec5abcc416
         let v: BTreeMap<u32, Value> =
-            serde_cbor::from_slice(&decrypted).map_err(|_| WebauthnCError::Cbor)?;
+            serde_cbor_2::from_slice(&decrypted).map_err(|_| WebauthnCError::Cbor)?;
 
         let frame = CablePostHandshake::try_from(v)?;
         trace!(?frame);
@@ -300,7 +300,7 @@ impl Tunnel {
             linking_info: None,
         };
         trace!("Post-handshake message: {:02x?}", &phm);
-        let phm = serde_cbor::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
+        let phm = serde_cbor_2::to_vec(&phm).map_err(|_| WebauthnCError::Cbor)?;
         crypter.use_new_construction();
 
         let mut t = Self {

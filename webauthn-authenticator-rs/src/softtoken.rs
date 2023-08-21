@@ -13,7 +13,7 @@ use openssl::x509::{
 };
 use openssl::{asn1, bn, ec, hash, pkey, rand, sign};
 use serde::{Deserialize, Serialize};
-use serde_cbor::value::Value;
+use serde_cbor_2::value::Value;
 use std::collections::HashMap;
 use std::iter;
 use std::{collections::BTreeMap, fs::File, io::Read};
@@ -265,14 +265,14 @@ impl SoftToken {
     }
 
     pub fn to_cbor(&self) -> Result<Vec<u8>, WebauthnCError> {
-        serde_cbor::ser::to_vec(self).map_err(|e| {
+        serde_cbor_2::ser::to_vec(self).map_err(|e| {
             error!("SoftToken.to_cbor: {:?}", e);
             WebauthnCError::Cbor
         })
     }
 
     pub fn from_cbor(v: &[u8]) -> Result<Self, WebauthnCError> {
-        serde_cbor::from_slice(v).map_err(|e| {
+        serde_cbor_2::from_slice(v).map_err(|e| {
             error!("SoftToken::from_cbor: {:?}", e);
             WebauthnCError::Cbor
         })
@@ -492,7 +492,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         map.insert(Value::Integer(-3), Value::Bytes(public_key_y));
 
         let pk_cbor = Value::Map(map);
-        let pk_cbor_bytes = serde_cbor::to_vec(&pk_cbor).map_err(|e| {
+        let pk_cbor_bytes = serde_cbor_2::to_vec(&pk_cbor).map_err(|e| {
             error!("PK CBOR -> {:x?}", e);
             WebauthnCError::Cbor
         })?;
@@ -567,7 +567,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
 
         let ao = Value::Map(attest_map);
 
-        let ao_bytes = serde_cbor::to_vec(&ao).map_err(|e| {
+        let ao_bytes = serde_cbor_2::to_vec(&ao).map_err(|e| {
             error!("AO CBOR -> {:x?}", e);
             WebauthnCError::Cbor
         })?;
@@ -765,7 +765,7 @@ impl SoftTokenFile {
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)?;
 
-        let token: SoftToken = serde_cbor::from_slice(&buf).map_err(|e| {
+        let token: SoftToken = serde_cbor_2::from_slice(&buf).map_err(|e| {
             error!("Error reading SoftToken: {:?}", e);
             WebauthnCError::Cbor
         })?;
@@ -1075,7 +1075,7 @@ mod tests {
         let response = perform_register_with_request(&mut soft_token, request, 10000).unwrap();
 
         // All keys should be ints
-        let m: Value = serde_cbor::from_slice(response.as_slice()).unwrap();
+        let m: Value = serde_cbor_2::from_slice(response.as_slice()).unwrap();
         let m = if let Value::Map(m) = m {
             m
         } else {
@@ -1137,7 +1137,7 @@ mod tests {
         );
 
         // Future assertions are signed with this COSEKey
-        let cose_key: Value = serde_cbor::from_slice(
+        let cose_key: Value = serde_cbor_2::from_slice(
             &verification_data[cred_id_off + 2 + cred_id_len..auth_data_len],
         )
         .unwrap();
