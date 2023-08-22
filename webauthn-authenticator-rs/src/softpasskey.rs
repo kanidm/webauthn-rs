@@ -22,20 +22,22 @@ use webauthn_rs_proto::{
 pub struct SoftPasskey {
     tokens: HashMap<Vec<u8>, Vec<u8>>,
     counter: u32,
+    falsify_uv: bool,
 }
 
 impl SoftPasskey {
-    pub fn new() -> Self {
+    pub fn new(falsify_uv: bool) -> Self {
         SoftPasskey {
             tokens: HashMap::new(),
             counter: 0,
+            falsify_uv,
         }
     }
 }
 
 impl Default for SoftPasskey {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 
@@ -44,7 +46,7 @@ pub struct U2FSignData {
     key_handle: Vec<u8>,
     counter: u32,
     signature: Vec<u8>,
-    user_present: u8,
+    flags: u8,
 }
 
 impl AuthenticatorBackendHashedClientData for SoftPasskey {
@@ -183,7 +185,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
 
         // =====
 
-        if user_verification {
+        if user_verification && !self.falsify_uv {
             error!("User Verification not supported by softtoken");
             return Err(WebauthnCError::NotSupported);
         }
@@ -287,7 +289,11 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         // set counter to 0 during create
         // Combine rp_id_hash, flags, counter, acd, into authenticator data.
         // The flags are always user_present, att present
-        let flags = 0b01000001;
+        let flags = if user_verification {
+            0b01000101
+        } else {
+            0b01000001
+        };
 
         let authdata: Vec<u8> = rp_id_hash
             .iter()
@@ -400,7 +406,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         let authdata: Vec<u8> = rp_id_hash
             .iter()
             .copied()
-            .chain(iter::once(u2sd.user_present))
+            .chain(iter::once(u2sd.flags))
             .chain(
                 // A 0 u32 counter
                 u2sd.counter.to_be_bytes().iter().copied(),
@@ -452,7 +458,7 @@ impl U2FToken for SoftPasskey {
         allowed_credentials: &[AllowCredentials],
         user_verification: bool,
     ) -> Result<U2FSignData, WebauthnCError> {
-        if user_verification {
+        if user_verification && !self.falsify_uv {
             error!("User Verification not supported by softtoken");
             return Err(WebauthnCError::NotSupported);
         }
@@ -485,11 +491,16 @@ impl U2FToken for SoftPasskey {
         // Increment the counter.
         self.counter += 1;
         let counter = self.counter;
-        let user_present = 1;
+
+        let flags = if user_verification {
+            0b00000101
+        } else {
+            0b00000001
+        };
 
         let verification_data: Vec<u8> = app_bytes
             .iter()
-            .chain(iter::once(&user_present))
+            .chain(iter::once(&flags))
             .chain(counter.to_be_bytes().iter())
             .chain(chal_bytes.iter())
             .copied()
@@ -503,7 +514,7 @@ impl U2FToken for SoftPasskey {
             key_handle,
             counter,
             signature,
-            user_present,
+            flags,
         })
     }
 }

@@ -46,6 +46,7 @@ pub struct SoftToken {
     intermediate_cert: X509,
     tokens: HashMap<Vec<u8>, Vec<u8>>,
     counter: u32,
+    falsify_uv: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -213,7 +214,7 @@ fn build_intermediate(
 }
 
 impl SoftToken {
-    pub fn new() -> Result<(Self, X509), WebauthnCError> {
+    pub fn new(falsify_uv: bool) -> Result<(Self, X509), WebauthnCError> {
         let (ca_key, ca_cert) = build_ca()?;
 
         let ca = ca_cert.clone();
@@ -250,6 +251,7 @@ impl SoftToken {
                 intermediate_cert,
                 tokens: HashMap::new(),
                 counter: 0,
+                falsify_uv,
             },
             ca,
         ))
@@ -404,7 +406,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         // As a result this really limits our usage to certain device classes. This is why we implement
         // this section in a seperate function call.
 
-        let (platform_attached, resident_key, _user_verification) =
+        let (platform_attached, resident_key, user_verification) =
             match &options.authenticator_selection {
                 Some(auth_sel) => {
                     let pa = auth_sel
@@ -421,6 +423,11 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         let rp_id_hash = compute_sha256(options.rp.id.as_bytes()).to_vec();
 
         // =====
+
+        if user_verification && !self.falsify_uv {
+            error!("User Verification not supported by softtoken");
+            return Err(WebauthnCError::NotSupported);
+        }
 
         if platform_attached {
             error!("Platform Attachement not supported by softtoken");
@@ -515,7 +522,11 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         // set counter to 0 during create
         // Combine rp_id_hash, flags, counter, acd, into authenticator data.
         // The flags are always att present, user verified, user present
-        let flags = 0b01000101;
+        let flags = if user_verification {
+            0b01000101
+        } else {
+            0b01000001
+        };
 
         let authdata: Vec<u8> = rp_id_hash
             .iter()
@@ -617,7 +628,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
             client_data_json_hash,
             timeout_ms.into(),
             options.allow_credentials.as_slice(),
-            user_verification,
+            user_verification && self.falsify_uv,
         )?;
 
         trace!("u2sd -> {:x?}", u2sd);
@@ -680,7 +691,7 @@ impl U2FToken for SoftToken {
         allowed_credentials: &[AllowCredentials],
         user_verification: bool,
     ) -> Result<U2FSignData, WebauthnCError> {
-        if user_verification {
+        if user_verification && !self.falsify_uv {
             error!("User Verification not supported by softtoken");
             return Err(WebauthnCError::NotSupported);
         }
@@ -713,7 +724,12 @@ impl U2FToken for SoftToken {
         // Increment the counter.
         self.counter += 1;
         let counter = self.counter;
-        let flags = 0b00000101;
+
+        let flags = if user_verification {
+            0b00000101
+        } else {
+            0b00000001
+        };
 
         let verification_data: Vec<u8> = app_bytes
             .iter()

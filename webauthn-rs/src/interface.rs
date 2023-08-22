@@ -236,6 +236,13 @@ impl AttestedPasskey {
     }
 }
 
+#[cfg(feature = "preview-features")]
+impl PartialEq for AttestedPasskey {
+    fn eq(&self, other: &Self) -> bool {
+        self.cred.cred_id == other.cred.cred_id
+    }
+}
+
 #[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
 impl From<AttestedPasskey> for Credential {
     fn from(pk: AttestedPasskey) -> Self {
