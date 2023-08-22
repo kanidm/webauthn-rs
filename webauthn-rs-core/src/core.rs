@@ -48,7 +48,7 @@ use base64urlsafedata::Base64UrlSafeData;
 ///
 /// As a result, it's very important you read the function descriptions to understand the process
 /// as much as possible.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WebauthnCore {
     rp_name: String,
     rp_id: String,
