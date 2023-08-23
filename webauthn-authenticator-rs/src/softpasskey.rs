@@ -563,7 +563,7 @@ mod tests {
 
         info!("🍿 challenge -> {:x?}", chal);
 
-        let mut wa = WebauthnAuthenticator::new(SoftPasskey::new());
+        let mut wa = WebauthnAuthenticator::new(SoftPasskey::new(true));
         let r = wa
             .do_registration(Url::parse("https://localhost:8080").unwrap(), chal)
             .map_err(|e| {

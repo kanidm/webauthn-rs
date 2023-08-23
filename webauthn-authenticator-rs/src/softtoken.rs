@@ -888,7 +888,7 @@ mod tests {
             None,
         );
 
-        let (soft_token, ca_root) = SoftToken::new().unwrap();
+        let (soft_token, ca_root) = SoftToken::new(true).unwrap();
 
         let mut wa = WebauthnAuthenticator::new(soft_token);
 
@@ -967,7 +967,7 @@ mod tests {
             None,
         );
 
-        let (soft_token, ca_root) = SoftToken::new().unwrap();
+        let (soft_token, ca_root) = SoftToken::new(true).unwrap();
         let file = tempfile().unwrap();
         let soft_token = SoftTokenFile::new(soft_token, file);
         assert_eq!(soft_token.token.tokens.len(), 0);
@@ -1054,7 +1054,7 @@ mod tests {
     #[test]
     fn perform_register_auth_with_command() {
         let _ = tracing_subscriber::fmt::try_init();
-        let (mut soft_token, _) = SoftToken::new().unwrap();
+        let (mut soft_token, _) = SoftToken::new(true).unwrap();
         let mut client_data_hash = vec![0; 32];
         let mut user_id = vec![0; 16];
         rand_bytes(&mut client_data_hash).unwrap();
