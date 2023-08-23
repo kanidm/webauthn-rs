@@ -30,7 +30,7 @@ fn main() {
     tracing_subscriber::fmt::init();
     match opt.commands {
         Create(args) => {
-            let (token, _) = SoftToken::new().unwrap();
+            let (token, _) = SoftToken::new(false).unwrap();
             let f = OpenOptions::new()
                 .write(true)
                 .create_new(true)

@@ -180,7 +180,7 @@ impl Provider {
                         .unwrap();
                     Box::new(SoftTokenFile::open(file).unwrap())
                 } else {
-                    Box::new(SoftToken::new().unwrap().0)
+                    Box::new(SoftToken::new(false).unwrap().0)
                 }
             }
             #[cfg(feature = "ctap2")]
