@@ -81,6 +81,8 @@ tracing-subscriber = { version = "0.3", features = [
     "std",
     "fmt",
 ] }
-tungstenite = { version = "^0.18.0", default-features = false, features = ["handshake"] }
+tungstenite = { version = "^0.18.0", default-features = false, features = [
+    "handshake",
+] }
 url = "2"
 uuid = "^1.1.2"
