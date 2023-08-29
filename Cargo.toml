@@ -74,9 +74,7 @@ tokio = { version = "1.22.0", features = [
 ] }
 tokio-native-tls = "^0.3.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "^0.18.0", features = [
-    "native-tls",
-] }
+tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
 tracing = "^0.1.35"
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
