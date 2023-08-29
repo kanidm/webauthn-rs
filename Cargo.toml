@@ -34,7 +34,9 @@ members = [
 ]
 
 # Due to --cfg=web_sys_unstable_apis
-exclude = ["compat_tester/webauthn-rs-demo-wasm"]
+exclude = [
+    "compat_tester/webauthn-rs-demo-wasm"
+]
 
 [workspace.dependencies]
 base64urlsafedata = { path = "./base64urlsafedata" }
