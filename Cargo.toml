@@ -55,7 +55,7 @@ http = "^0.2.9"
 http-body = "=1.0.0-rc.2"
 http-body-util = "=0.1.0-rc.2"
 hyper = { version = "=1.0.0-rc.3", default-features = false, features = [
-    "http1"
+    "http1",
 ] }
 nom = "7.1"
 openssl = "^0.10.56"
@@ -68,12 +68,21 @@ thiserror = "^1.0.37"
 tokio = { version = "1.22.0", features = [
     "sync",
     "test-util",
-    "macros","rt-multi-thread","time"] }
+    "macros",
+    "rt-multi-thread",
+    "time",
+] }
 tokio-native-tls = "^0.3.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
+tokio-tungstenite = { version = "^0.18.0", features = [
+    "native-tls",
+] }
 tracing = "^0.1.35"
-tracing-subscriber = { version = "0.3", features = ["env-filter","std","fmt"] }
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "std",
+    "fmt",
+] }
 tungstenite = { version = "^0.18.0", default-features = false, features = ["handshake"] }
 url = "2"
 uuid = "^1.1.2"
