@@ -17,4 +17,3 @@ tracing-subscriber.workspace = true
 serde.workspace = true
 rand.workspace = true
 anyhow = "1.0"
-
