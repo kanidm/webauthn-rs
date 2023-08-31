@@ -60,6 +60,8 @@ pub struct QueryOpt {
     pub query: String,
     #[clap(short, long)]
     pub output_cert_roots: bool,
+    #[clap(long, hide(true))]
+    pub show_insecure_devices: bool,
     #[clap(flatten)]
     pub common: CommonOpt,
 }
@@ -240,6 +242,7 @@ fn main() {
         Opt::Query(QueryOpt {
             query,
             output_cert_roots,
+            show_insecure_devices,
             common: CommonOpt { debug: _, path },
         }) => {
             trace!("{:?}", path);
@@ -261,12 +264,16 @@ fn main() {
             };
 
             // For safety, we wrap this in a "gte" for valid authenticators ONLY.
-            let query = Query::And(
-                Box::new(Query::Op(AttrValueAssertion::StatusGte(
-                    AuthenticatorStatus::FidoCertified,
-                ))),
-                Box::new(query),
-            );
+            let query = if show_insecure_devices {
+                query
+            } else {
+                Query::And(
+                    Box::new(Query::Not(Box::new(Query::Op(
+                        AttrValueAssertion::StatusLt(AuthenticatorStatus::FidoCertified),
+                    )))),
+                    Box::new(query),
+                )
+            };
 
             match FidoMds::from_str(&s) {
                 Ok(mds) => {

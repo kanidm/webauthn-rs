@@ -995,7 +995,8 @@ impl FIDO2 {
                 .last()
                 .map(|sr| sr == s)
                 .unwrap_or(false),
-            AttrValueAssertion::StatusGte(s) => self.status_reports.iter().all(|sr| sr.gte(s)),
+            AttrValueAssertion::StatusGte(s) => self.status_reports.iter().any(|sr| sr.gte(s)),
+            AttrValueAssertion::StatusLt(s) => self.status_reports.iter().any(|sr| !sr.gte(s)),
             AttrValueAssertion::TransportEq(t) => self
                 .authenticator_get_info
                 .as_ref()

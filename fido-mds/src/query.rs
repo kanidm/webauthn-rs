@@ -14,6 +14,7 @@ pub enum AttrValueAssertion {
     DescriptionCnt(String),
     StatusEq(AuthenticatorStatus),
     StatusGte(AuthenticatorStatus),
+    StatusLt(AuthenticatorStatus),
     TransportEq(AuthenticatorTransport),
     UserVerificationCnt(UserVerificationMethod),
 }
@@ -71,6 +72,7 @@ peg::parser! {
             desc_cn_expr() /
             authstat_eq_expr() /
             authstat_gte_expr() /
+            authstat_lt_expr() /
             authtrans_eq_expr() /
             uvm_cnt_expr()
 
@@ -81,13 +83,16 @@ peg::parser! {
             "desc" separator()+ "eq" separator()+ v:octetstr() { Query::Op(AttrValueAssertion::DescriptionEq(v)) }
 
         rule desc_cn_expr() -> Query =
-            "desc" separator()+ "cn" separator()+ v:octetstr() { Query::Op(AttrValueAssertion::DescriptionCnt(v)) }
+            "desc" separator()+ "cnt" separator()+ v:octetstr() { Query::Op(AttrValueAssertion::DescriptionCnt(v)) }
 
         rule authstat_eq_expr() -> Query =
             "status" separator()+ "eq" separator()+ v:status() { Query::Op(AttrValueAssertion::StatusEq(v)) }
 
         rule authstat_gte_expr() -> Query =
             "status" separator()+ "gte" separator()+ v:status() { Query::Op(AttrValueAssertion::StatusGte(v)) }
+
+        rule authstat_lt_expr() -> Query =
+            "status" separator()+ "lt" separator()+ v:status() { Query::Op(AttrValueAssertion::StatusLt(v)) }
 
         rule authtrans_eq_expr() -> Query =
             "transport" separator()+ "eq" separator()+ v:transport() { Query::Op(AttrValueAssertion::TransportEq(v)) }
