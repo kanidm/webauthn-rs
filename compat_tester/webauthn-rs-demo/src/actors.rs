@@ -361,7 +361,9 @@ impl WebauthnActor {
         // ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
         debug!("handle ChallengeRegister -> {:?}", username);
 
-        let att_ca_list: AttestationCaList = (&Data::strict()).into();
+        let att_ca_list: AttestationCaList = (&Data::strict())
+            .try_into()
+            .map_err(WebauthnError::OpenSSLError)?;
 
         let (ccr, rs) = self.swan.start_attested_resident_key_registration(
             user_unique_id,

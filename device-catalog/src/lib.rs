@@ -25,6 +25,7 @@ pub mod prelude {
     pub use crate::query::Query;
     pub use crate::{Data, DataBuilder};
 
+    pub(crate) use openssl::error::ErrorStack as OpenSSLErrorStack;
     pub(crate) use openssl::x509;
     pub(crate) use std::collections::BTreeSet;
     pub(crate) use std::rc::Rc;
@@ -96,8 +97,10 @@ impl Data {
 
 // Allowed as AttestationCaList is foreign.
 #[allow(clippy::from_over_into)]
-impl Into<AttestationCaList> for &Data {
-    fn into(self) -> AttestationCaList {
+impl TryInto<AttestationCaList> for &Data {
+    type Error = crate::prelude::OpenSSLErrorStack;
+
+    fn try_into(self) -> Result<AttestationCaList, Self::Error> {
         AttestationCaList::from_iter(self.devices.iter().flat_map(|dev| {
             dev.aaguid
                 .ca

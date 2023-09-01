@@ -32,11 +32,11 @@ impl Into<Option<AttestationCaList>> for AttestationLevel {
             AttestationLevel::None => None,
             AttestationLevel::AnyKnown => {
                 let data = Data::all_known_devices();
-                Some((&data).into())
+                (&data).try_into().ok()
             }
             AttestationLevel::Strict => {
                 let data = Data::strict();
-                Some((&data).into())
+                (&data).try_into().ok()
             }
         }
     }

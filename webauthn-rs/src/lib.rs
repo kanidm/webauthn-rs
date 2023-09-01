@@ -674,7 +674,9 @@ impl Webauthn {
     /// use webauthn_rs_device_catalog::Data;
     /// let device_catalog = Data::strict();
     ///
-    /// let attestation_ca_list = (&device_catalog).into();
+    /// let attestation_ca_list = (&device_catalog)
+    ///     .try_into()
+    ///     .expect("Failed to build attestation ca list");
     ///
     /// let (ccr, skr) = webauthn
     ///     .start_securitykey_registration(
@@ -936,7 +938,9 @@ impl Webauthn {
     /// // Create a device catalog reference that contains a list of known high quality authenticators
     /// let device_catalog = Data::all_known_devices();
     ///
-    /// let attestation_ca_list = (&device_catalog).into();
+    /// let attestation_ca_list = (&device_catalog)
+    ///     .try_into()
+    ///     .expect("Failed to build attestation ca list");
     ///
     /// // Initiate a basic registration flow, allowing any attested cryptograhpic authenticator to proceed.
     /// // Hint (but do not enforce) that we prefer this to be a token/key like a yubikey.
@@ -959,7 +963,9 @@ impl Webauthn {
     ///
     /// let device_catalog = Data::strict();
     ///
-    /// let attestation_ca_list = (&device_catalog).into();
+    /// let attestation_ca_list = (&device_catalog)
+    ///     .try_into()
+    ///     .expect("Failed to build attestation ca list");
     ///
     /// let (ccr, skr) = webauthn
     ///     .start_attested_passkey_registration(

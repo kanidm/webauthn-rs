@@ -129,10 +129,7 @@ impl TryFrom<&[(&[u8], Uuid)]> for AttestationCaList {
         for (der, aaguid) in iter {
             let ca = x509::X509::from_der(der)?;
 
-            let kid = ca
-                .digest(hash::MessageDigest::sha256())
-                // Is there a better way to do this with fromIterator?
-                .unwrap();
+            let kid = ca.digest(hash::MessageDigest::sha256())?;
 
             if !cas.contains_key(kid.as_ref()) {
                 let mut aaguids = BTreeSet::default();
@@ -150,15 +147,14 @@ impl TryFrom<&[(&[u8], Uuid)]> for AttestationCaList {
     }
 }
 
-impl FromIterator<(x509::X509, Uuid)> for AttestationCaList {
-    fn from_iter<I: IntoIterator<Item = (x509::X509, Uuid)>>(iter: I) -> Self {
+impl AttestationCaList {
+    pub fn from_iter<I: IntoIterator<Item = (x509::X509, Uuid)>>(
+        iter: I,
+    ) -> Result<Self, OpenSSLErrorStack> {
         let mut cas = BTreeMap::default();
 
         for (ca, aaguid) in iter {
-            let kid = ca
-                .digest(hash::MessageDigest::sha256())
-                // Is there a better way to do this with fromIterator?
-                .unwrap();
+            let kid = ca.digest(hash::MessageDigest::sha256())?;
 
             if !cas.contains_key(kid.as_ref()) {
                 let mut aaguids = BTreeSet::default();
@@ -172,7 +168,7 @@ impl FromIterator<(x509::X509, Uuid)> for AttestationCaList {
             };
         }
 
-        AttestationCaList { cas }
+        Ok(AttestationCaList { cas })
     }
 }
 
