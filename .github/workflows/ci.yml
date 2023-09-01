@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, 1.67.0]
+        rust_version: [stable, 1.70.0]
         os:
           - ubuntu-latest
           - windows-latest
@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, 1.67.0]
+        rust_version: [stable, 1.70.0]
         features:
           - bluetooth
           - cable
@@ -101,7 +101,7 @@ jobs:
             rust_version: stable
         exclude:
           - os: windows-latest
-            rust_version: 1.67.0
+            rust_version: 1.70.0
 
     runs-on: ${{ matrix.os }}
     steps:
