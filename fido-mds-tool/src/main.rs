@@ -49,9 +49,9 @@ pub struct QueryOpt {
     ///
     /// Supported query types and operators are:
     ///
-    /// * aaguid eq <uuid>
-    /// * desc eq <string>
-    /// * desc cnt <string>
+    /// * aaguid eq \<uuid\>
+    /// * desc eq \<string\>
+    /// * desc cnt \<string\>
     /// * status gte [valid|l1|l1+|l2|l2+|l3|l3+]
     /// * states eq [valid|l1|l1+|l2|l2+|l3|l3+]
     /// * transport eq [usb|nfc|lightning|ble|internal]

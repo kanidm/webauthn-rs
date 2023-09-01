@@ -5,8 +5,8 @@ use crate::UserVerificationMethod;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
-use std::hash::{Hash, Hasher};
 use crc32c::Crc32cHasher;
+use std::hash::{Hash, Hasher};
 
 const YK5LIGHTNING: Uuid = uuid::uuid!("c5ef55ff-ad9a-4b9f-b580-adebafe026d0");
 const YK5LIGHTNING_HASH: u64 = 3670715709;
@@ -188,7 +188,7 @@ fn user_verification_method_yk5lightning(
 /// We do NOT have access to this device, so we can only speculate that the same data error
 /// that affects the yk5ci is present here. Since the product does not have a method to
 /// internally accept a PIN, this is likely correct. See
-/// https://www.rsa.com/resources/datasheets/id-plus-ds100-authenticator/
+/// <https://www.rsa.com/resources/datasheets/id-plus-ds100-authenticator/>
 fn user_verification_method_rsads100(
     uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
@@ -241,7 +241,7 @@ fn user_verification_method_vivokey_apex(
 /// We do NOT have access to this device, so we can only speculate that the same data error
 /// that affects the yk5ci is present here. Since the product does not have a method to
 /// internally accept a PIN, this is likely correct. See
-/// https://www.kensington.com/software/verimark-setup/verimark-guard-setup-guide/
+/// <https://www.kensington.com/software/verimark-setup/verimark-guard-setup-guide/>
 fn user_verification_method_verimark_guard_fingerprint(
     _uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
