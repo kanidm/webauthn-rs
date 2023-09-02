@@ -21,9 +21,11 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 pub mod mds;
+pub mod patch;
 pub mod query;
 
 use crate::mds::AuthenticatorStatus;
+use crate::mds::AuthenticatorTransport;
 use crate::mds::FidoDevice as RawFidoDevice;
 use crate::mds::FidoMds as RawFidoMds;
 use crate::mds::MetadataStatement as RawMetadataStatement;
@@ -37,7 +39,9 @@ use crate::mds::{
     PatternAccuracyDescriptor, ProtocolFamily, PublicKeyAlg,
 };
 
-use crate::query::{AttrValueAssertion, CompareOp, Query};
+use crate::query::{AttrValueAssertion, Query};
+
+use webauthn_attestation_ca::AttestationCaList;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use compact_jwt::JwtError;
@@ -45,9 +49,10 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::rc;
 use std::str::FromStr;
-use tracing::{debug, warn};
+use tracing::{debug, error, info, warn};
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::Hash;
 use uuid::Uuid;
 
 /// A status report for an authenticator. This describes the specific state of this device and
@@ -489,6 +494,55 @@ impl TryFrom<RawStatusReport> for StatusReport {
     }
 }
 
+impl PartialEq<AuthenticatorStatus> for StatusReport {
+    fn eq(&self, other: &AuthenticatorStatus) -> bool {
+        // Looks nicer code style wise this way.
+        #[allow(clippy::match_like_matches_macro)]
+        match (self, other) {
+            (StatusReport::NotFidoCertified { .. }, AuthenticatorStatus::NotFidoCertified)
+            | (
+                StatusReport::SelfAssertionSubmitted { .. },
+                AuthenticatorStatus::SelfAssertionSubmitted,
+            )
+            | (
+                StatusReport::UserVerificationBypass { .. },
+                AuthenticatorStatus::UserVerificationBypass,
+            )
+            | (
+                StatusReport::AttestationKeyCompromise { .. },
+                AuthenticatorStatus::AttestationKeyCompromise,
+            )
+            | (
+                StatusReport::UserKeyRemoteCompromise { .. },
+                AuthenticatorStatus::UserKeyRemoteCompromise,
+            )
+            | (
+                StatusReport::UserKeyPhysicalCompromise { .. },
+                AuthenticatorStatus::UserKeyPhysicalCompromise,
+            )
+            | (StatusReport::Revoked { .. }, AuthenticatorStatus::Revoked)
+            | (StatusReport::UpdateAvailable { .. }, AuthenticatorStatus::UpdateAvailable)
+            | (StatusReport::FidoCertified { .. }, AuthenticatorStatus::FidoCertified)
+            | (StatusReport::FidoCertifiedL1 { .. }, AuthenticatorStatus::FidoCertifiedL1)
+            | (
+                StatusReport::FidoCertifiedL1Plus { .. },
+                AuthenticatorStatus::FidoCertifiedL1Plus,
+            )
+            | (StatusReport::FidoCertifiedL2 { .. }, AuthenticatorStatus::FidoCertifiedL2)
+            | (
+                StatusReport::FidoCertifiedL2Plus { .. },
+                AuthenticatorStatus::FidoCertifiedL2Plus,
+            )
+            | (StatusReport::FidoCertifiedL3 { .. }, AuthenticatorStatus::FidoCertifiedL3)
+            | (
+                StatusReport::FidoCertifiedL3Plus { .. },
+                AuthenticatorStatus::FidoCertifiedL3Plus,
+            ) => true,
+            _ => false,
+        }
+    }
+}
+
 impl StatusReport {
     /// Retrieve the effective date of this report
     fn effective_date(&self) -> Option<&str> {
@@ -509,6 +563,29 @@ impl StatusReport {
             | StatusReport::FidoCertifiedL3 { effective_date, .. }
             | StatusReport::FidoCertifiedL3Plus { effective_date, .. } => effective_date.as_deref(),
         }
+    }
+
+    pub(crate) fn numeric(&self) -> u8 {
+        match self {
+            StatusReport::NotFidoCertified { .. }
+            | StatusReport::UserVerificationBypass { .. }
+            | StatusReport::AttestationKeyCompromise { .. }
+            | StatusReport::UserKeyRemoteCompromise { .. }
+            | StatusReport::UserKeyPhysicalCompromise { .. }
+            | StatusReport::UpdateAvailable { .. }
+            | StatusReport::Revoked { .. }
+            | StatusReport::SelfAssertionSubmitted { .. } => 0,
+            StatusReport::FidoCertified { .. } | StatusReport::FidoCertifiedL1 { .. } => 10,
+            StatusReport::FidoCertifiedL1Plus { .. } => 11,
+            StatusReport::FidoCertifiedL2 { .. } => 20,
+            StatusReport::FidoCertifiedL2Plus { .. } => 21,
+            StatusReport::FidoCertifiedL3 { .. } => 30,
+            StatusReport::FidoCertifiedL3Plus { .. } => 31,
+        }
+    }
+
+    fn gte(&self, level: &AuthenticatorStatus) -> bool {
+        self.numeric() >= level.numeric()
     }
 }
 
@@ -531,7 +608,7 @@ impl Ord for StatusReport {
 
 /// An identifier of a user verification method. Some methods may contain an internal descriptor
 /// which provides information about certification or details of the user verification method.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq)]
 pub enum UserVerificationMethod {
     /// No user verification is required
     None,
@@ -561,9 +638,37 @@ pub enum UserVerificationMethod {
     PatternInternal(Option<PatternAccuracyDescriptor>),
 }
 
-impl PartialEq for UserVerificationMethod {
-    fn eq(&self, other: &Self) -> bool {
-        std::mem::discriminant(self) == std::mem::discriminant(other)
+impl FromStr for UserVerificationMethod {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "none" => Ok(UserVerificationMethod::None),
+            "presence" => Ok(UserVerificationMethod::PresenceInternal),
+            "pin_internal" | "passcode_internal" => {
+                Ok(UserVerificationMethod::PasscodeInternal(None))
+            }
+            "pin_external" | "passcode_external" => {
+                Ok(UserVerificationMethod::PasscodeExternal(None))
+            }
+            "fingerprint_internal" | "fprint_internal" | "fprint" => {
+                Ok(UserVerificationMethod::FingerprintInternal(None))
+            }
+            "handprint_internal" | "hprint_internal" | "hprint" => {
+                Ok(UserVerificationMethod::HandprintInternal(None))
+            }
+            "eyeprint_internal" | "eprint_internal" | "eprint" => {
+                Ok(UserVerificationMethod::EyeprintInternal(None))
+            }
+            "voiceprint_internal" | "vprint_internal" | "vprint" => {
+                Ok(UserVerificationMethod::VoiceprintInternal(None))
+            }
+            "faceprint_internal" | "face_internal" | "face" => {
+                Ok(UserVerificationMethod::FaceprintInternal(None))
+            }
+            "pattern_internal" | "pattern" => Ok(UserVerificationMethod::PatternInternal(None)),
+            _ => Err(()),
+        }
     }
 }
 
@@ -572,8 +677,22 @@ impl fmt::Display for UserVerificationMethod {
         match self {
             UserVerificationMethod::None => write!(f, "None"),
             UserVerificationMethod::PresenceInternal => write!(f, "PresenceInternal"),
-            UserVerificationMethod::PasscodeInternal(_) => write!(f, "PasscodeInternal"),
-            UserVerificationMethod::PasscodeExternal(_) => write!(f, "PasscodeExternal"),
+            UserVerificationMethod::PasscodeInternal(Some(cad)) => write!(
+                f,
+                "PasscodeInternal ( base: {}, min_length: {}, max_retries: {:?}, slowdown: {:?} )",
+                cad.base, cad.min_length, cad.max_retries, cad.block_slowdown
+            ),
+            UserVerificationMethod::PasscodeInternal(None) => {
+                write!(f, "PasscodeInternal (unknown limits)")
+            }
+            UserVerificationMethod::PasscodeExternal(Some(cad)) => write!(
+                f,
+                "PasscodeExternal ( base: {}, min_length: {}, max_retries: {:?}, slowdown: {:?} )",
+                cad.base, cad.min_length, cad.max_retries, cad.block_slowdown
+            ),
+            UserVerificationMethod::PasscodeExternal(None) => {
+                write!(f, "PasscodeExternal (unknown limits)")
+            }
             UserVerificationMethod::FingerprintInternal(_) => write!(f, "FingerprintInternal"),
             UserVerificationMethod::HandprintInternal(_) => write!(f, "HandprintInternal"),
             UserVerificationMethod::EyeprintInternal(_) => write!(f, "EyeprintInternal"),
@@ -846,6 +965,14 @@ pub struct FIDO2 {
     pub status_reports: BTreeSet<StatusReport>,
     /// The time this device was last updated.
     pub time_of_last_status_change: String,
+    /// These data as supplied from FIDO is inconsistent for this device, and may contain omissions
+    /// or errors. In some cases the webauthn-rs project has patched these data to correct these
+    /// which is indicated by the "patched" flag.
+    pub inconsistent_data: bool,
+    /// These data have been patched by the webauthn-rs project to repair flaws in the MDS that
+    /// are provided by FIDO. These patches are created by the project observing the device and
+    /// providing this.
+    pub patched_data: bool,
 }
 
 impl fmt::Display for FIDO2 {
@@ -855,16 +982,37 @@ impl fmt::Display for FIDO2 {
 }
 
 impl FIDO2 {
-    fn query_attr(&self, ava: &AttrValueAssertion, op: &CompareOp) -> bool {
-        match (ava, op) {
-            (AttrValueAssertion::Aaguid(u), CompareOp::Equal) => self.aaguid == *u,
-            (AttrValueAssertion::Aaguid(u), CompareOp::NotEqual) => self.aaguid != *u,
+    fn query_attr(&self, ava: &AttrValueAssertion) -> bool {
+        match ava {
+            AttrValueAssertion::AaguidEq(u) => self.aaguid == *u,
+            AttrValueAssertion::DescriptionEq(s) => &self.description == s,
+            AttrValueAssertion::DescriptionCnt(s) => self
+                .description
+                .to_lowercase()
+                .contains(s.to_lowercase().as_str()),
+            AttrValueAssertion::StatusEq(s) => self
+                .status_reports
+                .last()
+                .map(|sr| sr == s)
+                .unwrap_or(false),
+            AttrValueAssertion::StatusGte(s) => self.status_reports.iter().any(|sr| sr.gte(s)),
+            AttrValueAssertion::StatusLt(s) => self.status_reports.iter().any(|sr| !sr.gte(s)),
+            AttrValueAssertion::TransportEq(t) => self
+                .authenticator_get_info
+                .as_ref()
+                .map(|agi| agi.transports.contains(t))
+                .unwrap_or(false),
+            AttrValueAssertion::UserVerificationCnt(u) => self
+                .user_verification_details
+                .iter()
+                .flat_map(|and| and.iter())
+                .any(|uvd| std::mem::discriminant(uvd) == std::mem::discriminant(u)),
         }
     }
 
     fn query_match(&self, q: &Query) -> bool {
         match q {
-            Query::Op(ava, op) => self.query_attr(ava, op),
+            Query::Op(ava) => self.query_attr(ava),
             Query::And(a, b) => self.query_match(a) && self.query_match(b),
             Query::Or(a, b) => self.query_match(a) || self.query_match(b),
             Query::Not(a) => !self.query_match(a),
@@ -920,6 +1068,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
         }
 
         let mut invalid_metadata = false;
+        let mut inconsistent_data = false;
 
         // We deconstruct the MDS because there are a bunch of duplicate
         // types / values that we want to expose.
@@ -937,7 +1086,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             authentication_algorithms,
             public_key_alg_and_encodings,
             attestation_types,
-            user_verification_details,
+            mut user_verification_details,
             key_protection,
             is_key_restricted,
             is_fresh_user_verification_required,
@@ -951,7 +1100,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             ecdaa_trust_anchors,
             icon: _,
             supported_extensions,
-            authenticator_get_info,
+            mut authenticator_get_info,
         } = metadata_statement;
 
         let status_reports: BTreeSet<_> = status_reports
@@ -977,7 +1126,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                         "Invalid attestation root certificate - leading/trailing whitespace: {:?}, {:?}, {:?}",
                         aaid, aaguid, attestation_certificate_key_identifiers
                     );
-                    invalid_metadata = true;
+                    inconsistent_data = true;
                     None
                 } else {
                     match STANDARD.decode(trim_cert) {
@@ -996,39 +1145,125 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             })
             .collect();
 
-        let user_verification_details: Vec<Vec<_>> = user_verification_details.into_iter()
+        if patch::mds_user_verification_method_code_accuracy_descriptor(
+            &mut user_verification_details,
+        ) {
+            info!(
+                "Device was patched for invalid code accuracy descriptior on presence: {:?}, {:?}, {:?}",
+                aaid, aaguid, attestation_certificate_key_identifiers
+            );
+            inconsistent_data = true;
+        }
+
+        if patch::mds_user_verification_method_invalid_all_present(&mut user_verification_details) {
+            info!(
+                "Device was patched for uvm 'all', which violates fido's standards: {:?}, {:?}, {:?}",
+                aaid, aaguid, attestation_certificate_key_identifiers
+            );
+            inconsistent_data = true;
+        }
+
+        // debug!("{:#?}", user_verification_details);
+
+        let mut user_verification_details: Vec<Vec<_>> = user_verification_details.into_iter()
             .map(|inner| {
                 inner.into_iter()
                     .filter_map(|uvm| {
                         uvm.try_into()
-                            .map_err(|_| {
+                            .map_err(|_e| {
                                 warn!(
                                     "Invalid user verification details located in: {:?}, {:?}, {:?}",
                                     aaid, aaguid, attestation_certificate_key_identifiers
                                 );
+                                assert!(aaguid.is_none());
                                 invalid_metadata = true;
                             })
                             .ok()
+
                     })
                     .collect()
             })
             .collect();
 
-        user_verification_details.iter().for_each(|uvm_or| {
-            if uvm_or.contains(&UserVerificationMethod::None) && uvm_or.len() != 1 {
-                debug!(?uvm_or);
+        match patch::user_verification_method(aaguid, &user_verification_details) {
+            Ok(None) => {
+                // No patching needed.
+            }
+            Ok(Some(mut uvm_patch)) => {
+                // Patch provided
+                inconsistent_data = true;
+                std::mem::swap(&mut uvm_patch, &mut user_verification_details)
+            }
+            Err(_e) => {
+                error!("Unable to patch user verification methods. This is a bug and should be reported. https://github.com/kanidm/webauthn-rs/issues");
+            }
+        }
+
+        for uvm_and in user_verification_details.iter() {
+            if uvm_and.contains(&UserVerificationMethod::None) && uvm_and.len() != 1 {
+                debug!(?user_verification_details);
+                debug!(?description);
                 warn!(
                     "Illogical user verification method located in - None may not exist with other UVM: {:?}, {:?}, {:?}",
                     aaid, aaguid, attestation_certificate_key_identifiers
                 );
+                assert!(aaguid.is_none());
+                invalid_metadata = true;
             }
-        });
+        }
 
-        if !supported_extensions.is_empty() && authenticator_get_info.is_some() {
-            warn!(
-                "Inconsistent supported extension descriptors in - {:?}, {:?}, {:?}",
+        // There are multiple devices that have no authenticator get info, and instead rely on
+        // other fields in the metadata to do the work for them. In these cases, we should actually
+        // make the AGI is None since it's only populated by the fido MDS and not a true mds.
+
+        let agi_invalid = if let Some(agi) = authenticator_get_info.as_ref() {
+            agi.extensions.is_empty()
+                && agi.pin_uv_auth_protocols.is_empty()
+                && agi.transports.is_empty()
+                && agi.algorithms.is_empty()
+        } else {
+            false
+        };
+
+        if agi_invalid {
+            authenticator_get_info = None;
+            info!(
+                "Device was patched for invalid authenticator get info that was not collected from a real device: {:?}, {:?}, {:?}",
                 aaid, aaguid, attestation_certificate_key_identifiers
             );
+            inconsistent_data = true;
+        }
+
+        if let Some(agi) = authenticator_get_info.as_ref() {
+            if !supported_extensions.is_empty() {
+                let agi_extn: BTreeSet<_> = agi.extensions.iter().map(|s| s.as_str()).collect();
+                let sup_extn: BTreeSet<_> =
+                    supported_extensions.iter().map(|s| s.id.as_str()).collect();
+
+                for sup_missing in agi_extn.difference(&sup_extn) {
+                    warn!(
+                        "Inconsistent supported extension descriptor {} in - {:?}, {:?}, {:?}",
+                        sup_missing, aaid, aaguid, attestation_certificate_key_identifiers
+                    );
+                    inconsistent_data = true;
+                }
+
+                for agi_missing in sup_extn.difference(&agi_extn) {
+                    warn!(
+                        "Inconsistent authenticator_get_info extension descriptor {} in - {:?}, {:?}, {:?}",
+                        agi_missing,
+                        aaid, aaguid, attestation_certificate_key_identifiers
+                    );
+                    inconsistent_data = true;
+                }
+            }
+        }
+
+        if let Some(aaguid) = aaguid.as_ref() {
+            if authenticator_get_info.is_none() {
+                warn!("FIDO2 Device missing authenticator info - {:?}", aaguid);
+                invalid_metadata = true;
+            }
         }
 
         if invalid_metadata {
@@ -1078,6 +1313,8 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                 authenticator_get_info,
                 status_reports,
                 time_of_last_status_change,
+                inconsistent_data,
+                patched_data: false,
             })),
             (ProtocolFamily::U2f, None, None, Some(aki)) => Ok(FidoDevice::U2F(U2F {
                 attestation_certificate_key_identifiers: aki,
@@ -1114,56 +1351,46 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
 pub struct FidoMds {
     /// The set of FIDO2 device metadata that exists within the Metadata Statement, indexed by their
     /// aaguid / uuid.
-    pub fido2: BTreeMap<Uuid, rc::Rc<FIDO2>>,
-
-    /// The set of FIDO2 device metadata that exists within the Metadata Statement, indexed by their
-    /// descriptions.
-    pub fido2_description: BTreeMap<String, rc::Rc<FIDO2>>,
-
+    pub fido2: Vec<rc::Rc<FIDO2>>,
     /// The set of (legacy) UAF device metadata that exists within the Metadata Statement.
-    pub uaf: BTreeMap<String, UAF>,
+    pub uaf: Vec<UAF>,
     /// The set of (legacy) U2f device metadata that exists within the Metadata Statement.
-    pub u2f: BTreeMap<String, rc::Rc<U2F>>,
+    pub u2f: Vec<rc::Rc<U2F>>,
 }
 
 impl From<RawFidoMds> for FidoMds {
     fn from(rawmds: RawFidoMds) -> Self {
-        let mut fido2 = BTreeMap::new();
-        let mut fido2_description = BTreeMap::new();
-        let mut uaf = BTreeMap::new();
-        let mut u2f = BTreeMap::new();
+        let mut fido2 = Vec::new();
+        let mut uaf = Vec::new();
+        let mut u2f = Vec::new();
 
         rawmds
             .entries
             .into_iter()
             .filter_map(|device| device.try_into().ok())
             .for_each(|fd| match fd {
-                FidoDevice::Uaf(dev) => {
-                    assert!(uaf.insert(dev.aaid.clone(), dev).is_none());
-                }
+                FidoDevice::Uaf(dev) => uaf.push(dev),
                 FidoDevice::U2F(dev) => {
-                    let akis = dev.attestation_certificate_key_identifiers.clone();
+                    // let akis = dev.attestation_certificate_key_identifiers.clone();
                     let dev = rc::Rc::new(dev);
 
-                    akis.into_iter().for_each(|aki| {
-                        assert!(u2f.insert(aki, dev.clone()).is_none());
-                    })
+                    u2f.push(dev.clone());
                 }
                 FidoDevice::FIDO2(dev) => {
                     let dev = rc::Rc::new(dev);
-                    assert!(fido2.insert(dev.aaguid, dev.clone()).is_none());
-                    assert!(fido2_description
-                        .insert(dev.description.clone(), dev)
-                        .is_none());
+                    fido2.push(dev.clone())
                 }
             });
 
-        FidoMds {
-            fido2,
-            fido2_description,
-            uaf,
-            u2f,
-        }
+        // Sort
+        fido2.sort_unstable_by(|a, b| {
+            // a.description.cmp(&b.description)
+            a.aaguid.cmp(&b.aaguid)
+        });
+        u2f.sort_unstable_by(|a, b| a.description.cmp(&b.description));
+        uaf.sort_unstable_by(|a, b| a.description.cmp(&b.description));
+
+        FidoMds { fido2, uaf, u2f }
     }
 }
 
@@ -1177,12 +1404,12 @@ impl FromStr for FidoMds {
 
 impl FidoMds {
     pub fn fido2_query(&self, query: &Query) -> Option<Vec<rc::Rc<FIDO2>>> {
-        debug!("{:?}", query);
+        debug!(?query);
 
         // Iterate over the set of metadata.
         let fds = self
             .fido2
-            .values()
+            .iter()
             .filter(|fd| fd.query_match(query))
             // This is cheap due to Rc,
             .cloned()
@@ -1194,5 +1421,22 @@ impl FidoMds {
         } else {
             Some(fds)
         }
+    }
+
+    pub fn fido2_to_attestation_ca_list(fds: &[rc::Rc<FIDO2>]) -> Option<AttestationCaList> {
+        let data: Vec<_> = fds
+            .iter()
+            .flat_map(|fd| {
+                fd.attestation_root_certificates
+                    .iter()
+                    .map(|ca| (ca.as_slice(), fd.aaguid))
+            })
+            .collect();
+
+        AttestationCaList::try_from(data.as_slice())
+            .map_err(|e| {
+                error!(err = ?e, "Failed to process attestation ca list");
+            })
+            .ok()
     }
 }

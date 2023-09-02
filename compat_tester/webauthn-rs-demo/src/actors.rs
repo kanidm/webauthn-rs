@@ -21,6 +21,8 @@ use webauthn_rs::prelude::{
     DiscoverableAuthentication,
 };
 
+use webauthn_rs_device_catalog::Data;
+
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -359,13 +361,16 @@ impl WebauthnActor {
         // ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
         debug!("handle ChallengeRegister -> {:?}", username);
 
-        let att_ca = AttestationCaList::strict();
+        let att_ca_list: AttestationCaList = (&Data::strict())
+            .try_into()
+            .map_err(WebauthnError::OpenSSLError)?;
+
         let (ccr, rs) = self.swan.start_attested_resident_key_registration(
             user_unique_id,
             &username,
             &username,
             None,
-            att_ca,
+            att_ca_list,
             // Some(AuthenticatorAttachment::None),
             None,
         )?;

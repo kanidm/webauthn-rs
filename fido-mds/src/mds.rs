@@ -15,6 +15,7 @@ use std::str::FromStr;
 use tracing::{debug, error};
 
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use uuid::Uuid;
 
 static GLOBAL_SIGN_ROOT_CA_R3: &str = r#"
@@ -57,7 +58,7 @@ pub struct Upv {
     pub minor: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Hash)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 /// The CodeAccuracyDescriptor describes the relevant accuracy/complexity aspects of passcode user verification methods.
 pub struct CodeAccuracyDescriptor {
@@ -77,7 +78,7 @@ pub struct CodeAccuracyDescriptor {
     pub block_slowdown: Option<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 /// The BiometricAccuracyDescriptor describes relevant accuracy/complexity aspects in the case of a biometric user verification method.
 pub struct BiometricAccuracyDescriptor {
@@ -116,7 +117,23 @@ pub struct BiometricAccuracyDescriptor {
     pub block_slowdown: Option<u16>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+impl Hash for BiometricAccuracyDescriptor {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.self_attested_frr
+            .map(|f| f.to_le_bytes())
+            .unwrap_or([0; 4])
+            .hash(state);
+        self.self_attested_far
+            .map(|f| f.to_le_bytes())
+            .unwrap_or([0; 4])
+            .hash(state);
+        self.max_templates.hash(state);
+        self.max_retries.hash(state);
+        self.block_slowdown.hash(state);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 /// The PatternAccuracyDescriptor describes relevant accuracy/complexity aspects in the case that a
 /// pattern is used as the user verification method.
@@ -137,8 +154,21 @@ pub struct PatternAccuracyDescriptor {
     pub block_slowdown: Option<u16>,
 }
 
+impl Hash for PatternAccuracyDescriptor {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.max_retries
+            .map(|f| f.to_le_bytes())
+            .unwrap_or([0; 2])
+            .hash(state);
+        self.block_slowdown
+            .map(|f| f.to_le_bytes())
+            .unwrap_or([0; 2])
+            .hash(state);
+    }
+}
+
 /// User Verification Methods
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum UserVerificationMethod {
     /// None
     #[serde(rename = "none")]
@@ -413,6 +443,12 @@ pub enum AttachmentHint {
     /// bluetooth
     #[serde(rename = "bluetooth")]
     Bluetooth,
+    /// network
+    #[serde(rename = "network")]
+    Network,
+    /// wifi-direct
+    #[serde(rename = "wifi_direct")]
+    WifiDirect,
 }
 
 /// The authenticator versions this device supports
@@ -430,6 +466,41 @@ pub enum AuthenticatorVersion {
     /// FIDO 2.1
     #[serde(rename = "FIDO_2_1")]
     Fido2_1,
+}
+
+/// The authenticator transports that this device supports
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum AuthenticatorTransport {
+    /// usb
+    #[serde(rename = "usb")]
+    Usb,
+    /// nfc
+    #[serde(rename = "nfc")]
+    Nfc,
+    /// lightning
+    #[serde(rename = "lightning")]
+    Lightning,
+    /// ble
+    #[serde(rename = "ble")]
+    Ble,
+    /// internal
+    #[serde(rename = "internal")]
+    Internal,
+}
+
+impl FromStr for AuthenticatorTransport {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "usb" => Ok(AuthenticatorTransport::Usb),
+            "nfc" => Ok(AuthenticatorTransport::Nfc),
+            "lightning" => Ok(AuthenticatorTransport::Lightning),
+            "ble" => Ok(AuthenticatorTransport::Ble),
+            "internal" => Ok(AuthenticatorTransport::Internal),
+            _ => Err(()),
+        }
+    }
 }
 
 /// The output of authenticatorGetInfo. Some fields are hidden as they are duplicated
@@ -458,9 +529,9 @@ pub struct AuthenticatorGetInfo {
     pub max_credential_id_length: Option<u32>,
     /// The list of transports this device supports
     #[serde(default)]
-    pub transports: Vec<String>,
+    pub transports: Vec<AuthenticatorTransport>,
     #[serde(default)]
-    algorithms: Vec<serde_json::Value>,
+    pub(crate) algorithms: Vec<serde_json::Value>,
     /// The maximum size of large blob array this device can store, if the extension is supported.
     pub max_serialized_large_blob_array: Option<u32>,
     #[serde(rename = "forcePINChange")]
@@ -479,7 +550,7 @@ pub struct AuthenticatorGetInfo {
     uv_modality: Option<u32>,
     #[serde(default)]
     certifications: BTreeMap<String, u32>,
-    remaining_discoverable_credentials: Option<u32>,
+    pub(crate) remaining_discoverable_credentials: Option<u32>,
     /// Vendor specific details
     #[serde(default)]
     pub vendor_prototype_config_commands: Vec<u32>,
@@ -681,7 +752,7 @@ pub struct MetadataStatement {
     #[serde(default)]
     pub ecdaa_trust_anchors: Vec<EcdaaAnchor>,
     /// An icon representing this device.
-    pub icon: serde_json::Value,
+    pub icon: Option<serde_json::Value>,
     /// The list of supported extensions of this authenticator
     #[serde(default)]
     pub supported_extensions: Vec<ExtensionDescriptor>,
@@ -735,7 +806,7 @@ pub struct BiometricsStatusReport {
 }
 
 /// The fido certification status of the device associated to this aaid/aaguid.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AuthenticatorStatus {
     /// The device is NOT fido certified
     #[serde(rename = "NOT_FIDO_CERTIFIED")]
@@ -804,6 +875,51 @@ pub enum AuthenticatorStatus {
     /// This device is certified at level 3 plus
     #[serde(rename = "FIDO_CERTIFIED_L3plus")]
     FidoCertifiedL3Plus,
+}
+
+impl FromStr for AuthenticatorStatus {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "not-certified" => Ok(AuthenticatorStatus::NotFidoCertified),
+            "uv-bypass" => Ok(AuthenticatorStatus::UserVerificationBypass),
+            "key-compromise" => Ok(AuthenticatorStatus::AttestationKeyCompromise),
+            "remote-exploit" => Ok(AuthenticatorStatus::UserKeyRemoteCompromise),
+            "physical-compromise" => Ok(AuthenticatorStatus::UserKeyPhysicalCompromise),
+            "update-available" => Ok(AuthenticatorStatus::UpdateAvailable),
+            "revoked" => Ok(AuthenticatorStatus::Revoked),
+            "self-asserted" => Ok(AuthenticatorStatus::SelfAssertionSubmitted),
+            "valid" | "l1" => Ok(AuthenticatorStatus::FidoCertifiedL1),
+            "l1+" => Ok(AuthenticatorStatus::FidoCertifiedL1Plus),
+            "l2" => Ok(AuthenticatorStatus::FidoCertifiedL2),
+            "l2+" => Ok(AuthenticatorStatus::FidoCertifiedL2Plus),
+            "l3" => Ok(AuthenticatorStatus::FidoCertifiedL3),
+            "l3+" => Ok(AuthenticatorStatus::FidoCertifiedL3Plus),
+            _ => Err(()),
+        }
+    }
+}
+
+impl AuthenticatorStatus {
+    pub(crate) fn numeric(&self) -> u8 {
+        match self {
+            AuthenticatorStatus::NotFidoCertified
+            | AuthenticatorStatus::UserVerificationBypass
+            | AuthenticatorStatus::AttestationKeyCompromise
+            | AuthenticatorStatus::UserKeyRemoteCompromise
+            | AuthenticatorStatus::UserKeyPhysicalCompromise
+            | AuthenticatorStatus::UpdateAvailable
+            | AuthenticatorStatus::Revoked
+            | AuthenticatorStatus::SelfAssertionSubmitted => 0,
+            AuthenticatorStatus::FidoCertified | AuthenticatorStatus::FidoCertifiedL1 => 10,
+            AuthenticatorStatus::FidoCertifiedL1Plus => 11,
+            AuthenticatorStatus::FidoCertifiedL2 => 20,
+            AuthenticatorStatus::FidoCertifiedL2Plus => 21,
+            AuthenticatorStatus::FidoCertifiedL3 => 30,
+            AuthenticatorStatus::FidoCertifiedL3Plus => 31,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

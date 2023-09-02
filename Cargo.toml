@@ -1,6 +1,7 @@
 
 
 [workspace]
+resolver = "2"
 members = [
     # Support Libraries
     "base64urlsafedata",
@@ -23,9 +24,14 @@ members = [
     "tutorial/server/axum",
     "tutorial/server/actix_web",
     "tutorial/wasm",
+    # Attestatation struct format
+    "attestation-ca",
     # Fido MDS tools
     "fido-mds",
     "fido-mds-tool",
+    # Our Device Catalog
+    "device-catalog",
+    # "device-catalog-tool",
     # The compat tester
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
@@ -44,6 +50,8 @@ webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs" }
 webauthn-rs = { path = "./webauthn-rs" }
 webauthn-rs-core = { path = "./webauthn-rs-core" }
 webauthn-rs-proto = { path = "./webauthn-rs-proto" }
+webauthn-attestation-ca = { path = "./attestation-ca" }
+webauthn-rs-device-catalog = { path = "./device-catalog" }
 
 async-std = { version = "1.6", features = ["attributes"] }
 base64 = "0.21"
@@ -58,6 +66,7 @@ hyper = { version = "=1.0.0-rc.3", default-features = false, features = [
     "http1",
 ] }
 nom = "7.1"
+peg = "0.8.1"
 openssl = "^0.10.56"
 rand = "0.8"
 serde = { version = "^1.0.141", features = ["derive"] }

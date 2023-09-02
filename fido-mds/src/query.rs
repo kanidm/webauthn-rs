@@ -3,23 +3,25 @@
 //!
 //! `aaguid eq abcd and userverification eq passcodeexternal`
 
+use crate::{AuthenticatorStatus, AuthenticatorTransport, UserVerificationMethod};
 use std::str::FromStr;
 use uuid::Uuid;
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum CompareOp {
-    Equal,
-    NotEqual,
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum AttrValueAssertion {
-    Aaguid(Uuid),
+    AaguidEq(Uuid),
+    DescriptionEq(String),
+    DescriptionCnt(String),
+    StatusEq(AuthenticatorStatus),
+    StatusGte(AuthenticatorStatus),
+    StatusLt(AuthenticatorStatus),
+    TransportEq(AuthenticatorTransport),
+    UserVerificationCnt(UserVerificationMethod),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Query {
-    Op(AttrValueAssertion, CompareOp),
+    Op(AttrValueAssertion),
     And(Box<Query>, Box<Query>),
     Or(Box<Query>, Box<Query>),
     Not(Box<Query>),
@@ -65,18 +67,62 @@ peg::parser! {
             ['\n' | ' ' | '\t' | '(' | ')' ]
 
         pub(crate) rule expr() -> Query =
-            uuid_expr()
+            uuid_eq_expr() /
+            desc_eq_expr() /
+            desc_cn_expr() /
+            authstat_eq_expr() /
+            authstat_gte_expr() /
+            authstat_lt_expr() /
+            authtrans_eq_expr() /
+            uvm_cnt_expr()
 
-        rule uuid_expr() -> Query =
-            "aaguid" separator()+ c:compareop() separator() + v:uuid() { Query::Op(AttrValueAssertion::Aaguid(v), c) }
+        rule uuid_eq_expr() -> Query =
+            "aaguid" separator()+ "eq" separator()+ v:uuid() { Query::Op(AttrValueAssertion::AaguidEq(v)) }
 
-        pub(crate) rule compareop() -> CompareOp =
-            "eq" { CompareOp::Equal } /
-            "ne" { CompareOp::NotEqual }
+        rule desc_eq_expr() -> Query =
+            "desc" separator()+ "eq" separator()+ v:octetstr() { Query::Op(AttrValueAssertion::DescriptionEq(v)) }
+
+        rule desc_cn_expr() -> Query =
+            "desc" separator()+ "cnt" separator()+ v:octetstr() { Query::Op(AttrValueAssertion::DescriptionCnt(v)) }
+
+        rule authstat_eq_expr() -> Query =
+            "status" separator()+ "eq" separator()+ v:status() { Query::Op(AttrValueAssertion::StatusEq(v)) }
+
+        rule authstat_gte_expr() -> Query =
+            "status" separator()+ "gte" separator()+ v:status() { Query::Op(AttrValueAssertion::StatusGte(v)) }
+
+        rule authstat_lt_expr() -> Query =
+            "status" separator()+ "lt" separator()+ v:status() { Query::Op(AttrValueAssertion::StatusLt(v)) }
+
+        rule authtrans_eq_expr() -> Query =
+            "transport" separator()+ "eq" separator()+ v:transport() { Query::Op(AttrValueAssertion::TransportEq(v)) }
+
+        rule uvm_cnt_expr() -> Query =
+            "uvm" separator()+ "cnt" separator()+ v:uvm() { Query::Op(AttrValueAssertion::UserVerificationCnt(v)) }
 
         pub(crate) rule uuid() -> Uuid =
-            s:$((!operator()[_])*) {? Uuid::from_str(s).map_err(|_| "invalid UUID" ) }
+            s:$((!operator()[_])+) {? Uuid::from_str(s).map_err(|_| "invalid UUID" ) }
 
+        pub(crate) rule status() -> AuthenticatorStatus =
+            s:$((!operator()[_])+) {? AuthenticatorStatus::from_str(s).map_err(|_| "invalid Authenticator Status" ) }
+
+        pub(crate) rule transport() -> AuthenticatorTransport =
+            s:$((!operator()[_])+) {? AuthenticatorTransport::from_str(s).map_err(|_| "invalid Authenticator Transport" ) }
+
+        pub(crate) rule uvm() -> UserVerificationMethod =
+            s:$((!operator()[_])+) {? UserVerificationMethod::from_str(s).map_err(|_| "invalid User Verification Method" ) }
+
+        pub(crate) rule octetstr() -> String =
+            dquotedoctetstr() / squotedoctetstr() / bareoctetstr()
+
+        rule squotedoctetstr() -> String =
+            "\'" s:$((!"\'"[_])*) "\'" { s.to_string() }
+
+        rule dquotedoctetstr() -> String =
+            "\"" s:$((!"\""[_])*) "\"" { s.to_string() }
+
+        rule bareoctetstr() -> String =
+            s:$((!operator()[_])*) { s.to_string() }
     }
 }
 
@@ -94,19 +140,12 @@ mod test {
     }
 
     #[test]
-    fn test_compareop() {
-        assert_eq!(query::compareop("eq"), Ok(CompareOp::Equal));
-        assert_eq!(query::compareop("ne"), Ok(CompareOp::NotEqual));
-    }
-
-    #[test]
     fn test_query_attr_uuid() {
         assert_eq!(
             query::expr("aaguid eq c370f859-622e-4388-9ad2-a7fe7551fdba"),
-            Ok(Query::Op(
-                AttrValueAssertion::Aaguid(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba")),
-                CompareOp::Equal
-            ))
+            Ok(Query::Op(AttrValueAssertion::AaguidEq(uuid::uuid!(
+                "c370f859-622e-4388-9ad2-a7fe7551fdba"
+            ))))
         );
     }
 
@@ -115,8 +154,7 @@ mod test {
         assert_eq!(
             query::parse("not (aaguid eq c370f859-622e-4388-9ad2-a7fe7551fdba)"),
             Ok(Query::Not(Box::new(Query::Op(
-                AttrValueAssertion::Aaguid(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba")),
-                CompareOp::Equal
+                AttrValueAssertion::AaguidEq(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba"))
             ))))
         );
     }
@@ -129,14 +167,12 @@ mod test {
                 Query::And(
                     Box::new(
                         Query::Op(
-                            AttrValueAssertion::Aaguid(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba")),
-                            CompareOp::Equal
+                            AttrValueAssertion::AaguidEq(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba"))
                         )
                     ),
                     Box::new(
                         Query::Op(
-                            AttrValueAssertion::Aaguid(uuid::uuid!("70f11dce-befb-4619-a091-110633d923f6")),
-                            CompareOp::Equal
+                            AttrValueAssertion::AaguidEq(uuid::uuid!("70f11dce-befb-4619-a091-110633d923f6"))
                         )
                     ),
                 )
@@ -152,14 +188,12 @@ mod test {
                 Query::Or(
                     Box::new(
                         Query::Op(
-                            AttrValueAssertion::Aaguid(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba")),
-                            CompareOp::Equal
+                            AttrValueAssertion::AaguidEq(uuid::uuid!("c370f859-622e-4388-9ad2-a7fe7551fdba"))
                         )
                     ),
                     Box::new(
                         Query::Op(
-                            AttrValueAssertion::Aaguid(uuid::uuid!("70f11dce-befb-4619-a091-110633d923f6")),
-                            CompareOp::Equal
+                            AttrValueAssertion::AaguidEq(uuid::uuid!("70f11dce-befb-4619-a091-110633d923f6"))
                         )
                     ),
                 )

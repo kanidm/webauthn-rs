@@ -14,7 +14,9 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+webauthn-attestation-ca.workspace = true
 base64.workspace = true
+crc32c = "^0.6.4"
 compact_jwt.workspace = true
 openssl.workspace = true
 peg = "0.8.1"
