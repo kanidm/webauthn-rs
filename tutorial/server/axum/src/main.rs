@@ -43,7 +43,7 @@ async fn main() {
     let session_layer = SessionLayer::new(store, &secret)
         .with_cookie_name("webauthnrs")
         .with_same_site_policy(SameSite::Lax)
-        .with_secure(true);
+        .with_secure(false); // TODO: change this to true when running on an HTTPS/production server instead of locally
 
     // build our application with a route
     let app = Router::new()
