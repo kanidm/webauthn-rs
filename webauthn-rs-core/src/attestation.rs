@@ -741,7 +741,7 @@ pub(crate) fn verify_tpm_attestation(
             // cose_rsa.e != tpm_parms.exponent ||
 
             // check the pkey is the same.
-            if cose_rsa.n.as_ref() != tpm_modulus {
+            if cose_rsa.n.as_slice() != tpm_modulus {
                 return Err(WebauthnError::AttestationTpmPubAreaMismatch);
             }
         }
@@ -762,7 +762,7 @@ pub(crate) fn verify_tpm_attestation(
                 }
             }
 
-            if x.0 != ecc_points.x || y.0 != ecc_points.y {
+            if x.as_slice() != ecc_points.x || y.as_slice() != ecc_points.y {
                 debug!("Invalid X or Y coords in TpmuPublicId");
                 return Err(WebauthnError::AttestationTpmPubAreaMismatch);
             }

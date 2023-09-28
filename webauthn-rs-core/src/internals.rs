@@ -186,7 +186,7 @@ impl Credential {
         let transports = None;
 
         Credential {
-            cred_id: acd.credential_id.clone(),
+            cred_id: acd.credential_id.clone().into(),
             cred: ck,
             counter,
             transports,

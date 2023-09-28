@@ -35,6 +35,12 @@ static ALLOWED_DECODING_FORMATS: &[GeneralPurpose] =
 /// when deserializing, will decode from many different types of base64 possible.
 pub struct Base64UrlSafeData(pub Vec<u8>);
 
+impl Base64UrlSafeData {
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
 impl fmt::Display for Base64UrlSafeData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", URL_SAFE_NO_PAD.encode(self))
@@ -125,7 +131,8 @@ impl<'de> Deserialize<'de> for Base64UrlSafeData {
     where
         D: Deserializer<'de>,
     {
-        // Was previously _str
+        // This is deserialize_any because it allows us to pivot between arrays
+        // of bytes, and strings inside the visitor.
         deserializer.deserialize_any(Base64UrlSafeDataVisitor)
     }
 }

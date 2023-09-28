@@ -648,7 +648,7 @@ impl WebauthnCore {
         // OUT OF SPEC - exclude any credential that is in our exclude list.
         let excluded = exclude_credentials
             .iter()
-            .any(|credid| credid.0.as_slice() == credential.cred_id.0.as_slice());
+            .any(|credid| credid.as_slice() == credential.cred_id.as_slice());
 
         if excluded {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
@@ -927,7 +927,7 @@ impl WebauthnCore {
             .iter()
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
-                id: cred.cred_id.clone(),
+                id: cred.cred_id.clone().into(),
                 transports: cred.transports.clone(),
             })
             .collect();
@@ -1015,7 +1015,7 @@ impl WebauthnCore {
             // inappropriate for your use case), look up the corresponding credential public key.
             let mut found_cred: Option<&Credential> = None;
             for cred in creds {
-                if cred.cred_id.0 == rsp.raw_id.0 {
+                if cred.cred_id.as_slice() == rsp.raw_id.as_slice() {
                     found_cred = Some(cred);
                     break;
                 }
@@ -1096,7 +1096,7 @@ impl WebauthnCore {
         }
 
         Ok(AuthenticationResult {
-            cred_id: cred.cred_id.clone(),
+            cred_id: cred.cred_id.clone().into(),
             needs_update,
             user_verified,
             backup_eligible,
@@ -1651,12 +1651,13 @@ mod tests {
 
         // Create the fake credential that we know is associated
         let cred = Credential {
-            cred_id: Base64UrlSafeData(vec![
+            cred_id: vec![
                 106, 223, 133, 124, 161, 172, 56, 141, 181, 18, 27, 66, 187, 181, 113, 251, 187,
                 123, 20, 169, 41, 80, 236, 138, 92, 137, 4, 4, 16, 255, 188, 47, 158, 202, 111,
                 192, 117, 110, 152, 245, 95, 22, 200, 172, 71, 154, 40, 181, 212, 64, 80, 17, 238,
                 238, 21, 13, 27, 145, 140, 27, 208, 101, 166, 81,
-            ]),
+            ]
+            .into(),
             cred: COSEKey {
                 type_: COSEAlgorithm::ES256,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
@@ -1775,10 +1776,11 @@ mod tests {
         let cred = Credential {
             counter: 1,
             transports: None,
-            cred_id: Base64UrlSafeData(vec![
+            cred_id: vec![
                 179, 64, 237, 0, 28, 248, 197, 30, 213, 228, 250, 139, 28, 11, 156, 130, 69, 242,
                 21, 48, 84, 77, 103, 163, 66, 204, 167, 147, 82, 214, 212,
-            ]),
+            ]
+            .into(),
             cred: COSEKey {
                 type_: COSEAlgorithm::ES256,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
@@ -1996,7 +1998,13 @@ mod tests {
         let _ = tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
             .try_init();
-        let ser_cred = r#"{"cred_id":"uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ","cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"user_verified":false,"backup_eligible":false,"backup_state":false,"registration_policy":"preferred","extensions":{"cred_protect":"NotRequested","hmac_create_secret":"NotRequested"},"attestation":{"data":{"Basic":["MIICvTCCAaWgAwIBAgIEK_F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt-pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V_62aS5-1gK3rr-Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn_Cd-S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE-aFa4kTe6NQQfi8-yiZrQ8N-JL4f7gNdQPSrH-r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa-5cqNF4G1fPCofvw9W4lKnObuPakr0x_icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2-0m1f1mwQS8yRD5-_aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ_mXnUQ6TTsgRqPvPXgQPbSyGMf2z_DIPbQqCD_Bmc4dj9o6LozheBdDtcZCAjSPTAd_ui"]},"metadata":"None"},"attestation_format":"Packed"}"#;
+
+        let ser_cred = if cfg!(feature = "danger_serde_bincode") {
+            r#"{"cred_id":[185, 151, 21, 12, 21, 82, 235, 193, 63, 50, 208, 32, 121, 10, 68, 148, 156, 101, 116, 95, 250, 113, 143, 108, 74, 246, 214, 171, 31, 234, 70, 31, 48, 138, 238, 54, 151, 36, 65, 70, 104, 121, 200, 87, 131, 254, 191, 100, 215, 125, 29, 49, 177, 71, 4, 114, 61, 69, 49, 96, 116, 148, 8, 205],"cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"user_verified":false,"backup_eligible":false,"backup_state":false,"registration_policy":"preferred","extensions":{"cred_protect":"NotRequested","hmac_create_secret":"NotRequested"},"attestation":{"data":{"Basic":["MIICvTCCAaWgAwIBAgIEK_F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt-pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V_62aS5-1gK3rr-Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn_Cd-S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE-aFa4kTe6NQQfi8-yiZrQ8N-JL4f7gNdQPSrH-r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa-5cqNF4G1fPCofvw9W4lKnObuPakr0x_icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2-0m1f1mwQS8yRD5-_aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ_mXnUQ6TTsgRqPvPXgQPbSyGMf2z_DIPbQqCD_Bmc4dj9o6LozheBdDtcZCAjSPTAd_ui"]},"metadata":"None"},"attestation_format":"Packed"}"#
+        } else {
+            r#"{"cred_id":"uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ","cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"user_verified":false,"backup_eligible":false,"backup_state":false,"registration_policy":"preferred","extensions":{"cred_protect":"NotRequested","hmac_create_secret":"NotRequested"},"attestation":{"data":{"Basic":["MIICvTCCAaWgAwIBAgIEK_F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt-pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V_62aS5-1gK3rr-Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn_Cd-S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE-aFa4kTe6NQQfi8-yiZrQ8N-JL4f7gNdQPSrH-r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa-5cqNF4G1fPCofvw9W4lKnObuPakr0x_icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2-0m1f1mwQS8yRD5-_aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ_mXnUQ6TTsgRqPvPXgQPbSyGMf2z_DIPbQqCD_Bmc4dj9o6LozheBdDtcZCAjSPTAd_ui"]},"metadata":"None"},"attestation_format":"Packed"}"#
+        };
+
         let cred: Credential = serde_json::from_str(ser_cred).unwrap();
         trace!("{:?}", cred);
     }
@@ -2855,12 +2863,13 @@ mod tests {
         // Given two credentials with differening policy
         let mut creds = vec![
             Credential {
-                cred_id: Base64UrlSafeData(vec![
+                cred_id: vec![
                     205, 198, 18, 130, 133, 220, 73, 23, 199, 211, 240, 143, 220, 154, 172, 117,
                     91, 18, 164, 211, 24, 147, 16, 203, 118, 76, 33, 65, 31, 92, 236, 211, 79, 67,
                     240, 30, 65, 247, 46, 134, 19, 136, 170, 209, 11, 115, 37, 12, 88, 244, 244,
                     240, 148, 132, 191, 165, 150, 166, 252, 39, 97, 137, 21, 186,
-                ]),
+                ]
+                .into(),
                 cred: COSEKey {
                     type_: COSEAlgorithm::ES256,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {
@@ -2895,12 +2904,13 @@ mod tests {
                 attestation_format: AttestationFormat::None,
             },
             Credential {
-                cred_id: Base64UrlSafeData(vec![
+                cred_id: vec![
                     211, 204, 163, 253, 101, 149, 83, 136, 242, 175, 211, 104, 215, 131, 122, 175,
                     187, 84, 13, 3, 21, 24, 11, 138, 50, 137, 55, 225, 180, 109, 49, 28, 98, 8, 28,
                     181, 149, 241, 106, 124, 110, 149, 154, 198, 23, 8, 8, 4, 41, 69, 236, 203,
                     122, 120, 204, 174, 28, 58, 171, 43, 218, 81, 195, 177,
-                ]),
+                ]
+                .into(),
                 cred: COSEKey {
                     type_: COSEAlgorithm::ES256,
                     key: COSEKeyType::EC_EC2(COSEEC2Key {

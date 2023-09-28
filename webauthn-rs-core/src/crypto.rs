@@ -677,8 +677,8 @@ impl COSEKey {
             COSEKeyType::EC_EC2(ecpk) => {
                 let r: [u8; 1] = [0x04];
                 Ok(r.iter()
-                    .chain(ecpk.x.0.iter())
-                    .chain(ecpk.y.0.iter())
+                    .chain(ecpk.x.as_slice().iter())
+                    .chain(ecpk.y.as_slice().iter())
                     .copied()
                     .collect())
             }

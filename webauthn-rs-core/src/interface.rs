@@ -9,15 +9,44 @@ use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
 
+use base64urlsafedata::Base64UrlSafeData;
 pub use webauthn_attestation_ca::*;
 
-use base64urlsafedata::Base64UrlSafeData;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use openssl::{bn, ec, nid, pkey, x509};
 use uuid::Uuid;
+
+#[cfg(not(feature = "danger_serde_bincode"))]
+type BinaryData = Base64UrlSafeData;
+
+#[cfg(feature = "danger_serde_bincode")]
+type BinaryData = Vec<u8>;
+
+/*
+#[cfg(feature = "danger_serde_bincode")]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+/// This is a datawrapper used when the feature `danger_serde_bincode` is enabled. It allows
+/// transparently swapping between base64 and vec<u8> for applications that require it.
+pub struct DataWrapper(pub Vec<u8>);
+
+#[cfg(feature = "danger_serde_bincode")]
+impl DataWrapper {
+    /// Return a reference to the inner slice of this data.
+    pub fn as_ref(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
+#[cfg(feature = "danger_serde_bincode")]
+impl From<Vec<u8>> for DataWrapper {
+    fn from(data: Vec<u8>) -> Self {
+        DataWrapper(data)
+    }
+}
+*/
 
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
@@ -134,9 +163,9 @@ pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
     /// The key's public X coordinate.
-    pub x: Base64UrlSafeData,
+    pub x: BinaryData,
     /// The key's public Y coordinate.
-    pub y: Base64UrlSafeData,
+    pub y: BinaryData,
 }
 
 impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
@@ -146,8 +175,8 @@ impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
         let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
         let mut ctx = bn::BigNumContext::new()?;
         let mut point = ec::EcPoint::new(&group)?;
-        let x = bn::BigNum::from_slice(k.x.0.as_slice())?;
-        let y = bn::BigNum::from_slice(k.y.0.as_slice())?;
+        let x = bn::BigNum::from_slice(k.x.as_slice())?;
+        let y = bn::BigNum::from_slice(k.y.as_slice())?;
         point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
 
         ec::EcKey::from_public_key(&group, &point)
@@ -173,7 +202,7 @@ pub struct COSEOKPKey {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSERSAKey {
     /// An RSA modulus
-    pub n: Base64UrlSafeData,
+    pub n: BinaryData,
     /// An RSA exponent
     pub e: [u8; 3],
 }
@@ -233,8 +262,12 @@ pub struct COSEKey {
 /// and a counter of how many times the authenticator has been used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Credential {
+    #[cfg(not(feature = "danger_serde_bincode"))]
     /// The ID of this credential.
     pub cred_id: CredentialID,
+    #[cfg(feature = "danger_serde_bincode")]
+    /// The ID of this credential as a raw u8 array.
+    pub cred_id: BinaryData,
     /// The public key of this credential
     pub cred: COSEKey,
     /// The counter for this credential
@@ -318,7 +351,7 @@ impl From<CredentialV3> for Credential {
 
         // prior to 20220520 no multi-device credentials existed to migrate from.
         Credential {
-            cred_id: Base64UrlSafeData(cred_id),
+            cred_id: cred_id.into(),
             cred,
             counter,
             transports: None,
