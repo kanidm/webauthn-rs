@@ -927,6 +927,7 @@ impl WebauthnCore {
             .iter()
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
+                #[allow(clippy::useless_conversion)]
                 id: cred.cred_id.clone().into(),
                 transports: cred.transports.clone(),
             })
@@ -1095,6 +1096,7 @@ impl WebauthnCore {
             }
         }
 
+        #[allow(clippy::useless_conversion)]
         Ok(AuthenticationResult {
             cred_id: cred.cred_id.clone().into(),
             needs_update,

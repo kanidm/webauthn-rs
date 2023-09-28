@@ -186,6 +186,7 @@ impl Credential {
         let transports = None;
 
         Credential {
+            #[allow(clippy::useless_conversion)]
             cred_id: acd.credential_id.clone().into(),
             cred: ck,
             counter,
