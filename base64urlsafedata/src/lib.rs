@@ -90,7 +90,10 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
     type Value = Base64UrlSafeData;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "a base64 url encoded string")
+        write!(
+            formatter,
+            "a url-safe base64-encoded string, bytes, or sequence of integers"
+        )
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -122,6 +125,20 @@ impl<'de> Visitor<'de> for Base64UrlSafeDataVisitor {
         }
         Ok(Base64UrlSafeData(data))
     }
+
+    fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Base64UrlSafeData(v))
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Base64UrlSafeData(v.into()))
+    }
 }
 
 impl<'de> Deserialize<'de> for Base64UrlSafeData {
@@ -146,7 +163,7 @@ impl Serialize for Base64UrlSafeData {
 
 #[cfg(test)]
 mod tests {
-    use crate::Base64UrlSafeData;
+    use super::*;
     use std::convert::TryFrom;
 
     #[test]
@@ -156,9 +173,133 @@ mod tests {
     }
 
     #[test]
-    fn test_try_from_json() {
-        // let _: Base64UrlSafeData = serde_json::from_str("\"aGVsbG8=\"")
-        // .expect("Invalid Data");
-        assert!(serde_json::from_str::<Base64UrlSafeData>("[0,1,2,3]").is_ok());
+    fn from_json() {
+        let expected = Base64UrlSafeData(vec![0x00, 0x01, 0x02, 0xff]);
+
+        // JSON as Array<Number>
+        assert_eq!(
+            serde_json::from_str::<Base64UrlSafeData>("[0,1,2,255]").unwrap(),
+            expected
+        );
+
+        // JSON as Array<Number> with whitespace
+        assert_eq!(
+            serde_json::from_str::<Base64UrlSafeData>("[0, 1, 2, 255]").unwrap(),
+            expected
+        );
+
+        // RFC 4648 §5 non-padded (URL-safe)
+        assert_eq!(
+            serde_json::from_str::<Base64UrlSafeData>("\"AAEC_w\"").unwrap(),
+            expected
+        );
+
+        // RFC 4648 §5 padded (URL-safe)
+        assert_eq!(
+            serde_json::from_str::<Base64UrlSafeData>("\"AAEC_w==\"").unwrap(),
+            expected
+        );
+
+        // RFC 4648 §4 non-padded (standard)
+        assert_eq!(
+            serde_json::from_str::<Base64UrlSafeData>("\"AAEC/w\"").unwrap(),
+            expected
+        );
+
+        // RFC 4648 §4 padded (standard)
+        assert_eq!(
+            serde_json::from_str::<Base64UrlSafeData>("\"AAEC/w==\"").unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn to_json() {
+        let input = Base64UrlSafeData(vec![0x00, 0x01, 0x02, 0xff]);
+
+        // JSON output should be a String, RFC 4648 §5 non-padded (URL-safe)
+        assert_eq!(serde_json::to_string(&input).unwrap(), "\"AAEC_w\"");
+    }
+
+    #[test]
+    fn from_cbor() {
+        let expected = Base64UrlSafeData(vec![0x00, 0x01, 0x02, 0xff]);
+
+        // Data as bytes
+        assert_eq!(
+            serde_cbor_2::from_slice::<Base64UrlSafeData>(&[
+                0x44, // bytes(4)
+                0x00, 0x01, 0x02, 0xff
+            ])
+            .unwrap(),
+            expected
+        );
+
+        // Data as array
+        assert_eq!(
+            serde_cbor_2::from_slice::<Base64UrlSafeData>(&[
+                0x84, // array(4)
+                0x00, // 0
+                0x01, // 1
+                0x02, // 2
+                0x18, 0xff // 0xff
+            ])
+            .unwrap(),
+            expected
+        );
+
+        // RFC 4648 §5 non-padded (URL-safe)
+        assert_eq!(
+            serde_cbor_2::from_slice::<Base64UrlSafeData>(&[
+                0x66, // text(6)
+                0x41, 0x41, 0x45, 0x43, 0x5F, 0x77, // "AAEC_w"
+            ])
+            .unwrap(),
+            expected
+        );
+
+        // RFC 4648 §5 padded (URL-safe)
+        assert_eq!(
+            serde_cbor_2::from_slice::<Base64UrlSafeData>(&[
+                0x68, // text(8)
+                0x41, 0x41, 0x45, 0x43, 0x5F, 0x77, 0x3D, 0x3D // "AAEC_w=="
+            ])
+            .unwrap(),
+            expected
+        );
+
+        // RFC 4648 §4 non-padded (standard)
+        assert_eq!(
+            serde_cbor_2::from_slice::<Base64UrlSafeData>(&[
+                0x66, // text(6)
+                0x41, 0x41, 0x45, 0x43, 0x2F, 0x77, // "AAEC/w"
+            ])
+            .unwrap(),
+            expected
+        );
+
+        // RFC 4648 §4 padded (standard)
+        assert_eq!(
+            serde_cbor_2::from_slice::<Base64UrlSafeData>(&[
+                0x68, // text(8)
+                0x41, 0x41, 0x45, 0x43, 0x2F, 0x77, 0x3D, 0x3D // "AAEC/w=="
+            ])
+            .unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn to_cbor() {
+        let input = Base64UrlSafeData(vec![0x00, 0x01, 0x02, 0xff]);
+
+        // CBOR output should be base64 encoded string
+        assert_eq!(
+            serde_cbor_2::to_vec(&input).unwrap(),
+            vec![
+                0x66, // text(6)
+                0x41, 0x41, 0x45, 0x43, 0x5F, 0x77 // "AAEC_w"
+            ]
+        );
     }
 }

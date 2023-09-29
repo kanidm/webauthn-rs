@@ -116,7 +116,10 @@ impl<'de> Visitor<'de> for HumanBinaryDataVisitor {
     type Value = HumanBinaryData;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        write!(formatter, "a url-safe base64-encoded string")
+        write!(
+            formatter,
+            "a url-safe base64-encoded string, bytes, or sequence of integers"
+        )
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
