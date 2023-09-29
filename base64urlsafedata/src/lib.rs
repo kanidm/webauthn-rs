@@ -14,6 +14,10 @@
 #![deny(clippy::needless_pass_by_value)]
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
+mod human;
+
+pub use crate::human::HumanBinaryData;
+
 use base64::{
     engine::general_purpose::{
         GeneralPurpose, STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD,
