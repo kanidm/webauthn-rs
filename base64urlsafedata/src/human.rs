@@ -8,30 +8,19 @@ use base64::Engine;
 use serde::de::{Error, SeqAccess, Unexpected, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Wrapper for `Vec<u8>` which changes Serde's serialisation and
-/// deserialisation behaviour:
+/// Serde wrapper for `Vec<u8>` which emits URL-safe, non-padded Base64 for
+/// *only* human-readable formats, and accepts Base64 and binary formats.
 ///
-/// * on serialisation to [a "human-readable" format][0] (such as JSON), it
-///   should emit URL-safe, non-padded Base64 (per RFC 4648 §5).
+/// * Deserialisation is described in the [module documentation][crate].
 ///
-/// * on serialisation to [a "non-human-readable" format][0] (such as CBOR), it
-///   should emit a native "bytes" type, and not encode the value.
+/// * Serialisation to [a human-readable format][0] (such as JSON) emits
+///   URL-safe, non-padded Base64 (per [RFC 4648 §5][sec5]).
 ///
-/// * deserialisation accepts multiple input types:
-///
-///   * a bytes type, which is passed as-is
-///   * a sequence of integers, which is passed as-is
-///   * a string, which is decoded Base64 per RFC 4648 §5 (URL-safe) or §4
-///     (standard), with optional padding
-///
-/// Otherwise, this type should work as much like a `Vec<u8>` as possible.
-///
-/// **See also:** [`serde_bytes`][1], which implements efficient coding of
-/// `Vec<u8>` [for non-human-readable formats][2].
+/// * Serialisation to [a non-human-readable format][0] (such as CBOR) emits
+///   a native "bytes" type, and not encode the value.
 ///
 /// [0]: https://docs.rs/serde/latest/serde/trait.Serializer.html#method.is_human_readable
-/// [1]: https://docs.rs/serde_bytes
-/// [2]: https://github.com/serde-rs/bytes/issues/37
+/// [sec5]: https://datatracker.ietf.org/doc/html/rfc4648#section-5
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct HumanBinaryData(Vec<u8>);
 
