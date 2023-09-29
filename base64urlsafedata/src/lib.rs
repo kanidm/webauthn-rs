@@ -17,7 +17,7 @@
 //!
 //! * `serde_cbor` encodes as an `array`, rather than a `bytes`. This uses
 //!   zig-zag encoded integers for values > `0x1F`, which averages about 1.88
-//!   bytes per byte assuming a normal distribution of values.
+//!   bytes per byte assuming an equal distribution of values.
 //!
 //! * `serde_json` encodes as an `Array<Number>`, which averages 3.55 bytes per
 //!   byte without whitespace.

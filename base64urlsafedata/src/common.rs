@@ -5,6 +5,16 @@
 /// [1]: crate::HumanBinaryData
 macro_rules! common_impls {
     ($type:ty) => {
+        impl $type {
+            pub const fn new() -> Self {
+                Self(Vec::new())
+            }
+
+            pub fn with_capacity(capacity: usize) -> Self {
+                Vec::with_capacity(capacity).into()
+            }
+        }
+
         impl std::ops::Deref for $type {
             type Target = Vec<u8>;
 
@@ -43,6 +53,12 @@ macro_rules! common_impls {
             }
         }
 
+        impl<const N: usize> From<&[u8; N]> for $type {
+            fn from(value: &[u8; N]) -> Self {
+                Self(value.to_vec())
+            }
+        }
+
         impl From<$type> for Vec<u8> {
             fn from(value: $type) -> Self {
                 value.0
@@ -56,14 +72,14 @@ macro_rules! common_impls {
         }
 
         macro_rules! partial_eq_impl {
-            ($type2:ty) => {
-                impl PartialEq<$type2> for $type {
-                    fn eq(&self, other: &$type2) -> bool {
-                        self.0.eq(other)
+            ($other:ty) => {
+                impl PartialEq<$other> for $type {
+                    fn eq(&self, other: &$other) -> bool {
+                        self.as_slice() == &other[..]
                     }
                 }
 
-                impl PartialEq<$type> for $type2 {
+                impl PartialEq<$type> for $other {
                     fn eq(&self, other: &$type) -> bool {
                         self.eq(&other.0)
                     }
