@@ -165,7 +165,7 @@ fn interop_from() {
 
     let c = Base64UrlSafeData::from(b.clone());
     assert_eq!(a, c);
-    let d = HumanBinaryData::from(a.clone());
+    let d = HumanBinaryData::from(a);
     assert_eq!(b, d);
 }
 
