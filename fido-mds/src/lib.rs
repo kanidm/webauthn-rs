@@ -1374,11 +1374,11 @@ impl From<RawFidoMds> for FidoMds {
                     // let akis = dev.attestation_certificate_key_identifiers.clone();
                     let dev = rc::Rc::new(dev);
 
-                    u2f.push(dev.clone());
+                    u2f.push(dev);
                 }
                 FidoDevice::FIDO2(dev) => {
                     let dev = rc::Rc::new(dev);
-                    fido2.push(dev.clone())
+                    fido2.push(dev)
                 }
             });
 
