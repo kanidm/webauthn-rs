@@ -35,7 +35,7 @@ pub struct AttestationCa {
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {
-            ca: Base64UrlSafeData(self.ca.to_der().expect("Invalid DER")),
+            ca: Base64UrlSafeData::from(self.ca.to_der().expect("Invalid DER")),
             aaguids: self.aaguids,
         }
     }
@@ -46,7 +46,7 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
 
     fn try_from(data: SerialisableAttestationCa) -> Result<Self, Self::Error> {
         Ok(AttestationCa {
-            ca: x509::X509::from_der(&data.ca.0)?,
+            ca: x509::X509::from_der(data.ca.as_slice())?,
             aaguids: data.aaguids,
         })
     }

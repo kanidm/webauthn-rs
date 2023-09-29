@@ -210,7 +210,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         // been brought up with MS.
 
         let raw_id = if let Some(cred_data) = &attestation_object.auth_data.credential_data {
-            Base64UrlSafeData(cred_data.credential_id.clone())
+            Base64UrlSafeData::from(cred_data.credential_id.clone())
         } else {
             return Err(WebauthnCError::PlatformAuthenticator);
         };
@@ -315,13 +315,13 @@ impl AuthenticatorBackend for MozillaAuthenticator {
 
         let raw_id = assertion
             .credentials
-            .map(|pkdesc| Base64UrlSafeData(pkdesc.id))
+            .map(|pkdesc| Base64UrlSafeData::from(pkdesc.id))
             .ok_or(WebauthnCError::Internal)?;
 
         let id = raw_id.to_string();
 
-        let user_handle = assertion.user.map(|u| Base64UrlSafeData(u.id));
-        let signature = Base64UrlSafeData(assertion.signature);
+        let user_handle = assertion.user.map(|u| Base64UrlSafeData::from(u.id));
+        let signature = Base64UrlSafeData::from(assertion.signature);
 
         // let authenticator_data = serde_cbor_2::to_vec(&assertion.auth_data)
         let authenticator_data = assertion

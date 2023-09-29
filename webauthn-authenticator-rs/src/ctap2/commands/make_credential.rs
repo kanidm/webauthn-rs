@@ -110,7 +110,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 
         let mut user_map = BTreeMap::new();
         // info!("{:?}", id);
-        user_map.insert(Value::Text("id".to_string()), Value::Bytes(id.0));
+        user_map.insert(Value::Text("id".to_string()), Value::Bytes(id.into()));
         user_map.insert(Value::Text("name".to_string()), Value::Text(name));
         user_map.insert(
             Value::Text("displayName".to_string()),
@@ -139,7 +139,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
                                 ),
                                 (
                                     Value::Text("id".to_string()),
-                                    Value::Bytes(a.id.0.to_owned()),
+                                    Value::Bytes(a.id.to_vec()),
                                 ),
                             ]);
 
@@ -204,7 +204,7 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialRequest {
                 .and_then(|v| if let Value::Map(v) = v { Some(v) } else { None })
                 .and_then(|mut v| {
                     Some(User {
-                        id: Base64UrlSafeData(value_to_vec_u8(
+                        id: Base64UrlSafeData::from(value_to_vec_u8(
                             v.remove(&Value::Text("id".to_string()))?,
                             "id",
                         )?),
@@ -361,7 +361,7 @@ mod test {
                 id: "test.ctap".to_owned(),
             },
             user: User {
-                id: Base64UrlSafeData(vec![
+                id: Base64UrlSafeData::from(vec![
                     43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80, 203, 110, 163, 198,
                     10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140, 112,
                 ]),
@@ -584,7 +584,7 @@ mod test {
                 id: "test".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData("test".as_bytes().into()),
+                id: Base64UrlSafeData::from(b"test"),
                 name: "test".to_string(),
                 display_name: "test".to_string(),
             },

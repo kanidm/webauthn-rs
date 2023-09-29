@@ -387,8 +387,8 @@ mod tests {
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
-            attest.0.as_slice(),
-            challenge.0.as_slice(),
+            attest.as_slice(),
+            challenge.as_slice(),
             &att_ca_list,
             false,
         )
@@ -434,8 +434,8 @@ mod tests {
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
-            attest.0.as_slice(),
-            challenge.0.as_slice(),
+            attest.as_slice(),
+            challenge.as_slice(),
             &att_ca_list,
             false,
         )
@@ -484,8 +484,8 @@ mod tests {
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
-            attest.0.as_slice(),
-            challenge.0.as_slice(),
+            attest.as_slice(),
+            challenge.as_slice(),
             &att_ca_list,
             false,
         );
@@ -538,8 +538,8 @@ mod tests {
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
-            attest.0.as_slice(),
-            challenge.0.as_slice(),
+            attest.as_slice(),
+            challenge.as_slice(),
             &att_ca_list,
             false,
         );
@@ -578,8 +578,8 @@ mod tests {
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
-            attest.0.as_slice(),
-            challenge.0.as_slice(),
+            attest.as_slice(),
+            challenge.as_slice(),
             &att_ca_list,
             false,
         );

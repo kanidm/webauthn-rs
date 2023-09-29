@@ -101,7 +101,7 @@ impl WebauthnActor {
                     user_unique_id,
                     &username,
                     &username,
-                    Some(vec![Base64UrlSafeData(vec![0x00, 0x01, 0x02, 0x03])]),
+                    Some(vec![Base64UrlSafeData::from(vec![0x00, 0x01, 0x02, 0x03])]),
                 )
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passkey(rs)))?,
             RegisterWithType::AttestedPasskey(strict) => {
