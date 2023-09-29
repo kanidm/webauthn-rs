@@ -588,14 +588,14 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         // Okay, now persist the token. We shouldn't fail from here.
         self.tokens.insert(key_handle.clone(), ecpriv_der);
 
-        let id: String = Base64UrlSafeData(key_handle.clone()).to_string();
+        let id: String = Base64UrlSafeData::from(key_handle.clone()).to_string();
 
         let rego = RegisterPublicKeyCredential {
             id,
-            raw_id: Base64UrlSafeData(key_handle),
+            raw_id: Base64UrlSafeData::from(key_handle),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(ao_bytes),
-                client_data_json: Base64UrlSafeData(vec![]),
+                attestation_object: Base64UrlSafeData::from(ao_bytes),
+                client_data_json: Base64UrlSafeData::from(vec![]),
                 transports: Some(vec![AuthenticatorTransport::Internal]),
             },
             type_: "public-key".to_string(),
@@ -646,15 +646,15 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
             )
             .collect();
 
-        let id: String = Base64UrlSafeData(u2sd.key_handle.clone()).to_string();
+        let id: String = Base64UrlSafeData::from(u2sd.key_handle.clone()).to_string();
 
         Ok(PublicKeyCredential {
             id,
-            raw_id: Base64UrlSafeData(u2sd.key_handle.clone()),
+            raw_id: Base64UrlSafeData::from(u2sd.key_handle.clone()),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: Base64UrlSafeData(authdata),
-                client_data_json: Base64UrlSafeData(vec![]),
-                signature: Base64UrlSafeData(u2sd.signature),
+                authenticator_data: Base64UrlSafeData::from(authdata),
+                client_data_json: Base64UrlSafeData::from(vec![]),
+                signature: Base64UrlSafeData::from(u2sd.signature),
                 user_handle: None,
             },
             type_: "public-key".to_string(),
@@ -1049,7 +1049,7 @@ mod tests {
                 id: "example.com".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData(user_id),
+                id: Base64UrlSafeData::from(user_id),
                 name: "sampleuser".to_string(),
                 display_name: "Sample User".to_string(),
             },
@@ -1130,7 +1130,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ) as usize;
-        let cred_id = Base64UrlSafeData(
+        let cred_id = Base64UrlSafeData::from(
             (verification_data[cred_id_off + 2..cred_id_off + 2 + cred_id_len]).to_vec(),
         );
 

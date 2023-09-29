@@ -696,7 +696,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .iter()
         .chain(att_obj.auth_data.rp_id_hash.iter())
         .chain(client_data_hash.iter())
-        .chain(acd.credential_id.0.iter())
+        .chain(acd.credential_id.iter())
         .chain(public_key_u2f.iter())
         .copied()
         .collect();
@@ -864,7 +864,7 @@ pub(crate) fn verify_tpm_attestation(
                 }
             }
 
-            if x.0 != ecc_points.x || y.0 != ecc_points.y {
+            if x.as_slice() != ecc_points.x || y.as_slice() != ecc_points.y {
                 debug!("Invalid X or Y coords in TpmuPublicId");
                 return Err(WebauthnError::AttestationTpmPubAreaMismatch);
             }
@@ -1350,7 +1350,7 @@ pub(crate) fn verify_android_safetynet_attestation(
             let verified_claims = jws.into_inner();
 
             // 3. Verify that the nonce attribute in the payload of response is identical to the Base64 encoding of the SHA-256 hash of the concatenation of authenticatorData and clientDataHash.
-            if verified_claims.nonce.0 != data_to_verify.to_vec() {
+            if verified_claims.nonce != data_to_verify.as_slice() {
                 return Err(SafetyNetError::NonceMismatch);
             }
 

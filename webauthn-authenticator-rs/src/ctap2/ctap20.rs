@@ -505,7 +505,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
                 name: "SELECTION".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData(vec![0]),
+                id: Base64UrlSafeData::from(vec![0]),
                 name: "SELECTION".to_string(),
                 display_name: "SELECTION".to_string(),
             },
@@ -622,12 +622,12 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
 
         Ok(RegisterPublicKeyCredential {
             id,
-            raw_id: Base64UrlSafeData(cred_id),
+            raw_id: Base64UrlSafeData::from(cred_id),
             type_,
             extensions: RegistrationExtensionsClientOutputs::default(), // TODO
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(raw),
-                client_data_json: Base64UrlSafeData(vec![]),
+                attestation_object: Base64UrlSafeData::from(raw),
+                client_data_json: Base64UrlSafeData::new(),
                 // All transports the token supports, as opposed to the
                 // transport which was actually used.
                 transports: self.info.get_transports(),
@@ -680,15 +680,15 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
             .credential
             .map(|c| c.type_)
             .ok_or(WebauthnCError::Cbor)?;
-        let signature = Base64UrlSafeData(ret.signature.ok_or(WebauthnCError::Cbor)?);
-        let authenticator_data = Base64UrlSafeData(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
+        let signature = Base64UrlSafeData::from(ret.signature.ok_or(WebauthnCError::Cbor)?);
+        let authenticator_data = Base64UrlSafeData::from(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
 
         Ok(PublicKeyCredential {
             id,
             raw_id,
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data,
-                client_data_json: Base64UrlSafeData(vec![]),
+                client_data_json: Base64UrlSafeData::new(),
                 signature,
                 // TODO
                 user_handle: None,

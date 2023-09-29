@@ -355,14 +355,14 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         // Okay, now persist the token. We shouldn't fail from here.
         self.tokens.insert(key_handle.clone(), ecpriv_der);
 
-        let id: String = Base64UrlSafeData(key_handle.clone()).to_string();
+        let id: String = Base64UrlSafeData::from(key_handle.clone()).to_string();
 
         let rego = RegisterPublicKeyCredential {
             id,
-            raw_id: Base64UrlSafeData(key_handle),
+            raw_id: Base64UrlSafeData::from(key_handle),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(ao_bytes),
-                client_data_json: Base64UrlSafeData(vec![]),
+                attestation_object: Base64UrlSafeData::from(ao_bytes),
+                client_data_json: Base64UrlSafeData::from(vec![]),
                 transports: None,
             },
             type_: "public-key".to_string(),
@@ -413,15 +413,15 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
             )
             .collect();
 
-        let id: String = Base64UrlSafeData(u2sd.key_handle.clone()).to_string();
+        let id: String = Base64UrlSafeData::from(u2sd.key_handle.clone()).to_string();
 
         Ok(PublicKeyCredential {
             id,
-            raw_id: Base64UrlSafeData(u2sd.key_handle.clone()),
+            raw_id: Base64UrlSafeData::from(u2sd.key_handle.clone()),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: Base64UrlSafeData(authdata),
-                client_data_json: Base64UrlSafeData(vec![]),
-                signature: Base64UrlSafeData(u2sd.signature),
+                authenticator_data: Base64UrlSafeData::from(authdata),
+                client_data_json: Base64UrlSafeData::from(vec![]),
+                signature: Base64UrlSafeData::from(u2sd.signature),
                 user_handle: None,
             },
             type_: "public-key".to_string(),

@@ -31,19 +31,19 @@ impl Challenge {
 
 impl From<Challenge> for Base64UrlSafeData {
     fn from(chal: Challenge) -> Self {
-        Base64UrlSafeData(chal.0)
+        Base64UrlSafeData::from(chal.0)
     }
 }
 
 impl From<Base64UrlSafeData> for Challenge {
     fn from(d: Base64UrlSafeData) -> Self {
-        Challenge(d.0)
+        Challenge(d.into())
     }
 }
 
 impl<'a> From<&'a Base64UrlSafeData> for &'a ChallengeRef {
     fn from(d: &'a Base64UrlSafeData) -> Self {
-        ChallengeRef::new(d.0.as_slice())
+        ChallengeRef::new(d.as_slice())
     }
 }
 
@@ -307,7 +307,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
         i,
         AttestedCredentialData {
             aaguid,
-            credential_id: Base64UrlSafeData(cred_id.to_vec()),
+            credential_id: Base64UrlSafeData::from(cred_id.to_vec()),
             credential_pk: cred_pk,
         },
     ))

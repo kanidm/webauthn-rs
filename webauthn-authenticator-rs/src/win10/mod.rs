@@ -191,16 +191,16 @@ impl AuthenticatorBackend for Win10 {
                 .to_string()
                 .map_err(|_| WebauthnCError::Internal)?;
 
-            let id: String = Base64UrlSafeData(cred_id.clone()).to_string();
+            let id: String = Base64UrlSafeData::from(cred_id.clone()).to_string();
 
             Ok(RegisterPublicKeyCredential {
                 id,
-                raw_id: Base64UrlSafeData(cred_id),
+                raw_id: Base64UrlSafeData::from(cred_id),
                 type_,
                 extensions: native_to_registration_extensions(&a.Extensions)?,
                 response: AuthenticatorAttestationResponseRaw {
-                    attestation_object: Base64UrlSafeData(attesation_object),
-                    client_data_json: Base64UrlSafeData(
+                    attestation_object: Base64UrlSafeData::from(attesation_object),
+                    client_data_json: Base64UrlSafeData::from(
                         clientdata.client_data_json().as_bytes().to_vec(),
                     ),
                     transports: Some(native_to_transports(a.dwUsedTransport)),
@@ -312,7 +312,7 @@ impl AuthenticatorBackend for Win10 {
                 from_raw_parts(a.pbAuthenticatorData, a.cbAuthenticatorData as usize).into();
             let signature = from_raw_parts(a.pbSignature, a.cbSignature as usize).into();
 
-            let credential_id = Base64UrlSafeData(
+            let credential_id = Base64UrlSafeData::from(
                 from_raw_parts(a.Credential.pbId, a.Credential.cbId as usize).into(),
             );
             let type_ = a
@@ -332,12 +332,12 @@ impl AuthenticatorBackend for Win10 {
                 id: credential_id.to_string(),
                 raw_id: credential_id,
                 response: AuthenticatorAssertionResponseRaw {
-                    authenticator_data: Base64UrlSafeData(authenticator_data),
-                    client_data_json: Base64UrlSafeData(
+                    authenticator_data: Base64UrlSafeData::from(authenticator_data),
+                    client_data_json: Base64UrlSafeData::from(
                         clientdata.client_data_json().as_bytes().to_vec(),
                     ),
-                    signature: Base64UrlSafeData(signature),
-                    user_handle: Some(Base64UrlSafeData(user_id)),
+                    signature: Base64UrlSafeData::from(signature),
+                    user_handle: Some(Base64UrlSafeData::from(user_id)),
                 },
                 type_,
                 extensions,

@@ -156,8 +156,8 @@ impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
         let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
         let mut ctx = bn::BigNumContext::new()?;
         let mut point = ec::EcPoint::new(&group)?;
-        let x = bn::BigNum::from_slice(k.x.0.as_slice())?;
-        let y = bn::BigNum::from_slice(k.y.0.as_slice())?;
+        let x = bn::BigNum::from_slice(k.x.as_slice())?;
+        let y = bn::BigNum::from_slice(k.y.as_slice())?;
         point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
 
         ec::EcKey::from_public_key(&group, &point)
@@ -321,7 +321,7 @@ impl From<CredentialV3> for Credential {
 
         // prior to 20220520 no multi-device credentials existed to migrate from.
         Credential {
-            cred_id: Base64UrlSafeData(cred_id),
+            cred_id: Base64UrlSafeData::from(cred_id),
             cred,
             counter,
             transports: None,
@@ -506,22 +506,22 @@ impl Into<SerialisableAttestationData> for ParsedAttestationData {
             ParsedAttestationData::Basic(chain) => SerialisableAttestationData::Basic(
                 chain
                     .into_iter()
-                    .map(|c| Base64UrlSafeData(c.to_der().expect("Invalid DER")))
+                    .map(|c| Base64UrlSafeData::from(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::Self_ => SerialisableAttestationData::Self_,
             ParsedAttestationData::AttCa(chain) => SerialisableAttestationData::AttCa(
-                // Base64UrlSafeData(c.to_der().expect("Invalid DER")),
+                // Base64UrlSafeData::from(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| Base64UrlSafeData(c.to_der().expect("Invalid DER")))
+                    .map(|c| Base64UrlSafeData::from(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::AnonCa(chain) => SerialisableAttestationData::AnonCa(
-                // Base64UrlSafeData(c.to_der().expect("Invalid DER")),
+                // Base64UrlSafeData::from(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| Base64UrlSafeData(c.to_der().expect("Invalid DER")))
+                    .map(|c| Base64UrlSafeData::from(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::ECDAA => SerialisableAttestationData::ECDAA,
@@ -539,7 +539,7 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
             SerialisableAttestationData::Basic(chain) => ParsedAttestationData::Basic(
                 chain
                     .into_iter()
-                    .map(|c| x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError))
+                    .map(|c| x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError))
                     .collect::<WebauthnResult<_>>()?,
             ),
             SerialisableAttestationData::Self_ => ParsedAttestationData::Self_,
@@ -547,14 +547,14 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 // x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
                 chain
                     .into_iter()
-                    .map(|c| x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError))
+                    .map(|c| x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError))
                     .collect::<WebauthnResult<_>>()?,
             ),
             SerialisableAttestationData::AnonCa(chain) => ParsedAttestationData::AnonCa(
                 // x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
                 chain
                     .into_iter()
-                    .map(|c| x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError))
+                    .map(|c| x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError))
                     .collect::<WebauthnResult<_>>()?,
             ),
             SerialisableAttestationData::ECDAA => ParsedAttestationData::ECDAA,
