@@ -681,7 +681,8 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
             .map(|c| c.type_)
             .ok_or(WebauthnCError::Cbor)?;
         let signature = Base64UrlSafeData::from(ret.signature.ok_or(WebauthnCError::Cbor)?);
-        let authenticator_data = Base64UrlSafeData::from(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
+        let authenticator_data =
+            Base64UrlSafeData::from(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
 
         Ok(PublicKeyCredential {
             id,

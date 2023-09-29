@@ -74,10 +74,7 @@ impl From<GetAssertionRequest> for BTreeMap<u32, Value> {
                                     Value::Text("type".to_string()),
                                     Value::Text(a.type_.to_owned()),
                                 ),
-                                (
-                                    Value::Text("id".to_string()),
-                                    Value::Bytes(a.id.to_vec()),
-                                ),
+                                (Value::Text("id".to_string()), Value::Bytes(a.id.to_vec())),
                             ]);
 
                             if let Some(transports) = &a.transports {
@@ -189,7 +186,10 @@ impl From<GetAssertionResponse> for BTreeMap<u32, Value> {
         let mut keys = BTreeMap::new();
         if let Some(credential) = credential {
             let mut m = BTreeMap::from([
-                (Value::Text("id".to_string()), Value::Bytes(credential.id.into())),
+                (
+                    Value::Text("id".to_string()),
+                    Value::Bytes(credential.id.into()),
+                ),
                 (
                     Value::Text("type".to_string()),
                     Value::Text(credential.type_),
