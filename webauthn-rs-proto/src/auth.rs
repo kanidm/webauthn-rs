@@ -200,7 +200,8 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         // Base64 it
 
         let data_raw_id_b64 = Base64UrlSafeData::from(data_raw_id);
-        let data_response_client_data_json_b64 = Base64UrlSafeData::from(data_response_client_data_json);
+        let data_response_client_data_json_b64 =
+            Base64UrlSafeData::from(data_response_client_data_json);
         let data_response_authenticator_data_b64 =
             Base64UrlSafeData::from(data_response_authenticator_data);
         let data_response_signature_b64 = Base64UrlSafeData::from(data_response_signature);

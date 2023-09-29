@@ -536,7 +536,9 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
             SerialisableAttestationData::Basic(chain) => ParsedAttestationData::Basic(
                 chain
                     .into_iter()
-                    .map(|c| x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError))
+                    .map(|c| {
+                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                    })
                     .collect::<WebauthnResult<_>>()?,
             ),
             SerialisableAttestationData::Self_ => ParsedAttestationData::Self_,
@@ -544,14 +546,18 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 // x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
                 chain
                     .into_iter()
-                    .map(|c| x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError))
+                    .map(|c| {
+                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                    })
                     .collect::<WebauthnResult<_>>()?,
             ),
             SerialisableAttestationData::AnonCa(chain) => ParsedAttestationData::AnonCa(
                 // x509::X509::from_der(&c.0).map_err(WebauthnError::OpenSSLError)?,
                 chain
                     .into_iter()
-                    .map(|c| x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError))
+                    .map(|c| {
+                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                    })
                     .collect::<WebauthnResult<_>>()?,
             ),
             SerialisableAttestationData::ECDAA => ParsedAttestationData::ECDAA,

@@ -137,10 +137,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
                                     Value::Text("type".to_string()),
                                     Value::Text(a.type_.to_owned()),
                                 ),
-                                (
-                                    Value::Text("id".to_string()),
-                                    Value::Bytes(a.id.to_vec()),
-                                ),
+                                (Value::Text("id".to_string()), Value::Bytes(a.id.to_vec())),
                             ]);
 
                             if let Some(transports) = &a.transports {

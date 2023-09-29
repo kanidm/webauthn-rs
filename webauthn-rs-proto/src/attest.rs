@@ -187,11 +187,12 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
 
         // Now we can convert to the base64 values for json.
         let data_raw_id_b64 = Base64UrlSafeData::from(data_raw_id);
-        
+
         let data_response_attestation_object_b64 =
             Base64UrlSafeData::from(data_response_attestation_object);
 
-        let data_response_client_data_json_b64 = Base64UrlSafeData::from(data_response_client_data_json);
+        let data_response_client_data_json_b64 =
+            Base64UrlSafeData::from(data_response_client_data_json);
 
         RegisterPublicKeyCredential {
             id: format!("{data_raw_id_b64}"),
