@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{Base64UrlSafeData, ALLOWED_DECODING_FORMATS, URL_SAFE_NO_PAD};
+use crate::{Base64UrlSafeData, URL_SAFE_NO_PAD};
 use base64::Engine;
 use serde::{Serialize, Serializer};
 
@@ -25,6 +25,12 @@ common_impls!(HumanBinaryData);
 impl From<Base64UrlSafeData> for HumanBinaryData {
     fn from(value: Base64UrlSafeData) -> Self {
         Self(value.into())
+    }
+}
+
+impl PartialEq<Base64UrlSafeData> for HumanBinaryData {
+    fn eq(&self, other: &Base64UrlSafeData) -> bool {
+        self.0.eq(other)
     }
 }
 

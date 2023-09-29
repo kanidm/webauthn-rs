@@ -100,7 +100,7 @@ macro_rules! common_impls {
                     E: serde::de::Error,
                 {
                     // Forgive alt base64 decoding formats
-                    for config in ALLOWED_DECODING_FORMATS {
+                    for config in crate::ALLOWED_DECODING_FORMATS {
                         if let Ok(data) = config.decode(v) {
                             return Ok(<$type>::from(data));
                         }

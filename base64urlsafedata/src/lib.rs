@@ -137,6 +137,12 @@ impl From<HumanBinaryData> for Base64UrlSafeData {
     }
 }
 
+impl PartialEq<HumanBinaryData> for Base64UrlSafeData {
+    fn eq(&self, other: &HumanBinaryData) -> bool {
+        self.0.eq(other)
+    }
+}
+
 impl fmt::Display for Base64UrlSafeData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", URL_SAFE_NO_PAD.encode(self))
