@@ -19,6 +19,12 @@ macro_rules! common_impls {
             }
         }
 
+        impl std::borrow::Borrow<[u8]> for $type {
+            fn borrow(&self) -> &[u8] {
+                self.0.as_slice()
+            }
+        }
+
         impl From<Vec<u8>> for $type {
             fn from(value: Vec<u8>) -> Self {
                 Self(value)

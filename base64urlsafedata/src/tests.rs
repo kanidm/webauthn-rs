@@ -33,7 +33,6 @@ macro_rules! from_invalid_json_test {
     };
 }
 
-
 macro_rules! from_cbor_test {
     ($($name:ident: $value:expr,)*) => {
         $(
@@ -212,7 +211,7 @@ fn interop_vec() {
     a.push(4);
     assert_eq!(vec![0, 1, 2, 3, 4], a);
     assert_eq!(5, a.len());
-    
+
     let mut a = HumanBinaryData::from([0, 1, 2, 3]);
     a.push(4);
     assert_eq!(vec![0, 1, 2, 3, 4], a);

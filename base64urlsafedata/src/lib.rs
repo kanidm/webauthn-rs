@@ -101,7 +101,6 @@ use base64::{
     Engine,
 };
 use serde::{Serialize, Serializer};
-use std::borrow::Borrow;
 use std::convert::TryFrom;
 use std::fmt;
 use std::hash::Hash;
@@ -146,12 +145,6 @@ impl PartialEq<HumanBinaryData> for Base64UrlSafeData {
 impl fmt::Display for Base64UrlSafeData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", URL_SAFE_NO_PAD.encode(self))
-    }
-}
-
-impl Borrow<[u8]> for Base64UrlSafeData {
-    fn borrow(&self) -> &[u8] {
-        self.0.as_slice()
     }
 }
 
