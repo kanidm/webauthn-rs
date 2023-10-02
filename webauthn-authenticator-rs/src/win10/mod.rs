@@ -41,9 +41,10 @@ use crate::win10::{
 use crate::{
     error::WebauthnCError,
     util::{creation_to_clientdata, get_to_clientdata},
-    AuthenticatorBackend, Url,
+    AuthenticatorBackend, Url, BASE64_ENGINE,
 };
 
+use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use webauthn_rs_proto::{
     AuthenticatorAssertionResponseRaw, AuthenticatorAttachment,
@@ -182,24 +183,21 @@ impl AuthenticatorBackend for Win10 {
         // trace!("{:?}", (*a));
 
         unsafe {
-            let cred_id: Vec<u8> =
-                from_raw_parts(a.pbCredentialId, a.cbCredentialId as usize).into();
+            let cred_id = from_raw_parts(a.pbCredentialId, a.cbCredentialId as usize).to_vec();
             let attesation_object =
-                from_raw_parts(a.pbAttestationObject, a.cbAttestationObject as usize).into();
+                from_raw_parts(a.pbAttestationObject, a.cbAttestationObject as usize).to_vec();
             let type_: String = a
                 .pwszFormatType
                 .to_string()
                 .map_err(|_| WebauthnCError::Internal)?;
 
-            let id: String = Base64UrlSafeData::from(cred_id.clone()).to_string();
-
             Ok(RegisterPublicKeyCredential {
-                id,
-                raw_id: Base64UrlSafeData::from(cred_id),
+                id: BASE64_ENGINE.encode(&cred_id),
+                raw_id: cred_id.into(),
                 type_,
                 extensions: native_to_registration_extensions(&a.Extensions)?,
                 response: AuthenticatorAttestationResponseRaw {
-                    attestation_object: Base64UrlSafeData::from(attesation_object),
+                    attestation_object: attesation_object.into(),
                     client_data_json: Base64UrlSafeData::from(
                         clientdata.client_data_json().as_bytes().to_vec(),
                     ),
@@ -307,14 +305,13 @@ impl AuthenticatorBackend for Win10 {
         // trace!("got result from WebAuthNAuthenticatorGetAssertion");
 
         unsafe {
-            let user_id = from_raw_parts(a.pbUserId, a.cbUserId as usize).into();
+            let user_id = from_raw_parts(a.pbUserId, a.cbUserId as usize).to_vec();
             let authenticator_data =
-                from_raw_parts(a.pbAuthenticatorData, a.cbAuthenticatorData as usize).into();
-            let signature = from_raw_parts(a.pbSignature, a.cbSignature as usize).into();
+                from_raw_parts(a.pbAuthenticatorData, a.cbAuthenticatorData as usize).to_vec();
+            let signature = from_raw_parts(a.pbSignature, a.cbSignature as usize).to_vec();
 
-            let credential_id = Base64UrlSafeData::from(
-                from_raw_parts(a.Credential.pbId, a.Credential.cbId as usize).into(),
-            );
+            let credential_id =
+                from_raw_parts(a.Credential.pbId, a.Credential.cbId as usize).to_vec();
             let type_ = a
                 .Credential
                 .pwszCredentialType
@@ -329,15 +326,15 @@ impl AuthenticatorBackend for Win10 {
             extensions.appid = Some(app_id_used.into());
 
             Ok(PublicKeyCredential {
-                id: credential_id.to_string(),
-                raw_id: credential_id,
+                id: BASE64_ENGINE.encode(&credential_id),
+                raw_id: credential_id.into(),
                 response: AuthenticatorAssertionResponseRaw {
-                    authenticator_data: Base64UrlSafeData::from(authenticator_data),
+                    authenticator_data: authenticator_data.into(),
                     client_data_json: Base64UrlSafeData::from(
                         clientdata.client_data_json().as_bytes().to_vec(),
                     ),
-                    signature: Base64UrlSafeData::from(signature),
-                    user_handle: Some(Base64UrlSafeData::from(user_id)),
+                    signature: signature.into(),
+                    user_handle: Some(user_id.into()),
                 },
                 type_,
                 extensions,

@@ -181,6 +181,9 @@ pub use crate::authenticator_hashed::{
 #[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 pub use crate::crypto::SHA256Hash;
 
+const BASE64_ENGINE: base64::engine::GeneralPurpose =
+    base64::engine::general_purpose::URL_SAFE_NO_PAD;
+
 pub struct WebauthnAuthenticator<T>
 where
     T: AuthenticatorBackend,
