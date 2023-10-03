@@ -12,6 +12,12 @@ repository = "https://github.com/kanidm/webauthn-rs/"
 rust-version = "1.70.0"
 build = "build.rs"
 
+[[bin]]
+name = "fido-key-manager"
+# cargo can't run binaries needing elevation on Windows, and there's no tests
+# here anyway.
+test = false
+
 [features]
 # Bluetooth support is flakey on Linux and Windows, so not enabled by default.
 bluetooth = ["webauthn-authenticator-rs/bluetooth"]
