@@ -21,6 +21,7 @@ wasm = ["wasm-bindgen", "web-sys", "js-sys", "serde-wasm-bindgen"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
+base64.workspace = true
 base64urlsafedata.workspace = true
 serde.workspace = true
 serde_json.workspace = true
