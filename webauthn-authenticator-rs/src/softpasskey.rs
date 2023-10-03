@@ -4,6 +4,8 @@ use crate::stubs::*;
 use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
 use crate::crypto::{compute_sha256, get_group};
 use crate::error::WebauthnCError;
+use crate::BASE64_ENGINE;
+use base64::Engine;
 use openssl::{bn, ec, hash, pkey, rand, sign};
 use serde_cbor_2::value::Value;
 use std::collections::BTreeMap;
@@ -355,14 +357,12 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         // Okay, now persist the token. We shouldn't fail from here.
         self.tokens.insert(key_handle.clone(), ecpriv_der);
 
-        let id: String = Base64UrlSafeData::from(key_handle.clone()).to_string();
-
         let rego = RegisterPublicKeyCredential {
-            id,
-            raw_id: Base64UrlSafeData::from(key_handle),
+            id: BASE64_ENGINE.encode(&key_handle),
+            raw_id: key_handle.into(),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData::from(ao_bytes),
-                client_data_json: Base64UrlSafeData::from(vec![]),
+                attestation_object: ao_bytes.into(),
+                client_data_json: Base64UrlSafeData::new(),
                 transports: None,
             },
             type_: "public-key".to_string(),
@@ -413,15 +413,13 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
             )
             .collect();
 
-        let id: String = Base64UrlSafeData::from(u2sd.key_handle.clone()).to_string();
-
         Ok(PublicKeyCredential {
-            id,
-            raw_id: Base64UrlSafeData::from(u2sd.key_handle.clone()),
+            id: BASE64_ENGINE.encode(&u2sd.key_handle),
+            raw_id: u2sd.key_handle.into(),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: Base64UrlSafeData::from(authdata),
-                client_data_json: Base64UrlSafeData::from(vec![]),
-                signature: Base64UrlSafeData::from(u2sd.signature),
+                authenticator_data: authdata.into(),
+                client_data_json: Base64UrlSafeData::new(),
+                signature: u2sd.signature.into(),
                 user_handle: None,
             },
             type_: "public-key".to_string(),

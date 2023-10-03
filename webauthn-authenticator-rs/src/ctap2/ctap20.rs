@@ -8,9 +8,10 @@ use crate::{
     error::{CtapError, WebauthnCError},
     transport::Token,
     ui::UiCallback,
-    SHA256Hash,
+    SHA256Hash, BASE64_ENGINE,
 };
 
+use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use futures::executor::block_on;
 
@@ -672,7 +673,6 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
             .as_ref()
             .map(|c| c.id.to_owned())
             .ok_or(WebauthnCError::Cbor)?;
-        let id = raw_id.to_string();
         let type_ = ret
             .credential
             .map(|c| c.type_)
@@ -682,7 +682,7 @@ impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
             Base64UrlSafeData::from(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
 
         Ok(PublicKeyCredential {
-            id,
+            id: BASE64_ENGINE.encode(&raw_id),
             raw_id,
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data,

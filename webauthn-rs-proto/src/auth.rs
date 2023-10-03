@@ -1,10 +1,14 @@
 //! Types related to authentication (Assertion)
 
+#[cfg(feature = "wasm")]
+use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{AuthenticationExtensionsClientOutputs, RequestAuthenticationExtensions};
 use crate::options::*;
+#[cfg(feature = "wasm")]
+use crate::BASE64_ENGINE;
 
 /// The requested options for the authentication
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -197,25 +201,14 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         let data_extensions = data.get_client_extension_results();
         web_sys::console::log_1(&data_extensions);
 
-        // Base64 it
-
-        let data_raw_id_b64 = Base64UrlSafeData::from(data_raw_id);
-        let data_response_client_data_json_b64 =
-            Base64UrlSafeData::from(data_response_client_data_json);
-        let data_response_authenticator_data_b64 =
-            Base64UrlSafeData::from(data_response_authenticator_data);
-        let data_response_signature_b64 = Base64UrlSafeData::from(data_response_signature);
-
-        let data_response_user_handle_b64 = data_response_user_handle.map(Base64UrlSafeData::from);
-
         PublicKeyCredential {
-            id: format!("{data_raw_id_b64}"),
-            raw_id: data_raw_id_b64,
+            id: BASE64_ENGINE.encode(&data_raw_id),
+            raw_id: data_raw_id.into(),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: data_response_authenticator_data_b64,
-                client_data_json: data_response_client_data_json_b64,
-                signature: data_response_signature_b64,
-                user_handle: data_response_user_handle_b64,
+                authenticator_data: data_response_authenticator_data.into(),
+                client_data_json: data_response_client_data_json.into(),
+                signature: data_response_signature.into(),
+                user_handle: data_response_user_handle.map(Into::into),
             },
             extensions: data_extensions.into(),
             type_: "public-key".to_string(),

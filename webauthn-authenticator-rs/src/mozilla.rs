@@ -7,7 +7,9 @@ use crate::stubs::*;
 use crate::error::WebauthnCError;
 use crate::AuthenticatorBackend;
 use crate::Url;
+use crate::BASE64_ENGINE;
 
+use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use webauthn_rs_proto::PublicKeyCredentialCreationOptions;
 use webauthn_rs_proto::{
@@ -202,8 +204,8 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             Err(_e) => return Err(WebauthnCError::PlatformAuthenticator),
         };
 
-        trace!("{:?}", attestation_object);
-        trace!("{:?}", client_data);
+        trace!(?attestation_object);
+        trace!(?client_data);
 
         // Warning! In the future this may change!
         // This currently relies on serde_json and serde_cbor_2 being deterministic, and has
@@ -216,22 +218,18 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         };
 
         // Based on the request attestation format, provide it
-        let attestation_object = serde_cbor_2::to_vec(&attestation_object)
-            .map(Base64UrlSafeData)
-            .map_err(|_| WebauthnCError::Cbor)?;
+        let attestation_object =
+            serde_cbor_2::to_vec(&attestation_object).map_err(|_| WebauthnCError::Cbor)?;
 
-        let client_data_json = serde_json::to_vec(&client_data)
-            .map(Base64UrlSafeData)
-            .map_err(|_| WebauthnCError::Json)?;
+        let client_data_json =
+            serde_json::to_vec(&client_data).map_err(|_| WebauthnCError::Json)?;
 
         Ok(RegisterPublicKeyCredential {
-            id: raw_id.to_string(),
+            id: BASE64_ENGINE.encode(&raw_id),
             raw_id,
             response: AuthenticatorAttestationResponseRaw {
-                // Turn into cbor,
-                attestation_object,
-                // Turn into json
-                client_data_json,
+                attestation_object: attestation_object.into(),
+                client_data_json: client_data_json.into(),
                 transports: None,
             },
             type_: "public-key".to_string(),
@@ -299,8 +297,8 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             Err(_e) => return Err(WebauthnCError::PlatformAuthenticator),
         };
 
-        trace!("{:?}", assertion_object);
-        trace!("{:?}", client_data);
+        trace!(?assertion_object);
+        trace!(?client_data);
 
         let AssertionObject(mut assertions) = assertion_object;
         let assertion = if let Some(a) = assertions.pop() {
@@ -318,30 +316,23 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             .map(|pkdesc| Base64UrlSafeData::from(pkdesc.id))
             .ok_or(WebauthnCError::Internal)?;
 
-        let id = raw_id.to_string();
-
-        let user_handle = assertion.user.map(|u| Base64UrlSafeData::from(u.id));
-        let signature = Base64UrlSafeData::from(assertion.signature);
-
         // let authenticator_data = serde_cbor_2::to_vec(&assertion.auth_data)
         let authenticator_data = assertion
             .auth_data
             .to_vec()
-            .map(Base64UrlSafeData)
             .map_err(|_| WebauthnCError::Cbor)?;
 
-        let client_data_json = serde_json::to_vec(&client_data)
-            .map(Base64UrlSafeData)
-            .map_err(|_| WebauthnCError::Json)?;
+        let client_data_json =
+            serde_json::to_vec(&client_data).map_err(|_| WebauthnCError::Json)?;
 
         Ok(PublicKeyCredential {
-            id,
+            id: BASE64_ENGINE.encode(&raw_id),
             raw_id,
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data,
-                client_data_json,
-                signature,
-                user_handle,
+                authenticator_data: authenticator_data.into(),
+                client_data_json: client_data_json.into(),
+                signature: assertion.signature.into(),
+                user_handle: assertion.user.map(|u| u.id.into()),
             },
             type_: "public-key".to_string(),
             extensions: AuthenticationExtensionsClientOutputs {
