@@ -11,6 +11,12 @@ repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
 license = "MPL-2.0"
 
+[features]
+# TLS support is disabled by default due rustls depending on ring 0.16, which
+# doesn't build on aarch64-pc-windows-msvc and lots of cross-compiling problems:
+# https://github.com/rustls/rustls/issues/1103
+tls = ["dep:tide-rustls", "dep:rustls"]
+
 [dependencies]
 webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", features = ["core"] }
 webauthn-rs-core.workspace = true
@@ -18,11 +24,11 @@ webauthn-rs = { workspace = true, features = ["resident-key-support", "preview-f
 webauthn-rs-device-catalog.workspace = true
 
 tide.workspace = true
-tide-rustls = "0.3"
+tide-rustls = { version = "0.3", optional = true }
 async-std.workspace = true
 openssl.workspace = true
 structopt = { version = "0.3", default-features = false }
-rustls = "0.19.0"
+rustls = { version = "0.19.0", optional = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rand.workspace = true

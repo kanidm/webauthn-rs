@@ -22,6 +22,7 @@ use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKey
 use webauthn_rs_demo_shared::*;
 
 mod actors;
+#[cfg(feature = "tls")]
 mod crypto;
 
 use crate::actors::*;
@@ -738,14 +739,19 @@ async fn main() -> tide::Result<()> {
     app.at("/*").get(index_view);
 
     if opt.enable_tls {
-        debug!("Starting with TLS ...");
-        let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
-        app.listen(
-            tide_rustls::TlsListener::build()
-                .addrs(opt.bind.as_str())
-                .config(server_config),
-        )
-        .await?;
+        #[cfg(feature = "tls")]
+        {
+            debug!("Starting with TLS ...");
+            let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
+            app.listen(
+                tide_rustls::TlsListener::build()
+                    .addrs(opt.bind.as_str())
+                    .config(server_config),
+            )
+            .await?;
+        }
+        #[cfg(not(feature = "tls"))]
+        panic!("TLS not available in this build - build with --features tls");
     } else {
         debug!("Starting without TLS ...");
         app.listen(opt.bind).await?;
