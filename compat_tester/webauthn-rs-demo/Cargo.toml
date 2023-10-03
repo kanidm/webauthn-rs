@@ -12,10 +12,8 @@ readme = "README.md"
 license = "MPL-2.0"
 
 [features]
-# TLS support is disabled by default due rustls depending on ring 0.16, which
-# doesn't build on aarch64-pc-windows-msvc and lots of cross-compiling problems:
-# https://github.com/rustls/rustls/issues/1103
-tls = ["dep:tide-rustls", "dep:rustls"]
+default = ["tls"]
+tls = ["dep:tide-openssl"]
 
 [dependencies]
 webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", features = ["core"] }
@@ -24,14 +22,16 @@ webauthn-rs = { workspace = true, features = ["resident-key-support", "preview-f
 webauthn-rs-device-catalog.workspace = true
 
 tide.workspace = true
-tide-rustls = { version = "0.3", optional = true }
 async-std.workspace = true
-openssl.workspace = true
 structopt = { version = "0.3", default-features = false }
-rustls = { version = "0.19.0", optional = true }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rand.workspace = true
 url = { workspace = true , features = ["serde"] }
 
 serde.workspace = true
+
+[dependencies.tide-openssl]
+git = "https://github.com/victorcwai/tide-openssl.git"
+rev = "7d0e2215f2f1ebfa71aa30d132213ed45dd95cbf"
+optional = true
