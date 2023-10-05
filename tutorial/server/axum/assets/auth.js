@@ -12,6 +12,9 @@ function register () {
     .then(credentialCreationOptions => {
         credentialCreationOptions.publicKey.challenge = Base64.toUint8Array(credentialCreationOptions.publicKey.challenge);
         credentialCreationOptions.publicKey.user.id = Base64.toUint8Array(credentialCreationOptions.publicKey.user.id);
+        credentialCreationOptions.publicKey.excludeCredentials?.forEach(function (listItem) {
+            listItem.id = Base64.toUint8Array(listItem.id)
+        });
 
         return navigator.credentials.create({
             publicKey: credentialCreationOptions.publicKey
@@ -57,7 +60,7 @@ function login() {
     .then(response => response.json())
     .then((credentialRequestOptions) => {
         credentialRequestOptions.publicKey.challenge = Base64.toUint8Array(credentialRequestOptions.publicKey.challenge);
-        credentialRequestOptions.publicKey.allowCredentials.forEach(function (listItem) {
+        credentialRequestOptions.publicKey.allowCredentials?.forEach(function (listItem) {
             listItem.id = Base64.toUint8Array(listItem.id)
         });
 
