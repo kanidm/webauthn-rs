@@ -22,13 +22,13 @@ pub struct WinUserEntityInformation {
 
 impl WinWrapper<User> for WinUserEntityInformation {
     type NativeType = WEBAUTHN_USER_ENTITY_INFORMATION;
-    fn new(u: &User) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(u: User) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Construct an incomplete type first, so that all the pointers are fixed.
         let res = Self {
             native: WEBAUTHN_USER_ENTITY_INFORMATION::default(),
-            _id: u.id.clone().into(),
-            _name: u.name.clone().into(),
-            _display_name: u.display_name.clone().into(),
+            _id: u.id.into(),
+            _name: u.name.into(),
+            _display_name: u.display_name.into(),
         };
 
         let mut boxed = Box::pin(res);

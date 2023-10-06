@@ -43,7 +43,7 @@ where
     /// The `webauthn-authenticator-rs` type which this wraps.
     type WrappedType;
     /// Converts the [Self::WrappedType] to a [Vec] of Windows API types.
-    fn to_native(e: &Self::WrappedType) -> Vec<Self>;
+    fn to_native(e: Self::WrappedType) -> Vec<Self>;
 }
 
 impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
@@ -73,7 +73,7 @@ impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
 
     type WrappedType = RequestRegistrationExtensions;
 
-    fn to_native(e: &Self::WrappedType) -> Vec<Self> {
+    fn to_native(e: Self::WrappedType) -> Vec<Self> {
         let mut o: Vec<Self> = Vec::new();
         if let Some(c) = &e.cred_protect {
             o.push(c.into());
@@ -291,7 +291,7 @@ where
         &self.native
     }
 
-    fn new(e: &T::WrappedType) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(e: T::WrappedType) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Convert the extensions to a Windows-ish type
         // trace!(?e);
         let extensions = T::to_native(e);

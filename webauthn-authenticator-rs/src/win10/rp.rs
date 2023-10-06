@@ -21,11 +21,11 @@ pub struct WinRpEntityInformation {
 
 impl WinWrapper<RelyingParty> for WinRpEntityInformation {
     type NativeType = WEBAUTHN_RP_ENTITY_INFORMATION;
-    fn new(rp: &RelyingParty) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(rp: RelyingParty) -> Result<Pin<Box<Self>>, WebauthnCError> {
         let res = Self {
             native: Default::default(),
-            id: rp.id.clone().into(),
-            name: rp.name.clone().into(),
+            id: rp.id.into(),
+            name: rp.name.into(),
         };
 
         let mut boxed = Box::pin(res);
