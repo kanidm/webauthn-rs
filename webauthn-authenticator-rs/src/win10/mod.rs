@@ -97,18 +97,18 @@ impl AuthenticatorBackend for Win10 {
     ) -> Result<RegisterPublicKeyCredential, WebauthnCError> {
         let hwnd = Window::new()?;
         // let hwnd = get_hwnd().ok_or(WebauthnCError::CannotFindHWND)?;
-        let rp = WinRpEntityInformation::new(&options.rp)?;
-        let userinfo = WinUserEntityInformation::new(&options.user)?;
-        let pubkeycredparams = WinCoseCredentialParameters::new(&options.pub_key_cred_params)?;
+        let rp = WinRpEntityInformation::new(options.rp)?;
+        let userinfo = WinUserEntityInformation::new(options.user)?;
+        let pubkeycredparams = WinCoseCredentialParameters::new(options.pub_key_cred_params)?;
         let clientdata =
-            WinClientData::new(&creation_to_clientdata(origin, options.challenge.clone()))?;
+            WinClientData::new(creation_to_clientdata(origin, options.challenge.clone()))?;
 
-        let mut exclude_credentials = if let Some(e) = options.exclude_credentials.as_ref() {
+        let mut exclude_credentials = if let Some(e) = options.exclude_credentials {
             Some(WinCredentialList::new(e)?)
         } else {
             None
         };
-        let extensions = match &options.extensions {
+        let extensions = match options.extensions {
             Some(e) => WinExtensionsRequest::new(e)?,
             None => Box::pin(WinExtensionsRequest::<WinExtensionMakeCredentialRequest>::default()),
         };
@@ -221,9 +221,9 @@ impl AuthenticatorBackend for Win10 {
         trace!(?options);
         let hwnd = Window::new()?;
         let rp_id: HSTRING = options.rp_id.clone().into();
-        let clientdata = WinClientData::new(&get_to_clientdata(origin, options.challenge.clone()))?;
+        let clientdata = WinClientData::new(get_to_clientdata(origin, options.challenge.clone()))?;
 
-        let mut allow_credentials = WinCredentialList::new(options.allow_credentials.as_ref())?;
+        let mut allow_credentials = WinCredentialList::new(options.allow_credentials)?;
 
         let app_id: Option<HSTRING> = options
             .extensions

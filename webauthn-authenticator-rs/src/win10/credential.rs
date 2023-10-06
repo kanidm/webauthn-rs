@@ -111,7 +111,7 @@ impl CredentialType for AllowCredentials {
 
 impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
     type NativeType = WEBAUTHN_CREDENTIAL_LIST;
-    fn new(credentials: &Vec<T>) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(credentials: Vec<T>) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Check that all the credential types are supported.
         for c in credentials.iter() {
             let typ = c.type_();
