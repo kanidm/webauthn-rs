@@ -101,7 +101,6 @@ use base64::{
     Engine,
 };
 use serde::{Serialize, Serializer};
-use std::convert::TryFrom;
 use std::fmt;
 use std::hash::Hash;
 
@@ -139,25 +138,6 @@ impl From<HumanBinaryData> for Base64UrlSafeData {
 impl PartialEq<HumanBinaryData> for Base64UrlSafeData {
     fn eq(&self, other: &HumanBinaryData) -> bool {
         self.0.eq(other)
-    }
-}
-
-impl fmt::Display for Base64UrlSafeData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", URL_SAFE_NO_PAD.encode(self))
-    }
-}
-
-impl TryFrom<&str> for Base64UrlSafeData {
-    type Error = ();
-
-    fn try_from(v: &str) -> Result<Self, Self::Error> {
-        for config in ALLOWED_DECODING_FORMATS {
-            if let Ok(data) = config.decode(v) {
-                return Ok(Base64UrlSafeData(data));
-            }
-        }
-        Err(())
     }
 }
 

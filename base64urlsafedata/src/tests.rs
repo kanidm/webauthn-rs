@@ -1,11 +1,4 @@
 use super::*;
-use std::convert::TryFrom;
-
-#[test]
-fn test_try_from() {
-    assert!(Base64UrlSafeData::try_from("aGVsbG8=").is_ok());
-    assert!(Base64UrlSafeData::try_from("abcdefghij").is_err());
-}
 
 macro_rules! from_json_test {
     ($($name:ident: $value:expr,)*) => {
