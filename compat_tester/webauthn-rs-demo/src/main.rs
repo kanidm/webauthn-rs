@@ -11,7 +11,6 @@ use structopt::StructOpt;
 
 use rand::prelude::*;
 
-#[cfg(feature = "tls")]
 use tide_openssl::TlsListener;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
@@ -751,7 +750,6 @@ async fn main() -> tide::Result<()> {
     app.at("/*").get(index_view);
 
     match (opt.tls_public_key, opt.tls_private_key) {
-        #[cfg(feature = "tls")]
         (Some(tls_cert), Some(tls_key)) => {
             info!("Starting server with TLS...");
             app.listen(
@@ -769,11 +767,7 @@ async fn main() -> tide::Result<()> {
         }
 
         (_, _) => {
-            #[cfg(feature = "tls")]
             panic!("Must specify both --tls-public-key and --tls-private-key, or neither");
-
-            #[cfg(not(feature = "tls"))]
-            panic!("TLS not available in this build - build with --features tls");
         }
     }
     Ok(())

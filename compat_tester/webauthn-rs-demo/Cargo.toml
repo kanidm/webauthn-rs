@@ -11,10 +11,6 @@ repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
 license = "MPL-2.0"
 
-[features]
-default = ["tls"]
-tls = ["dep:tide-openssl"]
-
 [dependencies]
 webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", features = ["core"] }
 webauthn-rs-core.workspace = true
@@ -34,4 +30,3 @@ serde.workspace = true
 [dependencies.tide-openssl]
 git = "https://github.com/victorcwai/tide-openssl.git"
 rev = "7d0e2215f2f1ebfa71aa30d132213ed45dd95cbf"
-optional = true
