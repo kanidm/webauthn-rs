@@ -74,10 +74,7 @@ impl From<GetAssertionRequest> for BTreeMap<u32, Value> {
                                     Value::Text("type".to_string()),
                                     Value::Text(a.type_.to_owned()),
                                 ),
-                                (
-                                    Value::Text("id".to_string()),
-                                    Value::Bytes(a.id.0.to_owned()),
-                                ),
+                                (Value::Text("id".to_string()), Value::Bytes(a.id.to_vec())),
                             ]);
 
                             if let Some(transports) = &a.transports {
@@ -146,7 +143,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionRequest {
                                 a.remove(&Value::Text("type".to_string()))?,
                                 "type",
                             )?;
-                            let id = Base64UrlSafeData(value_to_vec_u8(
+                            let id = Base64UrlSafeData::from(value_to_vec_u8(
                                 a.remove(&Value::Text("id".to_string()))?,
                                 "id",
                             )?);
@@ -189,7 +186,10 @@ impl From<GetAssertionResponse> for BTreeMap<u32, Value> {
         let mut keys = BTreeMap::new();
         if let Some(credential) = credential {
             let mut m = BTreeMap::from([
-                (Value::Text("id".to_string()), Value::Bytes(credential.id.0)),
+                (
+                    Value::Text("id".to_string()),
+                    Value::Bytes(credential.id.into()),
+                ),
                 (
                     Value::Text("type".to_string()),
                     Value::Text(credential.type_),
@@ -237,7 +237,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
                     let id = v
                         .remove(&Value::Text("id".to_string()))
                         .and_then(|v| value_to_vec_u8(v, "0x01.id"))
-                        .map(Base64UrlSafeData);
+                        .map(Base64UrlSafeData::from);
                     let type_ = v
                         .remove(&Value::Text("type".to_string()))
                         .and_then(|v| value_to_string(v, "0x01.type"));

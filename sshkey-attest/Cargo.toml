@@ -17,6 +17,7 @@ categories = [
 license = "MPL-2.0"
 
 [dependencies]
+base64.workspace = true
 base64urlsafedata.workspace = true
 nom.workspace = true
 openssl.workspace = true

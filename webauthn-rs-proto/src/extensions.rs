@@ -208,11 +208,11 @@ impl Into<js_sys::Object> for &RequestAuthenticationExtensions {
         if let Some(HmacGetSecretInput { output1, output2 }) = hmac_get_secret {
             let hmac = Object::new();
 
-            let o1 = Uint8Array::from(output1.0.as_slice());
+            let o1 = Uint8Array::from(output1.as_slice());
             js_sys::Reflect::set(&hmac, &"output1".into(), &o1).unwrap();
 
             if let Some(output2) = output2 {
-                let o2 = Uint8Array::from(output2.0.as_slice());
+                let o2 = Uint8Array::from(output2.as_slice());
                 js_sys::Reflect::set(&hmac, &"output2".into(), &o2).unwrap();
             }
 
@@ -263,12 +263,12 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
             .and_then(|jv| {
                 let output2 = js_sys::Reflect::get(&jv, &"output2".into())
                     .map(|v| Uint8Array::new(&v).to_vec())
-                    .map(Base64UrlSafeData)
+                    .map(Base64UrlSafeData::from)
                     .ok();
 
                 let output1 = js_sys::Reflect::get(&jv, &"output1".into())
                     .map(|v| Uint8Array::new(&v).to_vec())
-                    .map(Base64UrlSafeData)
+                    .map(Base64UrlSafeData::from)
                     .ok();
 
                 output1.map(|output1| HmacGetSecretOutput { output1, output2 })

@@ -31,11 +31,11 @@ impl WinClientData {
 
 impl WinWrapper<CollectedClientData> for WinClientData {
     type NativeType = WEBAUTHN_CLIENT_DATA;
-    fn new(clientdata: &CollectedClientData) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(clientdata: CollectedClientData) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Construct an incomplete type first, so that all the pointers are fixed.
         let res = Self {
             native: WEBAUTHN_CLIENT_DATA::default(),
-            client_data_json: serde_json::to_string(clientdata)
+            client_data_json: serde_json::to_string(&clientdata)
                 .map_err(|_| WebauthnCError::Json)?,
         };
 

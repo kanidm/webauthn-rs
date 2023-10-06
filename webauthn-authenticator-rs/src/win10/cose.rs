@@ -20,10 +20,10 @@ struct WinCoseCredentialParameter {
 }
 
 impl WinCoseCredentialParameter {
-    fn from(p: &PubKeyCredParams) -> Pin<Box<Self>> {
+    fn from(p: PubKeyCredParams) -> Pin<Box<Self>> {
         let res = Self {
             native: Default::default(),
-            _typ: p.type_.clone().into(),
+            _typ: p.type_.into(),
         };
 
         let mut boxed = Box::pin(res);
@@ -52,9 +52,9 @@ pub struct WinCoseCredentialParameters {
 impl WinWrapper<Vec<PubKeyCredParams>> for WinCoseCredentialParameters {
     type NativeType = WEBAUTHN_COSE_CREDENTIAL_PARAMETERS;
 
-    fn new(params: &Vec<PubKeyCredParams>) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(params: Vec<PubKeyCredParams>) -> Result<Pin<Box<Self>>, WebauthnCError> {
         let params: Vec<Pin<Box<WinCoseCredentialParameter>>> = params
-            .iter()
+            .into_iter()
             .map(WinCoseCredentialParameter::from)
             .collect();
         Ok(WinCoseCredentialParameters::from_wrapped(params))
