@@ -141,25 +141,6 @@ impl PartialEq<HumanBinaryData> for Base64UrlSafeData {
     }
 }
 
-impl fmt::Display for Base64UrlSafeData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", URL_SAFE_NO_PAD.encode(self))
-    }
-}
-
-impl TryFrom<&str> for Base64UrlSafeData {
-    type Error = ();
-
-    fn try_from(v: &str) -> Result<Self, Self::Error> {
-        for config in ALLOWED_DECODING_FORMATS {
-            if let Ok(data) = config.decode(v) {
-                return Ok(Base64UrlSafeData(data));
-            }
-        }
-        Err(())
-    }
-}
-
 impl Serialize for Base64UrlSafeData {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
