@@ -18,14 +18,15 @@ webauthn-rs = { workspace = true, features = ["resident-key-support", "preview-f
 webauthn-rs-device-catalog.workspace = true
 
 tide.workspace = true
-tide-rustls = "0.3"
 async-std.workspace = true
-openssl.workspace = true
 structopt = { version = "0.3", default-features = false }
-rustls = "0.19.0"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rand.workspace = true
 url = { workspace = true , features = ["serde"] }
 
 serde.workspace = true
+
+[dependencies.tide-openssl]
+git = "https://github.com/victorcwai/tide-openssl.git"
+rev = "7d0e2215f2f1ebfa71aa30d132213ed45dd95cbf"

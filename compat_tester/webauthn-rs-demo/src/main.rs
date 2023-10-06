@@ -11,6 +11,9 @@ use structopt::StructOpt;
 
 use rand::prelude::*;
 
+use tide_openssl::TlsListener;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::EnvFilter;
 use webauthn_rs::prelude::Uuid;
 use webauthn_rs::prelude::{
     AttestedResidentKey,
@@ -22,7 +25,6 @@ use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKey
 use webauthn_rs_demo_shared::*;
 
 mod actors;
-mod crypto;
 
 use crate::actors::*;
 
@@ -54,8 +56,12 @@ struct CmdOptions {
         env = "BIND_ADDRESS"
     )]
     bind: String,
-    #[structopt(short = "s", long = "tls")]
-    enable_tls: bool,
+    /// TLS public key, in PEM format
+    #[structopt(long = "tls-public-key", env = "TLS_PUBLIC_KEY")]
+    tls_public_key: Option<String>,
+    /// TLS private key, in PEM format
+    #[structopt(long = "tls-private-key", env = "TLS_PRIVATE_KEY")]
+    tls_private_key: Option<String>,
 }
 
 async fn index_view(_request: tide::Request<AppState>) -> tide::Result {
@@ -675,8 +681,14 @@ async fn condui_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     let opt: CmdOptions = CmdOptions::from_args();
-    tracing_subscriber::fmt::init();
-    debug!("Started logging ...");
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .compact()
+        .init();
 
     let domain = opt.rp_id.clone();
 
@@ -737,19 +749,26 @@ async fn main() -> tide::Result<()> {
     app.at("/").get(index_view);
     app.at("/*").get(index_view);
 
-    if opt.enable_tls {
-        debug!("Starting with TLS ...");
-        let server_config = crypto::generate_dyn_ssl_config(opt.rp_id.as_str());
-        app.listen(
-            tide_rustls::TlsListener::build()
-                .addrs(opt.bind.as_str())
-                .config(server_config),
-        )
-        .await?;
-    } else {
-        debug!("Starting without TLS ...");
-        app.listen(opt.bind).await?;
-    };
+    match (opt.tls_public_key, opt.tls_private_key) {
+        (Some(tls_cert), Some(tls_key)) => {
+            info!("Starting server with TLS...");
+            app.listen(
+                TlsListener::build()
+                    .addrs(opt.bind.as_str())
+                    .cert(tls_cert)
+                    .key(tls_key),
+            )
+            .await?;
+        }
 
+        (None, None) => {
+            info!("Starting without TLS ...");
+            app.listen(opt.bind).await?;
+        }
+
+        (_, _) => {
+            panic!("Must specify both --tls-public-key and --tls-private-key, or neither");
+        }
+    }
     Ok(())
 }
