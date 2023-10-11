@@ -15,7 +15,7 @@ use crate::error::WebauthnCError;
 /// Wrapper for [WEBAUTHN_USER_ENTITY_INFORMATION] to ensure pointer lifetime, analgous to [User].
 pub struct WinUserEntityInformation {
     native: WEBAUTHN_USER_ENTITY_INFORMATION,
-    _id: String,
+    _id: Vec<u8>,
     _name: HSTRING,
     _display_name: HSTRING,
 }
@@ -26,7 +26,7 @@ impl WinWrapper<User> for WinUserEntityInformation {
         // Construct an incomplete type first, so that all the pointers are fixed.
         let res = Self {
             native: WEBAUTHN_USER_ENTITY_INFORMATION::default(),
-            _id: u.id.clone().to_string(),
+            _id: u.id.clone().into(),
             _name: u.name.clone().into(),
             _display_name: u.display_name.clone().into(),
         };
