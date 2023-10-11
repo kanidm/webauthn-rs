@@ -34,7 +34,7 @@ If you're testing locally, you can build a short-lived self-signed certificate
 
 ```sh
 openssl genrsa -out /tmp/demo.key
-openssl req -new -x509 -key /tmp/demo.key -out /tmp/demo.pem -days 5 -subj "/CN=localhost/"
+openssl req -new -x509 -key /tmp/demo.key -out /tmp/demo.pem -days 5 -subj "/CN=localhost/" -addext "subjectAltName = DNS:localhost"
 ```
 
 Configuring and managing certificates properly is outside the scope of this
