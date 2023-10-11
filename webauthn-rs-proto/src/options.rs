@@ -323,7 +323,7 @@ mod test {
     use crate::AuthenticatorTransport;
 
     #[test]
-    fn test_authenticator_transports() {
+    fn test_authenticator_transports_from_str() {
         let cases: [(&str, AuthenticatorTransport); 6] = [
             ("ble", AuthenticatorTransport::Ble),
             ("internal", AuthenticatorTransport::Internal),
@@ -342,5 +342,27 @@ mod test {
         }
 
         assert!(AuthenticatorTransport::from_str("fake fake").is_err());
+    }
+
+    #[test]
+    fn test_authenticator_transports_serde() {
+        let cases: [(&str, AuthenticatorTransport); 9] = [
+            ("\"ble\"", AuthenticatorTransport::Ble),
+            ("\"internal\"", AuthenticatorTransport::Internal),
+            ("\"nfc\"", AuthenticatorTransport::Nfc),
+            ("\"usb\"", AuthenticatorTransport::Usb),
+            ("\"test\"", AuthenticatorTransport::Test),
+            ("\"hybrid\"", AuthenticatorTransport::Hybrid),
+            ("\"unknown\"", AuthenticatorTransport::Unknown),
+            ("\"cable\"", AuthenticatorTransport::Unknown),
+            ("\"auth mc authface\"", AuthenticatorTransport::Unknown),
+        ];
+
+        for (s, t) in cases {
+            assert_eq!(
+                t,
+                serde_json::from_str(s).expect("Unable to parse transport")
+            );
+        }
     }
 }
