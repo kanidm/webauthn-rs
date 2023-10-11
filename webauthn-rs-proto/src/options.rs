@@ -141,6 +141,9 @@ pub enum AuthenticatorTransport {
     Hybrid,
     /// Test transport; used for Windows 10.
     Test,
+    /// An unknown transport was provided - it will be ignored.
+    #[serde(other)]
+    Unknown,
 }
 
 impl FromStr for AuthenticatorTransport {
@@ -175,6 +178,7 @@ impl ToString for AuthenticatorTransport {
             Internal => "internal",
             Test => "test",
             Hybrid => "hybrid",
+            Unknown => "unknown",
         }
         .to_string()
     }
