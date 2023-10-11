@@ -442,7 +442,7 @@ impl Token for Tunnel {
 ///   * 1: GetInfoResponse bytes
 ///   * 2: linking info (optional)
 /// * Protocol 0: Padded map (not implemented)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(try_from = "BTreeMap<u32, Value>", into = "BTreeMap<u32, Value>")]
 struct CablePostHandshake {
     info: GetInfoResponse,
@@ -484,6 +484,8 @@ impl From<CablePostHandshake> for BTreeMap<u32, Value> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     #[test]
@@ -509,5 +511,63 @@ mod test {
         for x in 256..=u16::MAX {
             assert_ne!(get_domain(x), None);
         }
+    }
+
+    #[test]
+    fn posthandshake_android_chrome() {
+        // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_authenticator.cc;l=242-273;drc=a0f2b9dcc9512d175ff2cf18322cfdeb5348085c
+        let _ = tracing_subscriber::fmt().try_init();
+        let expected = CablePostHandshake {
+            info: GetInfoResponse {
+                versions: BTreeSet::from(["FIDO_2_0".to_string(), "FIDO_2_1".to_string()]),
+                extensions: Some(vec!["devicePubKey".to_string(), "prf".to_string()]),
+                aaguid: Some(uuid::uuid!("00000000-0000-0000-0000-000000000000")),
+                options: Some(BTreeMap::from([
+                    ("rk".to_string(), true),
+                    ("uv".to_string(), true),
+                ])),
+                transports: Some(vec![
+                    "cable".to_string(),
+                    "hybrid".to_string(),
+                    "internal".to_string(),
+                ]),
+                ..Default::default()
+            },
+            linking_info: None,
+        };
+
+        let get_info = hex::decode("a101585ca50182684649444f5f325f30684649444f5f325f3102826c6465766963655075624b65796370726603500000000000000000000000000000000004a262726bf5627576f50983656361626c656668796272696468696e7465726e616c").unwrap();
+        let v: BTreeMap<u32, Value> = serde_cbor_2::from_slice(&get_info)
+            .map_err(|_| WebauthnCError::Cbor)
+            .unwrap();
+
+        let frame = CablePostHandshake::try_from(v).unwrap();
+        assert_eq!(expected, frame);
+    }
+
+    #[test]
+    fn posthandshake_ios16() {
+        let _ = tracing_subscriber::fmt().try_init();
+        let expected = CablePostHandshake {
+            info: GetInfoResponse {
+                versions: BTreeSet::from(["FIDO_2_0".to_string()]),
+                aaguid: Some(uuid::uuid!("f24a8e70-d0d3-f82c-2937-32523cc4de5a")),
+                options: Some(BTreeMap::from([
+                    ("rk".to_string(), true),
+                    ("uv".to_string(), true),
+                ])),
+                transports: Some(vec!["internal".to_string(), "hybrid".to_string()]),
+                ..Default::default()
+            },
+            linking_info: None,
+        };
+
+        let get_info = hex::decode("a101583aa40181684649444f5f325f300350f24a8e70d0d3f82c293732523cc4de5a04a262726bf5627576f5098268696e7465726e616c66687962726964").unwrap();
+        let v: BTreeMap<u32, Value> = serde_cbor_2::from_slice(&get_info)
+            .map_err(|_| WebauthnCError::Cbor)
+            .unwrap();
+
+        let frame = CablePostHandshake::try_from(v).unwrap();
+        assert_eq!(expected, frame);
     }
 }
