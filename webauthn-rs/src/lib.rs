@@ -126,6 +126,24 @@
 //! the UV *may* occur on registration and then will not occur again, and that is *by design*.
 //!
 //! If in doubt, do not enable this feature.
+//!
+//! ## Android Specific Workarounds
+//!
+//! Android has a number of issues in the dialogs they present to users for authenticator
+//! selection. Instead of allowing the user to choose what kind of passkey they want to
+//! use and create (security key, device screen unlock, sync google cloud key), Android
+//! expects every website to implement their own selection UI's ahead of time so that
+//! the RP sends the specific options to trigger each of these flows. This adds complexity
+//! to RP implementations and a large surface area for mistakes, confusion and inconsistent
+//! workflows.
+//!
+//! By default for maximum compatibility and the most accessible user experience this library
+//! sends the options to trigger security keys and the device screen unlock as choices. As RPs
+//! must provide methods to allow users to enroll multiple independent devices, we consider that
+//! this is a reasonable trade since we allow the widest possible sets of authenticators to work.
+//!
+//! To enable the registration call that triggers the synced google cloud key flow, you can
+//! enable the feature `workaround-android-specific-issues`.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -470,6 +488,61 @@ impl Webauthn {
                 // and can't satisfy it, they fail the operation instead.
                 enforce_credential_protection_policy: Some(false),
             }),
+            uvm: Some(true),
+            cred_props: Some(true),
+            min_pin_length: None,
+            hmac_create_secret: None,
+        });
+
+        self.core
+            .generate_challenge_register_options(
+                user_unique_id.as_bytes(),
+                user_name,
+                user_display_name,
+                attestation,
+                policy,
+                exclude_credentials,
+                extensions,
+                credential_algorithms,
+                require_resident_key,
+                authenticator_attachment,
+                reject_passkeys,
+            )
+            .map(|(ccr, rs)| (ccr, PasskeyRegistration { rs }))
+    }
+
+    /// Initiate the registration of a synced google cloud key on an Android Device.
+    ///
+    /// This function is required as Android's support for Webauthn/Passkeys is broken
+    /// and does not correctly perform authenticator selection for the user. Instead
+    /// of Android correctly presenting the choice to users to select between a
+    /// security key and a synced google cloud key, Android expects the Relying Party
+    /// to pre-select this and send a correct set of options for either security key
+    /// *or* a synced google cloud key.
+    ///
+    /// If you choose to use this function you *MUST* ensure that the device you are
+    /// contacting is an Android device, and you *MUST* provide the user the choice
+    /// on your site ahead of time to choose between a security key / screen unlock
+    /// (triggered by [`start_passkey_registration`](Webauthn::start_passkey_registration))
+    /// or a synced google cloud key (triggered by this function).
+    #[cfg(feature = "workaround-android-specific-issues")]
+    pub fn start_android_only_passkey_registration(
+        &self,
+        user_unique_id: Uuid,
+        user_name: &str,
+        user_display_name: &str,
+        exclude_credentials: Option<Vec<CredentialID>>,
+    ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
+        let attestation = AttestationConveyancePreference::None;
+        let credential_algorithms = self.algorithms.clone();
+        let require_resident_key = true;
+        let authenticator_attachment = Some(AuthenticatorAttachment::Platform);
+        let policy = Some(UserVerificationPolicy::Required);
+        let reject_passkeys = false;
+
+        let extensions = Some(RequestRegistrationExtensions {
+            // Android doesn't support cred protect.
+            cred_protect: None,
             uvm: Some(true),
             cred_props: Some(true),
             min_pin_length: None,
