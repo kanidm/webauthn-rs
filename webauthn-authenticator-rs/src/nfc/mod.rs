@@ -99,16 +99,29 @@ pub const APPLET_DF: [u8; 8] = [
 /// indicate we should ignore it.
 ///
 /// **See:** [`ignored_reader()`]
-const IGNORED_READERS: [&str; 2] = [
-    // Nitrokey 3 exposes a CCID interface, which we can select the FIDO applet
-    // on, but it doesn't actually work.
-    "Nitrokey",
+const IGNORED_READERS: [&str; 3] = [
+    // Trussed (used by Nitrokey 3 and SoloKeys Solo 2) expose a USB CCID
+    // interface which allows U2F applet selection, but then returns 0x6985
+    // (conditions of use not satisfied) to every command sent thereafter:
+    // https://github.com/trussed-dev/fido-authenticator/blob/7bd0c3bc5105a122fa11d9b354457746f391c4fb/src/dispatch/apdu.rs#L44-L48
+    // https://github.com/trussed-dev/fido-authenticator/issues/38
+    "Nitrokey", "SoloKey",
     // YubiKey exposes a CCID interface when OpenGPG or PIV support is enabled,
     // and this interface doesn't support FIDO.
     "YubiKey",
 ];
 
 /// Is the PC/SC card reader one which should be ignored?
+///
+/// Some USB security keys expose a USB CCID interface, which either don't
+/// expose a FIDO applet (as recommended by [non-public FIDO documentation][0])
+/// or is unusable.
+///
+/// Don't waste time enumerating these!
+///
+/// If `reader_name` does not contain valid UTF-8, this returns `false`.
+///
+/// [0]: https://github.com/w3c/webauthn/issues/1835#issuecomment-1382660217
 fn ignored_reader(reader_name: &CStr) -> bool {
     let reader_name = match reader_name.as_ref().to_str() {
         Ok(r) => r,
@@ -670,31 +683,38 @@ mod test {
         let _ = tracing_subscriber::fmt().try_init();
 
         // CCID interfaces on tokens
-        const IGNORED: [&str; 3] = [
-            "Nitrokey Nitrokey 3",
-            "Nitrokey Nitrokey 3 [CCID/ICCD Interface] 00 00",
-            "Yubico YubiKey FIDO+CCID",
+        const IGNORED: [&[u8]; 4] = [
+            b"Nitrokey Nitrokey 3",
+            b"Nitrokey Nitrokey 3 [CCID/ICCD Interface] 00 00",
+            b"SoloKeys Solo 2",
+            b"Yubico YubiKey FIDO+CCID",
         ];
 
         // Smartcard readers
-        const ALLOWED: [&str; 4] = [
-            "ACS ACR122U 00 00",
-            "ACS ACR122U 01 00",
-            "ACS ACR122U PICC Interface",
-            "ACS ACR123 3S Reader [ACR123U-PICC] (1.00.xx) 00 00",
+        const ALLOWED: [&[u8]; 6] = [
+            b"ACS ACR122U 00 00",
+            b"ACS ACR122U 01 00",
+            b"ACS ACR122U PICC Interface",
+            b"ACS ACR123 3S Reader [ACR123U-PICC] (1.00.xx) 00 00",
+            // Invalid UTF-8 should be allowed, even if it contains ignored
+            // reader names.
+            b"\xFF\xFF",
+            b"\xFFYubico YubiKey FIDO+CCID\xFF",
         ];
 
         for n in IGNORED {
+            let e = String::from_utf8(n.to_vec()).unwrap_or_else(|_| hex::encode(n));
             assert!(
                 ignored_reader(&CString::new(n)?),
-                "expected {n} to be ignored"
+                "expected {e} to be ignored"
             );
         }
 
         for n in ALLOWED {
+            let e = String::from_utf8(n.to_vec()).unwrap_or_else(|_| hex::encode(n));
             assert!(
                 !ignored_reader(&CString::new(n)?),
-                "expected {n} to be allowed"
+                "expected {e} to be allowed"
             );
         }
 
