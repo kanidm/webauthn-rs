@@ -1,3 +1,4 @@
+use super::TYPE_INIT;
 use crate::error::{CtapError, WebauthnCError};
 
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]

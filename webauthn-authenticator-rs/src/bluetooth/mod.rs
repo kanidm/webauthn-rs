@@ -75,9 +75,9 @@ use crate::{
     transport::{
         types::{
             CBORResponse, KeepAliveStatus, Response, U2FError, BTLE_CANCEL, BTLE_KEEPALIVE,
-            TYPE_INIT, U2FHID_ERROR, U2FHID_MSG, U2FHID_PING,
+            U2FHID_ERROR, U2FHID_MSG, U2FHID_PING,
         },
-        Token, TokenEvent, Transport,
+        Token, TokenEvent, Transport, TYPE_INIT,
     },
     ui::UiCallback,
 };
