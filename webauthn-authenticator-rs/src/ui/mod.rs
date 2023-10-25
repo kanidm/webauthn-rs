@@ -18,6 +18,9 @@ pub trait UiCallback: Sync + Send + Debug {
     /// This method will be called synchronously, and must not block.
     fn request_touch(&self);
 
+    /// Tell the user that the key is currently processing a request.
+    fn processing(&self);
+
     /// Provide the user feedback when they are enrolling fingerprints.
     ///
     /// This method will be called synchronously, and must not block.

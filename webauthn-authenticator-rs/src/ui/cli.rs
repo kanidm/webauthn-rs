@@ -25,6 +25,11 @@ impl UiCallback for Cli {
         writeln!(stderr, "Touch the authenticator").ok();
     }
 
+    fn processing(&self) {
+        let mut stderr = stderr();
+        writeln!(stderr, "Processing...").ok();
+    }
+
     fn fingerprint_enrollment_feedback(
         &self,
         remaining_samples: u32,
