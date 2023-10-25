@@ -156,7 +156,6 @@ impl TryFrom<&[u8]> for Atr {
         let mut extended_lc = None;
         let mut card_issuers_data = None;
         if i + t1_len > atr.len() {
-            error!(?i, ?t1_len, "atr.len = {}", atr.len());
             return Err(WebauthnCError::MessageTooShort);
         }
         let t1 = &atr[i..i + t1_len];
