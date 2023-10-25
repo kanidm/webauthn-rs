@@ -127,9 +127,9 @@
 //!
 //! If in doubt, do not enable this feature.
 //!
-//! ## Android Specific Workarounds
+//! ## 'Google Passkey stored in Google Password Manager' Specific Workarounds
 //!
-//! Android has a number of issues in the dialogs they present to users for authenticator
+//! Android (with GMS Core) has a number of issues in the dialogs they present to users for authenticator
 //! selection. Instead of allowing the user to choose what kind of passkey they want to
 //! use and create (security key, device screen unlock or 'Google Passkey stored in Google Password
 //! Manager'), Android expects every website to implement their own selection UI's ahead of time
@@ -140,10 +140,13 @@
 //! By default for maximum compatibility and the most accessible user experience this library
 //! sends the options to trigger security keys and the device screen unlock as choices. As RPs
 //! must provide methods to allow users to enroll multiple independent devices, we consider that
-//! this is a reasonable trade since we allow the widest possible sets of authenticators to work.
+//! this is a reasonable trade since we allow the widest possible sets of authenticators and Android
+//! devices (including devices without GMS Core) to operate.
 //!
 //! To enable the registration call that triggers the 'Google Passkey stored in Google Password
-//! Manager' key flow, you can enable the feature `workaround-google-passkey-specific-issues`.
+//! Manager' key flow, you can enable the feature `workaround-google-passkey-specific-issues`. This
+//! flow can only be used on Android devices with GMS Core, and you must have a way to detect this
+//! ahead of time.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -511,7 +514,8 @@ impl Webauthn {
             .map(|(ccr, rs)| (ccr, PasskeyRegistration { rs }))
     }
 
-    /// Initiate the registration of a 'Google Passkey stored in Google Password Manager'.
+    /// Initiate the registration of a 'Google Passkey stored in Google Password Manager' on an
+    /// Android device with GMS Core.
     ///
     /// This function is required as Android's support for Webauthn/Passkeys is broken
     /// and does not correctly perform authenticator selection for the user. Instead
@@ -521,7 +525,7 @@ impl Webauthn {
     /// a security key *or* a 'Google Passkey stored in Google Password Manager'.
     ///
     /// If you choose to use this function you *MUST* ensure that the device you are
-    /// contacting is an Android device, and you *MUST* provide the user the choice
+    /// contacting is an Android device with GMS Core, and you *MUST* provide the user the choice
     /// on your site ahead of time to choose between a security key / screen unlock
     /// (triggered by [`start_passkey_registration`](Webauthn::start_passkey_registration))
     /// or a 'Google Passkey stored in Google Password Manager' (triggered by this function).
