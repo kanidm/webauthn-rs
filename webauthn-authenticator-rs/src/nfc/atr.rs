@@ -1,4 +1,6 @@
 //! ISO/IEC 7816-3 _Answer-to-Reset_ and 7816-4 _Historical Bytes_ parser.
+use std::collections::{HashSet, VecDeque};
+
 #[cfg(feature = "nfc")]
 use pcsc::MAX_ATR_SIZE;
 
@@ -32,7 +34,7 @@ use super::tlv::*;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Atr {
     /// Supported protocols (`T=`), specified in ISO/IEC 7816-3:2006 §8.2.3.
-    pub protocols: Vec<u8>,
+    pub protocols: HashSet<u8>,
 
     /// Historical bytes (T<sub>1</sub> .. T<sub>k</sub>), as specified in
     /// ISO/IEC 7816-4:2005 §8.1.1.
@@ -113,7 +115,7 @@ impl TryFrom<&[u8]> for Atr {
             return Err(WebauthnCError::MessageTooShort);
         }
 
-        let mut nibbles = Vec::with_capacity(MAX_ATR_SIZE);
+        let mut nibbles = VecDeque::with_capacity(MAX_ATR_SIZE);
         // Byte 0 intentionally skipped
 
         // Calculate checksum (TCK), present unless the only protocol is T=0:
@@ -129,23 +131,24 @@ impl TryFrom<&[u8]> for Atr {
         let mut i: usize = 1;
         loop {
             let y = atr[i] >> 4;
-            nibbles.push(atr[i] & 0x0f);
+            nibbles.push_back(atr[i] & 0x0f);
             i += 1;
 
             // skip Ta, Tb, Tc fields
-            i += (y & 0x7) as usize;
+            i += (y & 0x7).count_ones() as usize;
             if y & 0x8 == 0 {
                 /* Td = 0 */
                 break;
             }
         }
 
-        let t1_len = nibbles[0] as usize;
-        let protocols = if nibbles.len() > 1 {
-            &nibbles[1..]
+        let t1_len = nibbles.pop_front().unwrap_or_default() as usize;
+
+        let protocols = if nibbles.len() >= 1 {
+            HashSet::from_iter(nibbles.into_iter())
         } else {
             // If TD1 is absent, the only offer is T=0.
-            &PROTOCOL_T0
+            HashSet::from(PROTOCOL_T0)
         };
 
         let mut storage_card = false;
@@ -199,7 +202,7 @@ impl TryFrom<&[u8]> for Atr {
         }
 
         Ok(Atr {
-            protocols: protocols.to_vec(),
+            protocols,
             t1: t1.to_vec(),
             storage_card,
             command_chaining,
@@ -227,12 +230,13 @@ mod tests {
 
     #[test]
     fn yubikey_5_nfc() {
+        let _ = tracing_subscriber::fmt().try_init();
         let input = [
             0x3b, 0x8d, 0x80, 0x01, 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69,
             0x4b, 0x65, 0xff, 0x7f,
         ];
         let expected = Atr {
-            protocols: [0, 1].to_vec(),
+            protocols: HashSet::from([0, 1]),
             t1: [
                 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69, 0x4b, 0x65, 0xff,
             ]
@@ -251,12 +255,13 @@ mod tests {
 
     #[test]
     fn yubico_security_key_c_nfc() {
+        let _ = tracing_subscriber::fmt().try_init();
         let input = [
             0x3b, 0x8d, 0x80, 0x01, 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69,
             0x4b, 0x65, 0x79, 0xf9,
         ];
         let expected = Atr {
-            protocols: [0, 1].to_vec(),
+            protocols: HashSet::from([0, 1]),
             t1: [
                 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69, 0x4b, 0x65, 0x79,
             ]
@@ -274,10 +279,36 @@ mod tests {
     }
 
     #[test]
+    fn yubico_yubikey_5c_usb_macos() {
+        let _ = tracing_subscriber::fmt().try_init();
+        let input = [
+            0x3b, 0xfd, 0x13, 0x00, 0x00, 0x81, 0x31, 0xfe, 0x15, 0x80, 0x73, 0xc0, 0x21, 0xc0,
+            0x57, 0x59, 0x75, 0x62, 0x69, 0x4b, 0x65, 0x79, 0x40,
+        ];
+        let expected = Atr {
+            // T=1 repeated twice
+            protocols: HashSet::from([1]),
+            t1: [
+                0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69, 0x4b, 0x65, 0x79,
+            ]
+            .to_vec(),
+            storage_card: false,
+            // "YubiKey"
+            card_issuers_data: Some([0x59, 0x75, 0x62, 0x69, 0x4b, 0x65, 0x79].to_vec()),
+            command_chaining: Some(true),
+            extended_lc: Some(true),
+        };
+
+        let actual = Atr::try_from(&input[..]).expect("yubico_yubikey_5c_usb_macos ATR");
+        assert_eq!(expected, actual);
+        assert_eq!("YubiKey", actual.card_issuers_data_str().unwrap());
+    }
+
+    #[test]
     fn desfire_storage_card() {
         let input = [0x3b, 0x81, 0x80, 0x01, 0x80, 0x80];
         let expected = Atr {
-            protocols: [0, 1].to_vec(),
+            protocols: HashSet::from([0, 1]),
             t1: [0x80].to_vec(),
             storage_card: false,
             card_issuers_data: None,
@@ -292,12 +323,13 @@ mod tests {
 
     #[test]
     fn felica_storage_card() {
+        let _ = tracing_subscriber::fmt().try_init();
         let input = [
             0x3b, 0x8f, 0x80, 0x01, 0x80, 0x4f, 0x0c, 0xa0, 0x00, 0x00, 0x03, 0x06, 0x11, 0x00,
             0x3b, 0x00, 0x00, 0x00, 0x00, 0x42,
         ];
         let expected = Atr {
-            protocols: [0, 1].to_vec(),
+            protocols: HashSet::from([0, 1]),
             t1: [
                 0x80, 0x4f, 0x0c, 0xa0, 0x00, 0x00, 0x03, 0x06, 0x11, 0x00, 0x3b, 0x00, 0x00, 0x00,
                 0x00,
@@ -316,10 +348,11 @@ mod tests {
 
     #[test]
     fn short_capabilities() {
+        let _ = tracing_subscriber::fmt().try_init();
         // These have a 1 and 2 byte tag 0x7X, so command chaining and extended
         // lc support isn't available.
         let i1 = [0x3b, 0x83, 0x80, 0x01, 0x80, 0x71, 0xc0, 0x33];
-        let expected_protocols = [0, 1].to_vec();
+        let expected_protocols = HashSet::from([0, 1]);
         let a1 = Atr::try_from(&i1[..]).expect("short caps atr1");
 
         assert_eq!(expected_protocols, a1.protocols);
@@ -338,8 +371,9 @@ mod tests {
 
     #[test]
     fn edge_cases() {
+        let _ = tracing_subscriber::fmt().try_init();
         let expected = Atr {
-            protocols: [0].to_vec(),
+            protocols: HashSet::from([0]),
             t1: [].to_vec(),
             storage_card: false,
             card_issuers_data: None,
@@ -358,6 +392,7 @@ mod tests {
 
     #[test]
     fn error_cases() {
+        let _ = tracing_subscriber::fmt().try_init();
         let i1 = [0x3b];
         let a1 = Atr::try_from(&i1[..]);
         assert_eq!(a1, Err(WebauthnCError::MessageTooShort));
