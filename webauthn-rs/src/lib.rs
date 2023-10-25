@@ -131,9 +131,9 @@
 //!
 //! Android has a number of issues in the dialogs they present to users for authenticator
 //! selection. Instead of allowing the user to choose what kind of passkey they want to
-//! use and create (security key, device screen unlock, sync google cloud key), Android
-//! expects every website to implement their own selection UI's ahead of time so that
-//! the RP sends the specific options to trigger each of these flows. This adds complexity
+//! use and create (security key, device screen unlock or 'Google Passkey stored in Google Password
+//! Manager'), Android expects every website to implement their own selection UI's ahead of time
+//! so that the RP sends the specific options to trigger each of these flows. This adds complexity
 //! to RP implementations and a large surface area for mistakes, confusion and inconsistent
 //! workflows.
 //!
@@ -142,8 +142,8 @@
 //! must provide methods to allow users to enroll multiple independent devices, we consider that
 //! this is a reasonable trade since we allow the widest possible sets of authenticators to work.
 //!
-//! To enable the registration call that triggers the synced google cloud key flow, you can
-//! enable the feature `workaround-android-specific-issues`.
+//! To enable the registration call that triggers the 'Google Passkey stored in Google Password
+//! Manager' key flow, you can enable the feature `workaround-google-passkey-specific-issues`.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -511,22 +511,22 @@ impl Webauthn {
             .map(|(ccr, rs)| (ccr, PasskeyRegistration { rs }))
     }
 
-    /// Initiate the registration of a synced google cloud key on an Android Device.
+    /// Initiate the registration of a 'Google Passkey stored in Google Password Manager'.
     ///
     /// This function is required as Android's support for Webauthn/Passkeys is broken
     /// and does not correctly perform authenticator selection for the user. Instead
     /// of Android correctly presenting the choice to users to select between a
-    /// security key and a synced google cloud key, Android expects the Relying Party
-    /// to pre-select this and send a correct set of options for either security key
-    /// *or* a synced google cloud key.
+    /// security key, or a 'Google Passkey stored in Google Password Manager', Android
+    /// expects the Relying Party to pre-select this and send a correct set of options for either
+    /// a security key *or* a 'Google Passkey stored in Google Password Manager'.
     ///
     /// If you choose to use this function you *MUST* ensure that the device you are
     /// contacting is an Android device, and you *MUST* provide the user the choice
     /// on your site ahead of time to choose between a security key / screen unlock
     /// (triggered by [`start_passkey_registration`](Webauthn::start_passkey_registration))
-    /// or a synced google cloud key (triggered by this function).
-    #[cfg(feature = "workaround-android-specific-issues")]
-    pub fn start_android_only_passkey_registration(
+    /// or a 'Google Passkey stored in Google Password Manager' (triggered by this function).
+    #[cfg(feature = "workaround-google-passkey-specific-issues")]
+    pub fn start_google_passkey_in_google_password_manager_only_registration(
         &self,
         user_unique_id: Uuid,
         user_name: &str,
