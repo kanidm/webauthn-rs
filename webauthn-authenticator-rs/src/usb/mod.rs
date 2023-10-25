@@ -229,8 +229,10 @@ impl Token for USBToken {
 
             if let Response::KeepAlive(r) = resp {
                 trace!("waiting for {:?}", r);
-                if r == KeepAliveStatus::UserPresenceNeeded {
-                    ui.request_touch();
+                match r {
+                    KeepAliveStatus::UserPresenceNeeded => ui.request_touch(),
+                    KeepAliveStatus::Processing => ui.processing(),
+                    _ => (),
                 }
                 // TODO: maybe time out at some point
                 tokio::time::sleep(Duration::from_millis(100)).await;
