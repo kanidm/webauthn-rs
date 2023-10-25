@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::{
     prelude::WebauthnCError,
     transport::{
-        solokey::{SoloKeyToken, CMD_UUID, CMD_VERSION},
+        solokey::{SoloKeyToken, CMD_LOCK, CMD_UUID, CMD_VERSION},
         types::{U2FError, U2FHID_ERROR},
     },
     usb::framing::U2FHIDFrame,
@@ -14,6 +14,31 @@ use super::{USBToken, USBTransport};
 
 #[async_trait]
 impl SoloKeyToken for USBToken {
+    async fn get_solokey_lock(&mut self) -> Result<bool, WebauthnCError> {
+        let cmd = U2FHIDFrame {
+            cid: self.cid,
+            cmd: CMD_LOCK,
+            len: 0,
+            data: vec![],
+        };
+        self.send_one(&cmd).await?;
+
+        let r = self.recv_one().await?;
+        match r.cmd {
+            CMD_LOCK => {
+                if r.len != 1 || r.data.len() != 1 {
+                    return Err(WebauthnCError::InvalidMessageLength);
+                }
+
+                Ok(r.data[0] != 0)
+            }
+
+            U2FHID_ERROR => Err(U2FError::from(r.data.as_slice()).into()),
+
+            _ => Err(WebauthnCError::UnexpectedState),
+        }
+    }
+
     async fn get_solokey_version(&mut self) -> Result<u32, WebauthnCError> {
         let cmd = U2FHIDFrame {
             cid: self.cid,

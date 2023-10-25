@@ -41,9 +41,15 @@ pub const CMD_VERSION: u8 = super::TYPE_INIT | 0x61;
 #[cfg(all(feature = "usb", feature = "vendor-solokey"))]
 pub const CMD_UUID: u8 = super::TYPE_INIT | 0x62;
 
+#[cfg(all(feature = "usb", feature = "vendor-solokey"))]
+pub const CMD_LOCK: u8 = super::TYPE_INIT | 0x63;
+
 /// See [`SoloKeyAuthenticator`](crate::ctap2::SoloKeyAuthenticator).
 #[async_trait]
 pub trait SoloKeyToken {
+    /// See [`SoloKeyAuthenticator::get_solokey_lock()`](crate::ctap2::SoloKeyAuthenticator::get_solokey_lock).
+    async fn get_solokey_lock(&mut self) -> Result<bool, WebauthnCError>;
+
     /// See [`SoloKeyAuthenticator::get_solokey_version()`](crate::ctap2::SoloKeyAuthenticator::get_solokey_version).
     async fn get_solokey_version(&mut self) -> Result<u32, WebauthnCError>;
 
@@ -53,6 +59,18 @@ pub trait SoloKeyToken {
 
 #[async_trait]
 impl SoloKeyToken for AnyToken {
+    async fn get_solokey_lock(&mut self) -> Result<bool, WebauthnCError> {
+        match self {
+            AnyToken::Stub => unimplemented!(),
+            #[cfg(feature = "bluetooth")]
+            AnyToken::Bluetooth(_) => Err(WebauthnCError::NotSupported),
+            #[cfg(feature = "nfc")]
+            AnyToken::Nfc(_) => Err(WebauthnCError::NotSupported),
+            #[cfg(feature = "usb")]
+            AnyToken::Usb(u) => u.get_solokey_lock().await,
+        }
+    }
+
     async fn get_solokey_version(&mut self) -> Result<u32, WebauthnCError> {
         match self {
             AnyToken::Stub => unimplemented!(),

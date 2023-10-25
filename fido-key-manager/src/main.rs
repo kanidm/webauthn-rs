@@ -201,11 +201,8 @@ pub enum Opt {
     /// Updates user information for a discoverable credential on this token.
     UpdateCredentialUser(UpdateCredentialUserOpt),
     #[cfg(feature = "solokey")]
-    /// Gets a SoloKey's UUID.
-    SoloKeyUuid(InfoOpt),
-    #[cfg(feature = "solokey")]
-    /// Gets a SoloKey's version.
-    SoloKeyVersion(InfoOpt),
+    /// Gets info about a connected SoloKey.
+    SoloKeyInfo(InfoOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -691,7 +688,7 @@ async fn main() {
         }
 
         #[cfg(feature = "solokey")]
-        Opt::SoloKeyUuid(o) => {
+        Opt::SoloKeyInfo(o) => {
             while let Some(event) = stream.next().await {
                 match event {
                     TokenEvent::Added(t) => {
@@ -700,46 +697,47 @@ async fn main() {
                             None => continue,
                         };
 
-                        match authenticator.get_solokey_uuid().await {
-                            Ok(uuid) => println!("SoloKey UUID: {uuid}"),
+                        let uuid = match authenticator.get_solokey_uuid().await {
+                            Ok(v) => v,
                             Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::U2F(_))
                             | Err(WebauthnCError::InvalidMessageLength) => {
-                                println!("Device is not a SoloKey!")
+                                println!("Device is not a SoloKey!");
+                                continue;
                             }
                             Err(e) => panic!("could not get SoloKey UUID: {e:?}"),
-                        }
-                    }
-                    TokenEvent::EnumerationComplete => {
-                        if o.watch {
-                            println!("Initial enumeration completed, watching for more devices...");
-                            println!("Press Ctrl + C to stop watching.");
-                        } else {
-                            break;
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        #[cfg(feature = "solokey")]
-        Opt::SoloKeyVersion(o) => {
-            while let Some(event) = stream.next().await {
-                match event {
-                    TokenEvent::Added(t) => {
-                        let mut authenticator = match CtapAuthenticator::new(t, &ui).await {
-                            Some(a) => a,
-                            None => continue,
                         };
 
-                        match authenticator.get_solokey_version().await {
-                            Ok(ver) => println!("SoloKey version: {ver:#x}"),
+                        let version = match authenticator.get_solokey_version().await {
+                            Ok(v) => v,
                             Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::U2F(_))
                             | Err(WebauthnCError::InvalidMessageLength) => {
-                                println!("Device is not a SoloKey!")
+                                println!("Device is not a SoloKey!");
+                                continue;
                             }
                             Err(e) => panic!("could not get SoloKey version: {e:?}"),
-                        }
+                        };
+
+                        let secure_boot = if match authenticator.get_solokey_lock().await {
+                            Ok(v) => v,
+                            Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::U2F(_))
+                            | Err(WebauthnCError::InvalidMessageLength) => {
+                                println!("Device is not a SoloKey!");
+                                continue;
+                            }
+                            Err(e) => panic!("could not get SoloKey lock state: {e:?}"),
+                        } {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        };
+
+                        println!("SoloKey info:");
+                        println!("  Device UUID: {uuid}");
+                        println!("  Version:     {version:#x}");
+                        println!("  Secure boot: {secure_boot}");
                     }
                     TokenEvent::EnumerationComplete => {
                         if o.watch {
