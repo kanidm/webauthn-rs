@@ -462,6 +462,23 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             .get(&serde_cbor_2::Value::Integer(1))
             .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
         let key_type = cbor_try_i128!(key_type_value)?;
+        /*
+            // Some keys may return this as a string rather than int.
+            // The only key so far is the solokey and it's ed25519 support
+            // is broken, so there isn't much point enabling this today.
+            .or_else(|_| {
+                // tstr is also supported as a type on this field.
+                cbor_try_string!(key_type_value)
+                    .and_then(|kt_str| {
+                        match kt_str.as_str() {
+                            "OKP" => Ok(1),
+                            "EC2" => Ok(2),
+                            "RSA" => Ok(3),
+                            _ => Err(WebauthnError::COSEKeyInvalidCBORValue)
+                        }
+                    })
+            })?;
+        */
 
         let content_type_value = m
             .get(&serde_cbor_2::Value::Integer(3))
@@ -571,6 +588,22 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
                 .get(&serde_cbor_2::Value::Integer(-1))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let curve_type = cbor_try_i128!(curve_type_value)?;
+            /*
+                // Some keys may return this as a string rather than int.
+                // The only key so far is the solokey and it's ed25519 support
+                // is broken, so there isn't much point enabling this today.
+                .or_else(|_| {
+                    // tstr is also supported as a type on this field.
+                    cbor_try_string!(curve_type_value)
+                        .and_then(|ct_str| {
+                            trace!(?ct_str);
+                            match ct_str.as_str() {
+                                "EdDSA" => Ok(-8),
+                                _ => Err(WebauthnError::COSEKeyInvalidCBORValue)
+                            }
+                        })
+                })?;
+            */
 
             let x_value = m
                 .get(&serde_cbor_2::Value::Integer(-2))

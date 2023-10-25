@@ -406,6 +406,9 @@ pub(crate) fn verify_packed_attestation(
             COSEAlgorithm::try_from(v).map_err(|_| WebauthnError::COSEKeyInvalidAlgorithm)
         })?;
 
+    trace!(x5c = ?att_stmt_map.get(x5c_key));
+    trace!(ecdaa = ?att_stmt_map.get(ecdaa_key_id_key));
+
     match (
         att_stmt_map.get(x5c_key),
         att_stmt_map.get(ecdaa_key_id_key),
@@ -436,6 +439,8 @@ pub(crate) fn verify_packed_attestation(
                 .get(0)
                 .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
+            trace!(?attestn_cert);
+
             // Verify that sig is a valid signature over the concatenation of authenticatorData
             // and clientDataHash using the attestation public key in attestnCert with the
             // algorithm specified in alg.
@@ -445,12 +450,15 @@ pub(crate) fn verify_packed_attestation(
                 .chain(client_data_hash.iter())
                 .copied()
                 .collect();
+
             let is_valid_signature = att_stmt_map
                 .get(&serde_cbor_2::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
                 .and_then(|sig| verify_signature(alg, attestn_cert, sig, &verification_data))?;
+
             if !is_valid_signature {
+                trace!("packed x509 signature invalid");
                 return Err(WebauthnError::AttestationStatementSigInvalid);
             }
 

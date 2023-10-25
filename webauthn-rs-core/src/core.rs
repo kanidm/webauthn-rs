@@ -3837,4 +3837,122 @@ mod tests {
             &Url::parse("ios:bundle-id:com.foo.baz").unwrap(),
         ));
     }
+
+    #[test]
+    fn test_solokey_v2_a_sealed_attestation() {
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"VEP2Y5lrFKvfNZCt-js1BivzIRjDCXERNRswVPGT1tw\"").unwrap();
+        let response = r#"{
+            "id": "owBYr08K20VJPLwjmm6fiIPE9iqvr31mfxoi1S-gj3mrvsmeSSUd70rMHJpbMBxnm7MlTX8hPpXz2NKVkEVrVGrrJOayYhdthzPeRqPQsFj_f2qkhJrt3xSIzDb6ZzS1hcME5xE76_XKdbH9-ZEUztxN9lR8GjX5TO9e1WsEfeY6yriqKRZ-xgA3BU081GOZWZ00cggWPEEmll1gkYepDDjrwH0a2CXaV-oSs50rRIuD9JkBTKCqEYK6IG-CBMtTEwJQA042FkAQ_RpWpziVVyXfWA",
+            "rawId": "owBYr08K20VJPLwjmm6fiIPE9iqvr31mfxoi1S-gj3mrvsmeSSUd70rMHJpbMBxnm7MlTX8hPpXz2NKVkEVrVGrrJOayYhdthzPeRqPQsFj_f2qkhJrt3xSIzDb6ZzS1hcME5xE76_XKdbH9-ZEUztxN9lR8GjX5TO9e1WsEfeY6yriqKRZ-xgA3BU081GOZWZ00cggWPEEmll1gkYepDDjrwH0a2CXaV-oSs50rRIuD9JkBTKCqEYK6IG-CBMtTEwJQA042FkAQ_RpWpziVVyXfWA",
+            "response": {
+              "attestationObject": "o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIhAPdns_NNqPklDOJLgahVz9Ul9yGWelzagMgTc9PSgAliAiAi058w6Dq4C_-44qlEcqoKFldVCGcQxnWh6tL2IXj-mmN4NWOBWQKqMIICpjCCAkygAwIBAgIUfWe3F4mJfmOVopPF8mmAKxBb0igwCgYIKoZIzj0EAwIwLTERMA8GA1UECgwIU29sb0tleXMxCzAJBgNVBAYTAkNIMQswCQYDVQQDDAJGMTAgFw0yMTA1MjMwMDUyMDBaGA8yMDcxMDUxMTAwNTIwMFowgYMxCzAJBgNVBAYTAlVTMREwDwYDVQQKDAhTb2xvS2V5czEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjE9MDsGA1UEAww0U29sbyAyIE5GQytVU0ItQSA4NjUyQUJFOUZCRDg0ODEwQTg0MEQ2RkM0NDJBOEMyQyBCMTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABArSyTVT7sDxX0rom6XoIcg8qwMStGV3SjoGRNMqHBSAh2sr4EllUzA1F8yEX5XvUPN_M6DQlqEFGw18UodOjBqjgfAwge0wHQYDVR0OBBYEFBiTdxTWyNCRuzSieBflmHPSJbS1MB8GA1UdIwQYMBaAFEFrtkvvohkN5GJf_SkElrmCKbT4MAkGA1UdEwQCMAAwCwYDVR0PBAQDAgTwMDIGCCsGAQUFBwEBBCYwJDAiBggrBgEFBQcwAoYWaHR0cDovL2kuczJwa2kubmV0L2YxLzAnBgNVHR8EIDAeMBygGqAYhhZodHRwOi8vYy5zMnBraS5uZXQvcjEvMCEGCysGAQQBguUcAQEEBBIEEIZSq-n72EgQqEDW_EQqjCwwEwYLKwYBBAGC5RwCAQEEBAMCBDAwCgYIKoZIzj0EAwIDSAAwRQIgMsLnUg5Px2FehxIUNiaey8qeT1FGtlJ1s3LEUGOks-8CIQDNEv5aupDvYxn2iqWSNysv4qpdoqSMytRQ7ctfuJDWN2hhdXRoRGF0YVkBV2q5u_Dfmhb5Hbszu7Ey-vnRfHgsSCbG7HDs7ljZfvUqRQAAAAOGUqvp-9hIEKhA1vxEKowsANOjAFivTwrbRUk8vCOabp-Ig8T2Kq-vfWZ_GiLVL6CPeau-yZ5JJR3vSswcmlswHGebsyVNfyE-lfPY0pWQRWtUausk5rJiF22HM95Go9CwWP9_aqSEmu3fFIjMNvpnNLWFwwTnETvr9cp1sf35kRTO3E32VHwaNflM717VawR95jrKuKopFn7GADcFTTzUY5lZnTRyCBY8QSaWXWCRh6kMOOvAfRrYJdpX6hKznStEi4P0mQFMoKoRgrogb4IEy1MTAlADTjYWQBD9GlanOJVXJd9YowFjT0tQAycgZ0VkMjU1MTkhmCAYTBQYsBg8DBhNGCEY3BgxGDIY6xhdABiiGEoYVhiKGHgYMxgcGOIYdRiiGJMLAhgZGIkYNQkY2A0",
+              "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJWRVAyWTVsckZLdmZOWkN0LWpzMUJpdnpJUmpEQ1hFUk5Sc3dWUEdUMXR3Iiwib3JpZ2luIjoiaHR0cHM6Ly93ZWJhdXRobi5maXJzdHllYXIuaWQuYXUiLCJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIn0",
+              "transports": null
+            },
+            "type": "public-key",
+            "extensions": {}
+          }"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = Webauthn::new_unsafe_experts_only(
+            "webauthn.firstyear.id.au",
+            "webauthn.firstyear.id.au",
+            vec![Url::parse("https://webauthn.firstyear.id.au").unwrap()],
+            None,
+            None,
+            None,
+        );
+
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!(?rsp_d);
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            &chal,
+            &[],
+            &[COSEAlgorithm::EDDSA],
+            None,
+            true,
+            &RequestRegistrationExtensions::default(),
+            true,
+        );
+
+        debug!(?result);
+
+        // This is a known fault, solokeys emit invalid attestation with EDDSA
+        assert!(matches!(
+            result,
+            Err(WebauthnError::AttestationStatementSigInvalid)
+        ))
+    }
+
+    #[test]
+    fn test_solokey_v2_a_sealed_ed25519_invalid_cbor() {
+        let chal: Base64UrlSafeData =
+            serde_json::from_str("\"KlJqz0evSPAw8cTWpup6SkYJw-RTziV0BBuMH8R-zVM\"").unwrap();
+
+        let response = r#"{
+            "id": "owBYn6_Ys3wJqEeCM84k1tMrasG4oPkmzCza-UvzwU5a3V_piE5ZglKlAPMikNcz2LHMMxrlE7CZo6bJZ-QNijw97HdJT8fxky1CW78Yt5yvyYAkPurVqIp0_18ngp3HHu9vL35C7bczMQdJEv3tWjD7XZvzlZlewTiFcSjbnSNROmxxTWUFJM9T8Hsito3g8sDSwc16ogiaPidHoK33fCxVhwFMPCVPuOjlRzLXxUXzAlDXFCg6QebXOL-9KnXq1JsZ",
+            "rawId": "owBYn6_Ys3wJqEeCM84k1tMrasG4oPkmzCza-UvzwU5a3V_piE5ZglKlAPMikNcz2LHMMxrlE7CZo6bJZ-QNijw97HdJT8fxky1CW78Yt5yvyYAkPurVqIp0_18ngp3HHu9vL35C7bczMQdJEv3tWjD7XZvzlZlewTiFcSjbnSNROmxxTWUFJM9T8Hsito3g8sDSwc16ogiaPidHoK33fCxVhwFMPCVPuOjlRzLXxUXzAlDXFCg6QebXOL-9KnXq1JsZ",
+            "response": {
+              "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVkBTEmWDeWIDoxodDQXD2R2YFuP5K65ooYyx5lc87qDHZdjRQAAABMAAAAAAAAAAAAAAAAAAAAAAMOjAFifr9izfAmoR4IzziTW0ytqwbig-SbMLNr5S_PBTlrdX-mITlmCUqUA8yKQ1zPYscwzGuUTsJmjpsln5A2KPD3sd0lPx_GTLUJbvxi3nK_JgCQ-6tWoinT_XyeCncce728vfkLttzMxB0kS_e1aMPtdm_OVmV7BOIVxKNudI1E6bHFNZQUkz1PweyK2jeDywNLBzXqiCJo-J0egrfd8LFWHAUw8JU-46OVHMtfFRfMCUNcUKDpB5tc4v70qderUmxmjAWNPS1ADJyBnRWQyNTUxOSGYIBhtGCEYqxgkGEwYPRhZGKIYaBjWGNoYIRjCEhifGPUYVBj7GDgY0hhNGLQYrxiEGE4VGJkYQxheGJoYUhip",
+              "clientDataJSON": "eyJjaGFsbGVuZ2UiOiJLbEpxejBldlNQQXc4Y1RXcHVwNlNrWUp3LVJUemlWMEJCdU1IOFItelZNIiwib3JpZ2luIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgwIiwidHlwZSI6IndlYmF1dGhuLmNyZWF0ZSJ9",
+              "transports": null
+            },
+            "type": "public-key",
+            "extensions": {}
+        }"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = Webauthn::new_unsafe_experts_only(
+            "localhost",
+            "localhost",
+            vec![Url::parse("http://localhost:8080/").unwrap()],
+            None,
+            None,
+            None,
+        );
+
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!(?rsp_d);
+
+        let reg_extn = RequestRegistrationExtensions {
+            cred_protect: Some(CredProtect {
+                credential_protection_policy:
+                    CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIDList,
+                enforce_credential_protection_policy: Some(false),
+            }),
+            uvm: Some(true),
+            cred_props: Some(true),
+            min_pin_length: Some(true),
+            hmac_create_secret: Some(true),
+        };
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Discouraged_DO_NOT_USE,
+            &chal,
+            &[],
+            &[COSEAlgorithm::EDDSA],
+            None,
+            true,
+            &reg_extn,
+            true,
+        );
+
+        debug!(?result);
+
+        assert!(matches!(
+            result,
+            Err(WebauthnError::COSEKeyInvalidCBORValue)
+        ))
+    }
 }
