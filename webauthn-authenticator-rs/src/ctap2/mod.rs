@@ -128,6 +128,9 @@ mod ctap21_cred;
 mod ctap21pre;
 mod internal;
 mod pin_uv;
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
+#[doc(hidden)]
+mod solokey;
 
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
@@ -158,6 +161,10 @@ pub use self::{
 pub use self::{
     ctap21_bio::BiometricAuthenticator, ctap21_cred::CredentialManagementAuthenticator,
 };
+
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
+#[doc(inline)]
+pub use self::solokey::SoloKeyAuthenticator;
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///

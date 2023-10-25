@@ -69,6 +69,8 @@ pub enum WebauthnCError {
     /// something has not been initialised correctly, or that the authenticator
     /// is sending unexpected messages.
     UnexpectedState,
+    #[cfg(feature = "usb")]
+    U2F(crate::transport::types::U2FError),
 }
 
 #[cfg(feature = "nfc")]
@@ -138,6 +140,13 @@ impl From<btleplug::Error> for WebauthnCError {
             PermissionDenied => WebauthnCError::PermissionDenied,
             _ => Self::BluetoothError(v.to_string()),
         }
+    }
+}
+
+#[cfg(feature = "usb")]
+impl From<crate::transport::types::U2FError> for WebauthnCError {
+    fn from(value: crate::transport::types::U2FError) -> Self {
+        Self::U2F(value)
     }
 }
 

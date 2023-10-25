@@ -11,6 +11,9 @@ use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use tokio_stream::StreamExt;
+#[cfg(feature = "solokey")]
+use webauthn_authenticator_rs::ctap2::SoloKeyAuthenticator;
+use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::{
     ctap2::{
         commands::UserCM, select_one_device, select_one_device_predicate,
@@ -197,6 +200,9 @@ pub enum Opt {
     DeleteCredential(DeleteCredentialOpt),
     /// Updates user information for a discoverable credential on this token.
     UpdateCredentialUser(UpdateCredentialUserOpt),
+    #[cfg(feature = "solokey")]
+    /// Gets a SoloKey's UUID.
+    SoloKeyUuid(InfoOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -679,6 +685,38 @@ async fn main() {
                 .update_credential_user(o.credential_id.into(), user)
                 .await
                 .expect("Error updating credential");
+        }
+
+        #[cfg(feature = "solokey")]
+        Opt::SoloKeyUuid(o) => {
+            while let Some(event) = stream.next().await {
+                match event {
+                    TokenEvent::Added(t) => {
+                        let mut authenticator = match CtapAuthenticator::new(t, &ui).await {
+                            Some(a) => a,
+                            None => continue,
+                        };
+
+                        match authenticator.get_uuid().await {
+                            Ok(uuid) => println!("SoloKey UUID: {uuid}"),
+                            Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::InvalidMessageLength) => {
+                                println!("Device is not a SoloKey!")
+                            }
+                            Err(e) => panic!("could not get SoloKey UUID: {e:?}"),
+                        }
+                    }
+                    TokenEvent::EnumerationComplete => {
+                        if o.watch {
+                            println!("Initial enumeration completed, watching for more devices...");
+                            println!("Press Ctrl + C to stop watching.");
+                        } else {
+                            break;
+                        }
+                    }
+                    _ => (),
+                }
+            }
         }
     }
 }
