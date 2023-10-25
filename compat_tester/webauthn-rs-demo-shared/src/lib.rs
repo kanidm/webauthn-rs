@@ -15,6 +15,7 @@ pub use webauthn_rs_proto::{
     RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
+#[cfg(feature = "core")]
 use webauthn_rs_device_catalog::Data;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

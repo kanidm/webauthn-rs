@@ -43,7 +43,14 @@ pub enum COSEAlgorithm {
 impl COSEAlgorithm {
     /// Return the set of secure recommended COSEAlgorithm's
     pub fn secure_algs() -> Vec<Self> {
-        vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]
+        vec![
+            COSEAlgorithm::ES256,
+            // COSEAlgorithm::ES384,
+            // COSEAlgorithm::ES512,
+            COSEAlgorithm::RS256,
+            // COSEAlgorithm::RS384,
+            // COSEAlgorithm::RS512
+        ]
     }
 
     /// Return the set of all possible algorithms that may exist as a COSEAlgorithm

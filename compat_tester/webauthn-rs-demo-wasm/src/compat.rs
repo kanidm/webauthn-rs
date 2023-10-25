@@ -212,7 +212,7 @@ impl Component for CompatTest {
                             RegisterWithSettings {
                                 username: "compatuser".to_string(),
                                 uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                algorithm: Some(COSEAlgorithm::secure_algs()),
                                 attestation: Some(AttestationConveyancePreference::Direct),
                                 attachment: None,
                                 extensions: Some(reg_extensions_full()),
@@ -228,7 +228,7 @@ impl Component for CompatTest {
                             RegisterWithSettings {
                                 username: "compatuser".to_string(),
                                 uv: Some(UserVerificationPolicy::Discouraged_DO_NOT_USE),
-                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                algorithm: Some(COSEAlgorithm::secure_algs()),
                                 attestation: Some(AttestationConveyancePreference::Indirect),
                                 attachment: None,
                                 extensions: Some(reg_extensions_full()),
@@ -314,7 +314,7 @@ impl Component for CompatTest {
                             RegisterWithSettings {
                                 username: "compatuser".to_string(),
                                 uv: Some(UserVerificationPolicy::Preferred),
-                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                algorithm: Some(COSEAlgorithm::secure_algs()),
                                 attestation: Some(AttestationConveyancePreference::None),
                                 attachment: None,
                                 extensions: Some(reg_extensions_full()),
@@ -330,7 +330,7 @@ impl Component for CompatTest {
                             RegisterWithSettings {
                                 username: "compatuser".to_string(),
                                 uv: Some(UserVerificationPolicy::Required),
-                                algorithm: Some(COSEAlgorithm::all_possible_algs()),
+                                algorithm: Some(COSEAlgorithm::secure_algs()),
                                 attestation: Some(AttestationConveyancePreference::None),
                                 attachment: None,
                                 extensions: Some(reg_extensions_full()),
