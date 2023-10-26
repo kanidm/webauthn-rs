@@ -33,16 +33,16 @@ use crate::prelude::WebauthnCError;
 use super::AnyToken;
 
 #[cfg(all(feature = "usb", feature = "vendor-solokey"))]
-pub const CMD_RANDOM: u8 = super::TYPE_INIT | 0x60;
+pub(crate) const CMD_RANDOM: u8 = super::TYPE_INIT | 0x60;
 
 #[cfg(all(feature = "usb", feature = "vendor-solokey"))]
-pub const CMD_VERSION: u8 = super::TYPE_INIT | 0x61;
+pub(crate) const CMD_VERSION: u8 = super::TYPE_INIT | 0x61;
 
 #[cfg(all(feature = "usb", feature = "vendor-solokey"))]
-pub const CMD_UUID: u8 = super::TYPE_INIT | 0x62;
+pub(crate) const CMD_UUID: u8 = super::TYPE_INIT | 0x62;
 
 #[cfg(all(feature = "usb", feature = "vendor-solokey"))]
-pub const CMD_LOCK: u8 = super::TYPE_INIT | 0x63;
+pub(crate) const CMD_LOCK: u8 = super::TYPE_INIT | 0x63;
 
 /// See [`SoloKeyAuthenticator`](crate::ctap2::SoloKeyAuthenticator).
 #[async_trait]
