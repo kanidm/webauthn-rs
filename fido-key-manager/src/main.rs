@@ -12,7 +12,11 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use tokio_stream::StreamExt;
 #[cfg(feature = "solokey")]
-use webauthn_authenticator_rs::{ctap2::SoloKeyAuthenticator, prelude::WebauthnCError};
+use webauthn_authenticator_rs::ctap2::SoloKeyAuthenticator;
+#[cfg(feature = "yubikey")]
+use webauthn_authenticator_rs::ctap2::YubiKeyAuthenticator;
+#[cfg(any(feature = "solokey", feature = "yubikey"))]
+use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::{
     ctap2::{
         commands::UserCM, select_one_device, select_one_device_predicate,
@@ -205,6 +209,8 @@ pub enum Opt {
     #[cfg(feature = "solokey")]
     /// Gets some random bytes from a connected SoloKey 2 or Trussed device.
     SoloKeyRandom,
+    #[cfg(feature = "yubikey")]
+    YubikeyGetConfig,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -753,6 +759,20 @@ async fn main() {
                 .await
                 .expect("Error getting random data");
             println!("Random bytes: {}", hex::encode(r));
+        }
+
+        #[cfg(feature = "yubikey")]
+        Opt::YubikeyGetConfig => {
+            // TODO: filter this to just YubiKey devices in a safe way
+            println!("Insert a YubiKey device...");
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device(stream, &ui).await.unwrap();
+
+            let r = token
+                .get_yubikey_config()
+                .await
+                .expect("Error getting random data");
+            todo!()
         }
     }
 }
