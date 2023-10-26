@@ -13,10 +13,8 @@ use crate::{
         solokey::SoloKeyToken,
         types::{U2FError, U2FHID_ERROR},
     },
-    usb::framing::U2FHIDFrame,
+    usb::{framing::U2FHIDFrame, USBToken},
 };
-
-use super::{USBToken, USBTransport};
 
 #[async_trait]
 impl SoloKeyToken for USBToken {
