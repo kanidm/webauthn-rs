@@ -1,5 +1,8 @@
 //! YubiKey vendor-specific commands.
 //!
+//! This currently only supports YubiKey 5 and later. Older keys have different
+//! config formats and protocols, some firmwares give bogus data.
+//!
 //! ## USB HID
 //!
 //! Commands are sent on a `U2FHIDFrame` level, and values are bitwise-OR'd
@@ -7,10 +10,21 @@
 //!
 //! Command | Description | Request | Response
 //! ------- | ----------- | ------- | --------
+//! `0x40`  | Set legacy device config | ... | ...
 //! `0x42`  | Get device config | _none_ | [`YubiKeyConfig`]
-//!
+//! `0x43`  | Set device config | [`YubiKeyConfig`] | none?
 //!
 //! ## NFC
+//!
+//! Management app AID: `a000000527471117`
+//!
+//! INS    | P1     | Description | Request | Response
+//! ------ | ------ | ----------- | ------- | --------
+//! `0x16` | `0x11` | Set legacy device config | ... | ...
+//! `0x1D` | `0x00` | Get device config | _none_ | [`YubiKeyConfig`]
+//! `0x1C` | `0x00` | Set device config | [`YubiKeyConfig`] | none?
+//!
+//! All commands sent with CLA = `0x00`, P2 = `0x00`.
 //!
 //! ## References
 //!
@@ -60,7 +74,9 @@ enum ConfigKey {
     ChallengeResponseTimeout = 0x7,
     DeviceFlags = 0x8,
     AppVersions = 0x9,
+    /// 16 bytes lock code, or indicates when a device is locked
     ConfigLock = 0xa,
+    /// 16 bytes unlock code, to unlock a locked device
     Unlock = 0xb,
     Reboot = 0xc,
     SupportedNfcInterfaces = 0xd,

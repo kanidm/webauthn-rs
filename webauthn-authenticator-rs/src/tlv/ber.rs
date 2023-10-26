@@ -20,11 +20,14 @@ impl BerTlvParser<'_> {
         BerTlvParser { b: &tlv[i..] }
     }
 
+    /// Sets the internal buffer to an empty range, effectively "bricking" the
+    /// iterator.
     #[inline]
     fn brick(&mut self) {
         self.b = &self.b[0..0];
     }
 
+    /// Returns `None` if the internal buffer is empty.
     fn stop_if_empty(&self) -> Option<()> {
         if self.b.is_empty() {
             None
@@ -33,6 +36,10 @@ impl BerTlvParser<'_> {
         }
     }
 
+    /// Returns `None` and [bricks][0] the buffer if it contains less than
+    /// `bytes` bytes.
+    ///
+    /// [0]: BerTlvParser::brick
     fn stop_and_brick_if_less_than(&mut self, bytes: usize) -> Option<()> {
         if self.b.len() < bytes {
             error!("bricked: less than {bytes} bytes: {}", self.b.len());
