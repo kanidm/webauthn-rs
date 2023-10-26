@@ -768,11 +768,13 @@ async fn main() {
             let mut token: CtapAuthenticator<AnyToken, Cli> =
                 select_one_device(stream, &ui).await.unwrap();
 
-            let r = token
+            let cfg = token
                 .get_yubikey_config()
                 .await
-                .expect("Error getting random data");
-            todo!()
+                .expect("Error getting YubiKey config");
+
+            println!("YubiKey config:");
+            println!("{cfg}")
         }
     }
 }

@@ -2,7 +2,10 @@ use async_trait::async_trait;
 
 use crate::{
     prelude::WebauthnCError,
-    transport::{yubikey::YubiKeyToken, Token},
+    transport::{
+        yubikey::{YubiKeyConfig, YubiKeyToken},
+        Token,
+    },
     ui::UiCallback,
 };
 
@@ -20,7 +23,7 @@ use super::Ctap20Authenticator;
 /// Protocol notes are in TODO
 #[async_trait]
 pub trait YubiKeyAuthenticator {
-    async fn get_yubikey_config(&mut self) -> Result<bool, WebauthnCError>;
+    async fn get_yubikey_config(&mut self) -> Result<YubiKeyConfig, WebauthnCError>;
 }
 
 #[async_trait]
@@ -28,7 +31,7 @@ impl<'a, T: Token + YubiKeyToken, U: UiCallback> YubiKeyAuthenticator
     for Ctap20Authenticator<'a, T, U>
 {
     #[inline]
-    async fn get_yubikey_config(&mut self) -> Result<bool, WebauthnCError> {
+    async fn get_yubikey_config(&mut self) -> Result<YubiKeyConfig, WebauthnCError> {
         self.token.get_yubikey_config().await
     }
 }
