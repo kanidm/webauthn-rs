@@ -1,10 +1,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
-#[cfg(any(
-    all(doc, not(doctest)),
-    all(feature = "usb", feature = "vendor-solokey")
-))]
+#[cfg(all(feature = "usb", feature = "vendor-solokey"))]
 use crate::transport::solokey::{CMD_LOCK, CMD_RANDOM, CMD_UUID, CMD_VERSION};
 
 use crate::{
