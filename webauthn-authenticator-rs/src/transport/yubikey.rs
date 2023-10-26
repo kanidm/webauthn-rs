@@ -389,7 +389,7 @@ mod tests {
     fn yubico_security_key_c_nfc() {
         let _ = tracing_subscriber::fmt().try_init();
         let expected = YubiKeyConfig {
-            version: [5,4,3],
+            version: [5, 4, 3],
             form_factor: FormFactor::UsbCKeychain,
             is_security_key: true,
             supported_usb_interfaces: Interface::CTAP1 | Interface::CTAP2,
