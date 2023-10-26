@@ -7,7 +7,8 @@
 //!
 //! Command | Description | Request | Response
 //! ------- | ----------- | ------- | --------
-//! `0x42`  | Get device config | _none_ | `DeviceInfo` BER-TLV
+//! `0x42`  | Get device config | _none_ | [`YubiKeyConfig`]
+//!
 //!
 //! ## NFC
 //!
@@ -66,35 +67,63 @@ enum ConfigKey {
     EnabledNfcInterfaces = 0xe,
 }
 
+/// YubiKey device form factor.
+///
+/// Only the lower 3 bits of the `u8` are used.
 #[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive, ToPrimitive)]
 #[repr(u8)]
 pub enum FormFactor {
     #[default]
     Unknown = 0x0,
+    /// USB-A keychain-size device
     UsbAKeychain = 0x1,
+    /// USB-A nano-size device
     UsbANano = 0x2,
+    /// USB-C keychain-size device
     UsbCKeychain = 0x3,
+    /// USB-C nano-size device
     UsbCNano = 0x4,
+    /// USB-C + Lightning device
     UsbCLightning = 0x5,
+    /// USB-A + biometric device
     UsbABio = 0x6,
+    /// USB-C + biometric device
     UsbCBio = 0x7,
 }
 
+/// YubiKey device info / configuration structure
+///
+/// ## Payload format
+///
+/// * `u8`: length
+/// * BER-TLV payload
+///
+/// BER-TLV tag values are one of the values in [`ConfigKey`].
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct YubiKeyConfig {
+    /// Device serial number. This isn't available on all devices.
     pub serial: Option<u32>,
+    /// Form factor of the device.
     pub form_factor: FormFactor,
+    /// Firmware version of the device.
     pub version: [u8; 3],
+    /// `true` if a configuration lock has been set on the device.
     pub is_locked: bool,
+    /// `true` if the device is FIPS-certified.
     pub is_fips: bool,
     /// `true` if the device is a "Security Key" (CTAP-only), `false` if it is a
     /// "YubiKey".
     pub is_security_key: bool,
     pub supports_remote_wakeup: bool,
     pub supports_eject: bool,
+    /// Interfaces which are supported over USB.
     pub supported_usb_interfaces: Interface,
+    /// Interfaces which are enabled over USB.
     pub enabled_usb_interfaces: Interface,
+    /// Interfaces which are supported over NFC. Non-NFC devices don't set any
+    /// values here.
     pub supported_nfc_interfaces: Interface,
+    /// Interfaces which are enabled over NFC.
     pub enabled_nfc_interfaces: Interface,
     pub auto_eject_timeout: u16,
     pub challenge_response_timeout: u16,
