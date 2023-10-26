@@ -61,6 +61,7 @@ pub trait SoloKeyToken {
 }
 
 #[async_trait]
+#[allow(clippy::unimplemented)]
 impl SoloKeyToken for AnyToken {
     async fn get_solokey_lock(&mut self) -> Result<bool, WebauthnCError> {
         match self {
