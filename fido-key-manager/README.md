@@ -38,6 +38,10 @@ Start-Process -FilePath "powershell" -Verb RunAs
 .\target\debug\fido-key-manager.exe --help
 ```
 
+By default, Cargo will build `fido-key-manager` with the `nfc` and `usb`
+[features][]. Additional features are described in `Cargo.toml` and in the
+remainder of this document.
+
 ## Commands
 
 Most `fido-key-manager` commands (except `info` and `factory-reset`) will
@@ -98,9 +102,13 @@ of the commands, or returns an unexpected value.
 
 ### SoloKey 2 / Trussed
 
+> **Tip:** this functionality is only available when `fido-key-manager` is
+> built with `--features solokey`.
+
 SoloKey 2 / Trussed commands are currently **only** supported over USB HID. NFC
 support may be added in future, but we have encountered many problems
-communicating with SoloKey / Trussed devices *at all* over NFC.
+communicating with SoloKey and Trussed devices *at all* over NFC, which has made
+things difficult.
 
 Command | Description
 ------- | -----------
@@ -110,7 +118,8 @@ Command | Description
 ## Platform-specific notes
 
 Bluetooth is currently disabled by default, as it's not particularly reliable on
-anything but macOS, and can easily accidentally select nearby devices.
+anything but macOS, and can easily accidentally select nearby devices. It can be
+enabled with `--features bluetooth`.
 
 ### Linux
 
@@ -218,3 +227,4 @@ As long as you're running `fido-key-manager` as Administrator:
 * USB support should "just work".
 
 [1]: https://learn.microsoft.com/en-us/previous-versions/bb756929(v=msdn.10)
+[features]: https://doc.rust-lang.org/cargo/reference/features.html
