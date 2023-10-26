@@ -19,13 +19,16 @@ use super::Ctap20Authenticator;
 /// Protocol notes are in [`crate::transport::solokey`].
 #[async_trait]
 pub trait SoloKeyAuthenticator {
-    /// Gets the device's lock (secure boot) status.
+    /// Gets a SoloKey's lock (secure boot) status.
     async fn get_solokey_lock(&mut self) -> Result<bool, WebauthnCError>;
 
-    /// Gets the device-specific UUID of a SoloKey token.
+    /// Gets some random bytes from a SoloKey.
+    async fn get_solokey_random(&mut self) -> Result<[u8; 57], WebauthnCError>;
+
+    /// Gets a SoloKey's UUID.
     async fn get_solokey_uuid(&mut self) -> Result<Uuid, WebauthnCError>;
 
-    /// Gets the version of a SoloKey token.
+    /// Gets a SoloKey's firmware version.
     async fn get_solokey_version(&mut self) -> Result<u32, WebauthnCError>;
 }
 
@@ -36,6 +39,11 @@ impl<'a, T: Token + SoloKeyToken, U: UiCallback> SoloKeyAuthenticator
     #[inline]
     async fn get_solokey_lock(&mut self) -> Result<bool, WebauthnCError> {
         self.token.get_solokey_lock().await
+    }
+
+    #[inline]
+    async fn get_solokey_random(&mut self) -> Result<[u8; 57], WebauthnCError> {
+        self.token.get_solokey_random().await
     }
 
     #[inline]

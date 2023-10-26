@@ -201,8 +201,11 @@ pub enum Opt {
     /// Updates user information for a discoverable credential on this token.
     UpdateCredentialUser(UpdateCredentialUserOpt),
     #[cfg(feature = "solokey")]
-    /// Gets info about a connected SoloKey.
+    /// Gets info about a connected SoloKey 2 or Trussed device.
     SoloKeyInfo(InfoOpt),
+    #[cfg(feature = "solokey")]
+    /// Gets some random bytes from a connected SoloKey 2 or Trussed device.
+    SoloKeyRandom,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -689,6 +692,7 @@ async fn main() {
 
         #[cfg(feature = "solokey")]
         Opt::SoloKeyInfo(o) => {
+            println!("Looking for SoloKey 2 or Trussed devices...");
             while let Some(event) = stream.next().await {
                 match event {
                     TokenEvent::Added(t) => {
@@ -697,6 +701,7 @@ async fn main() {
                             None => continue,
                         };
 
+                        // TODO: filter this to just SoloKey devices in a safe way
                         let uuid = match authenticator.get_solokey_uuid().await {
                             Ok(v) => v,
                             Err(WebauthnCError::NotSupported)
@@ -750,6 +755,20 @@ async fn main() {
                     _ => (),
                 }
             }
+        }
+
+        #[cfg(feature = "solokey")]
+        Opt::SoloKeyRandom => {
+            // TODO: filter this to just SoloKey devices in a safe way
+            println!("Insert a SoloKey 2 or Trussed device...");
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device(stream, &ui).await.unwrap();
+
+            let r = token
+                .get_solokey_random()
+                .await
+                .expect("Error getting random data");
+            println!("Random bytes: {}", hex::encode(r));
         }
     }
 }
