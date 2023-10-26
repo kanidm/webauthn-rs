@@ -1,10 +1,16 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+#[cfg(any(
+    all(doc, not(doctest)),
+    all(feature = "usb", feature = "vendor-solokey")
+))]
+use crate::transport::solokey::{CMD_LOCK, CMD_RANDOM, CMD_UUID, CMD_VERSION};
+
 use crate::{
     prelude::WebauthnCError,
     transport::{
-        solokey::{SoloKeyToken, CMD_LOCK, CMD_RANDOM, CMD_UUID, CMD_VERSION},
+        solokey::SoloKeyToken,
         types::{U2FError, U2FHID_ERROR},
     },
     usb::framing::U2FHIDFrame,
