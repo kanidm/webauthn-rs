@@ -551,9 +551,7 @@ impl From<&AttestedResidentKey> for DiscoverableKey {
 #[cfg(all(feature = "conditional-ui", feature = "resident-key-support"))]
 impl From<AttestedResidentKey> for DiscoverableKey {
     fn from(k: AttestedResidentKey) -> Self {
-        DiscoverableKey {
-            cred: k.cred,
-        }
+        DiscoverableKey { cred: k.cred }
     }
 }
 
@@ -569,8 +567,6 @@ impl From<&Passkey> for DiscoverableKey {
 #[cfg(feature = "conditional-ui")]
 impl From<Passkey> for DiscoverableKey {
     fn from(k: Passkey) -> Self {
-        DiscoverableKey {
-            cred: k.cred,
-        }
+        DiscoverableKey { cred: k.cred }
     }
 }

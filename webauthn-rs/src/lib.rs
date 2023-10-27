@@ -1225,10 +1225,8 @@ impl Webauthn {
     }
 }
 
-
 #[cfg(feature = "conditional-ui")]
 impl Webauthn {
-
     /// This function will initiate a conditional ui authentication for discoverable
     /// credentials.
     ///
