@@ -50,6 +50,8 @@ ctap2 = [
     "dep:tokio-stream",
 ]
 ctap2-management = ["ctap2"]
+# Support for SoloKey's vendor commands
+vendor-solokey = []
 nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
 softpasskey = ["crypto", "softtoken"]

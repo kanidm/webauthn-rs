@@ -11,6 +11,9 @@ use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use tokio_stream::StreamExt;
+#[cfg(feature = "solokey")]
+use webauthn_authenticator_rs::ctap2::SoloKeyAuthenticator;
+use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::{
     ctap2::{
         commands::UserCM, select_one_device, select_one_device_predicate,
@@ -197,6 +200,12 @@ pub enum Opt {
     DeleteCredential(DeleteCredentialOpt),
     /// Updates user information for a discoverable credential on this token.
     UpdateCredentialUser(UpdateCredentialUserOpt),
+    #[cfg(feature = "solokey")]
+    /// Gets info about a connected SoloKey 2 or Trussed device.
+    SoloKeyInfo(InfoOpt),
+    #[cfg(feature = "solokey")]
+    /// Gets some random bytes from a connected SoloKey 2 or Trussed device.
+    SoloKeyRandom,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -679,6 +688,87 @@ async fn main() {
                 .update_credential_user(o.credential_id.into(), user)
                 .await
                 .expect("Error updating credential");
+        }
+
+        #[cfg(feature = "solokey")]
+        Opt::SoloKeyInfo(o) => {
+            println!("Looking for SoloKey 2 or Trussed devices...");
+            while let Some(event) = stream.next().await {
+                match event {
+                    TokenEvent::Added(t) => {
+                        let mut authenticator = match CtapAuthenticator::new(t, &ui).await {
+                            Some(a) => a,
+                            None => continue,
+                        };
+
+                        // TODO: filter this to just SoloKey devices in a safe way
+                        let uuid = match authenticator.get_solokey_uuid().await {
+                            Ok(v) => v,
+                            Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::U2F(_))
+                            | Err(WebauthnCError::InvalidMessageLength) => {
+                                println!("Device is not a SoloKey!");
+                                continue;
+                            }
+                            Err(e) => panic!("could not get SoloKey UUID: {e:?}"),
+                        };
+
+                        let version = match authenticator.get_solokey_version().await {
+                            Ok(v) => v,
+                            Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::U2F(_))
+                            | Err(WebauthnCError::InvalidMessageLength) => {
+                                println!("Device is not a SoloKey!");
+                                continue;
+                            }
+                            Err(e) => panic!("could not get SoloKey version: {e:?}"),
+                        };
+
+                        let secure_boot = if match authenticator.get_solokey_lock().await {
+                            Ok(v) => v,
+                            Err(WebauthnCError::NotSupported)
+                            | Err(WebauthnCError::U2F(_))
+                            | Err(WebauthnCError::InvalidMessageLength) => {
+                                println!("Device is not a SoloKey!");
+                                continue;
+                            }
+                            Err(e) => panic!("could not get SoloKey lock state: {e:?}"),
+                        } {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        };
+
+                        println!("SoloKey info:");
+                        println!("  Device UUID: {uuid}");
+                        println!("  Version:     {version:#x}");
+                        println!("  Secure boot: {secure_boot}");
+                    }
+                    TokenEvent::EnumerationComplete => {
+                        if o.watch {
+                            println!("Initial enumeration completed, watching for more devices...");
+                            println!("Press Ctrl + C to stop watching.");
+                        } else {
+                            break;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        #[cfg(feature = "solokey")]
+        Opt::SoloKeyRandom => {
+            // TODO: filter this to just SoloKey devices in a safe way
+            println!("Insert a SoloKey 2 or Trussed device...");
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device(stream, &ui).await.unwrap();
+
+            let r = token
+                .get_solokey_random()
+                .await
+                .expect("Error getting random data");
+            println!("Random bytes: {}", hex::encode(r));
         }
     }
 }

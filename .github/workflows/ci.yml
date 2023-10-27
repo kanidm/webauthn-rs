@@ -72,6 +72,8 @@ jobs:
       # handle.
       - if: runner.os != 'windows'
         run: cargo run --bin fido-key-manager -- --help
+      - if: runner.os != 'windows'
+        run: cargo run --bin fido-key-manager --features solokey -- --help
       - run: cargo run --bin fido-mds-tool -- --help
 
   authenticator:
@@ -88,7 +90,7 @@ jobs:
           - softtoken
           - usb
           - bluetooth,nfc,usb,ctap2-management
-          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb
+          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb,vendor-solokey
         os:
           - ubuntu-latest
           - windows-latest

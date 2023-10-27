@@ -38,6 +38,10 @@ Start-Process -FilePath "powershell" -Verb RunAs
 .\target\debug\fido-key-manager.exe --help
 ```
 
+By default, Cargo will build `fido-key-manager` with the `nfc` and `usb`
+[features][]. Additional features are described in `Cargo.toml` and in the
+remainder of this document.
+
 ## Commands
 
 Most `fido-key-manager` commands (except `info` and `factory-reset`) will
@@ -80,10 +84,42 @@ Command | Description | Requirements
 [Enterprise Attestation]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-enterp-attstn
 [Minimum PIN Length]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-feature-descriptions-minPinLength
 
+## Vendor-specific commands
+
+**Warning:** for safety, ensure that you **only** have security key(s) from that
+vendor connected to your computer when using **any** vendor-specific command,
+**even benign ones**.
+
+In the CTAP 2 protocol, vendor-specific command IDs can (and do!) have different
+meanings on different vendors – one vendor may use a certain ID as a safe
+operation (such as "get info"), but another vendor might use the same ID to
+start firmware updates, change the key's operating mode or perform some
+potentially-destructive operation.
+
+For operations that require multiple commands be sent to a security key, this
+tool will attempt to stop early if a key reports that it does not support one
+of the commands, or returns an unexpected value.
+
+### SoloKey 2 / Trussed
+
+> **Tip:** this functionality is only available when `fido-key-manager` is
+> built with `--features solokey`.
+
+SoloKey 2 / Trussed commands are currently **only** supported over USB HID. NFC
+support may be added in future, but we have encountered many problems
+communicating with SoloKey and Trussed devices *at all* over NFC, which has made
+things difficult.
+
+Command | Description
+------- | -----------
+`solo-key-info` | get all connected SoloKeys' unique ID, firmware version and secure boot status
+`solo-key-random` | get some random bytes from a SoloKey
+
 ## Platform-specific notes
 
 Bluetooth is currently disabled by default, as it's not particularly reliable on
-anything but macOS, and can easily accidentally select nearby devices.
+anything but macOS, and can easily accidentally select nearby devices. It can be
+enabled with `--features bluetooth`.
 
 ### Linux
 
@@ -145,6 +181,10 @@ anything but macOS, and can easily accidentally select nearby devices.
 * NFC should "just work", provided you've installed a PC/SC initiator
   (driver) for your transciever (if it is not supported by `libccid`).
 
+  macOS tends to "butt in" on exclusive connections by selecting the PIV applet,
+  which can cause issues for some keys' firmware, especially if they support
+  PIV.
+
 * USB should "just work".
 
 ### Windows
@@ -187,3 +227,4 @@ As long as you're running `fido-key-manager` as Administrator:
 * USB support should "just work".
 
 [1]: https://learn.microsoft.com/en-us/previous-versions/bb756929(v=msdn.10)
+[features]: https://doc.rust-lang.org/cargo/reference/features.html

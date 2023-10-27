@@ -1,9 +1,12 @@
 //! All [Response] frame types, used by FIDO tokens over USB HID.
 use crate::error::WebauthnCError;
-use crate::transport::iso7816::ISO7816ResponseAPDU;
-use crate::transport::types::{
-    CBORResponse, U2FError, TYPE_INIT, U2FHID_CBOR, U2FHID_ERROR, U2FHID_KEEPALIVE, U2FHID_MSG,
-    U2FHID_PING,
+use crate::transport::{
+    iso7816::ISO7816ResponseAPDU,
+    types::{
+        CBORResponse, U2FError, U2FHID_CBOR, U2FHID_ERROR, U2FHID_KEEPALIVE, U2FHID_MSG,
+        U2FHID_PING,
+    },
+    TYPE_INIT,
 };
 use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;

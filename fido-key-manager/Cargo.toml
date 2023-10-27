@@ -23,6 +23,7 @@ test = false
 bluetooth = ["webauthn-authenticator-rs/bluetooth"]
 nfc = ["webauthn-authenticator-rs/nfc"]
 usb = ["webauthn-authenticator-rs/usb"]
+solokey = ["webauthn-authenticator-rs/vendor-solokey"]
 
 default = ["nfc", "usb"]
 

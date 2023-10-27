@@ -13,6 +13,8 @@
 //! Windows instead.
 mod framing;
 mod responses;
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
+mod solokey;
 
 use fido_hid_rs::{
     HidReportBytes, HidSendReportBytes, USBDevice, USBDeviceImpl, USBDeviceInfo, USBDeviceInfoImpl,

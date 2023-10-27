@@ -1,9 +1,9 @@
+use super::TYPE_INIT;
 use crate::error::{CtapError, WebauthnCError};
 
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 use super::iso7816::ISO7816ResponseAPDU;
 
-pub const TYPE_INIT: u8 = 0x80;
 pub const U2FHID_PING: u8 = TYPE_INIT | 0x01;
 #[cfg(any(doc, feature = "bluetooth"))]
 pub const BTLE_KEEPALIVE: u8 = TYPE_INIT | 0x02;

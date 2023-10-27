@@ -3,6 +3,8 @@
 //! See [crate::ctap2] for a higher-level abstraction over this API.
 mod any;
 pub mod iso7816;
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
+pub(crate) mod solokey;
 #[cfg(any(doc, feature = "bluetooth", feature = "usb"))]
 pub(crate) mod types;
 
@@ -14,6 +16,9 @@ use std::fmt;
 use webauthn_rs_proto::AuthenticatorTransport;
 
 use crate::{ctap2::*, error::WebauthnCError, ui::UiCallback};
+
+#[cfg(any(doc, feature = "bluetooth", feature = "usb"))]
+pub(crate) const TYPE_INIT: u8 = 0x80;
 
 #[derive(Debug)]
 pub enum TokenEvent<T: Token> {
