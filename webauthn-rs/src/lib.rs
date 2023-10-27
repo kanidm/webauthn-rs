@@ -147,6 +147,23 @@
 //! Manager' key flow, you can enable the feature `workaround-google-passkey-specific-issues`. This
 //! flow can only be used on Android devices with GMS Core, and you must have a way to detect this
 //! ahead of time.
+//!
+//! ## Conditional UI / Username Autocompletion
+//!
+//! Some passkey devices will create a resident key opportunistically during registration. These
+//! keys in some cases allow the device to autocomplete the username *and* authenticate in a
+//! single step.
+//!
+//! Not all devices support this, nor do all browsers. As a result you must always support the
+//! full passkey flow, and conditional-ui is only opportunistically itself.
+//!
+//! User testing has shown that these conditional UI flows in most browsers are hard to activate
+//! and may be confusing to users, as they attempt to force users to use caBLE/hybrid. We don't
+//! recommend conditional UI as a result.
+//!
+//! If you still wish to experiment with conditional UI, then enabling the feature `conditional-ui`
+//! will expose the needed methods to create conditional-ui mediated challenges and expose the
+//! functions to extract the users uuid from the authentication request.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -361,7 +378,7 @@ impl<'a> WebauthnBuilder<'a> {
 /// __I want to replace passwords with strong multi-factor cryptographic authentication, limited to
 /// a known set of controlled and trusted authenticator types__
 ///
-/// This type requires `preview-features` enabled as the current form of the Attestation CA List
+/// This type requires `attestation` enabled as the current form of the Attestation CA List
 /// may change in the future.
 ///
 /// > You should use [`start_attested_passkey_registration`](Webauthn::start_attested_passkey_registration)
@@ -926,7 +943,7 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "attestation")]
 impl Webauthn {
     /// Initiate the registration of a new attested_passkey key for a user. A attested_passkey key is a
     /// cryptographic authenticator that is a self-contained multifactor authenticator. This means
@@ -1199,8 +1216,6 @@ impl Webauthn {
     /// valid per the above check. If you wish
     /// you *may* use the content of the [AuthenticationResult] for extended validations (such as the
     /// user verification flag).
-    ///
-    /// In *some* cases, you *may* be able to identify the user by examinin
     pub fn finish_attested_passkey_authentication(
         &self,
         reg: &PublicKeyCredential,
@@ -1208,8 +1223,17 @@ impl Webauthn {
     ) -> WebauthnResult<AuthenticationResult> {
         self.core.authenticate_credential(reg, &state.ast)
     }
+}
 
-    /// WIP DO NOT USE
+
+#[cfg(feature = "conditional-ui")]
+impl Webauthn {
+
+    /// This function will initiate a conditional ui authentication for discoverable
+    /// credentials.
+    ///
+    /// Since this relies on the client to "discover" what credential and user id to
+    /// use, there are no options required to start this.
     pub fn start_discoverable_authentication(
         &self,
     ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
@@ -1222,10 +1246,20 @@ impl Webauthn {
 
         self.core
             .generate_challenge_authenticate_discoverable(policy, extensions)
-            .map(|(rcr, ast)| (rcr, DiscoverableAuthentication { ast }))
+            .map(|(mut rcr, ast)| {
+                // Force conditional ui - this is not a generic discoverable credential
+                // workflow!
+                rcr.mediation = Some(Mediation::Conditional);
+                (rcr, DiscoverableAuthentication { ast })
+            })
     }
 
-    /// WIP DO NOT USE
+    /// Pre-process the clients response from a conditional ui authentication attempt. This
+    /// will extract the users Uuid and the Credential ID that was used by the user
+    /// in their authentication.
+    ///
+    /// You must use this information to locate the relavent credential that was used
+    /// to allow you to finish the authentication.
     pub fn identify_discoverable_authentication<'a>(
         &'_ self,
         reg: &'a PublicKeyCredential,
@@ -1237,7 +1271,28 @@ impl Webauthn {
             .ok_or(WebauthnError::InvalidUserUniqueId)
     }
 
-    /// WIP DO NOT USE
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), the
+    /// stored [DiscoverableAuthentication] and the users [DiscoverableKey],
+    /// complete the authentication of the user. This asserts that user verification must have been correctly
+    /// performed allowing you to trust this as a MFA interfaction.
+    ///
+    /// # Errors
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
+    ///
+    /// # Returns
+    /// On success, [AuthenticationResult] is returned which contains some details of the Authentication
+    /// process.
+    ///
+    /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
+    ///
+    /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
+    /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
+    /// and you SHOULD invalidate and reject that credential as a result.
+    ///
+    /// From this [AuthenticationResult] you *should* update the Credential's Counter value if it is
+    /// valid per the above check. If you wish
+    /// you *may* use the content of the [AuthenticationResult] for extended validations (such as the
+    /// user verification flag).
     pub fn finish_discoverable_authentication(
         &self,
         reg: &PublicKeyCredential,

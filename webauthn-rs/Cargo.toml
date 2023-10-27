@@ -16,8 +16,10 @@ features = ["danger-allow-state-serialisation", "danger-user-presence-only-secur
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+preview-features = ["conditional-ui", "attestation"]
 resident-key-support = []
-preview-features = []
+conditional-ui = []
+attestation = []
 workaround-google-passkey-specific-issues = []
 danger-allow-state-serialisation = []
 danger-credential-internals = []
