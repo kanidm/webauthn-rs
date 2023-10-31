@@ -5,7 +5,6 @@ authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
 description = "Webauthn RS Device Catalog"
 repository = "https://github.com/kanidm/webauthn-rs"
-readme = "README.md"
 keywords = ["webauthn", "authentication"]
 categories = ["authentication", "web-programming"]
 license = "MPL-2.0"

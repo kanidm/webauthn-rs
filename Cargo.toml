@@ -43,15 +43,15 @@ members = [
 exclude = ["compat_tester/webauthn-rs-demo-wasm"]
 
 [workspace.dependencies]
-base64urlsafedata = { path = "./base64urlsafedata" }
+base64urlsafedata = { path = "./base64urlsafedata", version = "0.1.3" }
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
 fido-hid-rs = { path = "./fido-hid-rs" }
-webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs" }
-webauthn-rs = { path = "./webauthn-rs" }
-webauthn-rs-core = { path = "./webauthn-rs-core" }
-webauthn-rs-proto = { path = "./webauthn-rs-proto" }
-webauthn-attestation-ca = { path = "./attestation-ca" }
-webauthn-rs-device-catalog = { path = "./device-catalog" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "0.5.0-dev" }
+webauthn-rs = { path = "./webauthn-rs", version = "0.5.0-dev" }
+webauthn-rs-core = { path = "./webauthn-rs-core", version = "0.5.0-dev" }
+webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "0.5.0-dev" }
+webauthn-attestation-ca = { path = "./attestation-ca", version = "0.1.0" }
+webauthn-rs-device-catalog = { path = "./device-catalog", version = "0.5.0-20230418" }
 
 async-std = { version = "1.6", features = ["attributes"] }
 base64 = "0.21"
