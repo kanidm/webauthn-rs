@@ -242,6 +242,17 @@ impl WebauthnActor {
         r
     }
 
+    pub async fn demo_start_condui_login(
+        &self,
+    ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
+        debug!("handle ChallengeAuthenticate");
+
+        let (acr, st) = self.swan.start_discoverable_authentication()?;
+
+        debug!("complete ChallengeAuthenticate -> {:?}", acr);
+        Ok((acr, st))
+    }
+
     pub async fn compat_start_register(
         &self,
         reg_settings: RegisterWithSettings,

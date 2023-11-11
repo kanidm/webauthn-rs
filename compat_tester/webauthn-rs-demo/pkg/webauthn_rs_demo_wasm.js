@@ -833,6 +833,7 @@ function __wbg_get_imports() {
         const ret = wasm.memory;
         return addHeapObject(ret);
     };
+<<<<<<< HEAD
     imports.wbg.__wbindgen_closure_wrapper1203 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 450, __wbg_adapter_34);
         return addHeapObject(ret);
@@ -843,6 +844,18 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbindgen_closure_wrapper1866 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 661, __wbg_adapter_40);
+=======
+    imports.wbg.__wbindgen_closure_wrapper1219 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 457, __wbg_adapter_34);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_closure_wrapper1739 = function(arg0, arg1, arg2) {
+        const ret = makeClosure(arg0, arg1, 646, __wbg_adapter_37);
+        return addHeapObject(ret);
+    };
+    imports.wbg.__wbindgen_closure_wrapper1882 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 668, __wbg_adapter_40);
+>>>>>>> cff2e28 (wip)
         return addHeapObject(ret);
     };
 

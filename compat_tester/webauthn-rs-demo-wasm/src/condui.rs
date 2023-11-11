@@ -197,6 +197,7 @@ impl Component for ConduiTest {
     fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
         console::log!("oauth2::rendered");
         crate::utils::autofocus("autofocus");
+
         match &self.state {
             ConduiTestState::Main(ChallengeState::Waiting) => {
                 match PublicKeyCredentialExt::is_conditional_mediation_available() {

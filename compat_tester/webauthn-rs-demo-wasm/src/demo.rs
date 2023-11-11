@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response};
+use web_sys::{AbortController, Request, RequestInit, RequestMode, Response};
 use webauthn_rs_demo_shared::*;
 use webauthn_rs_proto::wasm::PublicKeyCredentialExt;
 use yew::prelude::*;
@@ -19,14 +19,22 @@ pub struct Demo {
     ctap2_supported: bool,
     reg_settings: RegisterWithType,
     last_username: String,
+    abort_controller: AbortController,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConduiState {
+    Waiting,
+    Presented(web_sys::CredentialRequestOptions),
+    Cancelled,
 }
 
 #[derive(Debug, Clone)]
 pub enum DemoState {
     Waiting,
     Register,
-    Login,
-    LoginSuccess,
+    Login(ConduiState),
+    LoginSuccess(ConduiState),
     Error(String),
 }
 
@@ -39,8 +47,11 @@ pub enum AppMsg {
     CompleteRegisterChallenge(JsValue, String),
     RegisterSuccess,
     Login,
+    ConduiChallengeReady(web_sys::CredentialRequestOptions),
     BeginLoginChallenge(web_sys::CredentialRequestOptions, String),
+    CompleteConduiChallenge(JsValue),
     CompleteLoginChallenge(JsValue, String),
+    ConduiCancelled,
     LoginSuccess,
     // Errors
     Error(Option<String>),
@@ -137,6 +148,89 @@ impl Demo {
 
         if status == 200 {
             Ok(AppMsg::RegisterSuccess)
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
+        } else {
+            // let headers = resp.headers();
+            let text = JsFuture::from(resp.text()?).await?;
+            let emsg = text.as_string();
+            Ok(AppMsg::Error(emsg))
+        }
+    }
+
+    async fn conditional_login_begin() -> Result<AppMsg, FetchError> {
+        console::log!("conditional_login_begin()");
+
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::SameOrigin);
+
+        let request = Request::new_with_str_and_init("/demo/condui_login_start", &opts)?;
+
+        request
+            .headers()
+            .set("content-type", "application/json")
+            .expect_throw("failed to set header");
+
+        console::log!("conditional_login_begin() req sent");
+
+        let window = utils::window();
+        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        let resp: Response = resp_value.dyn_into().expect_throw("Unable to get response");
+        let status = resp.status();
+
+        console::log!("conditional_login_begin() status");
+
+        if status == 200 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            console::log!(format!("conditional_login_begin() {:?}", jsval).as_str());
+            let ccr: Result<RequestChallengeResponse, _> = jsval.into_serde();
+            console::log!(format!("conditional_login_begin() {:?}", ccr).as_str());
+            let ccr = ccr.expect_throw("Failed to deserialise");
+            let c_options = ccr.into();
+            Ok(AppMsg::ConduiChallengeReady(c_options))
+        } else if status == 400 {
+            let jsval = JsFuture::from(resp.json()?).await?;
+            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            Ok(AppMsg::ErrorCode(err))
+        } else {
+            // let headers = resp.headers();
+            let text = JsFuture::from(resp.text()?).await?;
+            let emsg = text.as_string();
+            Ok(AppMsg::Error(emsg))
+        }
+    }
+
+    async fn conditional_login_complete(data: web_sys::PublicKeyCredential) -> Result<AppMsg, FetchError> {
+        console::log!(format!("pkc -> {:?}", data).as_str());
+        let pkc = PublicKeyCredential::from(data);
+        console::log!(format!("rp pkc -> {:?}", pkc).as_str());
+
+        let req_jsvalue = serde_json::to_string(&pkc)
+            .map(|s| JsValue::from(&s))
+            .expect("Failed to serialise pkc");
+
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::SameOrigin);
+        opts.body(Some(&req_jsvalue));
+
+        let request = Request::new_with_str_and_init("/demo/condui_login_finish", &opts)?;
+
+        request
+            .headers()
+            .set("content-type", "application/json")
+            .expect_throw("failed to set header");
+
+        let window = utils::window();
+        let resp_value = JsFuture::from(window.fetch_with_request(&request)).await?;
+        let resp: Response = resp_value.dyn_into().unwrap_throw();
+        let status = resp.status();
+
+        if status == 200 {
+            Ok(AppMsg::LoginSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
             let err: ResponseError = jsval.into_serde().unwrap_throw();
@@ -365,7 +459,7 @@ impl Demo {
                 action="javascript:void(0);"
               >
                 <div class="form-floating">
-                  <input id="autofocus" type="text" class="form-control" value={ last_username } />
+                  <input id="autofocus" type="text" name="name" autocomplete="webauthn" class="form-control" value={ last_username } />
                   <label for="autofocus">{ "Username" }</label>
                 </div>
                 <button class="btn btn-lg btn-primary" type="submit">
@@ -490,6 +584,7 @@ impl Component for Demo {
             ctap2_supported: true,
             reg_settings: RegisterWithType::Passkey,
             last_username: String::default(),
+            abort_controller: AbortController::new().expect("Failed to build abort controller"),
         }
     }
 
@@ -552,6 +647,9 @@ impl Component for Demo {
                 self.reg_settings = reg_type.clone();
                 console::log!(format!("register_settings -> {reg_type:?}").as_str());
 
+                // End anything dangling.
+                self.abort_controller.abort();
+
                 ctx.link().send_future(async {
                     match Self::register_begin(username, reg_type).await {
                         Ok(v) => v,
@@ -595,9 +693,11 @@ impl Component for Demo {
                 });
                 DemoState::Waiting
             }
-            (DemoState::Waiting, AppMsg::RegisterSuccess) => DemoState::Login,
+            (DemoState::Waiting, AppMsg::RegisterSuccess) => {
+                DemoState::Login(ConduiState::Waiting)
+            }
             // Loggo
-            (DemoState::LoginSuccess, AppMsg::Login) | (DemoState::Login, AppMsg::Login) => {
+            (DemoState::LoginSuccess(_), AppMsg::Login) | (DemoState::Login(_), AppMsg::Login) => {
                 let username = utils::get_value_from_element_id("autofocus").expect("No username");
                 if username == "" {
                     ctx.link().send_message(AppMsg::Error(Some(
@@ -608,6 +708,9 @@ impl Component for Demo {
                 self.last_username = username.clone();
 
                 let auth_type: AuthenticateWithType = (&self.reg_settings).into();
+
+                // End anything dangling from condui
+                self.abort_controller.abort();
 
                 console::log!(format!("login -> {:?}", username).as_str());
                 ctx.link().send_future(async {
@@ -649,7 +752,33 @@ impl Component for Demo {
                 });
                 DemoState::Waiting
             }
-            (DemoState::Waiting, AppMsg::LoginSuccess) => DemoState::LoginSuccess,
+
+            (DemoState::Waiting, AppMsg::LoginSuccess) => DemoState::LoginSuccess(ConduiState::Waiting),
+            // Condui handlers
+            (DemoState::Login(ConduiState::Waiting), AppMsg::ConduiChallengeReady(cro)) => {
+                // No state change, we are just triggering a callback.
+                DemoState::Login(ConduiState::Presented(cro))
+            }
+            (DemoState::LoginSuccess(ConduiState::Waiting), AppMsg::ConduiChallengeReady(cro)) => {
+                // No state change, we are just triggering a callback.
+                DemoState::LoginSuccess(ConduiState::Presented(cro))
+            }
+            (DemoState::Login(ConduiState::Presented(_)), AppMsg::CompleteConduiChallenge(jsv)) |
+            (DemoState::LoginSuccess(ConduiState::Presented(_)), AppMsg::CompleteConduiChallenge(jsv)) => {
+                ctx.link().send_future(async {
+                    match Self::conditional_login_complete(web_sys::PublicKeyCredential::from(jsv)).await {
+                        Ok(v) => v,
+                        Err(v) => v.into(),
+                    }
+                });
+                // the user did something so now we are waiting.
+                DemoState::Waiting
+            }
+
+            (DemoState::Login(_), AppMsg::ConduiCancelled) =>
+                DemoState::Login(ConduiState::Cancelled),
+            (DemoState::LoginSuccess(_), AppMsg::ConduiCancelled) =>
+                DemoState::LoginSuccess(ConduiState::Cancelled),
             (s, m) => {
                 let msg = format!("Invalid State Transition -> {:?}, {:?}", s, m);
                 console::log!(msg.as_str());
@@ -674,14 +803,81 @@ impl Component for Demo {
                 }
             }
             DemoState::Register => self.view_register(ctx),
-            DemoState::Login => self.view_login(ctx),
-            DemoState::LoginSuccess => self.view_login_success(ctx),
+            DemoState::Login(_) => self.view_login(ctx),
+            DemoState::LoginSuccess(_) => self.view_login_success(ctx),
             DemoState::Error(msg) => self.view_error(ctx, &msg),
         }
     }
 
-    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
+    fn rendered(&mut self, ctx: &Context<Self>, _first_render: bool) {
         crate::utils::autofocus("autofocus");
-        console::log!("oauth2::rendered");
+        console::log!("rendered");
+
+        // At this point we need to check if condui is possible.
+        match &mut self.state {
+            DemoState::Login( ConduiState::Waiting )
+            | DemoState::LoginSuccess( ConduiState::Waiting ) => {
+                match PublicKeyCredentialExt::is_conditional_mediation_available() {
+                    Ok(promise) => ctx.link().send_future(async {
+                        let x = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
+
+                        console::log!(format!("{:?}", x).as_str());
+
+                        if x.as_bool() == Some(true) {
+                            console::log!("conditional mediation is available");
+                            match Self::conditional_login_begin().await {
+                                Ok(v) => v,
+                                Err(v) => v.into(),
+                            }
+                        } else {
+                            console::log!("conditional mediation is NOT available");
+                            AppMsg::Error(
+                                Some("Condition Mediation is NOT available on this platform".to_string()),
+                            )
+                        }
+                    }),
+                    Err(e) => {
+                        console::log!(format!("isConditionalMediationAvailable() does not exist in this browser. Assuming unsupported. error {:?}", e).as_str());
+                    }
+                };
+            }
+            DemoState::Login( ConduiState::Presented(c_options) )
+            | DemoState::LoginSuccess( ConduiState::Presented(c_options) ) => {
+                console::log!(format!("raw c_options {:?}", c_options).as_str());
+
+                // Setup the abort controller.
+                let mut abort_controller =
+                    AbortController::new().expect("Failed to build abort controller");
+
+                std::mem::swap(&mut self.abort_controller, &mut abort_controller);
+                let abort_signal = self.abort_controller.signal();
+
+                c_options.signal(&abort_signal);
+
+                let promise = utils::window()
+                    .navigator()
+                    .credentials()
+                    .get_with_options(&c_options)
+                    .expect("Unable to create promise");
+                let fut = JsFuture::from(promise);
+
+                ctx.link().send_future(async {
+                    console::log!("Started future for navigator cred get");
+                    // Im not sure if we select! over this, if we can cancel this future / promise
+                    // or not.
+                    match fut.await {
+                        Ok(data) => {
+                            console::log!(format!("nav cred get data -> {:?}", data).as_str());
+                            AppMsg::CompleteConduiChallenge(data)
+                        }
+                        Err(e) => {
+                            console::log!(format!("nav cred get error -> {:?}", e).as_str());
+                            AppMsg::ConduiCancelled
+                        }
+                    }
+                });
+            }
+            _ => {}
+        }
     }
 }

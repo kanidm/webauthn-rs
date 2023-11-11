@@ -293,6 +293,38 @@ async fn demo_finish_login(mut request: tide::Request<AppState>) -> tide::Result
     Ok(res)
 }
 
+async fn condui_start_login(mut request: tide::Request<AppState>) -> tide::Result {
+    debug!("session - {:?}", request.session().get_raw("d_cred_map"));
+
+    let actor_res = request.state().demo_start_condui_login().await;
+
+    let session = request.session_mut();
+    session.remove("d_st");
+
+    let res = match actor_res {
+        Ok((chal, st)) => {
+            request
+                .session_mut()
+                .insert("d_st", st)
+                .expect("Failed to insert");
+            debug!(
+                "Session - inserted auth state - {:?}",
+                request.session().get_raw("d_st")
+            );
+            tide::Response::builder(tide::StatusCode::Ok)
+                .body(tide::Body::from_json(&chal)?)
+                .build()
+        }
+        Err(e) => {
+            debug!("challenge_login -> {:?}", e);
+            tide::Response::builder(tide::StatusCode::BadRequest)
+                .body(tide::Body::from_json(&ResponseError::from(e))?)
+                .build()
+        }
+    };
+    Ok(res)
+}
+
 async fn compat_start_register(mut request: tide::Request<AppState>) -> tide::Result {
     let session = request.session_mut();
     session.remove("rs");
@@ -739,6 +771,8 @@ async fn main() -> tide::Result<()> {
     app.at("/demo/register_finish").post(demo_finish_register);
     app.at("/demo/login_start").post(demo_start_login);
     app.at("/demo/login_finish").post(demo_finish_login);
+    app.at("/demo/condui_login_start").post(demo_start_login);
+    app.at("/demo/condui_login_finish").post(demo_finish_login);
 
     app.at("/condui/register_start").post(condui_start_register);
     app.at("/condui/register_finish")
