@@ -73,9 +73,10 @@ impl Demo {
             username: username.to_owned(),
             reg_type,
         };
-        let req_jsvalue = serde_json::to_string(&reg_start)
-            .map(|s| JsValue::from(&s))
-            .expect_throw("Failed to serialise settings");
+
+        let req_jsvalue =
+            serde_wasm_bindgen::to_value(&reg_start).expect_throw("Failed to serialise settings");
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -96,12 +97,13 @@ impl Demo {
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: CreationChallengeResponse = jsval.into_serde().unwrap_throw();
+            let ccr: CreationChallengeResponse =
+                serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             let c_options = ccr.into();
             Ok(AppMsg::BeginRegisterChallenge(c_options, username))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -124,9 +126,9 @@ impl Demo {
         console::log!(format!("rpkc -> {:?}", rpkc).as_str());
 
         let reg_finish = RegisterFinish { username, rpkc };
-        let req_jsvalue = serde_json::to_string(&reg_finish)
-            .map(|s| JsValue::from(&s))
-            .expect("Failed to serialise rpkc");
+        let req_jsvalue =
+            serde_wasm_bindgen::to_value(&reg_finish).expect("Failed to serialise rpkc");
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -150,7 +152,7 @@ impl Demo {
             Ok(AppMsg::RegisterSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -186,14 +188,14 @@ impl Demo {
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
             console::log!(format!("conditional_login_begin() {:?}", jsval).as_str());
-            let ccr: Result<RequestChallengeResponse, _> = jsval.into_serde();
+            let ccr: Result<RequestChallengeResponse, _> = serde_wasm_bindgen::from_value(jsval);
             console::log!(format!("conditional_login_begin() {:?}", ccr).as_str());
             let ccr = ccr.expect_throw("Failed to deserialise");
             let c_options = ccr.into();
             Ok(AppMsg::ConduiChallengeReady(c_options))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -203,14 +205,15 @@ impl Demo {
         }
     }
 
-    async fn conditional_login_complete(data: web_sys::PublicKeyCredential) -> Result<AppMsg, FetchError> {
+    async fn conditional_login_complete(
+        data: web_sys::PublicKeyCredential,
+    ) -> Result<AppMsg, FetchError> {
         console::log!(format!("pkc -> {:?}", data).as_str());
         let pkc = PublicKeyCredential::from(data);
         console::log!(format!("rp pkc -> {:?}", pkc).as_str());
 
-        let req_jsvalue = serde_json::to_string(&pkc)
-            .map(|s| JsValue::from(&s))
-            .expect("Failed to serialise pkc");
+        let req_jsvalue = serde_wasm_bindgen::to_value(&pkc).expect("Failed to serialise pkc");
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -233,7 +236,7 @@ impl Demo {
             Ok(AppMsg::LoginSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -251,9 +254,10 @@ impl Demo {
             username: username.to_owned(),
             auth_type,
         };
-        let req_jsvalue = serde_json::to_string(&auth_start)
-            .map(|s| JsValue::from(&s))
-            .expect_throw("Failed to serialise settings");
+
+        let req_jsvalue =
+            serde_wasm_bindgen::to_value(&auth_start).expect_throw("Failed to serialise settings");
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -274,12 +278,13 @@ impl Demo {
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: RequestChallengeResponse = jsval.into_serde().unwrap_throw();
+            let ccr: RequestChallengeResponse =
+                serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             let c_options = ccr.into();
             Ok(AppMsg::BeginLoginChallenge(c_options, username))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -297,9 +302,9 @@ impl Demo {
         console::log!(format!("pkc -> {:?}", pkc).as_str());
         let auth_finish = AuthenticateFinish { username, pkc };
 
-        let req_jsvalue = serde_json::to_string(&auth_finish)
-            .map(|s| JsValue::from(&s))
-            .expect("Failed to serialise pkc");
+        let req_jsvalue =
+            serde_wasm_bindgen::to_value(&auth_finish).expect("Failed to serialise pkc");
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -322,7 +327,7 @@ impl Demo {
             Ok(AppMsg::LoginSuccess)
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -693,9 +698,7 @@ impl Component for Demo {
                 });
                 DemoState::Waiting
             }
-            (DemoState::Waiting, AppMsg::RegisterSuccess) => {
-                DemoState::Login(ConduiState::Waiting)
-            }
+            (DemoState::Waiting, AppMsg::RegisterSuccess) => DemoState::Login(ConduiState::Waiting),
             // Loggo
             (DemoState::LoginSuccess(_), AppMsg::Login) | (DemoState::Login(_), AppMsg::Login) => {
                 let username = utils::get_value_from_element_id("autofocus").expect("No username");
@@ -753,7 +756,9 @@ impl Component for Demo {
                 DemoState::Waiting
             }
 
-            (DemoState::Waiting, AppMsg::LoginSuccess) => DemoState::LoginSuccess(ConduiState::Waiting),
+            (DemoState::Waiting, AppMsg::LoginSuccess) => {
+                DemoState::LoginSuccess(ConduiState::Waiting)
+            }
             // Condui handlers
             (DemoState::Login(ConduiState::Waiting), AppMsg::ConduiChallengeReady(cro)) => {
                 // No state change, we are just triggering a callback.
@@ -763,10 +768,15 @@ impl Component for Demo {
                 // No state change, we are just triggering a callback.
                 DemoState::LoginSuccess(ConduiState::Presented(cro))
             }
-            (DemoState::Login(ConduiState::Presented(_)), AppMsg::CompleteConduiChallenge(jsv)) |
-            (DemoState::LoginSuccess(ConduiState::Presented(_)), AppMsg::CompleteConduiChallenge(jsv)) => {
+            (DemoState::Login(ConduiState::Presented(_)), AppMsg::CompleteConduiChallenge(jsv))
+            | (
+                DemoState::LoginSuccess(ConduiState::Presented(_)),
+                AppMsg::CompleteConduiChallenge(jsv),
+            ) => {
                 ctx.link().send_future(async {
-                    match Self::conditional_login_complete(web_sys::PublicKeyCredential::from(jsv)).await {
+                    match Self::conditional_login_complete(web_sys::PublicKeyCredential::from(jsv))
+                        .await
+                    {
                         Ok(v) => v,
                         Err(v) => v.into(),
                     }
@@ -775,10 +785,13 @@ impl Component for Demo {
                 DemoState::Waiting
             }
 
-            (DemoState::Login(_), AppMsg::ConduiCancelled) =>
-                DemoState::Login(ConduiState::Cancelled),
-            (DemoState::LoginSuccess(_), AppMsg::ConduiCancelled) =>
-                DemoState::LoginSuccess(ConduiState::Cancelled),
+            (DemoState::Login(_), AppMsg::ConduiCancelled) => {
+                DemoState::Login(ConduiState::Cancelled)
+            }
+            (DemoState::LoginSuccess(_), AppMsg::ConduiCancelled) => {
+                DemoState::LoginSuccess(ConduiState::Cancelled)
+            }
+            (state, AppMsg::ConduiCancelled) => state.clone(),
             (s, m) => {
                 let msg = format!("Invalid State Transition -> {:?}, {:?}", s, m);
                 console::log!(msg.as_str());
@@ -815,8 +828,8 @@ impl Component for Demo {
 
         // At this point we need to check if condui is possible.
         match &mut self.state {
-            DemoState::Login( ConduiState::Waiting )
-            | DemoState::LoginSuccess( ConduiState::Waiting ) => {
+            DemoState::Login(ConduiState::Waiting)
+            | DemoState::LoginSuccess(ConduiState::Waiting) => {
                 match PublicKeyCredentialExt::is_conditional_mediation_available() {
                     Ok(promise) => ctx.link().send_future(async {
                         let x = wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
@@ -831,9 +844,7 @@ impl Component for Demo {
                             }
                         } else {
                             console::log!("conditional mediation is NOT available");
-                            AppMsg::Error(
-                                Some("Condition Mediation is NOT available on this platform".to_string()),
-                            )
+                            AppMsg::ConduiCancelled
                         }
                     }),
                     Err(e) => {
@@ -841,8 +852,8 @@ impl Component for Demo {
                     }
                 };
             }
-            DemoState::Login( ConduiState::Presented(c_options) )
-            | DemoState::LoginSuccess( ConduiState::Presented(c_options) ) => {
+            DemoState::Login(ConduiState::Presented(c_options))
+            | DemoState::LoginSuccess(ConduiState::Presented(c_options)) => {
                 console::log!(format!("raw c_options {:?}", c_options).as_str());
 
                 // Setup the abort controller.

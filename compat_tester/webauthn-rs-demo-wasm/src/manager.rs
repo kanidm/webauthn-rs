@@ -4,7 +4,6 @@ use yew::prelude::*;
 use yew_router::prelude::*;
 
 use crate::compat::CompatTest;
-use crate::condui::ConduiTest;
 use crate::demo::Demo;
 // use crate::uv::UvInconsistent;
 
@@ -17,25 +16,10 @@ pub enum Route {
     #[at("/compat_test")]
     CompatTest,
 
-    #[at("/condui_test")]
-    ConditionalUiTest,
-
     #[not_found]
     #[at("/404")]
     NotFound,
 }
-
-/*
-                <li class="nav-item">
-                  <Link<Route> classes={
-                    if matches!(cur_route, Some(Route::UvInconsistent)) {
-                        classes!("nav-link", "active")
-                    } else {
-                        classes!("nav-link")
-                    }
-                  } to={ Route::UvInconsistent }>{ "Why is UV Discouraged Bad?" }</Link<Route>>
-                </li>
-*/
 
 #[function_component(Nav)]
 fn nav() -> Html {
@@ -60,16 +44,7 @@ fn nav() -> Html {
                     } else {
                         classes!("nav-link")
                     }
-                  } to={ Route::Demo }>{ "Demo" }</Link<Route>>
-                </li>
-                <li class="nav-item">
-                  <Link<Route> classes={
-                    if matches!(cur_route, Some(Route::ConditionalUiTest)) {
-                        classes!("nav-link", "active")
-                    } else {
-                        classes!("nav-link")
-                    }
-                  } to={ Route::ConditionalUiTest }>{ "Conditional Ui Test" }</Link<Route>>
+                  } to={ Route::Demo }>{ "Demonstration" }</Link<Route>>
                 </li>
                 <li class="nav-item">
                   <Link<Route> classes={
@@ -92,8 +67,6 @@ fn switch(routes: &Route) -> Html {
     match routes {
         Route::Demo => html! { <Demo /> },
         Route::CompatTest => html! { <CompatTest /> },
-        Route::ConditionalUiTest => html! { <ConduiTest /> },
-        // Route::UvInconsistent => html! { <UvInconsistent /> },
         Route::NotFound => {
             html! {
                 <>

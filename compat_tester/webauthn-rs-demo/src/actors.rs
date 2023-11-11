@@ -16,12 +16,7 @@ use webauthn_rs::prelude::{
     SecurityKeyRegistration,
 };
 
-use webauthn_rs::prelude::{
-    AttestationCaList, AttestedResidentKey, AttestedResidentKeyRegistration,
-    DiscoverableAuthentication,
-};
-
-use webauthn_rs_device_catalog::Data;
+use webauthn_rs::prelude::DiscoverableAuthentication;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -253,6 +248,43 @@ impl WebauthnActor {
         Ok((acr, st))
     }
 
+    pub async fn demo_finish_condui_login(
+        &self,
+        cred_map: &BTreeMap<String, Vec<TypedCredential>>,
+        user_map: &BTreeMap<Uuid, String>,
+        lgn: &PublicKeyCredential,
+        st: DiscoverableAuthentication,
+    ) -> WebauthnResult<AuthenticationResult> {
+        debug!("handle Authenticate -> (lgn: {:?})", lgn);
+
+        // Find the credentials
+        let (unique_id, _) = self.swan.identify_discoverable_authentication(lgn)?;
+
+        let username = user_map
+            .get(&unique_id)
+            .ok_or(WebauthnError::InvalidUserUniqueId)?;
+
+        let creds = cred_map
+            .get(username)
+            .ok_or(WebauthnError::InvalidUserUniqueId)?;
+
+        let creds: Vec<_> = creds
+            .iter()
+            .filter_map(|x| match x {
+                TypedCredential::Passkey(p) => Some(p.into()),
+                TypedCredential::AttestedPasskey(p) => Some(p.into()),
+                TypedCredential::SecurityKey(_p) => None,
+            })
+            .collect();
+
+        let r = self
+            .swan
+            .finish_discoverable_authentication(lgn, st, &creds);
+
+        debug!("complete Authenticate -> {:?}", r);
+        r
+    }
+
     pub async fn compat_start_register(
         &self,
         reg_settings: RegisterWithSettings,
@@ -360,104 +392,6 @@ impl WebauthnActor {
                     .for_each(|cred| cred.counter = auth_result.counter());
                 (creds, auth_result)
             });
-        debug!("complete Authenticate -> {:?}", r);
-        r
-    }
-
-    pub async fn condui_start_register(
-        &self,
-        user_unique_id: Uuid,
-        username: String,
-    ) -> WebauthnResult<(CreationChallengeResponse, AttestedResidentKeyRegistration)> {
-        // ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
-        debug!("handle ChallengeRegister -> {:?}", username);
-
-        let att_ca_list: AttestationCaList = (&Data::strict())
-            .try_into()
-            .map_err(WebauthnError::OpenSSLError)?;
-
-        let (ccr, rs) = self.swan.start_attested_resident_key_registration(
-            user_unique_id,
-            &username,
-            &username,
-            None,
-            att_ca_list,
-            // Some(AuthenticatorAttachment::None),
-            None,
-        )?;
-        /*
-        let (ccr, rs) = self.swan
-            .start_passkey_registration(
-                user_unique_id,
-                &username,
-                &username,
-                None,
-            )?;
-        */
-
-        debug!("complete ChallengeRegister -> {:?}", ccr);
-        Ok((ccr, rs))
-    }
-
-    pub async fn condui_finish_register(
-        &self,
-        reg: &RegisterPublicKeyCredential,
-        rs: AttestedResidentKeyRegistration,
-        // rs: PasskeyRegistration,
-    ) -> WebauthnResult<AttestedResidentKey> {
-        // ) -> WebauthnResult<Passkey> {
-        debug!("handle Register -> (reg: {:?})", reg);
-
-        /*
-        let r = self.swan
-            .finish_passkey_registration(reg, &rs);
-        */
-        let r = self
-            .swan
-            .finish_attested_resident_key_registration(reg, &rs);
-
-        debug!("complete Register -> {:?}", r);
-        r
-    }
-
-    pub async fn condui_start_login(
-        &self,
-    ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
-        // ) -> WebauthnResult<(RequestChallengeResponse, PasskeyAuthentication)> {
-        debug!("handle ChallengeAuthenticate");
-
-        let (acr, st) = self.swan.start_discoverable_authentication()?;
-        /*
-        let (acr, st) = self.swan
-            .start_discoverable_passkey_authentication()?;
-        */
-
-        debug!("complete ChallengeAuthenticate -> {:?}", acr);
-        Ok((acr, st))
-    }
-
-    pub async fn condui_finish_login(
-        &self,
-        cred_map: &BTreeMap<Uuid, Vec<AttestedResidentKey>>,
-        lgn: &PublicKeyCredential,
-        st: DiscoverableAuthentication,
-        // st: PasskeyAuthentication,
-    ) -> WebauthnResult<AuthenticationResult> {
-        debug!("handle Authenticate -> (lgn: {:?})", lgn);
-
-        // Find the credentials
-        let (unique_id, _) = self.swan.identify_discoverable_authentication(lgn)?;
-
-        let creds = cred_map
-            .get(&unique_id)
-            .ok_or(WebauthnError::InvalidUserUniqueId)?;
-
-        let creds: Vec<_> = creds.iter().map(|x| x.into()).collect();
-
-        let r = self
-            .swan
-            .finish_discoverable_authentication(lgn, st, &creds);
-
         debug!("complete Authenticate -> {:?}", r);
         r
     }

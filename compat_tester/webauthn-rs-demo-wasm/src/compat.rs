@@ -2,11 +2,8 @@ use crate::error::*;
 use crate::utils;
 
 use gloo::console;
-// use gloo::timers;
-// timers::future::TimeoutFuture::new(1_000).await;
 use yew::prelude::*;
 
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen::UnwrapThrowExt;
 use wasm_bindgen_futures::JsFuture;
@@ -182,10 +179,11 @@ impl Component for CompatTest {
             }
             AppMsg::ResultsToClipboard => {
                 // Not yet supported, see: https://docs.rs/web-sys/latest/web_sys/struct.Clipboard.html
-                let data = serde_json::to_string(&self.results)
+                let data = serde_wasm_bindgen::to_value(&self.results)
                     .expect_throw("Failed to serialise results");
+                let data = js_sys::JSON::stringify(&data).expect_throw("failed to stringify");
 
-                let promise = utils::clipboard().write_text(&data);
+                let promise = utils::clipboard().write(&data);
                 let fut = JsFuture::from(promise);
 
                 ctx.link().send_future(async move {
@@ -938,7 +936,8 @@ Please add any extra details here:
 
     fn view_complete(&self, ctx: &Context<Self>) -> Html {
         let data =
-            serde_json::to_string_pretty(&self.results).expect_throw("Failed to serialise results");
+            serde_wasm_bindgen::to_value(&self.results).expect_throw("Failed to serialise results");
+        let data = js_sys::JSON::stringify(&data).expect_throw("failed to stringify");
 
         console::log!(&format!("{:?}", self.results));
         html! {
@@ -1144,9 +1143,10 @@ Please add any extra details here:
     }
 
     async fn register_begin(settings: RegisterWithSettings) -> Result<AppMsg, FetchError> {
-        let req_jsvalue = serde_json::to_string(&settings)
-            .map(|s| JsValue::from(&s))
-            .expect_throw("Failed to serialise settings");
+        let req_jsvalue =
+            serde_wasm_bindgen::to_value(&settings).expect_throw("Failed to serialise settings");
+
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -1167,11 +1167,12 @@ Please add any extra details here:
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: CreationChallengeResponse = jsval.into_serde().unwrap_throw();
+            let ccr: CreationChallengeResponse =
+                serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::BeginRegisterChallenge(ccr))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -1184,9 +1185,9 @@ Please add any extra details here:
     async fn register_complete(rpkc: RegisterPublicKeyCredential) -> Result<AppMsg, FetchError> {
         console::log!(format!("rpkc -> {:?}", rpkc).as_str());
 
-        let req_jsvalue = serde_json::to_string(&rpkc)
-            .map(|s| JsValue::from(&s))
-            .expect("Failed to serialise rpkc");
+        let req_jsvalue = serde_wasm_bindgen::to_value(&rpkc).expect("Failed to serialise rpkc");
+
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -1207,12 +1208,12 @@ Please add any extra details here:
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let rs: RegistrationSuccess = jsval.into_serde().unwrap_throw();
+            let rs: RegistrationSuccess = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             console::log!(format!("rs -> {:?}", rs).as_str());
             Ok(AppMsg::RegisterSuccess(rs))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -1223,9 +1224,10 @@ Please add any extra details here:
     }
 
     async fn login_begin(settings: AuthenticateWithSettings) -> Result<AppMsg, FetchError> {
-        let req_jsvalue = serde_json::to_string(&settings)
-            .map(|s| JsValue::from(&s))
-            .expect_throw("Failed to serialise settings");
+        let req_jsvalue =
+            serde_wasm_bindgen::to_value(&settings).expect_throw("Failed to serialise settings");
+
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -1246,11 +1248,12 @@ Please add any extra details here:
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let ccr: RequestChallengeResponse = jsval.into_serde().unwrap_throw();
+            let ccr: RequestChallengeResponse =
+                serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::BeginLoginChallenge(ccr))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();
@@ -1263,9 +1266,9 @@ Please add any extra details here:
     async fn login_complete(pkc: PublicKeyCredential) -> Result<AppMsg, FetchError> {
         console::log!(format!("pkc -> {:?}", pkc).as_str());
 
-        let req_jsvalue = serde_json::to_string(&pkc)
-            .map(|s| JsValue::from(&s))
-            .expect("Failed to serialise pkc");
+        let req_jsvalue = serde_wasm_bindgen::to_value(&pkc).expect("Failed to serialise pkc");
+
+        let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
         let mut opts = RequestInit::new();
         opts.method("POST");
@@ -1286,12 +1289,12 @@ Please add any extra details here:
 
         if status == 200 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let aus: AuthenticationSuccess = jsval.into_serde().unwrap_throw();
+            let aus: AuthenticationSuccess = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             console::log!(format!("aus -> {:?}", aus).as_str());
             Ok(AppMsg::LoginSuccess(aus))
         } else if status == 400 {
             let jsval = JsFuture::from(resp.json()?).await?;
-            let err: ResponseError = jsval.into_serde().unwrap_throw();
+            let err: ResponseError = serde_wasm_bindgen::from_value(jsval).unwrap_throw();
             Ok(AppMsg::ErrorCode(err))
         } else {
             // let headers = resp.headers();

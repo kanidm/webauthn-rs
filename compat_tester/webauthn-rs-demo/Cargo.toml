@@ -15,7 +15,6 @@ license = "MPL-2.0"
 webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", features = ["core"] }
 webauthn-rs-core.workspace = true
 webauthn-rs = { workspace = true, features = ["conditional-ui", "attestation", "resident-key-support", "danger-allow-state-serialisation"] }
-webauthn-rs-device-catalog.workspace = true
 
 tide.workspace = true
 async-std.workspace = true
