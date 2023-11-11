@@ -151,7 +151,7 @@ impl PartialEq for Passkey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "attestation")]
 pub struct AttestedPasskeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
@@ -171,7 +171,7 @@ pub struct AttestedPasskeyRegistration {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "attestation")]
 pub struct AttestedPasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -182,12 +182,12 @@ pub struct AttestedPasskeyAuthentication {
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "attestation")]
 pub struct AttestedPasskey {
     pub(crate) cred: Credential,
 }
 
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "attestation")]
 impl AttestedPasskey {
     /// Retrieve a reference to this AttestedPasskey Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
@@ -236,23 +236,23 @@ impl AttestedPasskey {
     }
 }
 
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "attestation")]
 impl PartialEq for AttestedPasskey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
     }
 }
 
-#[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
+#[cfg(all(feature = "danger-credential-internals", feature = "attestation"))]
 impl From<AttestedPasskey> for Credential {
     fn from(pk: AttestedPasskey) -> Self {
         pk.cred
     }
 }
 
-#[cfg(all(feature = "danger-credential-internals", feature = "preview-features"))]
+#[cfg(all(feature = "danger-credential-internals", feature = "attestation"))]
 impl From<Credential> for AttestedPasskey {
-    /// Convert a generic webauthn credential into a Passkey
+    /// Convert a generic webauthn credential into an [AttestedPasskey]
     fn from(cred: Credential) -> Self {
         AttestedPasskey { cred }
     }
@@ -523,7 +523,7 @@ impl From<Credential> for AttestedResidentKey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "conditional-ui")]
 pub struct DiscoverableAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -534,12 +534,12 @@ pub struct DiscoverableAuthentication {
 /// Generally this is used as part of conditional ui which allows autofill of discovered
 /// credentials in username fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg(feature = "preview-features")]
+#[cfg(feature = "conditional-ui")]
 pub struct DiscoverableKey {
     pub(crate) cred: Credential,
 }
 
-#[cfg(feature = "preview-features")]
+#[cfg(all(feature = "conditional-ui", feature = "resident-key-support"))]
 impl From<&AttestedResidentKey> for DiscoverableKey {
     fn from(k: &AttestedResidentKey) -> Self {
         DiscoverableKey {
@@ -548,11 +548,25 @@ impl From<&AttestedResidentKey> for DiscoverableKey {
     }
 }
 
-#[cfg(feature = "preview-features")]
+#[cfg(all(feature = "conditional-ui", feature = "resident-key-support"))]
+impl From<AttestedResidentKey> for DiscoverableKey {
+    fn from(k: AttestedResidentKey) -> Self {
+        DiscoverableKey { cred: k.cred }
+    }
+}
+
+#[cfg(feature = "conditional-ui")]
 impl From<&Passkey> for DiscoverableKey {
     fn from(k: &Passkey) -> Self {
         DiscoverableKey {
             cred: k.cred.clone(),
         }
+    }
+}
+
+#[cfg(feature = "conditional-ui")]
+impl From<Passkey> for DiscoverableKey {
+    fn from(k: Passkey) -> Self {
+        DiscoverableKey { cred: k.cred }
     }
 }
