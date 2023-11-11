@@ -181,7 +181,7 @@ impl Component for CompatTest {
                 // Not yet supported, see: https://docs.rs/web-sys/latest/web_sys/struct.Clipboard.html
                 let data = serde_wasm_bindgen::to_value(&self.results)
                     .expect_throw("Failed to serialise results");
-                let data = js_sys::JSON::stringify(&data).expect_throw("failed to stringify");
+                // let data = js_sys::JSON::stringify(&data).expect_throw("failed to stringify");
 
                 let promise = utils::clipboard().write(&data);
                 let fut = JsFuture::from(promise);
