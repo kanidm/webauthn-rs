@@ -1,4 +1,5 @@
+use std::time::Duration;
+
 // Can this ever change?
 pub const CHALLENGE_SIZE_BYTES: usize = 32;
-// Allegedly this is milliseconds?
-pub const AUTHENTICATOR_TIMEOUT: u32 = 60000;
+pub const DEFAULT_AUTHENTICATOR_TIMEOUT: Duration = Duration::from_millis(60000);

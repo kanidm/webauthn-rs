@@ -18,6 +18,7 @@
 use rand::prelude::*;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::time::Duration;
 use url::Url;
 
 use crate::attestation::{
@@ -25,7 +26,7 @@ use crate::attestation::{
     verify_apple_anonymous_attestation, verify_attestation_ca_chain, verify_fidou2f_attestation,
     verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
 };
-use crate::constants::{AUTHENTICATOR_TIMEOUT, CHALLENGE_SIZE_BYTES};
+use crate::constants::{CHALLENGE_SIZE_BYTES, DEFAULT_AUTHENTICATOR_TIMEOUT};
 use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::internals::*;
@@ -54,7 +55,7 @@ pub struct WebauthnCore {
     rp_id: String,
     rp_id_hash: [u8; 32],
     allowed_origins: Vec<Url>,
-    authenticator_timeout: u32,
+    authenticator_timeout: Duration,
     require_valid_counter_value: bool,
     #[allow(unused)]
     ignore_unsupported_attestation_formats: bool,
@@ -84,7 +85,7 @@ impl WebauthnCore {
         rp_name: &str,
         rp_id: &str,
         allowed_origins: Vec<Url>,
-        authenticator_timeout: Option<u32>,
+        authenticator_timeout: Option<Duration>,
         allow_subdomains_origin: Option<bool>,
         allow_any_port: Option<bool>,
     ) -> Self {
@@ -94,7 +95,7 @@ impl WebauthnCore {
             rp_id: rp_id.to_string(),
             rp_id_hash,
             allowed_origins,
-            authenticator_timeout: authenticator_timeout.unwrap_or(AUTHENTICATOR_TIMEOUT),
+            authenticator_timeout: authenticator_timeout.unwrap_or(DEFAULT_AUTHENTICATOR_TIMEOUT),
             require_valid_counter_value: true,
             ignore_unsupported_attestation_formats: true,
             allow_cross_origin: false,
@@ -213,6 +214,9 @@ impl WebauthnCore {
             Some(ResidentKeyRequirement::Discouraged)
         };
 
+        let timeout_millis =
+            u32::try_from(self.authenticator_timeout.as_millis()).expect("Timeout too large");
+
         let c = CreationChallengeResponse {
             public_key: PublicKeyCredentialCreationOptions {
                 rp: RelyingParty {
@@ -232,7 +236,7 @@ impl WebauthnCore {
                         alg: *alg as i64,
                     })
                     .collect(),
-                timeout: Some(self.authenticator_timeout),
+                timeout: Some(timeout_millis),
                 attestation: Some(attestation),
                 exclude_credentials: exclude_credentials.as_ref().map(|creds| {
                     creds
@@ -935,12 +939,15 @@ impl WebauthnCore {
         // Extract the appid from the extensions to store it in the AuthenticationState
         let appid = extensions.as_ref().and_then(|e| e.appid.clone());
 
+        let timeout_millis =
+            u32::try_from(self.authenticator_timeout.as_millis()).expect("Timeout too large");
+
         // Store the chal associated to the user.
         // Now put that into the correct challenge format
         let r = RequestChallengeResponse {
             public_key: PublicKeyCredentialRequestOptions {
                 challenge: chal.clone().into(),
-                timeout: Some(self.authenticator_timeout),
+                timeout: Some(timeout_millis),
                 rp_id: self.rp_id.clone(),
                 allow_credentials: ac,
                 user_verification: policy,

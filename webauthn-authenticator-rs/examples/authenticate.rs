@@ -4,6 +4,7 @@ extern crate tracing;
 #[cfg(feature = "softtoken")]
 use std::fs::OpenOptions;
 use std::io::{stdin, stdout, Write};
+use std::time::Duration;
 
 use clap::clap_derive::ValueEnum;
 #[cfg(any(feature = "cable", feature = "softtoken"))]
@@ -236,7 +237,7 @@ async fn main() {
         "https://localhost:8080/auth",
         "localhost",
         vec![url::Url::parse("https://localhost:8080").unwrap()],
-        Some(1),
+        Some(Duration::from_millis(1)),
         None,
         None,
     );
