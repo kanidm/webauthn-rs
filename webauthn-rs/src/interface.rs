@@ -555,6 +555,22 @@ impl From<AttestedResidentKey> for DiscoverableKey {
     }
 }
 
+#[cfg(all(feature = "conditional-ui", feature = "attestation"))]
+impl From<&AttestedPasskey> for DiscoverableKey {
+    fn from(k: &AttestedPasskey) -> Self {
+        DiscoverableKey {
+            cred: k.cred.clone(),
+        }
+    }
+}
+
+#[cfg(all(feature = "conditional-ui", feature = "attestation"))]
+impl From<AttestedPasskey> for DiscoverableKey {
+    fn from(k: AttestedPasskey) -> Self {
+        DiscoverableKey { cred: k.cred }
+    }
+}
+
 #[cfg(feature = "conditional-ui")]
 impl From<&Passkey> for DiscoverableKey {
     fn from(k: &Passkey) -> Self {

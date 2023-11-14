@@ -4,12 +4,10 @@
 use wasm_bindgen::prelude::*;
 
 mod compat;
-mod condui;
 mod demo;
 mod error;
 mod manager;
 mod utils;
-// mod uv;
 
 #[wasm_bindgen]
 pub fn run_app() -> Result<(), JsValue> {
