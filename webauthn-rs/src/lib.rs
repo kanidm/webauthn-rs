@@ -185,6 +185,7 @@ extern crate tracing;
 
 mod interface;
 
+use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
@@ -225,6 +226,7 @@ pub struct WebauthnBuilder<'a> {
     allowed_origins: Vec<Url>,
     allow_subdomains: bool,
     allow_any_port: bool,
+    timeout: Option<Duration>,
     algorithms: Vec<COSEAlgorithm>,
     user_presence_only_security_keys: bool,
 }
@@ -280,6 +282,7 @@ impl<'a> WebauthnBuilder<'a> {
                 allowed_origins: vec![rp_origin.to_owned()],
                 allow_subdomains: false,
                 allow_any_port: false,
+                timeout: None,
                 algorithms: COSEAlgorithm::secure_algs(),
                 user_presence_only_security_keys: false,
             })
@@ -312,6 +315,14 @@ impl<'a> WebauthnBuilder<'a> {
     /// app-specific origins than a web browser would.
     pub fn append_allowed_origin(mut self, origin: &Url) -> Self {
         self.allowed_origins.push(origin.to_owned());
+        self
+    }
+
+    /// Set the timeout value to use for credential creation and authentication challenges.
+    ///
+    /// If not set, defaults to [webauthn_rs_core::constants::DEFAULT_AUTHENTICATOR_TIMEOUT].
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -356,7 +367,7 @@ impl<'a> WebauthnBuilder<'a> {
                 self.rp_name.unwrap_or(self.rp_id),
                 self.rp_id,
                 self.allowed_origins,
-                None,
+                self.timeout,
                 Some(self.allow_subdomains),
                 Some(self.allow_any_port),
             ),
