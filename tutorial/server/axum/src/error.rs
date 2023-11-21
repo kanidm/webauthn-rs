@@ -14,6 +14,8 @@ pub enum WebauthnError {
     UserNotFound,
     #[error("User Has No Credentials")]
     UserHasNoCredentials,
+    #[error("Deserialising Session failed: {0}")]
+    InvalidSessionState(#[from] tower_sessions::session::Error),
 }
 impl IntoResponse for WebauthnError {
     fn into_response(self) -> Response {
@@ -22,6 +24,7 @@ impl IntoResponse for WebauthnError {
             WebauthnError::UserNotFound => "User Not Found",
             WebauthnError::Unknown => "Unknown Error",
             WebauthnError::UserHasNoCredentials => "User Has No Credentials",
+            WebauthnError::InvalidSessionState(_) => "Deserialising Session failed",
         };
 
         // its often easiest to implement `IntoResponse` by calling other implementations

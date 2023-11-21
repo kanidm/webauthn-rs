@@ -1,7 +1,15 @@
-use axum::{extract::Extension, routing::post, Router};
+use axum::{
+    error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, routing::post,
+    BoxError, Router,
+};
 use axum_extra::routing::SpaRouter;
-use axum_sessions::{async_session::MemoryStore, SameSite, SessionLayer};
 use std::net::SocketAddr;
+use tower::ServiceBuilder;
+use tower_sessions::{
+    cookie::{time::Duration, SameSite},
+    Expiry, MemoryStore, SessionManagerLayer,
+};
+
 mod error;
 /*
  * Webauthn RS server side tutorial.
@@ -11,8 +19,6 @@ mod error;
 // This file contains the wasm client loading code and the axum routing
 use crate::auth::{finish_authentication, finish_register, start_authentication, start_register};
 use crate::startup::AppState;
-
-use rand::prelude::*;
 
 #[macro_use]
 extern crate tracing;
@@ -37,13 +43,18 @@ async fn main() {
     // Create the app
     let app_state = AppState::new();
 
-    //Configure cookie based sessions
-    let store = MemoryStore::new();
-    let secret = thread_rng().gen::<[u8; 128]>(); // MUST be at least 64 bytes!
-    let session_layer = SessionLayer::new(store, &secret)
-        .with_cookie_name("webauthnrs")
-        .with_same_site_policy(SameSite::Lax)
-        .with_secure(false); // TODO: change this to true when running on an HTTPS/production server instead of locally
+    let session_store = MemoryStore::default();
+    let session_service = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|_: BoxError| async {
+            StatusCode::BAD_REQUEST
+        }))
+        .layer(
+            SessionManagerLayer::new(session_store)
+                .with_name("webauthnrs")
+                .with_same_site(SameSite::Lax)
+                .with_secure(false) // TODO: change this to true when running on an HTTPS/production server instead of locally
+                .with_expiry(Expiry::OnInactivity(Duration::seconds(360))),
+        );
 
     // build our application with a route
     let app = Router::new()
@@ -52,7 +63,7 @@ async fn main() {
         .route("/login_start/:username", post(start_authentication))
         .route("/login_finish", post(finish_authentication))
         .layer(Extension(app_state))
-        .layer(session_layer);
+        .layer(session_service);
 
     #[cfg(feature = "wasm")]
     let app = Router::new()
