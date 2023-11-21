@@ -2,7 +2,6 @@ use axum::{
     error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, routing::post,
     BoxError, Router,
 };
-use axum_extra::routing::SpaRouter;
 use std::net::SocketAddr;
 use tower::ServiceBuilder;
 use tower_sessions::{
@@ -66,14 +65,15 @@ async fn main() {
         .layer(session_service);
 
     #[cfg(feature = "wasm")]
-    let app = Router::new()
-        .merge(app)
-        .merge(SpaRouter::new("/assets", "assets").index_file("wasm_index.html"));
+    let app = Router::new().merge(app).nest_service(
+        "/assets",
+        tower_http::services::ServeDir::new("assets/wasm"),
+    );
 
     #[cfg(feature = "javascript")]
     let app = Router::new()
         .merge(app)
-        .merge(SpaRouter::new("/assets", "assets").index_file("js_index.html"));
+        .nest_service("/assets", tower_http::services::ServeDir::new("assets/js"));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
