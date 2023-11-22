@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use axum_sessions::extractors::WritableSession;
+use tower_sessions::Session;
 
 /*
  * Webauthn RS auth handlers.
@@ -51,7 +51,7 @@ use webauthn_rs::prelude::*;
 
 pub async fn start_register(
     Extension(app_state): Extension<AppState>,
-    mut session: WritableSession,
+    session: Session,
     Path(username): Path<String>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     info!("Start register");
@@ -76,7 +76,7 @@ pub async fn start_register(
     };
 
     // Remove any previous registrations that may have occured from the session.
-    session.remove("reg_state");
+    session.remove_value("reg_state");
 
     // If the user has any other credentials, we exclude these here so they can't be duplicate registered.
     // It also hints to the browser that only new credentials should be "blinked" for interaction.
@@ -118,14 +118,14 @@ pub async fn start_register(
 
 pub async fn finish_register(
     Extension(app_state): Extension<AppState>,
-    mut session: WritableSession,
+    session: Session,
     Json(reg): Json<RegisterPublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
-        .get("reg_state")
+        .get("reg_state")?
         .ok_or(WebauthnError::CorruptSession)?; //Corrupt Session
 
-    session.remove("reg_state");
+    session.remove_value("reg_state");
 
     let res = match app_state
         .webauthn
@@ -185,7 +185,7 @@ pub async fn finish_register(
 
 pub async fn start_authentication(
     Extension(app_state): Extension<AppState>,
-    mut session: WritableSession,
+    session: Session,
     Path(username): Path<String>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     info!("Start Authentication");
@@ -193,7 +193,7 @@ pub async fn start_authentication(
     // some other process.
 
     // Remove any previous authentication that may have occured from the session.
-    session.remove("auth_state");
+    session.remove_value("auth_state");
 
     // Get the set of keys that the user possesses
     let users_guard = app_state.users.lock().await;
@@ -241,14 +241,14 @@ pub async fn start_authentication(
 
 pub async fn finish_authentication(
     Extension(app_state): Extension<AppState>,
-    mut session: WritableSession,
+    session: Session,
     Json(auth): Json<PublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     let (user_unique_id, auth_state): (Uuid, PasskeyAuthentication) = session
-        .get("auth_state")
+        .get("auth_state")?
         .ok_or(WebauthnError::CorruptSession)?;
 
-    session.remove("auth_state");
+    session.remove_value("auth_state");
 
     let res = match app_state
         .webauthn

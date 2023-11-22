@@ -12,17 +12,15 @@ license = "MPL-2.0"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde.workspace = true
-rand = { workspace = true, features = ["min_const_gen"] }
 webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
 axum = {version = "0.6.1", features = ["http2"]}
-axum-extra = { version = "0.4.2" , features = ["spa"]}
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features=["v4"] }
 url.workspace = true
 thiserror.workspace = true
-axum-sessions = "0.4.1"
 tower = "0.4.13"
-tower-http = {version="0.3.4", features=["fs"]}
+tower-http = {version="0.4.4", features=["fs"]}
+tower-sessions = "0.6"
 
 [features]
 default = ["wasm"]
