@@ -13,10 +13,14 @@ pub struct DeviceDescription {
 }
 
 impl DeviceDescription {
+    /// A default description of device.
     pub fn description_en(&self) -> &str {
         self.en.as_str()
     }
 
+    /// Localised descriptions. These are a map of locale to the relevant description.
+    /// If the request locale is not found, you should try other user preferenced locales
+    /// falling back to the default value.
     pub fn description_localised(&self) -> &BTreeMap<String, String> {
         &self.localised
     }

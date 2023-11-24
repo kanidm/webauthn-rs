@@ -1460,8 +1460,8 @@ impl FidoMds {
                         fd.description.clone(),
                         fd.alternative_descriptions.clone(),
                     )
-                    .map_err(|e| {
-                        error!(err = ?e, "Failed to add FIDO2 device to attestation ca list");
+                    .map_err(|err| {
+                        error!(?err, "Failed to add FIDO2 device to attestation ca list");
                     })
                     .ok()?;
             }
