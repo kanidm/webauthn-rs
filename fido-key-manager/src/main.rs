@@ -216,17 +216,6 @@ pub struct CliParser {
     pub commands: Opt,
 }
 
-pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
-        return None;
-    }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-        .collect::<Result<Vec<_>, _>>()
-        .ok()
-}
-
 #[tokio::main]
 async fn main() {
     let opt = CliParser::parse();
@@ -416,7 +405,7 @@ async fn main() {
             token
                 .bio()
                 .unwrap()
-                .rename_fingerprint(base16_decode(&o.id).expect("decoding ID"), o.friendly_name)
+                .rename_fingerprint(hex::decode(&o.id).expect("decoding ID"), o.friendly_name)
                 .await
                 .expect("renaming fingerprint");
         }
@@ -429,7 +418,7 @@ async fn main() {
 
             let ids: Vec<Vec<u8>> =
                 o.id.iter()
-                    .map(|i| base16_decode(i).expect("decoding ID"))
+                    .map(|i| hex::decode(i).expect("decoding ID"))
                     .collect();
             token
                 .bio()
