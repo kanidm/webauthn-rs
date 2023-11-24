@@ -13,6 +13,7 @@ use std::time::Duration;
 use tokio_stream::StreamExt;
 #[cfg(feature = "solokey")]
 use webauthn_authenticator_rs::ctap2::SoloKeyAuthenticator;
+#[cfg(feature = "solokey")]
 use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::{
     ctap2::{

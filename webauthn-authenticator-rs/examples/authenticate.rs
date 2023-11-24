@@ -237,7 +237,7 @@ async fn main() {
         "https://localhost:8080/auth",
         "localhost",
         vec![url::Url::parse("https://localhost:8080").unwrap()],
-        Some(Duration::from_millis(1)),
+        Duration::from_secs(60),
         None,
         None,
     );

@@ -217,6 +217,9 @@ pub mod prelude {
     pub use webauthn_rs_core::AttestationFormat;
 }
 
+/// The default authenticator interaction timeout, if none is otherwise specified.
+pub const DEFAULT_AUTHENTICATOR_TIMEOUT: Duration = Duration::from_millis(60000);
+
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
 /// properties that apply to all webauthn operations of this service.
 #[derive(Debug)]
@@ -226,7 +229,7 @@ pub struct WebauthnBuilder<'a> {
     allowed_origins: Vec<Url>,
     allow_subdomains: bool,
     allow_any_port: bool,
-    timeout: Option<Duration>,
+    timeout: Duration,
     algorithms: Vec<COSEAlgorithm>,
     user_presence_only_security_keys: bool,
 }
@@ -282,7 +285,7 @@ impl<'a> WebauthnBuilder<'a> {
                 allowed_origins: vec![rp_origin.to_owned()],
                 allow_subdomains: false,
                 allow_any_port: false,
-                timeout: None,
+                timeout: DEFAULT_AUTHENTICATOR_TIMEOUT,
                 algorithms: COSEAlgorithm::secure_algs(),
                 user_presence_only_security_keys: false,
             })
@@ -320,9 +323,9 @@ impl<'a> WebauthnBuilder<'a> {
 
     /// Set the timeout value to use for credential creation and authentication challenges.
     ///
-    /// If not set, defaults to [webauthn_rs_core::constants::DEFAULT_AUTHENTICATOR_TIMEOUT].
+    /// If not set, defaults to [DEFAULT_AUTHENTICATOR_TIMEOUT].
     pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
+        self.timeout = timeout;
         self
     }
 
