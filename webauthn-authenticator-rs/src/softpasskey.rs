@@ -523,10 +523,13 @@ impl U2FToken for SoftPasskey {
 mod tests {
     use super::SoftPasskey;
     use crate::prelude::{Url, WebauthnAuthenticator};
+    use std::time::Duration;
     use webauthn_rs_core::WebauthnCore as Webauthn;
     use webauthn_rs_proto::{
         AttestationConveyancePreference, COSEAlgorithm, UserVerificationPolicy,
     };
+
+    const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
 
     #[test]
     fn webauthn_authenticator_wan_softpasskey_self_attest() {
@@ -535,7 +538,7 @@ mod tests {
             "https://localhost:8080/auth",
             "localhost",
             vec![url::Url::parse("https://localhost:8080").unwrap()],
-            None,
+            AUTHENTICATOR_TIMEOUT,
             None,
             None,
         );
