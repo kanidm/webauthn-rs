@@ -266,19 +266,16 @@ mod test {
             len: 17,
             data: vec![0xFF; 17],
         };
-        let expected = Ok(vec![
+        let expected = vec![
             0x80, 0x00, 0x11, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        ]);
+        ];
 
         assert!(frame.complete());
         assert!(frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
 
         // Invalid MTUs
         for mtu in (0..=19).chain([513].into_iter()) {
@@ -297,20 +294,17 @@ mod test {
             len: 18,
             data: vec![0xFF; 18],
         };
-        let expected = Ok(vec![
+        let expected = vec![
             0x80, 0x00, 0x12, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        ]);
+        ];
 
         assert!(frame.complete());
         assert!(frame.is_initial());
         assert_eq!(frame.as_vec(20), Err(WebauthnCError::MessageTooLarge));
-        assert_eq!(frame.as_vec(21), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(21).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
     }
 
     #[test]
@@ -321,16 +315,13 @@ mod test {
             len: 1,
             data: vec![0xFF; 1],
         };
-        let expected = Ok(vec![0x80, 0x00, 0x01, 0xff]);
+        let expected = vec![0x80, 0x00, 0x01, 0xff];
 
         assert!(frame.complete());
         assert!(frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
 
         // Invalid MTUs
         for mtu in (0..=19).chain([513].into_iter()) {
@@ -352,19 +343,19 @@ mod test {
             len: 0,
             data: vec![0xFF; 1],
         };
-        let expected = Ok(vec![0x80, 0x00, 0x00, 0xff]);
+        let expected = vec![0x80, 0x00, 0x00, 0xff];
 
         assert!(frame.complete()); // because ==0
         assert!(frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
         // Should drop the excess bytes for a zero-length frame...
         assert_eq!(
             BtleFrame {
                 data: vec![],
                 ..frame
             },
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
+            BtleFrame::try_from(expected.as_slice()).unwrap()
         );
 
         // Technically invalid...
@@ -373,17 +364,14 @@ mod test {
             len: 2,
             data: vec![0xFF; 1],
         };
-        let expected = Ok(vec![0x80, 0x00, 0x02, 0xff]);
+        let expected = vec![0x80, 0x00, 0x02, 0xff];
 
         assert!(!frame.complete()); // because !=0 and !=len
         assert!(frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
         // Keep the partial bytes
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
     }
 
     #[test]
@@ -394,19 +382,16 @@ mod test {
             len: 0,
             data: vec![0xFF; 19],
         };
-        let expected = Ok(vec![
+        let expected = vec![
             0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        ]);
+        ];
 
         assert!(!frame.complete());
         assert!(!frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
 
         // Invalid MTUs
         for mtu in (0..=19).chain([513].into_iter()) {
@@ -427,20 +412,17 @@ mod test {
             len: 0,
             data: vec![0xFF; 20],
         };
-        let expected = Ok(vec![
+        let expected = vec![
             0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        ]);
+        ];
 
         assert!(!frame.complete());
         assert!(!frame.is_initial());
         assert_eq!(frame.as_vec(20), Err(WebauthnCError::MessageTooLarge));
-        assert_eq!(frame.as_vec(21), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(21).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
     }
 
     #[test]
@@ -451,16 +433,13 @@ mod test {
             len: 0,
             data: vec![0xFF; 1],
         };
-        let expected = Ok(vec![0x01, 0xff]);
+        let expected = vec![0x01, 0xff];
 
         assert!(!frame.complete());
         assert!(!frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
 
         // Invalid MTUs
         for mtu in (0..=19).chain([513].into_iter()) {
@@ -479,19 +458,16 @@ mod test {
             len: 512,
             data: vec![0xFF; 17],
         };
-        let expected = Ok(vec![
+        let expected = vec![
             0x80, 0x02, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
             0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        ]);
+        ];
 
         assert!(!frame.complete());
         assert!(frame.is_initial());
-        assert_eq!(frame.as_vec(20), expected);
-        assert_eq!(frame.as_vec(512), expected);
-        assert_eq!(
-            frame,
-            BtleFrame::try_from(expected.unwrap().as_slice()).unwrap()
-        );
+        assert_eq!(frame.as_vec(20).unwrap(), expected);
+        assert_eq!(frame.as_vec(512).unwrap(), expected);
+        assert_eq!(frame, BtleFrame::try_from(expected.as_slice()).unwrap());
     }
 
     #[test]
