@@ -6,7 +6,7 @@ use webauthn_rs_core::proto::{
 };
 use webauthn_rs_core::proto::{AuthenticationState, RegistrationState};
 
-use webauthn_rs::{prelude::Uuid, Webauthn, WebauthnBuilder};
+use webauthn_rs::{prelude::Uuid, Webauthn, WebauthnBuilder, DEFAULT_AUTHENTICATOR_TIMEOUT};
 use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
 
@@ -61,7 +61,7 @@ impl WebauthnActor {
             &rp_name,
             &rp_id,
             vec![rp_origin.to_owned()],
-            None,
+            DEFAULT_AUTHENTICATOR_TIMEOUT,
             None,
             None,
         );

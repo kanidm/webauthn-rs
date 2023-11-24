@@ -852,7 +852,7 @@ impl AuthenticatorBackendHashedClientData for SoftTokenFile {
 mod tests {
     use super::*;
     use openssl::{hash::MessageDigest, rand::rand_bytes, sign::Verifier, x509::X509};
-    use std::collections::BTreeSet;
+    use std::{collections::BTreeSet, time::Duration};
     use tempfile::tempfile;
     use webauthn_rs_core::{
         proto::{AttestationCa, AttestationCaList, COSEKey},
@@ -876,6 +876,8 @@ mod tests {
         softtoken::SoftToken,
     };
 
+    const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
+
     #[test]
     fn webauthn_authenticator_wan_softtoken_direct_attest() {
         let _ = tracing_subscriber::fmt::try_init();
@@ -883,7 +885,7 @@ mod tests {
             "https://localhost:8080/auth",
             "localhost",
             vec![url::Url::parse("https://localhost:8080").unwrap()],
-            None,
+            AUTHENTICATOR_TIMEOUT,
             None,
             None,
         );
@@ -962,7 +964,7 @@ mod tests {
             "https://localhost:8080/auth",
             "localhost",
             vec![url::Url::parse("https://localhost:8080").unwrap()],
-            None,
+            AUTHENTICATOR_TIMEOUT,
             None,
             None,
         );

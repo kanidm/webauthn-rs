@@ -217,6 +217,11 @@ pub mod prelude {
     pub use webauthn_rs_core::AttestationFormat;
 }
 
+/// The [Webauthn recommended authenticator interaction timeout][0].
+///
+/// [0]: https://www.w3.org/TR/webauthn-3/#ref-for-dom-publickeycredentialcreationoptions-timeout
+pub const DEFAULT_AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(300);
+
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
 /// properties that apply to all webauthn operations of this service.
 #[derive(Debug)]
@@ -226,7 +231,7 @@ pub struct WebauthnBuilder<'a> {
     allowed_origins: Vec<Url>,
     allow_subdomains: bool,
     allow_any_port: bool,
-    timeout: Option<Duration>,
+    timeout: Duration,
     algorithms: Vec<COSEAlgorithm>,
     user_presence_only_security_keys: bool,
 }
@@ -282,7 +287,7 @@ impl<'a> WebauthnBuilder<'a> {
                 allowed_origins: vec![rp_origin.to_owned()],
                 allow_subdomains: false,
                 allow_any_port: false,
-                timeout: None,
+                timeout: DEFAULT_AUTHENTICATOR_TIMEOUT,
                 algorithms: COSEAlgorithm::secure_algs(),
                 user_presence_only_security_keys: false,
             })
@@ -320,9 +325,30 @@ impl<'a> WebauthnBuilder<'a> {
 
     /// Set the timeout value to use for credential creation and authentication challenges.
     ///
-    /// If not set, defaults to [webauthn_rs_core::constants::DEFAULT_AUTHENTICATOR_TIMEOUT].
+    /// If not set, this defaults to [`DEFAULT_AUTHENTICATOR_TIMEOUT`], per
+    /// [Webauthn Level 3 recommendations][0].
+    ///
+    /// Short timeouts are difficult for some users to meet, particularly if
+    /// they need to physically locate and plug in their authenticator, use a
+    /// [hybrid authenticator][1], need to enter a PIN and/or use a fingerprint
+    /// reader.
+    ///
+    /// This may take even longer for users with cognitive, motor, mobility
+    /// and/or vision impairments. Even a minor skin condition can make it hard
+    /// to use a fingerprint reader!
+    ///
+    /// Consult the [Webauthn specification's accessibilty considerations][2],
+    /// [WCAG 2.1's "Enough time" guideline][3] and
+    /// ["Timeouts" success criterion][4] when choosing a value, particularly if
+    /// it is *shorter* than the default.
+    ///
+    /// [0]: https://www.w3.org/TR/webauthn-3/#ref-for-dom-publickeycredentialcreationoptions-timeout
+    /// [1]: https://www.w3.org/TR/webauthn-3/#dom-authenticatortransport-hybrid
+    /// [2]: https://www.w3.org/TR/webauthn-3/#sctn-accessiblility-considerations
+    /// [3]: https://www.w3.org/TR/WCAG21/#enough-time
+    /// [4]: https://www.w3.org/WAI/WCAG21/Understanding/timeouts.html
     pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
+        self.timeout = timeout;
         self
     }
 
