@@ -421,7 +421,7 @@ impl Demo {
                               <td>
                                 <select class="form-select" id="strict_attestation_required">
                                   <option selected=true value="n">{ "None" }</option>
-                                  <option value="a">{ "Any Known Manufacturer" }</option>
+                                  <option value="a">{ "Any Known FIDO Device" }</option>
                                   <option value="s">{ "Strict" }</option>
                                 </select>
                               </td>
@@ -635,7 +635,7 @@ impl Component for Demo {
                     utils::get_select_value_from_element_id("strict_attestation_required")
                         .and_then(|v| match v.as_str() {
                             "s" => Some(AttestationLevel::Strict),
-                            "a" => Some(AttestationLevel::AnyKnown),
+                            "a" => Some(AttestationLevel::AnyKnownFido),
                             _ => None,
                         })
                         .unwrap_or(AttestationLevel::None);

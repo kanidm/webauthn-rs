@@ -5,11 +5,10 @@ edition = "2021"
 rust-version = "1.70.0"
 
 [features]
-core = ["webauthn-rs-core", "webauthn-rs-device-catalog"]
+core = ["webauthn-rs-core"]
 
 [dependencies]
 serde.workspace = true
 
 webauthn-rs-core = { workspace = true, optional = true }
 webauthn-rs-proto = { workspace = true }
-webauthn-rs-device-catalog =  { workspace = true, optional = true }

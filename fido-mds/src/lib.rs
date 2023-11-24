@@ -41,7 +41,7 @@ use crate::mds::{
 
 use crate::query::{AttrValueAssertion, Query};
 
-use webauthn_attestation_ca::AttestationCaList;
+use webauthn_attestation_ca::{AttestationCaList, AttestationCaListBuilder};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use compact_jwt::JwtError;
@@ -49,11 +49,13 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::rc;
 use std::str::FromStr;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::Hash;
 use uuid::Uuid;
+
+pub const FIDO_MDS_URL: &str = "https://mds.fidoalliance.org/";
 
 /// A status report for an authenticator. This describes the specific state of this device and
 /// it's FIDO certification status. The effective date acts as a publishing time, where if the
@@ -545,7 +547,7 @@ impl PartialEq<AuthenticatorStatus> for StatusReport {
 
 impl StatusReport {
     /// Retrieve the effective date of this report
-    fn effective_date(&self) -> Option<&str> {
+    pub fn effective_date(&self) -> Option<&str> {
         match self {
             StatusReport::NotFidoCertified { effective_date, .. }
             | StatusReport::UserVerificationBypass { effective_date, .. }
@@ -562,6 +564,27 @@ impl StatusReport {
             | StatusReport::FidoCertifiedL2Plus { effective_date, .. }
             | StatusReport::FidoCertifiedL3 { effective_date, .. }
             | StatusReport::FidoCertifiedL3Plus { effective_date, .. } => effective_date.as_deref(),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            StatusReport::NotFidoCertified { .. } => "Not FIDO Certified",
+            StatusReport::UserVerificationBypass { .. } => "⚠️  User Verification Bypass",
+            StatusReport::AttestationKeyCompromise { .. } => "⚠️  Attestation Key Compromise",
+            StatusReport::UserKeyRemoteCompromise { .. } => "⚠️  User Key Remote Compromise",
+            StatusReport::UserKeyPhysicalCompromise { .. } => "⚠️  User Key Physical Compromise",
+            StatusReport::UpdateAvailable { .. } => "⚠️  Update Available",
+            StatusReport::Revoked { .. } => "⚠️  Revoked",
+            StatusReport::SelfAssertionSubmitted { .. } => "Self Assertion",
+            StatusReport::FidoCertified { .. } | StatusReport::FidoCertifiedL1 { .. } => {
+                "FIDO Certified - L1"
+            }
+            StatusReport::FidoCertifiedL1Plus { .. } => "FIDO Certified - L1 Plus",
+            StatusReport::FidoCertifiedL2 { .. } => "FIDO Certified - L2",
+            StatusReport::FidoCertifiedL2Plus { .. } => "FIDO Certified - L2 Plus",
+            StatusReport::FidoCertifiedL3 { .. } => "FIDO Certified - L3",
+            StatusReport::FidoCertifiedL3Plus { .. } => "FIDO Certified - L3 Plus",
         }
     }
 
@@ -1424,19 +1447,26 @@ impl FidoMds {
     }
 
     pub fn fido2_to_attestation_ca_list(fds: &[rc::Rc<FIDO2>]) -> Option<AttestationCaList> {
-        let data: Vec<_> = fds
-            .iter()
-            .flat_map(|fd| {
-                fd.attestation_root_certificates
-                    .iter()
-                    .map(|ca| (ca.as_slice(), fd.aaguid))
-            })
-            .collect();
+        let mut att_ca_builder = AttestationCaListBuilder::new();
 
-        AttestationCaList::try_from(data.as_slice())
-            .map_err(|e| {
-                error!(err = ?e, "Failed to process attestation ca list");
-            })
-            .ok()
+        for fd in fds {
+            for ca in fd.attestation_root_certificates.iter() {
+                trace!(?fd);
+
+                att_ca_builder
+                    .insert_device_der(
+                        ca.as_slice(),
+                        fd.aaguid,
+                        fd.description.clone(),
+                        fd.alternative_descriptions.clone(),
+                    )
+                    .map_err(|e| {
+                        error!(err = ?e, "Failed to add FIDO2 device to attestation ca list");
+                    })
+                    .ok()?;
+            }
+        }
+
+        Some(att_ca_builder.build())
     }
 }

@@ -23,12 +23,9 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 use url::Url;
 
-use fido_mds::mds::AuthenticatorStatus;
-use fido_mds::query::{AttrValueAssertion, Query};
+use fido_mds::query::Query;
 use fido_mds::FidoMds;
-use fido_mds::FIDO2;
-
-const MDS_URL: &str = "https://mds.fidoalliance.org/";
+use fido_mds::{FIDO2, FIDO_MDS_URL};
 
 #[derive(Debug, Args)]
 pub struct CommonOpt {
@@ -43,23 +40,33 @@ pub struct CommonOpt {
 pub struct QueryOpt {
     /// A query over the MDS. This query is "scim" like and supports logical conditions. Examples are
     ///
-    /// * "desc cn yubikey"
+    /// * "desc cnt yubikey"
+    ///
     /// * "aaguid eq X or aaguid ne Y"
+    ///
     /// * "status gte l1 and not (aaguid eq Z)"
     ///
     /// Supported query types and operators are:
     ///
     /// * aaguid eq \<uuid\>
+    ///
     /// * desc eq \<string\>
+    ///
     /// * desc cnt \<string\>
+    ///
     /// * status gte [valid|l1|l1+|l2|l2+|l3|l3+]
+    ///
     /// * states eq [valid|l1|l1+|l2|l2+|l3|l3+]
+    ///
     /// * transport eq [usb|nfc|lightning|ble|internal]
+    ///
     /// * uvm cnt [presence|pin_internal|pin_external|fingerprint_internal|handprint_internal|eyeprint_internal|voiceprint_internal|faceprint_internal|faceprint_internal|pattern_internal]
     ///
     pub query: String,
     #[clap(short, long)]
     pub output_cert_roots: bool,
+    #[clap(short = 'x', long = "extra")]
+    extra_details: bool,
     #[clap(long, hide(true))]
     pub show_insecure_devices: bool,
     #[clap(flatten)]
@@ -138,7 +145,7 @@ fn main() {
 
     match opt.commands {
         Opt::Fetch(CommonOpt { debug: _, path }) => {
-            let mds_url = match Url::parse(MDS_URL) {
+            let mds_url = match Url::parse(FIDO_MDS_URL) {
                 Ok(mdsurl) => mdsurl,
                 Err(e) => {
                     error!(err = ?e, "Error - invalid MDS URL");
@@ -207,35 +214,23 @@ fn main() {
                 }
             };
 
-            match FidoMds::from_str(&s) {
+            let mds = match FidoMds::from_str(&s) {
                 Ok(mds) => {
                     debug!("{} fido metadata avaliable", mds.fido2.len());
-                    for fd in mds.fido2.iter() {
-                        eprintln!("{fd}");
-                        if extra_details {
-                            println!("  authentication_algorithms:");
-                            for alg in fd.authentication_algorithms.iter() {
-                                println!("    * {alg}");
-                            }
-
-                            println!("  user_verification_details:");
-                            for uvm_or in fd.user_verification_details.iter() {
-                                let mut first = true;
-                                print!("    *");
-                                for uvm_and in uvm_or.iter() {
-                                    if !first {
-                                        print!(" AND");
-                                    }
-                                    first = false;
-                                    print!(" {uvm_and}");
-                                }
-                                println!();
-                            }
-                        }
-                    }
+                    mds
                 }
                 Err(e) => {
                     tracing::error!(?e);
+                    return;
+                }
+            };
+
+            let query = Query::exclude_compromised_devices();
+
+            match mds.fido2_query(&query) {
+                Some(fds) => display_query_results(&fds, extra_details),
+                None => {
+                    error!("An internal error has occured, please report a bug!");
                 }
             }
         }
@@ -243,6 +238,7 @@ fn main() {
             query,
             output_cert_roots,
             show_insecure_devices,
+            extra_details,
             common: CommonOpt { debug: _, path },
         }) => {
             trace!("{:?}", path);
@@ -268,9 +264,7 @@ fn main() {
                 query
             } else {
                 Query::And(
-                    Box::new(Query::Not(Box::new(Query::Op(
-                        AttrValueAssertion::StatusLt(AuthenticatorStatus::FidoCertified),
-                    )))),
+                    Box::new(Query::exclude_compromised_devices()),
                     Box::new(query),
                 )
             };
@@ -283,7 +277,7 @@ fn main() {
                             if output_cert_roots {
                                 display_cert_roots(&fds)
                             } else {
-                                display_query_results(&fds)
+                                display_query_results(&fds, extra_details)
                             }
                         }
                         None => warn!("No metadata matched query"),
@@ -311,63 +305,120 @@ fn display_cert_roots(fds: &[Rc<FIDO2>]) {
     }
 }
 
-fn display_query_results(fds: &[Rc<FIDO2>]) {
+fn display_query_results(fds: &[Rc<FIDO2>], extra_details: bool) {
     for fd in fds {
-        println!("aaguid: {}", fd.aaguid);
-        println!("last update: {}", fd.time_of_last_status_change);
-        println!("description: {}", fd.description);
-        println!("authenticator_version: {}", fd.authenticator_version);
-        println!("authentication_algorithms:");
-        for alg in fd.authentication_algorithms.iter() {
-            println!("  {alg:?}");
-        }
-        println!("public_key_alg_and_encodings: ");
-        for alg in fd.public_key_alg_and_encodings.iter() {
-            println!("  {alg:?}");
-        }
+        if extra_details {
+            println!("description: {}", fd.description);
 
-        println!("user_verification_details:");
-        for uvm_or in fd.user_verification_details.iter() {
-            println!("-- OR");
-            for uvm_and in uvm_or.iter() {
-                println!("  AND");
-                println!("  {uvm_and}");
+            println!("  aaguid: {}", fd.aaguid);
+            println!("  last update: {}", fd.time_of_last_status_change);
+            println!("  authenticator_version: {}", fd.authenticator_version);
+            println!("  authentication_algorithms:");
+            for alg in fd.authentication_algorithms.iter() {
+                println!("    - {alg}");
             }
-        }
-        println!("key_protection:");
-        for kp in fd.key_protection.iter() {
-            println!("  {kp:?}");
-        }
-        println!("is_key_restricted: {}", fd.is_key_restricted);
-        println!(
-            "is_fresh_user_verification_required: {}",
-            fd.is_fresh_user_verification_required
-        );
 
-        // attestation root certificates
+            /*
+            println!("  public_key_alg_and_encodings: ");
+            for alg in fd.public_key_alg_and_encodings.iter() {
+                println!("    * {alg:?}");
+            }
+            */
 
-        println!("supported_extensions:");
-        for se in fd.supported_extensions.iter() {
+            println!("  user_verification_details:");
+            for uvm_or in fd.user_verification_details.iter() {
+                let mut first = true;
+                print!("    -");
+                for uvm_and in uvm_or.iter() {
+                    if !first {
+                        print!(" AND");
+                    }
+                    first = false;
+                    print!(" {uvm_and}");
+                }
+                println!();
+            }
+
+            println!("  key_protection:");
+            for kp in fd.key_protection.iter() {
+                println!("    - {kp:?}");
+            }
+            println!("  is_key_restricted: {}", fd.is_key_restricted);
             println!(
-                "  {} - {} - {}",
-                se.id,
-                se.fail_if_unknown,
-                se.data.as_deref().unwrap_or("")
+                "  is_fresh_user_verification_required: {}",
+                fd.is_fresh_user_verification_required
             );
-        }
 
-        if let Some(authenticator_info) = &fd.authenticator_get_info {
-            println!("authenticator_get_info: {authenticator_info:#?}");
+            if let Some(authenticator_info) = &fd.authenticator_get_info {
+                println!("  authenticator_get_info:");
+                println!("    versions:");
+                for ver in &authenticator_info.versions {
+                    println!("      - {}", ver);
+                }
+                println!("    extensions:");
+                for extn in &authenticator_info.extensions {
+                    println!("      - {}", extn);
+                }
+
+                // options?
+
+                println!("    transports:");
+                for tran in &authenticator_info.transports {
+                    println!("      - {}", tran);
+                }
+
+                if let Some(mpl) = authenticator_info.min_pin_length {
+                    println!("    minimum pin length: {}", mpl);
+                }
+
+                if !authenticator_info.certifications.is_empty() {
+                    println!("    certifications:");
+                    for (cert, cert_ver) in &authenticator_info.certifications {
+                        println!("      - {} - {}", cert, cert_ver);
+                    }
+                }
+
+                if let Some(mrk) = authenticator_info.remaining_discoverable_credentials {
+                    println!("    resident key slots: {}", mrk);
+                }
+            } else {
+                println!("  authenticator_get_info: not present")
+            }
+
+            println!("  status_reports:");
+            for sr in fd.status_reports.iter() {
+                if let Some(e_date) = sr.effective_date() {
+                    println!("    - {} - {}", e_date, sr.as_str());
+                } else {
+                    println!("    - current - {}", sr.as_str());
+                }
+            }
+
+            println!();
         } else {
-            println!("authenticator_get_info: not present")
-        }
+            println!("{fd}");
+            /*
+            println!("  authentication_algorithms:");
+            for alg in fd.authentication_algorithms.iter() {
+                println!("    * {alg}");
+            }
 
-        println!("status_reports:");
-        for sr in fd.status_reports.iter() {
-            println!("  {sr:#?}");
+            println!("  user_verification_details:");
+            for uvm_or in fd.user_verification_details.iter() {
+                let mut first = true;
+                print!("    *");
+                for uvm_and in uvm_or.iter() {
+                    if !first {
+                        print!(" AND");
+                    }
+                    first = false;
+                    print!(" {uvm_and}");
+                }
+                println!();
+            }
+            println!("");
+            */
         }
-
-        println!();
     }
     // End fds
 }

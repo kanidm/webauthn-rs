@@ -468,6 +468,17 @@ pub enum AuthenticatorVersion {
     Fido2_1,
 }
 
+impl fmt::Display for AuthenticatorVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthenticatorVersion::U2fV2 => write!(f, "U2F V2"),
+            AuthenticatorVersion::Fido2_0 => write!(f, "FIDO 2.0"),
+            AuthenticatorVersion::Fido2_1Pre => write!(f, "FIDO 2.1 PRE"),
+            AuthenticatorVersion::Fido2_1 => write!(f, "FIDO 2.1"),
+        }
+    }
+}
+
 /// The authenticator transports that this device supports
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AuthenticatorTransport {
@@ -486,6 +497,18 @@ pub enum AuthenticatorTransport {
     /// internal
     #[serde(rename = "internal")]
     Internal,
+}
+
+impl fmt::Display for AuthenticatorTransport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthenticatorTransport::Usb => write!(f, "usb"),
+            AuthenticatorTransport::Nfc => write!(f, "nfc"),
+            AuthenticatorTransport::Lightning => write!(f, "lightning"),
+            AuthenticatorTransport::Ble => write!(f, "ble"),
+            AuthenticatorTransport::Internal => write!(f, "internal"),
+        }
+    }
 }
 
 impl FromStr for AuthenticatorTransport {
@@ -549,8 +572,9 @@ pub struct AuthenticatorGetInfo {
     pub preferred_platform_uv_attempts: Option<u32>,
     uv_modality: Option<u32>,
     #[serde(default)]
-    certifications: BTreeMap<String, u32>,
-    pub(crate) remaining_discoverable_credentials: Option<u32>,
+    pub certifications: BTreeMap<String, u32>,
+    /// The number of remaining resident keys on this device.
+    pub remaining_discoverable_credentials: Option<u32>,
     /// Vendor specific details
     #[serde(default)]
     pub vendor_prototype_config_commands: Vec<u32>,

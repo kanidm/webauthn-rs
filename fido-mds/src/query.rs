@@ -27,6 +27,14 @@ pub enum Query {
     Not(Box<Query>),
 }
 
+impl Query {
+    pub fn exclude_compromised_devices() -> Self {
+        Query::Not(Box::new(Query::Op(AttrValueAssertion::StatusLt(
+            AuthenticatorStatus::FidoCertified,
+        ))))
+    }
+}
+
 impl FromStr for Query {
     type Err = peg::error::ParseError<peg::str::LineCol>;
 
