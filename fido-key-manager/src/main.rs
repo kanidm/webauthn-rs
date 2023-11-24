@@ -216,10 +216,6 @@ pub struct CliParser {
     pub commands: Opt,
 }
 
-pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
-    i.into_iter().map(|c| format!("{c:02X}")).collect()
-}
-
 pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
     if s.len() % 2 != 0 {
         return None;
@@ -385,7 +381,7 @@ async fn main() {
                 .enroll_fingerprint(Duration::from_secs(30), o.friendly_name)
                 .await
                 .expect("enrolling fingerprint");
-            println!("Enrolled fingerpint {}", base16_encode(id));
+            println!("Enrolled fingerpint {}", hex::encode(id));
         }
 
         Opt::ListFingerprints => {
@@ -405,7 +401,7 @@ async fn main() {
             for t in fingerprints {
                 println!(
                     "* ID: {}, Name: {:?}",
-                    base16_encode(t.id),
+                    hex::encode(t.id),
                     t.friendly_name.unwrap_or_default()
                 );
             }

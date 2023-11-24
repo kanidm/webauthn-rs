@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap, convert::Infallible, error::Error as StdError, net::SocketAddr, sync::Arc,
+    collections::HashMap, convert::Infallible, error::Error as StdError, fmt::Write,
+    net::SocketAddr, sync::Arc,
 };
 
 use clap::{ArgAction, Parser, ValueHint};
@@ -100,8 +101,10 @@ async fn handle_request(
                 let backends_read = state.backends.read().await;
                 let backends_info: String = backends_read
                     .iter()
-                    .map(|(k, v)| format!("backends[{}] = {v}\n", hex::encode_upper(k)))
-                    .collect();
+                    .fold(String::new(), |mut out, (k, v)| {
+                        let _ = writeln!(out, "backends[{}] = {v}", hex::encode_upper(k));
+                        out
+                    });
                 let debug = format!(
                     "server_state.strong_count = {}\nbackends.capacity = {}\nbackends.len = {}\n{}",
                     Arc::strong_count(&state),
