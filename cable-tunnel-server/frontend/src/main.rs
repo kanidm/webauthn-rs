@@ -99,9 +99,8 @@ async fn handle_request(
         Router::Debug => {
             return Ok(if state.debug_handler {
                 let backends_read = state.backends.read().await;
-                let backends_info: String = backends_read
-                    .iter()
-                    .fold(String::new(), |mut out, (k, v)| {
+                let backends_info: String =
+                    backends_read.iter().fold(String::new(), |mut out, (k, v)| {
                         let _ = writeln!(out, "backends[{}] = {v}", hex::encode_upper(k));
                         out
                     });
