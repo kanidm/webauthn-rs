@@ -54,15 +54,21 @@ pub mod tokio {
     }
     pub mod sync {
         pub mod mpsc {
-            pub struct Sender<T> {}
-            pub struct Receiver<T> {}
+            pub struct Sender<T> {
+                _phantom: std::marker::PhantomData<T>,
+            }
+            pub struct Receiver<T> {
+                _phantom: std::marker::PhantomData<T>,
+            }
         }
     }
     pub mod time {
         pub async fn sleep(_: std::time::Duration) {}
     }
     pub mod task {
-        pub struct JoinHandle<T> {}
+        pub struct JoinHandle<T> {
+            _phantom: std::marker::PhantomData<T>,
+        }
         pub fn spawn<A, B>(future: A) -> JoinHandle<B> {}
         pub fn spawn_blocking() {}
     }
@@ -71,7 +77,9 @@ pub mod tokio {
 #[cfg(not(feature = "ctap2"))]
 pub mod tokio_stream {
     pub mod wrappers {
-        pub struct ReceiverStream<T> {}
+        pub struct ReceiverStream<T> {
+            _phantom: std::marker::PhantomData<T>,
+        }
     }
 }
 
@@ -85,8 +93,12 @@ pub mod tokio_tungstenite {
             }
         }
     }
-    pub struct MaybeTlsStream<T> {}
-    pub struct WebSocketStream<T> {}
+    pub struct MaybeTlsStream<T> {
+        _phantom: std::marker::PhantomData<T>,
+    }
+    pub struct WebSocketStream<T> {
+        _phantom: std::marker::PhantomData<T>,
+    }
 }
 
 #[cfg(not(any(feature = "bluetooth", feature = "cable")))]
@@ -120,9 +132,13 @@ pub mod openssl {
         pub struct BigNumContext {}
     }
     pub mod ec {
-        pub struct EcKey<T> {}
+        pub struct EcKey<T> {
+            _phantom: std::marker::PhantomData<T>,
+        }
         pub struct EcGroup {}
-        pub struct EcKeyRef<T> {}
+        pub struct EcKeyRef<T> {
+            _phantom: std::marker::PhantomData<T>,
+        }
         pub struct EcPoint {}
         pub struct EcPointRef {}
         pub enum PointConversionForm {}
@@ -132,8 +148,12 @@ pub mod openssl {
     }
     pub mod pkey {
         pub struct Id {}
-        pub struct PKey<T> {}
-        pub struct PKeyRef<T> {}
+        pub struct PKey<T> {
+            _phantom: std::marker::PhantomData<T>,
+        }
+        pub struct PKeyRef<T> {
+            _phantom: std::marker::PhantomData<T>,
+        }
         pub struct Private {}
         pub struct Public {}
     }
