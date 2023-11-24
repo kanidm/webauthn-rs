@@ -2,7 +2,7 @@
 //!
 //! ## References
 //!
-//! * [Device Class Definition for Human Interface Devices, version 1.11][0],
+//! * [Device Class Definition for Human Interface Devices, v1.11][0],
 //!   §6.2.2 "Report Descriptor"
 //!
 //! [0]: https://www.usb.org/sites/default/files/documents/hid1_11.pdf
@@ -13,6 +13,14 @@ use num_traits::FromPrimitive;
 use crate::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 
 /// HID descriptor tags; shifted right by 2 bits (removing the `bSize` field).
+///
+/// ## References
+///
+/// * [Device Class Definition for Human Interface Devices, v1.11][0],
+///   §5.3 "Generic Item Format"
+///
+/// [0]: https://www.usb.org/sites/default/files/documents/hid1_11.pdf
+#[allow(clippy::unusual_byte_groupings)] // groupings are bTag(4), bType(2)
 #[derive(FromPrimitive)]
 #[repr(u8)]
 enum Tag {
@@ -130,9 +138,9 @@ impl<'a> Iterator for DescriptorIterator<'a> {
 /// support simple descriptors. This is should be sufficient for USB FIDO
 /// authethicators.
 pub fn is_fido_authenticator(descriptor: &[u8]) -> bool {
-    let mut descriptor = DescriptorIterator { i: descriptor };
+    let descriptor = DescriptorIterator { i: descriptor };
     let mut current_usage_page = 0u16;
-    while let Some(item) = descriptor.next() {
+    for item in descriptor {
         // trace!("item: {item:?}");
         match item.tag {
             Some(Tag::UsagePage) => {
@@ -170,7 +178,7 @@ pub fn is_fido_authenticator(descriptor: &[u8]) -> bool {
             _ => continue,
         }
     }
-    return false;
+    false
 }
 
 #[cfg(test)]

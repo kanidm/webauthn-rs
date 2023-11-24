@@ -129,6 +129,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
                         EventType::Remove => {
                             if let Some(path) = device.devnode() {
                                 if known_devices.remove(path) {
+                                    // We knew this device once, notify watchers
                                     if tx.blocking_send(WatchEvent::Removed(path.into())).is_err() {
                                         // Channel disappeared!
                                         return;
