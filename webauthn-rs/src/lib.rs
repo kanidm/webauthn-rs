@@ -217,8 +217,10 @@ pub mod prelude {
     pub use webauthn_rs_core::AttestationFormat;
 }
 
-/// The default authenticator interaction timeout, if none is otherwise specified.
-pub const DEFAULT_AUTHENTICATOR_TIMEOUT: Duration = Duration::from_millis(60000);
+/// The [Webauthn recommended authenticator interaction timeout][0].
+///
+/// [0]: https://www.w3.org/TR/webauthn-3/#ref-for-dom-publickeycredentialcreationoptions-timeout
+pub const DEFAULT_AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// A constructor for a new [Webauthn] instance. This accepts and configures a number of site-wide
 /// properties that apply to all webauthn operations of this service.
@@ -323,7 +325,28 @@ impl<'a> WebauthnBuilder<'a> {
 
     /// Set the timeout value to use for credential creation and authentication challenges.
     ///
-    /// If not set, defaults to [DEFAULT_AUTHENTICATOR_TIMEOUT].
+    /// If not set, this defaults to [`DEFAULT_AUTHENTICATOR_TIMEOUT`], per
+    /// [Webauthn Level 3 recommendations][0].
+    ///
+    /// Short timeouts are difficult for some users to meet, particularly if
+    /// they need to physically locate and plug in their authenticator, use a
+    /// [hybrid authenticator][1], need to enter a PIN and/or use a fingerprint
+    /// reader.
+    ///
+    /// This may take even longer for users with cognitive, motor, mobility
+    /// and/or vision impairments. Even a minor skin condition can make it hard
+    /// to use a fingerprint reader!
+    ///
+    /// Consult the [Webauthn specification's accessibilty considerations][2],
+    /// [WCAG 2.1's "Enough time" guideline][3] and
+    /// ["Timeouts" success criterion][4] when choosing a value, particularly if
+    /// it is *shorter* than the default.
+    ///
+    /// [0]: https://www.w3.org/TR/webauthn-3/#ref-for-dom-publickeycredentialcreationoptions-timeout
+    /// [1]: https://www.w3.org/TR/webauthn-3/#dom-authenticatortransport-hybrid
+    /// [2]: https://www.w3.org/TR/webauthn-3/#sctn-accessiblility-considerations
+    /// [3]: https://www.w3.org/TR/WCAG21/#enough-time
+    /// [4]: https://www.w3.org/WAI/WCAG21/Understanding/timeouts.html
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
