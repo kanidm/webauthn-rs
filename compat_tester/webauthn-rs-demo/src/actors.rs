@@ -1,12 +1,11 @@
 use url::Url;
+use webauthn_rs::{prelude::Uuid, Webauthn, WebauthnBuilder, DEFAULT_AUTHENTICATOR_TIMEOUT};
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
+use webauthn_rs_core::proto::{AttestationCaList, AuthenticationState, RegistrationState};
 use webauthn_rs_core::proto::{
     AuthenticationResult, Base64UrlSafeData, CreationChallengeResponse, Credential,
     PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse,
 };
-use webauthn_rs_core::proto::{AuthenticationState, RegistrationState};
-
-use webauthn_rs::{prelude::Uuid, Webauthn, WebauthnBuilder, DEFAULT_AUTHENTICATOR_TIMEOUT};
 use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
 
@@ -17,6 +16,8 @@ use webauthn_rs::prelude::{
 };
 
 use webauthn_rs::prelude::DiscoverableAuthentication;
+
+use webauthn_rs_device_catalog::Data;
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -50,10 +51,17 @@ pub struct WebauthnActor {
     wan: WebauthnCore,
     /// For demoing the simple cases.
     swan: Webauthn,
+    // For attestation stuff.
+    device_cat_strict: AttestationCaList,
+    fido_mds: AttestationCaList,
 }
 
 impl WebauthnActor {
-    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str) -> Self {
+    pub fn new(rp_name: &str, rp_origin: &str, rp_id: &str, fido_mds: AttestationCaList) -> Self {
+        let device_cat_strict = (&Data::strict())
+            .try_into()
+            .expect("Failed to setup device catalog");
+
         let rp_name = rp_name.to_string();
         let rp_id = rp_id.to_string();
         let rp_origin = Url::parse(rp_origin).expect("Failed to parse origin");
@@ -78,6 +86,16 @@ impl WebauthnActor {
             rp_origin,
             wan,
             swan,
+            device_cat_strict,
+            fido_mds,
+        }
+    }
+
+    fn get_att_ca_list(&self, level: AttestationLevel) -> Option<AttestationCaList> {
+        match level {
+            AttestationLevel::None => None,
+            AttestationLevel::AnyKnownFido => Some(self.fido_mds.clone()),
+            AttestationLevel::Strict => Some(self.device_cat_strict.clone()),
         }
     }
 
@@ -100,29 +118,35 @@ impl WebauthnActor {
                 )
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passkey(rs)))?,
             RegisterWithType::AttestedPasskey(strict) => {
-                let att_ca: Option<_> = strict.into();
+                let att_ca_list = self
+                    .get_att_ca_list(strict)
+                    .ok_or(WebauthnError::AttestationTrustFailure)?;
                 self.swan
                     .start_attested_passkey_registration(
                         user_unique_id,
                         &username,
                         &username,
                         None,
-                        att_ca.unwrap(),
+                        att_ca_list,
                         None,
                     )
                     .map(|(ccr, rs)| (ccr, RegistrationTypedState::AttestedPasskey(rs)))?
             }
-            RegisterWithType::SecurityKey(strict) => self
-                .swan
-                .start_securitykey_registration(
-                    user_unique_id,
-                    &username,
-                    &username,
-                    None,
-                    strict.into(),
-                    None,
-                )
-                .map(|(ccr, rs)| (ccr, RegistrationTypedState::SecurityKey(rs)))?,
+            RegisterWithType::SecurityKey(strict) => {
+                let att_ca_list = self
+                    .get_att_ca_list(strict)
+                    .ok_or(WebauthnError::AttestationTrustFailure)?;
+                self.swan
+                    .start_securitykey_registration(
+                        user_unique_id,
+                        &username,
+                        &username,
+                        None,
+                        Some(att_ca_list),
+                        None,
+                    )
+                    .map(|(ccr, rs)| (ccr, RegistrationTypedState::SecurityKey(rs)))?
+            }
         };
 
         debug!("complete ChallengeRegister -> {:?}", ccr);

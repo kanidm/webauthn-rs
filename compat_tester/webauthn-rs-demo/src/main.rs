@@ -5,6 +5,7 @@
 extern crate tracing;
 
 use std::collections::BTreeMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -12,11 +13,15 @@ use structopt::StructOpt;
 use rand::prelude::*;
 
 use tide_openssl::TlsListener;
+use tokio::task;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 use webauthn_rs::prelude::Uuid;
+use webauthn_rs_core::proto::AttestationCaList;
 use webauthn_rs_core::proto::{Credential, PublicKeyCredential, RegisterPublicKeyCredential};
 use webauthn_rs_demo_shared::*;
+
+use fido_mds::{query::Query, FidoMds, FIDO_MDS_URL};
 
 mod actors;
 
@@ -595,7 +600,47 @@ async fn compat_finish_login(mut request: tide::Request<AppState>) -> tide::Resu
     Ok(res)
 }
 
-#[async_std::main]
+async fn setup_fido_mds() -> AttestationCaList {
+    info!("Fetching MDS ...");
+
+    let req = reqwest::get(FIDO_MDS_URL)
+        .await
+        .map_err(|err| {
+            error!(?err, "Failed to fetch MDS");
+        })
+        .unwrap();
+
+    let data = req
+        .text()
+        .await
+        .map_err(|err| {
+            error!(?err, "Failed to fetch MDS");
+        })
+        .unwrap();
+
+    let mds = FidoMds::from_str(&data)
+        .map_err(|err| {
+            error!(?err, "Failed to parse MDS");
+        })
+        .unwrap();
+
+    let query = Query::exclude_compromised_devices();
+
+    let fds = mds
+        .fido2_query(&query)
+        .ok_or_else(|| {
+            error!("Failed to query MDS");
+        })
+        .unwrap();
+
+    FidoMds::fido2_to_attestation_ca_list(fds.as_slice())
+        .ok_or_else(|| {
+            error!("Failed to process MDS");
+        })
+        .unwrap()
+}
+
+#[tokio::main]
 async fn main() -> tide::Result<()> {
     let opt: CmdOptions = CmdOptions::from_args();
     tracing_subscriber::fmt()
@@ -607,6 +652,8 @@ async fn main() -> tide::Result<()> {
         .compact()
         .init();
 
+    let fido_mds = setup_fido_mds().await;
+
     let domain = opt.rp_id.clone();
 
     info!("Using origin - {}", opt.rp_origin);
@@ -615,6 +662,7 @@ async fn main() -> tide::Result<()> {
         opt.rp_name.as_str(),
         opt.rp_origin.as_str(),
         opt.rp_id.as_str(),
+        fido_mds,
     );
 
     let app_state = Arc::new(wan);
@@ -630,10 +678,10 @@ async fn main() -> tide::Result<()> {
         .with_session_ttl(Some(Duration::from_secs(3600)))
         .with_cookie_name("webauthnrs");
 
-    async_std::task::spawn(async move {
+    task::spawn(async move {
         // some work here
         loop {
-            async_std::task::sleep(Duration::from_secs(900)).await;
+            tokio::time::sleep(Duration::from_secs(900)).await;
             memory_store
                 .cleanup()
                 .await

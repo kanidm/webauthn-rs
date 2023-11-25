@@ -852,10 +852,10 @@ impl AuthenticatorBackendHashedClientData for SoftTokenFile {
 mod tests {
     use super::*;
     use openssl::{hash::MessageDigest, rand::rand_bytes, sign::Verifier, x509::X509};
-    use std::{collections::BTreeSet, time::Duration};
+    use std::time::Duration;
     use tempfile::tempfile;
     use webauthn_rs_core::{
-        proto::{AttestationCa, AttestationCaList, COSEKey},
+        proto::{AttestationCaList, AttestationCaListBuilder, COSEKey},
         WebauthnCore as Webauthn,
     };
     use webauthn_rs_proto::{
@@ -925,14 +925,12 @@ mod tests {
             })
             .expect("Failed to register");
 
-        let mut aaguids = BTreeSet::new();
-        aaguids.insert(AAGUID);
-        let att_ca_list: AttestationCaList = AttestationCa {
-            ca: ca_root,
-            aaguids,
-        }
-        .try_into()
-        .expect("Failed to build attestation ca list");
+        let mut att_ca_builder = AttestationCaListBuilder::new();
+        att_ca_builder
+            .insert_device_x509(ca_root, AAGUID, "softtoken".to_string(), Default::default())
+            .expect("Failed to build att ca list");
+        let att_ca_list: AttestationCaList = att_ca_builder.build();
+
         let cred = wan
             .register_credential(&r, &reg_state, Some(&att_ca_list))
             .unwrap();
@@ -1007,14 +1005,12 @@ mod tests {
             })
             .expect("Failed to register");
 
-        let mut aaguids = BTreeSet::new();
-        aaguids.insert(AAGUID);
-        let att_ca_list: AttestationCaList = AttestationCa {
-            ca: ca_root,
-            aaguids,
-        }
-        .try_into()
-        .expect("Failed to build attestation ca list");
+        let mut att_ca_builder = AttestationCaListBuilder::new();
+        att_ca_builder
+            .insert_device_x509(ca_root, AAGUID, "softtoken".to_string(), Default::default())
+            .expect("Failed to build att ca list");
+        let att_ca_list: AttestationCaList = att_ca_builder.build();
+
         let cred = wan
             .register_credential(&r, &reg_state, Some(&att_ca_list))
             .unwrap();

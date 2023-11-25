@@ -52,6 +52,7 @@ webauthn-rs-core = { path = "./webauthn-rs-core" }
 webauthn-rs-proto = { path = "./webauthn-rs-proto" }
 webauthn-attestation-ca = { path = "./attestation-ca" }
 webauthn-rs-device-catalog = { path = "./device-catalog" }
+fido-mds = { path = "./fido-mds" }
 
 async-std = { version = "1.6", features = ["attributes"] }
 base64 = "0.21"

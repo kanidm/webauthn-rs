@@ -1290,7 +1290,7 @@ pub fn verify_attestation_ca_chain<'a>(
 
     for ca_crt in ca_list.cas.values() {
         ca_store
-            .add_cert(ca_crt.ca.clone())
+            .add_cert(ca_crt.ca().clone())
             .map_err(WebauthnError::OpenSSLError)?;
     }
 

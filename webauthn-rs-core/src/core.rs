@@ -604,14 +604,14 @@ impl WebauthnCore {
         // Assert that the aaguid of the device, is within the authority of this CA (if
         // a list of aaguids was provided).
         if let Some(att_ca_crt) = attested_ca_crt {
-            if att_ca_crt.aaguids.is_empty() {
+            if att_ca_crt.aaguids().is_empty() {
                 trace!("No aaguids set present, allowing all associated keys.");
             } else {
                 match &credential.attestation.metadata {
                     AttestationMetadata::Packed { aaguid }
                     | AttestationMetadata::Tpm { aaguid, .. } => {
                         // If not present, fail.
-                        if !att_ca_crt.aaguids.contains(aaguid) {
+                        if !att_ca_crt.aaguids().contains_key(aaguid) {
                             return Err(WebauthnError::AttestationUntrustedAaguid);
                         }
                     }
@@ -1958,11 +1958,18 @@ mod tests {
         ));
 
         // Assert this fails when the attestaion ca is correct, but the aaguid is missing.
-        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
-        // AAGUID is for yk 5 fips
-        att_ca.insert_aaguid(uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"));
-        let att_ca_list: AttestationCaList =
-            att_ca.try_into().expect("Failed to build att ca list");
+
+        let mut att_ca_builder = AttestationCaListBuilder::new();
+        att_ca_builder
+            .insert_device_pem(
+                YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM,
+                uuid::uuid!("73bb0cd4-e502-49b8-9c6f-b59445bf720b"),
+                "yk 5 fips".to_string(),
+                Default::default(),
+            )
+            .expect("Failed to build att ca list");
+        let att_ca_list: AttestationCaList = att_ca_builder.build();
+
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred,
@@ -1980,11 +1987,17 @@ mod tests {
             Err(WebauthnError::AttestationUntrustedAaguid)
         ));
 
-        let mut att_ca: AttestationCa = YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap();
-        // AAGUID is for yk5ci
-        att_ca.insert_aaguid(uuid::uuid!("c5ef55ff-ad9a-4b9f-b580-adebafe026d0"));
-        let att_ca_list: AttestationCaList =
-            att_ca.try_into().expect("Failed to build att ca list");
+        let mut att_ca_builder = AttestationCaListBuilder::new();
+        att_ca_builder
+            .insert_device_pem(
+                YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM,
+                uuid::uuid!("c5ef55ff-ad9a-4b9f-b580-adebafe026d0"),
+                "yk 5 ci".to_string(),
+                Default::default(),
+            )
+            .expect("Failed to build att ca list");
+        let att_ca_list: AttestationCaList = att_ca_builder.build();
+
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Preferred,
@@ -2620,8 +2633,17 @@ mod tests {
         };
 
         // Attempt to request an AAGUID, but this format does not provide one.
-        let mut att_ca: AttestationCa = APPLE_WEBAUTHN_ROOT_CA_PEM.try_into().unwrap();
-        att_ca.insert_aaguid(uuid::uuid!("c5ef55ff-ad9a-4b9f-b580-adebafe026d0"));
+        let mut att_ca_builder = AttestationCaListBuilder::new();
+        att_ca_builder
+            .insert_device_pem(
+                APPLE_WEBAUTHN_ROOT_CA_PEM,
+                uuid::uuid!("c5ef55ff-ad9a-4b9f-b580-adebafe026d0"),
+                "yk 5 ci".to_string(),
+                Default::default(),
+            )
+            .expect("Failed to build att ca list");
+        let att_ca_list: AttestationCaList = att_ca_builder.build();
+
         let result = wan.register_credential_internal(
             &rsp_d,
             UserVerificationPolicy::Required,
@@ -2639,7 +2661,7 @@ mod tests {
                 COSEAlgorithm::PS512,
                 COSEAlgorithm::EDDSA,
             ],
-            Some(&(att_ca.try_into().unwrap())),
+            Some(&att_ca_list),
             // Must disable time checks because the submission is limited to 5 days.
             true,
             &RequestRegistrationExtensions::default(),

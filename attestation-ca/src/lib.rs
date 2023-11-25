@@ -2,15 +2,35 @@ use base64urlsafedata::Base64UrlSafeData;
 use openssl::error::ErrorStack as OpenSSLErrorStack;
 use openssl::{hash, x509};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use uuid::Uuid;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceDescription {
+    pub(crate) en: String,
+    pub(crate) localised: BTreeMap<String, String>,
+}
+
+impl DeviceDescription {
+    /// A default description of device.
+    pub fn description_en(&self) -> &str {
+        self.en.as_str()
+    }
+
+    /// A map of locale identifiers to a localised description of the device.
+    /// If the request locale is not found, you should try other user preferenced locales
+    /// falling back to the default value.
+    pub fn description_localised(&self) -> &BTreeMap<String, String> {
+        &self.localised
+    }
+}
 
 /// A serialised Attestation CA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialisableAttestationCa {
     pub(crate) ca: Base64UrlSafeData,
-    pub(crate) aaguids: BTreeSet<Uuid>,
+    pub(crate) aaguids: BTreeMap<Uuid, DeviceDescription>,
 }
 
 /// A structure representing an Attestation CA and other options associated to this CA.
@@ -24,11 +44,11 @@ pub struct SerialisableAttestationCa {
 )]
 pub struct AttestationCa {
     /// The x509 root CA of the attestation chain that a security key will be attested to.
-    pub ca: x509::X509,
+    ca: x509::X509,
     /// If not empty, the set of acceptable AAGUIDS (Device Ids) that are allowed to be
     /// attested as trusted by this CA. AAGUIDS that are not in this set, but signed by
     /// this CA will NOT be trusted.
-    pub aaguids: BTreeSet<Uuid>,
+    aaguids: BTreeMap<Uuid, DeviceDescription>,
 }
 
 #[allow(clippy::from_over_into)]
@@ -52,18 +72,15 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
     }
 }
 
-impl TryFrom<&[u8]> for AttestationCa {
-    type Error = OpenSSLErrorStack;
-
-    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
-        Ok(AttestationCa {
-            ca: x509::X509::from_pem(data)?,
-            aaguids: Default::default(),
-        })
-    }
-}
-
 impl AttestationCa {
+    pub fn ca(&self) -> &x509::X509 {
+        &self.ca
+    }
+
+    pub fn aaguids(&self) -> &BTreeMap<Uuid, DeviceDescription> {
+        &self.aaguids
+    }
+
     /// Retrieve the Key Identifier for this Attestation Ca
     pub fn get_kid(&self) -> Result<Vec<u8>, OpenSSLErrorStack> {
         self.ca
@@ -71,23 +88,25 @@ impl AttestationCa {
             .map(|bytes| bytes.to_vec())
     }
 
-    /// Update the set of aaguids this Attestation CA allows. If an empty btreeset is provided then
-    /// this Attestation CA allows all Aaguids.
-    pub fn set_aaguids(&mut self, aaguids: BTreeSet<Uuid>) {
-        self.aaguids = aaguids;
+    fn insert_device(
+        &mut self,
+        aaguid: Uuid,
+        desc_english: String,
+        desc_localised: BTreeMap<String, String>,
+    ) {
+        self.aaguids.insert(
+            aaguid,
+            DeviceDescription {
+                en: desc_english,
+                localised: desc_localised,
+            },
+        );
     }
 
-    /// Update the set of aaguids this Attestation CA allows by adding this AAGUID to the allowed
-    /// set.
-    pub fn insert_aaguid(&mut self, aaguid: Uuid) {
-        self.aaguids.insert(aaguid);
-    }
-
-    /// Create a customised attestation CA from a DER public key.
-    pub fn new_from_der(data: &[u8]) -> Result<Self, OpenSSLErrorStack> {
+    fn new_from_pem(data: &[u8]) -> Result<Self, OpenSSLErrorStack> {
         Ok(AttestationCa {
-            ca: x509::X509::from_der(data)?,
-            aaguids: BTreeSet::default(),
+            ca: x509::X509::from_pem(data)?,
+            aaguids: BTreeMap::default(),
         })
     }
 }
@@ -99,76 +118,14 @@ pub struct AttestationCaList {
     pub cas: BTreeMap<Base64UrlSafeData, AttestationCa>,
 }
 
-impl TryFrom<AttestationCa> for AttestationCaList {
-    type Error = OpenSSLErrorStack;
-
-    fn try_from(att_ca: AttestationCa) -> Result<Self, Self::Error> {
-        let mut new = Self::default();
-        new.insert(att_ca)?;
-        Ok(new)
-    }
-}
-
 impl TryFrom<&[u8]> for AttestationCaList {
     type Error = OpenSSLErrorStack;
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         let mut new = Self::default();
-        let att_ca = AttestationCa::try_from(data)?;
+        let att_ca = AttestationCa::new_from_pem(data)?;
         new.insert(att_ca)?;
         Ok(new)
-    }
-}
-
-impl TryFrom<&[(&[u8], Uuid)]> for AttestationCaList {
-    type Error = OpenSSLErrorStack;
-
-    fn try_from(iter: &[(&[u8], Uuid)]) -> Result<Self, Self::Error> {
-        let mut cas = BTreeMap::default();
-
-        for (der, aaguid) in iter {
-            let ca = x509::X509::from_der(der)?;
-
-            let kid = ca.digest(hash::MessageDigest::sha256())?;
-
-            if !cas.contains_key(kid.as_ref()) {
-                let mut aaguids = BTreeSet::default();
-                aaguids.insert(*aaguid);
-                let att_ca = AttestationCa { ca, aaguids };
-                cas.insert(kid.to_vec().into(), att_ca);
-            } else {
-                let att_ca = cas.get_mut(kid.as_ref()).expect("Can not fail!");
-                // just add the aaguid
-                att_ca.aaguids.insert(*aaguid);
-            };
-        }
-
-        Ok(AttestationCaList { cas })
-    }
-}
-
-impl AttestationCaList {
-    pub fn from_iter<I: IntoIterator<Item = (x509::X509, Uuid)>>(
-        iter: I,
-    ) -> Result<Self, OpenSSLErrorStack> {
-        let mut cas = BTreeMap::default();
-
-        for (ca, aaguid) in iter {
-            let kid = ca.digest(hash::MessageDigest::sha256())?;
-
-            if !cas.contains_key(kid.as_ref()) {
-                let mut aaguids = BTreeSet::default();
-                aaguids.insert(aaguid);
-                let att_ca = AttestationCa { ca, aaguids };
-                cas.insert(kid.to_vec().into(), att_ca);
-            } else {
-                let att_ca = cas.get_mut(kid.as_ref()).expect("Can not fail!");
-                // just add the aaguid
-                att_ca.aaguids.insert(aaguid);
-            };
-        }
-
-        Ok(AttestationCaList { cas })
     }
 }
 
@@ -186,5 +143,75 @@ impl AttestationCaList {
         // Get the key id (kid, digest).
         let att_ca_dgst = att_ca.get_kid()?;
         Ok(self.cas.insert(att_ca_dgst.into(), att_ca))
+    }
+}
+
+#[derive(Default)]
+pub struct AttestationCaListBuilder {
+    cas: BTreeMap<Vec<u8>, AttestationCa>,
+}
+
+impl AttestationCaListBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert_device_x509(
+        &mut self,
+        ca: x509::X509,
+        aaguid: Uuid,
+        desc_english: String,
+        desc_localised: BTreeMap<String, String>,
+    ) -> Result<(), OpenSSLErrorStack> {
+        let kid = ca
+            .digest(hash::MessageDigest::sha256())
+            .map(|bytes| bytes.to_vec())?;
+
+        let mut att_ca = if let Some(att_ca) = self.cas.remove(&kid) {
+            att_ca
+        } else {
+            AttestationCa {
+                ca,
+                aaguids: BTreeMap::default(),
+            }
+        };
+
+        att_ca.insert_device(aaguid, desc_english, desc_localised);
+
+        self.cas.insert(kid, att_ca);
+
+        Ok(())
+    }
+
+    pub fn insert_device_der(
+        &mut self,
+        ca_der: &[u8],
+        aaguid: Uuid,
+        desc_english: String,
+        desc_localised: BTreeMap<String, String>,
+    ) -> Result<(), OpenSSLErrorStack> {
+        let ca = x509::X509::from_der(ca_der)?;
+        self.insert_device_x509(ca, aaguid, desc_english, desc_localised)
+    }
+
+    pub fn insert_device_pem(
+        &mut self,
+        ca_pem: &[u8],
+        aaguid: Uuid,
+        desc_english: String,
+        desc_localised: BTreeMap<String, String>,
+    ) -> Result<(), OpenSSLErrorStack> {
+        let ca = x509::X509::from_pem(ca_pem)?;
+        self.insert_device_x509(ca, aaguid, desc_english, desc_localised)
+    }
+
+    pub fn build(self) -> AttestationCaList {
+        let cas = self
+            .cas
+            .into_iter()
+            .map(|(kid, att_ca)| (kid.into(), att_ca))
+            .collect();
+
+        AttestationCaList { cas }
     }
 }

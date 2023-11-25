@@ -4,8 +4,6 @@
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
-#[cfg(feature = "core")]
-use webauthn_rs_core::proto::AttestationCaList;
 
 pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticationExtensions, AuthenticatorAttachment,
@@ -15,32 +13,11 @@ pub use webauthn_rs_proto::{
     RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
-#[cfg(feature = "core")]
-use webauthn_rs_device_catalog::Data;
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum AttestationLevel {
     None,
-    AnyKnown,
+    AnyKnownFido,
     Strict,
-}
-
-#[cfg(feature = "core")]
-#[allow(clippy::from_over_into)]
-impl Into<Option<AttestationCaList>> for AttestationLevel {
-    fn into(self) -> Option<AttestationCaList> {
-        match self {
-            AttestationLevel::None => None,
-            AttestationLevel::AnyKnown => {
-                let data = Data::all_known_devices();
-                (&data).try_into().ok()
-            }
-            AttestationLevel::Strict => {
-                let data = Data::strict();
-                (&data).try_into().ok()
-            }
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

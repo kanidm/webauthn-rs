@@ -15,7 +15,7 @@ use crate::device::*;
 use crate::query::Query;
 use std::rc::Rc;
 
-use webauthn_attestation_ca::AttestationCaList;
+use webauthn_attestation_ca::{AttestationCaList, AttestationCaListBuilder};
 
 pub mod prelude {
     pub use crate::aaguid::Aaguid;
@@ -101,12 +101,22 @@ impl TryInto<AttestationCaList> for &Data {
     type Error = crate::prelude::OpenSSLErrorStack;
 
     fn try_into(self) -> Result<AttestationCaList, Self::Error> {
-        AttestationCaList::from_iter(self.devices.iter().flat_map(|dev| {
-            dev.aaguid
-                .ca
-                .iter()
-                .map(|ca| (ca.ca.clone(), dev.aaguid.id))
-        }))
+        let mut att_ca_builder = AttestationCaListBuilder::new();
+
+        for dev in self.devices.iter() {
+            for sku in dev.skus.iter() {
+                for authority in dev.aaguid.ca.iter() {
+                    att_ca_builder.insert_device_x509(
+                        authority.ca.clone(),
+                        dev.aaguid.id,
+                        sku.display_name.clone(),
+                        Default::default(),
+                    )?;
+                }
+            }
+        }
+
+        Ok(att_ca_builder.build())
     }
 }
 
