@@ -169,9 +169,11 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let session = request.session_mut();
 
-    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
-        .get("reg_state")
-        .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
+    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) =
+        session.get("reg_state").ok_or_else(|| {
+            error!("Failed to get session!");
+            tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session"))
+        })?;
 
     session.remove("reg_state");
 
@@ -389,7 +391,6 @@ async fn main() -> tide::Result<()> {
     let memory_store = tide::sessions::MemoryStore::new();
 
     let sessions = tide::sessions::SessionMiddleware::new(memory_store.clone(), &cookie_sig)
-        .with_cookie_domain("localhost")
         .with_same_site_policy(tide::http::cookies::SameSite::Strict)
         .with_session_ttl(Some(Duration::from_secs(3600)))
         .with_cookie_name("webauthnrs");
