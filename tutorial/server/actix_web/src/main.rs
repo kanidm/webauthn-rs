@@ -1,3 +1,6 @@
+use core::panic;
+use std::path::PathBuf;
+
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
 use actix_web::middleware::Logger;
@@ -10,7 +13,7 @@ use crate::handler::auth::{
     finish_authentication, finish_register, start_authentication, start_register,
 };
 use crate::handler::index::index;
-use crate::handler::serve_wasm::serve_wasm;
+use crate::handler::serve_wasm::{serve_wasm, WASM_DIR};
 use crate::session::MemorySession;
 use crate::startup::startup;
 
@@ -20,6 +23,10 @@ mod startup;
 
 #[tokio::main]
 async fn main() {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "info");
+    }
+
     // Initialize env-logger
     env_logger::init();
 
@@ -29,14 +36,22 @@ async fn main() {
 
     let (webauthn, webauthn_users) = startup();
 
+    if !PathBuf::from(WASM_DIR).exists() {
+        panic!("{} does not exist, can't serve WASM files.", WASM_DIR);
+    } else {
+        info!("Found WASM files OK");
+    }
+
     // Build the webserver and run it
-    info!("Start listening on: http://0.0.0.0:8080");
+    info!("Listening on: http://0.0.0.0:8080");
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
             .wrap(
                 SessionMiddleware::builder(MemorySession, key.clone())
                     .cookie_name("webauthnrs".to_string())
+                    .cookie_http_only(true)
+                    .cookie_secure(false)
                     .build(),
             )
             .app_data(JsonConfig::default())
@@ -50,7 +65,7 @@ async fn main() {
             .route("/login_finish", post().to(finish_authentication))
     })
     .bind(("0.0.0.0", 8080))
-    .unwrap()
+    .expect("Failed to start a listener on 0.0.0.0:8080")
     .run()
     .await
     .unwrap();
