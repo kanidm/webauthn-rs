@@ -2,7 +2,7 @@ use axum::{
     error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, routing::post,
     BoxError, Router,
 };
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 use tower::ServiceBuilder;
 use tower_sessions::{
     cookie::{time::Duration, SameSite},
@@ -50,7 +50,7 @@ async fn main() {
         .layer(
             SessionManagerLayer::new(session_store)
                 .with_name("webauthnrs")
-                .with_same_site(SameSite::Lax)
+                .with_same_site(SameSite::Strict)
                 .with_secure(false) // TODO: change this to true when running on an HTTPS/production server instead of locally
                 .with_expiry(Expiry::OnInactivity(Duration::seconds(360))),
         );
@@ -65,10 +65,14 @@ async fn main() {
         .layer(session_service);
 
     #[cfg(feature = "wasm")]
-    let app = Router::new().merge(app).nest_service(
-        "/assets",
-        tower_http::services::ServeDir::new("assets/wasm"),
-    );
+    if !PathBuf::from("./assets/wasm").exists() {
+        panic!("Can't find WASM files to serve!")
+    }
+
+    #[cfg(feature = "wasm")]
+    let app = Router::new()
+        .merge(app)
+        .nest_service("/", tower_http::services::ServeDir::new("assets/wasm"));
 
     #[cfg(feature = "javascript")]
     let app = Router::new()
