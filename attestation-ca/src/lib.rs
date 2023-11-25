@@ -18,7 +18,7 @@ impl DeviceDescription {
         self.en.as_str()
     }
 
-    /// Localised descriptions. These are a map of locale to the relevant description.
+    /// A map of locale identifiers to a localised description of the device.
     /// If the request locale is not found, you should try other user preferenced locales
     /// falling back to the default value.
     pub fn description_localised(&self) -> &BTreeMap<String, String> {
