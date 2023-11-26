@@ -1,7 +1,7 @@
 use actix_session::Session;
 use actix_web::web::{Data, Json, Path};
 use actix_web::HttpResponse;
-use log::{debug, error, info};
+use log::{error, info};
 use tokio::sync::Mutex;
 
 use crate::handler::{Error, WebResult};
