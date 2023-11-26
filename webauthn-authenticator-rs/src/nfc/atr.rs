@@ -144,8 +144,8 @@ impl TryFrom<&[u8]> for Atr {
 
         let t1_len = nibbles.pop_front().unwrap_or_default() as usize;
 
-        let protocols = if nibbles.len() >= 1 {
-            HashSet::from_iter(nibbles.into_iter())
+        let protocols = if !nibbles.is_empty() {
+            HashSet::from_iter(nibbles)
         } else {
             // If TD1 is absent, the only offer is T=0.
             HashSet::from(PROTOCOL_T0)

@@ -4,7 +4,7 @@
 //! cargo run --example cable_domain --features cable -- --help
 //! ```
 use clap::{error::ErrorKind, ArgGroup, CommandFactory, Parser, ValueHint};
-use std::net::ToSocketAddrs;
+use std::{fmt::Write, net::ToSocketAddrs};
 use webauthn_authenticator_rs::cable::get_domain;
 
 #[derive(Debug, clap::Parser)]
@@ -54,7 +54,10 @@ pub struct CliParser {
 /// Returns [None] on resolution failure or no results.
 fn resolver(hostname: &str) -> Option<String> {
     (hostname, 443).to_socket_addrs().ok().and_then(|addrs| {
-        let mut o: String = addrs.map(|addr| format!("{},", addr.ip())).collect();
+        let mut o: String = addrs.fold(String::new(), |mut out, addr| {
+            let _ = write!(out, "{},", addr.ip());
+            out
+        });
         o.pop();
 
         if o.is_empty() {

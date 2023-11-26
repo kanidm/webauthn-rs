@@ -12,9 +12,7 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use tokio_stream::StreamExt;
 #[cfg(feature = "solokey")]
-use webauthn_authenticator_rs::ctap2::SoloKeyAuthenticator;
-#[cfg(feature = "solokey")]
-use webauthn_authenticator_rs::prelude::WebauthnCError;
+use webauthn_authenticator_rs::{ctap2::SoloKeyAuthenticator, prelude::WebauthnCError};
 use webauthn_authenticator_rs::{
     ctap2::{
         commands::UserCM, select_one_device, select_one_device_predicate,
@@ -216,21 +214,6 @@ pub struct CliParser {
     pub commands: Opt,
 }
 
-pub fn base16_encode<T: IntoIterator<Item = u8>>(i: T) -> String {
-    i.into_iter().map(|c| format!("{c:02X}")).collect()
-}
-
-pub fn base16_decode(s: &str) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
-        return None;
-    }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&s[i..i + 2], 16))
-        .collect::<Result<Vec<_>, _>>()
-        .ok()
-}
-
 #[tokio::main]
 async fn main() {
     let opt = CliParser::parse();
@@ -385,7 +368,7 @@ async fn main() {
                 .enroll_fingerprint(Duration::from_secs(30), o.friendly_name)
                 .await
                 .expect("enrolling fingerprint");
-            println!("Enrolled fingerpint {}", base16_encode(id));
+            println!("Enrolled fingerpint {}", hex::encode(id));
         }
 
         Opt::ListFingerprints => {
@@ -405,7 +388,7 @@ async fn main() {
             for t in fingerprints {
                 println!(
                     "* ID: {}, Name: {:?}",
-                    base16_encode(t.id),
+                    hex::encode(t.id),
                     t.friendly_name.unwrap_or_default()
                 );
             }
@@ -420,7 +403,7 @@ async fn main() {
             token
                 .bio()
                 .unwrap()
-                .rename_fingerprint(base16_decode(&o.id).expect("decoding ID"), o.friendly_name)
+                .rename_fingerprint(hex::decode(&o.id).expect("decoding ID"), o.friendly_name)
                 .await
                 .expect("renaming fingerprint");
         }
@@ -433,7 +416,7 @@ async fn main() {
 
             let ids: Vec<Vec<u8>> =
                 o.id.iter()
-                    .map(|i| base16_decode(i).expect("decoding ID"))
+                    .map(|i| hex::decode(i).expect("decoding ID"))
                     .collect();
             token
                 .bio()

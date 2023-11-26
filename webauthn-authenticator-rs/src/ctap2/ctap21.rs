@@ -1,26 +1,28 @@
+use crate::{
+    ctap2::{
+        commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
+        ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
+        Ctap20Authenticator,
+    },
+    transport::Token,
+    ui::UiCallback,
+};
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+use crate::{
+    ctap2::{
+        commands::{
+            BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, CredSubCommand,
+            CredentialManagementRequest, Permissions, PublicKeyCredentialDescriptorCM,
+            SetMinPinLengthParams, UserCM,
+        },
+        ctap21_cred::CredentialManagementAuthenticatorSupport,
+        CredentialManagementAuthenticator,
+    },
+    error::WebauthnCError,
+};
 use std::ops::{Deref, DerefMut};
-
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use webauthn_rs_proto::UserVerificationPolicy;
-
-use crate::{error::WebauthnCError, transport::Token, ui::UiCallback};
-
-use super::{
-    commands::GetInfoResponse, ctap21_bio::BiometricAuthenticatorInfo,
-    ctap21_cred::CredentialManagementAuthenticatorInfo, internal::CtapAuthenticatorVersion,
-    Ctap20Authenticator,
-};
-
-#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
-use super::{
-    commands::{
-        BioEnrollmentRequest, ConfigRequest, ConfigSubCommand, CredSubCommand,
-        CredentialManagementRequest, Permissions, PublicKeyCredentialDescriptorCM,
-        SetMinPinLengthParams, UserCM,
-    },
-    ctap21_cred::CredentialManagementAuthenticatorSupport,
-    CredentialManagementAuthenticator,
-};
 
 /// CTAP 2.1 protocol implementation.
 ///

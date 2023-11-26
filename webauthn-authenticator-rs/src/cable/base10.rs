@@ -25,6 +25,7 @@
 //! [RFC 9285]: https://www.rfc-editor.org/rfc/rfc9285.html
 //! [url-chars]: https://www.rfc-editor.org/rfc/rfc3986.html#section-2.3
 
+use std::fmt::Write;
 /// Size of a chunk of data in its original form
 const CHUNK_SIZE: usize = 7;
 
@@ -35,27 +36,26 @@ const CHUNK_DIGITS: usize = 17;
 ///
 /// See Chromium's `BytesToDigits`.
 pub fn encode(i: &[u8]) -> String {
-    i.chunks(CHUNK_SIZE)
-        .map(|c| {
-            let chunk_len = c.len();
-            let w = match chunk_len {
-                CHUNK_SIZE => CHUNK_DIGITS,
-                6 => 15,
-                5 => 13,
-                4 => 10,
-                3 => 8,
-                2 => 5,
-                1 => 3,
-                // This should never happen
-                _ => 0,
-            };
+    i.chunks(CHUNK_SIZE).fold(String::new(), |mut out, c| {
+        let chunk_len = c.len();
+        let w = match chunk_len {
+            CHUNK_SIZE => CHUNK_DIGITS,
+            6 => 15,
+            5 => 13,
+            4 => 10,
+            3 => 8,
+            2 => 5,
+            1 => 3,
+            // This should never happen
+            _ => 0,
+        };
 
-            let mut chunk: [u8; 8] = [0; 8];
-            chunk[0..chunk_len].copy_from_slice(c);
-            let v = u64::from_le_bytes(chunk);
-            format!("{:0width$}", v, width = w)
-        })
-        .collect()
+        let mut chunk: [u8; 8] = [0; 8];
+        chunk[0..chunk_len].copy_from_slice(c);
+        let v = u64::from_le_bytes(chunk);
+        let _ = write!(out, "{:0width$}", v, width = w);
+        out
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]

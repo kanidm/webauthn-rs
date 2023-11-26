@@ -199,6 +199,7 @@ impl<'b> Transport<'b> for AnyTransport {
         Ok(Box::pin(s))
     }
 
+    #[allow(unreachable_code)]
     async fn tokens(&self) -> Result<Vec<Self::Token>, WebauthnCError> {
         #[cfg(not(any(feature = "bluetooth", feature = "nfc", feature = "usb")))]
         {
