@@ -105,7 +105,7 @@ pub async fn start_register(
             Json(ccr)
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             return Err(WebauthnError::Unknown);
         }
     };
@@ -121,9 +121,13 @@ pub async fn finish_register(
     session: Session,
     Json(reg): Json<RegisterPublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
-    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
-        .get("reg_state")?
-        .ok_or(WebauthnError::CorruptSession)?; //Corrupt Session
+    let (username, user_unique_id, reg_state) = match session.get("reg_state")? {
+        Some((username, user_unique_id, reg_state)) => (username, user_unique_id, reg_state),
+        None => {
+            error!("Failed to get session");
+            return Err(WebauthnError::CorruptSession);
+        }
+    };
 
     session.remove_value("reg_state");
 
@@ -146,7 +150,7 @@ pub async fn finish_register(
             StatusCode::OK
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            error!("challenge_register -> {:?}", e);
             StatusCode::BAD_REQUEST
         }
     };
@@ -227,7 +231,7 @@ pub async fn start_authentication(
             Json(rcr)
         }
         Err(e) => {
-            debug!("challenge_authenticate -> {:?}", e);
+            info!("challenge_authenticate -> {:?}", e);
             return Err(WebauthnError::Unknown);
         }
     };
@@ -273,7 +277,7 @@ pub async fn finish_authentication(
             StatusCode::OK
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             StatusCode::BAD_REQUEST
         }
     };

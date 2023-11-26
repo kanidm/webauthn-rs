@@ -153,7 +153,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
                 .build()
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -185,7 +185,7 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
         Ok(sk) => {
             let mut users_guard = request.state().users.lock().await;
 
-            debug!(?sk, "The following credential was registered");
+            info!(?sk, "The following credential was registered");
 
             users_guard
                 .keys
@@ -198,7 +198,7 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
             tide::Response::builder(tide::StatusCode::Ok).build()
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -281,7 +281,7 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
                 .build()
         }
         Err(e) => {
-            debug!("challenge_authenticate -> {:?}", e);
+            info!("challenge_authenticate -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -313,7 +313,7 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
             let mut users_guard = request.state().users.lock().await;
 
             // Update the credential counter, if possible.
-            debug!(?auth_result, "The following auth_result was returned");
+            info!(?auth_result, "The following auth_result was returned");
 
             users_guard
                 .keys
@@ -333,7 +333,7 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
             tide::Response::builder(tide::StatusCode::Ok).build()
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };

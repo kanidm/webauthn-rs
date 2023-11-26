@@ -92,7 +92,7 @@ pub(crate) async fn start_register(
     let (ccr, reg_state) = webauthn
         .start_passkey_registration(user_unique_id, &username, &username, exclude_credentials)
         .map_err(|e| {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             Error::Unknown(e)
         })?;
 
@@ -128,7 +128,7 @@ pub(crate) async fn finish_register(
     let sk = webauthn
         .finish_passkey_registration(&req, &reg_state)
         .map_err(|e| {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             Error::BadRequest(e)
         })?;
 
@@ -207,7 +207,7 @@ pub(crate) async fn start_authentication(
     let (rcr, auth_state) = webauthn
         .start_passkey_authentication(allow_credentials)
         .map_err(|e| {
-            debug!("challenge_authenticate -> {:?}", e);
+            info!("challenge_authenticate -> {:?}", e);
             Error::Unknown(e)
         })?;
 
@@ -240,7 +240,7 @@ pub(crate) async fn finish_authentication(
     let auth_result = webauthn
         .finish_passkey_authentication(&auth, &auth_state)
         .map_err(|e| {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             Error::BadRequest(e)
         })?;
 
