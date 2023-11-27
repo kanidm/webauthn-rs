@@ -1,7 +1,7 @@
 use actix_session::Session;
 use actix_web::web::{Data, Json, Path};
 use actix_web::HttpResponse;
-use log::{debug, info};
+use log::{error, info};
 use tokio::sync::Mutex;
 
 use crate::handler::{Error, WebResult};
@@ -92,16 +92,17 @@ pub(crate) async fn start_register(
     let (ccr, reg_state) = webauthn
         .start_passkey_registration(user_unique_id, &username, &username, exclude_credentials)
         .map_err(|e| {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             Error::Unknown(e)
         })?;
 
     // Note that due to the session store in use being a server side memory store, this is
     // safe to store the reg_state into the session since it is not client controlled and
     // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
-    session
-        .insert("reg_state", (username.as_str(), user_unique_id, reg_state))
-        .expect("Failed to insert");
+    if let Err(err) = session.insert("reg_state", (username.as_str(), user_unique_id, reg_state)) {
+        error!("Failed to save reg_state to session storage!");
+        return Err(Error::SessionInsert(err));
+    };
 
     info!("Registration Successful!");
     Ok(Json(ccr))
@@ -117,14 +118,17 @@ pub(crate) async fn finish_register(
     webauthn_users: Data<Mutex<UserData>>,
     webauthn: Data<Webauthn>,
 ) -> WebResult<HttpResponse> {
-    let (username, user_unique_id, reg_state) = session.get("reg_state")?.unwrap();
+    let (username, user_unique_id, reg_state) = match session.get("reg_state")? {
+        Some((username, user_unique_id, reg_state)) => (username, user_unique_id, reg_state),
+        None => return Err(Error::CorruptSession),
+    };
 
     session.remove("reg_state");
 
     let sk = webauthn
         .finish_passkey_registration(&req, &reg_state)
         .map_err(|e| {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             Error::BadRequest(e)
         })?;
 
@@ -203,7 +207,7 @@ pub(crate) async fn start_authentication(
     let (rcr, auth_state) = webauthn
         .start_passkey_authentication(allow_credentials)
         .map_err(|e| {
-            debug!("challenge_authenticate -> {:?}", e);
+            info!("challenge_authenticate -> {:?}", e);
             Error::Unknown(e)
         })?;
 
@@ -236,7 +240,7 @@ pub(crate) async fn finish_authentication(
     let auth_result = webauthn
         .finish_passkey_authentication(&auth, &auth_state)
         .map_err(|e| {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             Error::BadRequest(e)
         })?;
 

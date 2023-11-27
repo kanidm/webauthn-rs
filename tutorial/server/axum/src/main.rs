@@ -1,8 +1,8 @@
 use axum::{
-    error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, routing::post,
-    BoxError, Router,
+    error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::IntoResponse,
+    routing::post, BoxError, Router,
 };
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 use tower::ServiceBuilder;
 use tower_sessions::{
     cookie::{time::Duration, SameSite},
@@ -36,6 +36,9 @@ compile_error!("Feature \"javascript\" and feature \"wasm\" cannot be enabled at
 
 #[tokio::main]
 async fn main() {
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "INFO");
+    }
     // initialize tracing
     tracing_subscriber::fmt::init();
 
@@ -50,7 +53,7 @@ async fn main() {
         .layer(
             SessionManagerLayer::new(session_store)
                 .with_name("webauthnrs")
-                .with_same_site(SameSite::Lax)
+                .with_same_site(SameSite::Strict)
                 .with_secure(false) // TODO: change this to true when running on an HTTPS/production server instead of locally
                 .with_expiry(Expiry::OnInactivity(Duration::seconds(360))),
         );
@@ -62,13 +65,18 @@ async fn main() {
         .route("/login_start/:username", post(start_authentication))
         .route("/login_finish", post(finish_authentication))
         .layer(Extension(app_state))
-        .layer(session_service);
+        .layer(session_service)
+        .fallback(handler_404);
 
     #[cfg(feature = "wasm")]
-    let app = Router::new().merge(app).nest_service(
-        "/assets",
-        tower_http::services::ServeDir::new("assets/wasm"),
-    );
+    if !PathBuf::from("./assets/wasm").exists() {
+        panic!("Can't find WASM files to serve!")
+    }
+
+    #[cfg(feature = "wasm")]
+    let app = Router::new()
+        .merge(app)
+        .nest_service("/", tower_http::services::ServeDir::new("assets/wasm"));
 
     #[cfg(feature = "javascript")]
     let app = Router::new()
@@ -78,10 +86,14 @@ async fn main() {
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    println!("listening on {addr}");
-    tracing::debug!("listening on {}", addr);
+    info!("listening on {addr}");
+
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+async fn handler_404() -> impl IntoResponse {
+    (StatusCode::NOT_FOUND, "nothing to see here")
 }

@@ -153,7 +153,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
                 .build()
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -169,9 +169,11 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
 
     let session = request.session_mut();
 
-    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) = session
-        .get("reg_state")
-        .ok_or_else(|| tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session")))?;
+    let (username, user_unique_id, reg_state): (String, Uuid, PasskeyRegistration) =
+        session.get("reg_state").ok_or_else(|| {
+            error!("Failed to get session!");
+            tide::Error::new(500u16, anyhow::Error::msg("Corrupt Session"))
+        })?;
 
     session.remove("reg_state");
 
@@ -183,7 +185,7 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
         Ok(sk) => {
             let mut users_guard = request.state().users.lock().await;
 
-            debug!(?sk, "The following credential was registered");
+            info!(?sk, "The following credential was registered");
 
             users_guard
                 .keys
@@ -196,7 +198,7 @@ async fn finish_register(mut request: tide::Request<AppState>) -> tide::Result {
             tide::Response::builder(tide::StatusCode::Ok).build()
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -279,7 +281,7 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
                 .build()
         }
         Err(e) => {
-            debug!("challenge_authenticate -> {:?}", e);
+            info!("challenge_authenticate -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -311,7 +313,7 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
             let mut users_guard = request.state().users.lock().await;
 
             // Update the credential counter, if possible.
-            debug!(?auth_result, "The following auth_result was returned");
+            info!(?auth_result, "The following auth_result was returned");
 
             users_guard
                 .keys
@@ -331,7 +333,7 @@ async fn finish_authentication(mut request: tide::Request<AppState>) -> tide::Re
             tide::Response::builder(tide::StatusCode::Ok).build()
         }
         Err(e) => {
-            debug!("challenge_register -> {:?}", e);
+            info!("challenge_register -> {:?}", e);
             tide::Response::builder(tide::StatusCode::BadRequest).build()
         }
     };
@@ -389,7 +391,6 @@ async fn main() -> tide::Result<()> {
     let memory_store = tide::sessions::MemoryStore::new();
 
     let sessions = tide::sessions::SessionMiddleware::new(memory_store.clone(), &cookie_sig)
-        .with_cookie_domain("localhost")
         .with_same_site_policy(tide::http::cookies::SameSite::Strict)
         .with_session_ttl(Some(Duration::from_secs(3600)))
         .with_cookie_name("webauthnrs");
