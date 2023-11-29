@@ -1242,7 +1242,7 @@ pub fn verify_attestation_ca_chain<'a>(
     danger_disable_certificate_time_checks: bool,
 ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
     // If the ca_list is empty, Immediately fail since no valid attestation can be created.
-    if ca_list.cas.is_empty() {
+    if ca_list.cas().is_empty() {
         return Err(WebauthnError::AttestationCertificateTrustStoreEmpty);
     }
 
@@ -1288,7 +1288,7 @@ pub fn verify_attestation_ca_chain<'a>(
             .map_err(WebauthnError::OpenSSLError)?;
     }
 
-    for ca_crt in ca_list.cas.values() {
+    for ca_crt in ca_list.cas().values() {
         ca_store
             .add_cert(ca_crt.ca().clone())
             .map_err(WebauthnError::OpenSSLError)?;
@@ -1342,7 +1342,7 @@ pub fn verify_attestation_ca_chain<'a>(
     // attestation CA.
     res.and_then(|dgst| {
         ca_list
-            .cas
+            .cas()
             .get(dgst.as_ref())
             .ok_or_else(|| {
                 WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string())

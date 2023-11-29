@@ -602,10 +602,10 @@ impl WebauthnCore {
         debug!("attested_ca_crt = {:?}", attested_ca_crt);
 
         // Assert that the aaguid of the device, is within the authority of this CA (if
-        // a list of aaguids was provided).
+        // a list of aaguids was provided, and the ca blanket allows verification).
         if let Some(att_ca_crt) = attested_ca_crt {
-            if att_ca_crt.aaguids().is_empty() {
-                trace!("No aaguids set present, allowing all associated keys.");
+            if att_ca_crt.blanket_allow() {
+                trace!("CA allows all associated keys.");
             } else {
                 match &credential.attestation.metadata {
                     AttestationMetadata::Packed { aaguid }
