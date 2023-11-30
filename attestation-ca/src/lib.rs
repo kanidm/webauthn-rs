@@ -121,18 +121,37 @@ impl AttestationCa {
     }
 
     fn union(&mut self, other: &Self) {
-        for (o_aaguid, o_device) in other.aaguids.iter() {
-            // We can use the entry api here since o_aaguid is copy.
-            self.aaguids
-                .entry(*o_aaguid)
-                .or_insert_with(|| o_device.clone());
+        // if either is a blanket allow, we just do that.
+        if self.blanket_allow || other.blanket_allow {
+            self.blanket_allow = true;
+            self.aaguids.clear();
+            return
+        } else {
+            self.blanket_allow = false;
+            for (o_aaguid, o_device) in other.aaguids.iter() {
+                // We can use the entry api here since o_aaguid is copy.
+                self.aaguids
+                    .entry(*o_aaguid)
+                    .or_insert_with(|| o_device.clone());
+            }
         }
     }
 
     fn intersection(&mut self, other: &Self) {
-        // Only keep what is also in other.
-        self.aaguids
-            .retain(|s_aaguid, _| other.aaguids.contains_key(s_aaguid))
+        // If they are a blanket allow, do nothing, we are already
+        // more restrictive, or we also are a blanket allow
+        if other.blanket_allow() {
+            // Do nothing
+            return
+        } else if self.blanket_allow {
+            // Just set our aaguids to other, and remove our blanket allow.
+            self.blanket_allow = false;
+            self.aaguids = other.aaguids.clone();
+        } else {
+            // Only keep what is also in other.
+            self.aaguids
+                .retain(|s_aaguid, _| other.aaguids.contains_key(s_aaguid))
+        }
     }
 
     fn can_retain(&self) -> bool {
@@ -162,6 +181,14 @@ impl TryFrom<&[u8]> for AttestationCaList {
 impl AttestationCaList {
     pub fn cas(&self) -> &BTreeMap<Base64UrlSafeData, AttestationCa> {
         &self.cas
+    }
+
+    pub fn clear(&mut self) {
+        self.cas.clear()
+    }
+
+    pub fn len(&self) -> usize {
+        self.cas.len()
     }
 
     /// Determine if this attestation list contains any members.
@@ -198,25 +225,17 @@ impl AttestationCaList {
                 // Now, intersect.
                 s_att_ca.intersection(o_att_ca);
                 if s_att_ca.can_retain() {
-                    // Nothing remains, remove.
-                    false
-                } else {
                     // Still as elements, retain.
                     true
+                } else {
+                    // Nothing remains, remove.
+                    false
                 }
             } else {
                 // Not in other, remove.
                 false
             }
         })
-    }
-
-    pub fn clear(&mut self) {
-        self.cas.clear()
-    }
-
-    pub fn len(&self) -> usize {
-        self.cas.len()
     }
 }
 

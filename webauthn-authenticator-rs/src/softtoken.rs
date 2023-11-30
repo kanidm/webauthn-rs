@@ -39,7 +39,7 @@ pub struct SoftToken {
     #[serde(with = "PKeyPrivateDef")]
     _ca_key: pkey::PKey<pkey::Private>,
     #[serde(with = "X509Def")]
-    _ca_cert: X509,
+    ca_cert: X509,
     #[serde(with = "PKeyPrivateDef")]
     intermediate_key: pkey::PKey<pkey::Private>,
     #[serde(with = "X509Def")]
@@ -246,7 +246,7 @@ impl SoftToken {
             SoftToken {
                 // We could consider throwing these away?
                 _ca_key: ca_key,
-                _ca_cert: ca_cert,
+                ca_cert,
                 intermediate_key,
                 intermediate_cert,
                 tokens: HashMap::new(),
