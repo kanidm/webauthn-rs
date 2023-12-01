@@ -27,8 +27,8 @@ use base64urlsafedata::Base64UrlSafeData;
 
 use webauthn_rs_proto::{
     AllowCredentials, AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
-    AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, PublicKeyCredential,
-    PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
+    AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, AuthenticatorTransport,
+    PublicKeyCredential, PublicKeyCredentialCreationOptions, PublicKeyCredentialRequestOptions,
     RegisterPublicKeyCredential, RegistrationExtensionsClientOutputs, UserVerificationPolicy,
 };
 
@@ -596,7 +596,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: Base64UrlSafeData(ao_bytes),
                 client_data_json: Base64UrlSafeData(vec![]),
-                transports: None,
+                transports: Some(vec![AuthenticatorTransport::Internal]),
             },
             type_: "public-key".to_string(),
             extensions: RegistrationExtensionsClientOutputs::default(),

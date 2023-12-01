@@ -362,6 +362,19 @@ pub enum AttestationFormat {
     None,
 }
 
+impl AttestationFormat {
+    /// Only a small number of devices correctly report their transports. These are
+    /// limited to attested devices, and exclusively packed (fido2) and tpms. Most
+    /// other devices/browsers will get this wrong, meaning that authentication will
+    /// fail or not offer the correct transports to the user.
+    pub(crate) fn transports_valid(&self) -> bool {
+        match self {
+            AttestationFormat::Packed | AttestationFormat::Tpm => true,
+            _ => false,
+        }
+    }
+}
+
 impl TryFrom<&str> for AttestationFormat {
     type Error = WebauthnError;
 

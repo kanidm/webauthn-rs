@@ -204,7 +204,9 @@ pub mod prelude {
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     #[cfg(feature = "danger-credential-internals")]
     pub use webauthn_rs_core::proto::Credential;
-    pub use webauthn_rs_core::proto::{AttestationCa, AttestationCaList, AttestationCaListBuilder, AuthenticatorAttachment};
+    pub use webauthn_rs_core::proto::{
+        AttestationCa, AttestationCaList, AttestationCaListBuilder, AuthenticatorAttachment,
+    };
     pub use webauthn_rs_core::proto::{
         AttestationMetadata, AuthenticationResult, AuthenticationState, CreationChallengeResponse,
         CredentialID, ParsedAttestation, ParsedAttestationData, PublicKeyCredential,

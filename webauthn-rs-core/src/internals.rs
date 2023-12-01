@@ -126,7 +126,7 @@ impl Credential {
         req_extn: &RequestRegistrationExtensions,
         client_extn: &RegistrationExtensionsClientOutputs,
         attestation_format: AttestationFormat,
-        _transports: &Option<Vec<AuthenticatorTransport>>,
+        transports: &Option<Vec<AuthenticatorTransport>>,
     ) -> Self {
         let cred_protect = match (
             auth_data.extensions.cred_protect.as_ref(),
@@ -182,8 +182,11 @@ impl Credential {
         let backup_eligible = auth_data.backup_eligible;
         let backup_state = auth_data.backup_state;
 
-        // due to bugs in chrome, we have to disable transports because lol.
-        let transports = None;
+        let transports = if attestation_format.transports_valid() {
+            transports.clone()
+        } else {
+            None
+        };
 
         Credential {
             cred_id: acd.credential_id.clone(),
