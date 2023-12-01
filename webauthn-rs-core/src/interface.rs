@@ -284,12 +284,6 @@ impl Credential {
     /// be useful if you want to re-assert your credentials match an updated or changed
     /// ca_list from the time that registration occured. This can also be useful to
     /// re-determine certain properties of your device that may exist.
-    // ///
-    // /// # Safety
-    // /// Due to the design of CA infrastructure by certain providers, it is NOT possible
-    // /// to verify the CA expiry time. Certain vendors use CA intermediates that have
-    // /// expiries that are only valid for approximately 10 minutes, meaning that if we
-    // /// enforced time validity, these would false negative for their validity.
     pub fn verify_attestation<'a>(
         &'_ self,
         ca_list: &'a AttestationCaList,
