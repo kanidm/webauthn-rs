@@ -368,10 +368,7 @@ impl AttestationFormat {
     /// other devices/browsers will get this wrong, meaning that authentication will
     /// fail or not offer the correct transports to the user.
     pub(crate) fn transports_valid(&self) -> bool {
-        match self {
-            AttestationFormat::Packed | AttestationFormat::Tpm => true,
-            _ => false,
-        }
+        matches!(self, AttestationFormat::Packed | AttestationFormat::Tpm)
     }
 }
 
