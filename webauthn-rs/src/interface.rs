@@ -2,11 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
+use webauthn_rs_core::error::WebauthnError;
 use webauthn_rs_core::interface::{
     AttestationCaList, AuthenticationResult, AuthenticationState, RegistrationState,
 };
 use webauthn_rs_core::proto::{
-    COSEAlgorithm, COSEKey, Credential, CredentialID, ParsedAttestation,
+    AttestationCa, COSEAlgorithm, COSEKey, Credential, CredentialID, ParsedAttestation,
 };
 
 /// An in progress registration session for a [Passkey].
@@ -99,11 +100,8 @@ impl Passkey {
                 changed = true;
             }
 
-            if res.backup_eligible() != self.cred.backup_eligible {
-                // MUST be false -> true
-                assert!(!self.cred.backup_eligible);
-                assert!(res.backup_eligible());
-                self.cred.backup_eligible = res.backup_eligible();
+            if res.backup_eligible() && !self.cred.backup_eligible {
+                self.cred.backup_eligible = true;
                 changed = true;
             }
 
@@ -234,12 +232,71 @@ impl AttestedPasskey {
             None
         }
     }
+
+    /// Re-verify this Credential's attestation chain. This re-applies the same process
+    /// for certificate authority verification that occured at registration. This can
+    /// be useful if you want to re-assert your credentials match an updated or changed
+    /// ca_list from the time that registration occured. This can also be useful to
+    /// re-determine certain properties of your device that may exist.
+    pub fn verify_attestation<'a>(
+        &'_ self,
+        ca_list: &'a AttestationCaList,
+    ) -> Result<&'a AttestationCa, WebauthnError> {
+        self.cred
+            .verify_attestation(ca_list)
+            .and_then(|maybe_att_ca| {
+                if let Some(att_ca) = maybe_att_ca {
+                    Ok(att_ca)
+                } else {
+                    Err(WebauthnError::AttestationNotVerifiable)
+                }
+            })
+    }
+}
+
+#[cfg(feature = "attestation")]
+impl std::borrow::Borrow<CredentialID> for AttestedPasskey {
+    fn borrow(&self) -> &CredentialID {
+        &self.cred.cred_id
+    }
 }
 
 #[cfg(feature = "attestation")]
 impl PartialEq for AttestedPasskey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
+    }
+}
+
+impl Eq for AttestedPasskey {}
+
+#[cfg(feature = "attestation")]
+impl PartialOrd for AttestedPasskey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cred.cred_id.cmp(&other.cred.cred_id))
+    }
+}
+
+#[cfg(feature = "attestation")]
+impl Ord for AttestedPasskey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.cred.cred_id.cmp(&other.cred.cred_id)
+    }
+}
+
+#[cfg(feature = "attestation")]
+impl From<&AttestedPasskey> for Passkey {
+    fn from(k: &AttestedPasskey) -> Self {
+        Passkey {
+            cred: k.cred.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "attestation")]
+impl From<AttestedPasskey> for Passkey {
+    fn from(k: AttestedPasskey) -> Self {
+        Passkey { cred: k.cred }
     }
 }
 
@@ -478,12 +535,48 @@ impl AttestedResidentKey {
             None
         }
     }
+
+    /// Re-verify this Credential's attestation chain. This re-applies the same process
+    /// for certificate authority verification that occured at registration. This can
+    /// be useful if you want to re-assert your credentials match an updated or changed
+    /// ca_list from the time that registration occured. This can also be useful to
+    /// re-determine certain properties of your device that may exist.
+    pub fn verify_attestation<'a>(
+        &'_ self,
+        ca_list: &'a AttestationCaList,
+    ) -> Result<&'a AttestationCa, WebauthnError> {
+        self.cred
+            .verify_attestation(ca_list)
+            .and_then(|maybe_att_ca| {
+                if let Some(att_ca) = maybe_att_ca {
+                    Ok(att_ca)
+                } else {
+                    Err(WebauthnError::AttestationNotVerifiable)
+                }
+            })
+    }
 }
 
 #[cfg(feature = "resident-key-support")]
 impl PartialEq for AttestedResidentKey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
+    }
+}
+
+#[cfg(feature = "resident-key-support")]
+impl From<&AttestedResidentKey> for Passkey {
+    fn from(k: &AttestedResidentKey) -> Self {
+        Passkey {
+            cred: k.cred.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "resident-key-support")]
+impl From<AttestedResidentKey> for Passkey {
+    fn from(k: AttestedResidentKey) -> Self {
+        Passkey { cred: k.cred }
     }
 }
 
