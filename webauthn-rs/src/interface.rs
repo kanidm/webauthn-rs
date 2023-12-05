@@ -268,6 +268,7 @@ impl PartialEq for AttestedPasskey {
     }
 }
 
+#[cfg(feature = "attestation")]
 impl Eq for AttestedPasskey {}
 
 #[cfg(feature = "attestation")]
