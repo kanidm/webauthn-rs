@@ -20,6 +20,7 @@ members = [
     # Authenticator CLI,
     "authenticator-cli",
     # Tutorial / Example sites.
+    "tutorial/server/cli",
     "tutorial/server/tide",
     "tutorial/server/axum",
     "tutorial/server/actix_web",
