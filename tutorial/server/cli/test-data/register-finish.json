@@ -1,0 +1,33 @@
+{
+  "passkey_registration": {
+    "rs": {
+      "policy": "required",
+      "exclude_credentials": [],
+      "challenge": "sUBoD5kVocq6Q9XLgrQYY26hO5pNxTinl4X_4a2XB9w",
+      "credential_algorithms": [
+        "ES256",
+        "RS256"
+      ],
+      "require_resident_key": false,
+      "authenticator_attachment": null,
+      "extensions": {
+        "credentialProtectionPolicy": "userVerificationRequired",
+        "enforceCredentialProtectionPolicy": false,
+        "uvm": true,
+        "credProps": true
+      },
+      "allow_synchronised_authenticators": true
+    }
+  },
+  "register_public_key_credential": {
+    "id": "ARLlbpXWj_8dMYj1afk1vej8dkPYTju2Ruha67c_Rf8BIfXdDK4u6FI6uUu5G3aIzOD8TEmthSzxmQBPysqM_BQ",
+    "rawId": "ARLlbpXWj_8dMYj1afk1vej8dkPYTju2Ruha67c_Rf8BIfXdDK4u6FI6uUu5G3aIzOD8TEmthSzxmQBPysqM_BQ",
+    "response": {
+      "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjFSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NFAAAAAAAAAAAAAAAAAAAAAAAAAAAAQQES5W6V1o__HTGI9Wn5Nb3o_HZD2E47tkboWuu3P0X_ASH13QyuLuhSOrlLuRt2iMzg_ExJrYUs8ZkAT8rKjPwUpQECAyYgASFYIMaa_KhJ_b4VF6aFzZUTKWs_y5rgbtfVdugSlOWdqhjtIlggSjBrCqWLBc3x6V2VW6iuMxFnh8esXPt1Aq1sbpMH9_o",
+      "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoic1VCb0Q1a1ZvY3E2UTlYTGdyUVlZMjZoTzVwTnhUaW5sNFhfNGEyWEI5dyIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODQ0MyIsImNyb3NzT3JpZ2luIjpmYWxzZX0"
+    },
+    "type": "public-key"
+  },
+  "rp_id": "localhost",
+  "rp_origin": "http://localhost:8443"
+}

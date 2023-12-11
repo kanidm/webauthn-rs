@@ -1,0 +1,14 @@
+[package]
+name = "webauthn-cli"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70.0"
+authors = ["Arthur A. Gleckler <aag@alum.mit.edu>"]
+license = "MPL-2.0"
+
+[dependencies]
+clap = "3.0"
+serde = "1.0"
+serde_json = "1.0"
+uuid = "1.0"
+webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
