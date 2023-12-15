@@ -3,11 +3,9 @@
 use serde::{Deserialize, Serialize};
 
 use webauthn_rs_core::error::WebauthnError;
-use webauthn_rs_core::interface::{
-    AttestationCaList, AuthenticationResult, AuthenticationState, RegistrationState,
-};
 use webauthn_rs_core::proto::{
-    AttestationCa, COSEAlgorithm, COSEKey, Credential, CredentialID, ParsedAttestation,
+    AttestationCa, AttestationCaList, AuthenticationResult, AuthenticationState, COSEAlgorithm,
+    COSEKey, Credential, CredentialID, ParsedAttestation, RegistrationState,
 };
 
 /// An in progress registration session for a [Passkey].

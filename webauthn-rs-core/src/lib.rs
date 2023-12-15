@@ -37,9 +37,9 @@ mod constants;
 pub mod attestation;
 pub mod crypto;
 
-pub mod core;
+mod core;
 pub mod error;
-pub mod interface;
+mod interface;
 pub mod internals;
 
 /// Protocol bindings
@@ -48,8 +48,5 @@ pub mod proto {
     pub use base64urlsafedata::Base64UrlSafeData;
     pub use webauthn_rs_proto::*;
 }
-
-pub use attestation::verify_attestation_ca_chain;
-pub use attestation::AttestationFormat;
 
 pub use crate::core::*;

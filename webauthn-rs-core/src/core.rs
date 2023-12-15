@@ -1338,11 +1338,12 @@ pub trait WebauthnConfig {
 mod tests {
     #![allow(clippy::panic)]
 
+    use crate::attestation::AttestationFormat;
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
+    use crate::internals::*;
     use crate::proto::*;
     use crate::WebauthnCore as Webauthn;
-    use crate::{internals::*, AttestationFormat};
     use base64::{engine::general_purpose::STANDARD, Engine};
     use base64urlsafedata::Base64UrlSafeData;
     use std::time::Duration;

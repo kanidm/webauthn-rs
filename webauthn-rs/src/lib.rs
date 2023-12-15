@@ -201,6 +201,7 @@ pub mod prelude {
     pub use base64urlsafedata::Base64UrlSafeData;
     pub use url::Url;
     pub use uuid::Uuid;
+    pub use webauthn_rs_core::attestation::AttestationFormat;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     #[cfg(feature = "danger-credential-internals")]
     pub use webauthn_rs_core::proto::Credential;
@@ -216,7 +217,6 @@ pub mod prelude {
         COSEAlgorithm, COSEEC2Key, COSEKey, COSEKeyType, COSEKeyTypeId, COSEOKPKey, COSERSAKey,
         ECDSACurve, EDDSACurve,
     };
-    pub use webauthn_rs_core::AttestationFormat;
 }
 
 /// The [Webauthn recommended authenticator interaction timeout][0].
