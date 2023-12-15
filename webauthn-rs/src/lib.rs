@@ -16,6 +16,9 @@
 //! In the simplest case where you just want to replace passwords with strong self contained multifactor
 //! authentication, you should use our passkey flow.
 //!
+//! Remember, no other authentication factors are needed. A passkey combines inbuilt user
+//! verification (pin, biometrics, etc) with a hardware cryptographic authenticator.
+//!
 //! ```
 //! use webauthn_rs::prelude::*;
 //!
@@ -41,12 +44,10 @@
 //! After this point you then need to use `finish_passkey_registration`, followed by
 //! `start_passkey_authentication` and `finish_passkey_authentication`
 //!
-//! No other authentication factors are needed! A passkey combines inbuilt user verification (pin, biometrics, etc)
-//! with a hardware cryptographic authenticator.
-//!
 //! # Tutorial
 //!
-//! Tutorials and examples on how to use this library in your website project is on the project github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
+//! Tutorials and examples on how to use this library in your website project is on the project
+//! github <https://github.com/kanidm/webauthn-rs/tree/master/tutorial>
 //!
 //! # What is a "Passkey"?
 //!
@@ -54,18 +55,22 @@
 //! the terminology. There are at least four definitions that we are aware of. A passkey is:
 //!
 //! * any possible webauthn authenticator - security key, tpm, touch id, etc
-//! * a platform authenticator - built into a device such as touch id, tpm, etc
-//! * a synchronised credential - backed by a cloud keychain like Apple iCloud
-//! * a resident key - a stored, discoverable credential allowing usernameless flows
+//! * a platform authenticator - built into a device such as touch id, tpm, etc. This excludes security keys.
+//! * a synchronised credential - backed by a cloud keychain like Apple iCloud or Bitwarden.
+//! * a resident key (rk) - a stored, discoverable credential allowing usernameless flows
 //!
-//! The issue is each of these definitions have different pros/cons and different implications. For
+//! Each of these definitions have different pros and cons, and different usability implications. For
 //! example, passkeys as resident keys means you can accidentally brick many ctap2.0 devices by exhausting
-//! their storage. Passkeys as platform authenticators means only certain devices can use them.
-//! Passkeys as synced credentials means only certain devices with specific browser combinations can
-//! use them.
+//! their storage (forcing them to require a full reset, wiping all credentials). Passkeys as platform
+//! authenticators means only certain laptops and phones can use them.
+//! Passkeys as synced credentials means only certain devices with specific browser combinations
+//! or extensions can use passkeys.
 //!
-//! In this library we chose to define passkey's as "any possible authenticator". If the device
-//! opportunistically creates rk (such as Apple iCloud Keychain) then in the future we *may* allow usernameless
+//! In this library we chose to define passkey's as "any possible authenticator". This conforms to the
+//! w3c webauthn workgroup goal to enable all users to choose their authenticator, without any negative
+//! penalities or traps.
+//! If the device opportunistically creates a resident key (such as Apple iCloud Keychain) then in
+//! the future we *may* allow usernameless
 //! flows once we are satisfied with the state of these ui's in browsers.
 //!
 //! # Features
@@ -106,21 +111,20 @@
 //! [Credential] type is exposed via the [prelude] when this feature is enabled.
 //!
 //! However, you should be aware that manipulating the internals of a [Credential] may affect the usage
-//! of that [Credential] in certain use cases. You should be careful when enabling this feature that
-//! you do not change internal [Credential] values.
+//! any security properties of that [Credential] in certain cases. You should be careful when
+//! enabling this feature that you do not change internal [Credential] values without understanding
+//! the implications.
 //!
 //! ## User-Presence only SecurityKeys
 //!
 //! By default, SecurityKeys will opportunistically enforce User Verification (Such as a PIN or
-//! Biometric). This can cause issues with Firefox which only supports CTAP1. An example of this
-//! is if you register a SecurityKey on chromium it will be bound to always perform UserVerification
-//! for the life of the SecurityKey precluding it's use on Firefox.
+//! Biometric). This prevent UV bypass attacks and allows upgrade of the SecurityKey to a Passkey.
 //!
 //! Enabling the feature `danger-user-presence-only-security-keys` changes these keys to prevent
 //! User Verification if possible. However, newer keys will confusingly force a User Verification
 //! on registration, but will then not prompt for this during usage. Some user surveys have shown
 //! this to confuse users to why the UV is not requested, and it can lower trust in these tokens
-//! when they are elevated to be self-contained MFA as the user believes these UV prompts to be
+//! when they are elevated to be self-contained MFA (passkey) as the user believes these UV prompts to be
 //! unreliable and not verified correctly - in other words it trains users to believe that these
 //! prompts do nothing and have no effect. In these cases you MUST communicate to the user that
 //! the UV *may* occur on registration and then will not occur again, and that is *by design*.
@@ -146,7 +150,7 @@
 //! To enable the registration call that triggers the 'Google Passkey stored in Google Password
 //! Manager' key flow, you can enable the feature `workaround-google-passkey-specific-issues`. This
 //! flow can only be used on Android devices with GMS Core, and you must have a way to detect this
-//! ahead of time.
+//! ahead of time. This flow must NEVER be triggered on any other class of device or browser.
 //!
 //! ## Conditional UI / Username Autocompletion
 //!
@@ -155,7 +159,7 @@
 //! single step.
 //!
 //! Not all devices support this, nor do all browsers. As a result you must always support the
-//! full passkey flow, and conditional-ui is only opportunistically itself.
+//! full passkey flow, and conditional-ui is only opportunistic in itself.
 //!
 //! User testing has shown that these conditional UI flows in most browsers are hard to activate
 //! and may be confusing to users, as they attempt to force users to use caBLE/hybrid. We don't
@@ -456,18 +460,18 @@ impl Webauthn {
     }
 
     /// Initiate the registration of a new passkey for a user. A passkey is any cryptographic
-    /// authenticator acting as a single factor of authentication, far stronger than a password
-    /// or email-reset link.
+    /// authenticator which internally verifies the user's identity. As these are self contained
+    /// multifactor authenticators, they are far stronger than a password or email-reset link. Due
+    /// to how webauthn is designed these authentications are unable to be phished.
     ///
     /// Some examples of passkeys include Yubikeys, TouchID, FaceID, Windows Hello and others.
     ///
     /// The keys *may* exist and 'roam' between multiple devices. For example, Apple allows Passkeys
     /// to sync between devices owned by the same Apple account. This can affect your risk model
-    /// related to these credentials, but generally in all cases passkeys are better than passwords!
+    /// related to these credentials, but generally in most cases passkeys are better than passwords!
     ///
-    /// You *should* NOT pair this authentication with another factor. A passkey may opportunistically
-    /// allow and enforce user-verification (MFA), but this is NOT guaranteed with all authenticator
-    /// types.
+    /// You *should* NOT pair this authentication with any other factor. A passkey will always
+    /// enforce user-verification (MFA) removing the need for other factors.
     ///
     /// `user_unique_id` *may* be stored in the authenticator. This may allow the credential to
     ///  identify the user during certain client side work flows.
@@ -475,7 +479,7 @@ impl Webauthn {
     /// `user_name` and `user_display_name` *may* be stored in the authenticator. `user_name` is a
     /// friendly account name such as "claire@example.com". `user_display_name` is the persons chosen
     /// way to be identified such as "Claire". Both can change at *any* time on the client side, and
-    /// MUST NOT be used as primary keys. They *may not* be present in authentication, these are only
+    /// MUST NOT be used as primary keys. They *are not* present in authentication, these are only
     /// present to allow client facing work flows to display human friendly identifiers.
     ///
     /// `exclude_credentials` ensures that a set of credentials may not participate in this registration.
@@ -500,7 +504,6 @@ impl Webauthn {
     ///
     /// ```
     /// # use webauthn_rs::prelude::*;
-    ///
     /// # let rp_id = "example.com";
     /// # let rp_origin = Url::parse("https://idm.example.com")
     /// #     .expect("Invalid URL");
@@ -508,7 +511,7 @@ impl Webauthn {
     /// #     .expect("Invalid configuration");
     /// # let webauthn = builder.build()
     /// #     .expect("Invalid configuration");
-    ///
+    /// #
     /// // you must store this user's unique id with the account. Alternatelly you can
     /// // use an existed UUID source.
     /// let user_unique_id = Uuid::new_v4();
@@ -554,7 +557,7 @@ impl Webauthn {
         });
 
         self.core
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
@@ -610,7 +613,7 @@ impl Webauthn {
         });
 
         self.core
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
@@ -668,11 +671,11 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, PasskeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-        let policy = UserVerificationPolicy::Required;
-        let allow_backup_eligible_upgrade = true;
+        let policy = Some(UserVerificationPolicy::Required);
+        let allow_backup_eligible_upgrade = Some(true);
 
         self.core
-            .generate_challenge_authenticate_policy(
+            .generate_challenge_authenticate(
                 creds,
                 policy,
                 extensions,
@@ -743,7 +746,7 @@ impl Webauthn {
     /// your site, then you can provide the Yubico Root CA in this list, to validate that all
     /// registered devices are manufactured by Yubico.
     ///
-    /// Extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they can
+    /// Extensions may ONLY be accessed if an `attestation_ca_list` is provided, else they
     /// ARE NOT trusted.
     ///
     /// # Returns
@@ -871,7 +874,7 @@ impl Webauthn {
         let reject_passkeys = true;
 
         self.core
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
@@ -943,7 +946,7 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-        let allow_backup_eligible_upgrade = false;
+        let allow_backup_eligible_upgrade = Some(false);
 
         let policy = if self.user_presence_only_security_keys {
             UserVerificationPolicy::Discouraged_DO_NOT_USE
@@ -952,9 +955,9 @@ impl Webauthn {
         };
 
         self.core
-            .generate_challenge_authenticate_policy(
+            .generate_challenge_authenticate(
                 creds,
-                policy,
+                Some(policy),
                 extensions,
                 allow_backup_eligible_upgrade,
             )
@@ -990,7 +993,7 @@ impl Webauthn {
     /// biometric or other factor. Only if this verification passes, is the signature released
     /// and provided.
     ///
-    /// As a result, the server *only* requires this attested_passkey key to authenticator the user
+    /// As a result, the server *only* requires this attested_passkey key to authenticate the user
     /// and assert their identity. Because of this reliance on the authenticator, attestation of
     /// the authenticator and it's properties is strongly recommended.
     ///
@@ -998,11 +1001,11 @@ impl Webauthn {
     /// devices, and must be bound to a single authenticator. This precludes the use of certain types
     /// of authenticators (such as Apple's Passkeys as these are always synced).
     ///
-    /// Additionally, these credentials can have an attestation or certificate of authenticity
-    /// validated to give you stronger assertions in the types of devices in use.
+    /// Additionally, these credentials must provide an attestation certificate of authenticity
+    /// which will be cryptographically validated to stricly enforce that only certain devices may be used.
     ///
     /// You *should* recommend to the user to register multiple attested_passkey keys to their account on
-    /// seperate devices so that they have fall back authentication.
+    /// seperate devices so that they have fall back authentication in the case of device failure or loss.
     ///
     /// You *should* have a workflow that allows a user to register new devices without a need to register
     /// other factors. For example, allow a QR code that can be scanned from a phone, or a one-time
@@ -1023,7 +1026,7 @@ impl Webauthn {
     /// You *should* provide the list of credentials that are already registered to this user's account
     /// to prevent duplicate credential registrations.
     ///
-    /// `attestation_ca_list` contains an optional list of Root CA certificates of authenticator
+    /// `attestation_ca_list` contains a required list of Root CA certificates of authenticator
     /// manufacturers that you wish to trust. For example, if you want to only allow Yubikeys on
     /// your site, then you can provide the Yubico Root CA in this list, to validate that all
     /// registered devices are manufactured by Yubico.
@@ -1033,9 +1036,6 @@ impl Webauthn {
     /// attachement classes are valid. If set to Platform, only authenticators that are part of the
     /// device are used such as a TPM or TouchId. If set to Cross-Platform, only devices that are
     /// removable from the device can be used such as yubikeys.
-    ///
-    /// Currently, extensions are *not* possible to request due to webauthn not properly supporting
-    /// them in broader contexts.
     ///
     /// # Returns
     ///
@@ -1055,7 +1055,6 @@ impl Webauthn {
     /// ```
     /// # use webauthn_rs::prelude::*;
     /// use webauthn_rs_device_catalog::Data;
-    ///
     /// # let rp_id = "example.com";
     /// # let rp_origin = Url::parse("https://idm.example.com")
     /// #     .expect("Invalid url");
@@ -1063,7 +1062,7 @@ impl Webauthn {
     /// #     .expect("Invalid configuration");
     /// # let webauthn = builder.build()
     /// #     .expect("Invalid configuration");
-    ///
+    /// #
     /// // you must store this user's unique id with the account. Alternatelly you can
     /// // use an existed UUID source.
     /// let user_unique_id = Uuid::new_v4();
@@ -1140,14 +1139,16 @@ impl Webauthn {
                 // only viable on FIDO2/CTAP2 creds that actually support this.
                 enforce_credential_protection_policy: Some(true),
             }),
+            // https://www.w3.org/TR/webauthn-2/#sctn-uvm-extension
             uvm: Some(true),
             cred_props: Some(true),
+            // https://fidoalliance.org/specs/fido-v2.1-rd-20210309/fido-client-to-authenticator-protocol-v2.1-rd-20210309.html#sctn-minpinlength-extension
             min_pin_length: Some(true),
-            hmac_create_secret: None,
+            hmac_create_secret: Some(true),
         });
 
         self.core
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
@@ -1221,11 +1222,11 @@ impl Webauthn {
             hmac_get_secret: None,
         });
 
-        let policy = UserVerificationPolicy::Required;
-        let allow_backup_eligible_upgrade = false;
+        let policy = Some(UserVerificationPolicy::Required);
+        let allow_backup_eligible_upgrade = Some(false);
 
         self.core
-            .generate_challenge_authenticate_policy(
+            .generate_challenge_authenticate(
                 creds,
                 policy,
                 extensions,
@@ -1274,15 +1275,21 @@ impl Webauthn {
     pub fn start_discoverable_authentication(
         &self,
     ) -> WebauthnResult<(RequestChallengeResponse, DiscoverableAuthentication)> {
-        let policy = UserVerificationPolicy::Required;
+        let policy = Some(UserVerificationPolicy::Required);
         let extensions = Some(RequestAuthenticationExtensions {
             appid: None,
             uvm: Some(true),
             hmac_get_secret: None,
         });
+        let allow_backup_eligible_upgrade = Some(false);
 
         self.core
-            .generate_challenge_authenticate_discoverable(policy, extensions)
+            .generate_challenge_authenticate(
+                vec![],
+                policy,
+                extensions,
+                allow_backup_eligible_upgrade,
+            )
             .map(|(mut rcr, ast)| {
                 // Force conditional ui - this is not a generic discoverable credential
                 // workflow!
@@ -1382,7 +1389,7 @@ impl Webauthn {
         });
 
         self.core
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
@@ -1440,11 +1447,11 @@ impl Webauthn {
             hmac_get_secret: None,
         });
 
-        let policy = UserVerificationPolicy::Required;
-        let allow_backup_eligible_upgrade = false;
+        let policy = Some(UserVerificationPolicy::Required);
+        let allow_backup_eligible_upgrade = Some(false);
 
         self.core
-            .generate_challenge_authenticate_policy(
+            .generate_challenge_authenticate(
                 creds,
                 policy,
                 extensions,

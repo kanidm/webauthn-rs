@@ -25,9 +25,10 @@ use uuid::Uuid;
 pub use webauthn_rs_core::error::WebauthnError;
 use webauthn_rs_core::{
     attestation::{
-        validate_extension, verify_attestation_ca_chain, AttestationFormat, FidoGenCeAaguid,
+        assert_packed_attest_req, validate_extension, verify_attestation_ca_chain,
+        AttestationFormat, FidoGenCeAaguid,
     },
-    crypto::{assert_packed_attest_req, compute_sha256, verify_signature},
+    crypto::{compute_sha256, verify_signature},
     internals::AuthenticatorData,
     proto::{
         AttestationCaList, AttestationMetadata, COSEAlgorithm, COSEKey, COSEKeyType,

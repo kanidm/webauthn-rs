@@ -1,16 +1,15 @@
-//! Attestation information and verifications procedures.
+//! Attestation information and verification procedures.
 //! This contains a transparent type allowing callbacks to
-//! make attestation decisions. See the WebauthnConfig trait
-//! for more details.
+//! make attestation decisions.
 
 use std::convert::TryFrom;
 
 use crate::crypto::{
-    assert_packed_attest_req, assert_tpm_attest_req, compute_sha256, only_hash_from_type,
-    verify_signature,
+    check_extension, compute_sha256, only_hash_from_type, verify_signature, TpmSanData,
 };
 use crate::error::WebauthnError;
 use crate::internals::*;
+use crate::internals::{tpm_device_attribute_parser, TpmVendor};
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
 use openssl::hash::MessageDigest;
@@ -21,6 +20,8 @@ use openssl::x509::store;
 use openssl::x509::verify;
 use uuid::Uuid;
 use x509_parser::oid_registry::Oid;
+use x509_parser::prelude::GeneralName;
+use x509_parser::x509::X509Version;
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
 /// that the value of the extension is equal to some other value
@@ -536,6 +537,93 @@ pub(crate) fn verify_packed_attestation(
     }
 }
 
+/// Verify that attestnCert meets the requirements in
+/// [§ 8.2.1 Packed Attestation Statement Certificate Requirements][0]
+///
+/// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
+pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+    // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
+    let der_bytes = pubk.to_der()?;
+    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1;
+
+    // The attestation certificate MUST have the following fields/extensions:
+    // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
+    if x509_cert.version != X509Version::V3 {
+        trace!("X509 Version != v3");
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
+
+    // Subject field MUST be set to:
+    //
+    // Subject-C
+    //  ISO 3166 code specifying the country where the Authenticator vendor is incorporated (PrintableString)
+    // Subject-O
+    //  Legal name of the Authenticator vendor (UTF8String)
+    // Subject-OU
+    //  Literal string “Authenticator Attestation” (UTF8String)
+    // Subject-CN
+    //  A UTF8String of the vendor’s choosing
+    let subject = &x509_cert.subject;
+
+    let subject_c = subject.iter_country().take(1).next();
+    let subject_o = subject.iter_organization().take(1).next();
+    let subject_ou = subject.iter_organizational_unit().take(1).next();
+    let subject_cn = subject.iter_common_name().take(1).next();
+
+    if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
+        trace!("Invalid subject details");
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
+
+    match subject_ou {
+        Some(ou) => match ou.attr_value().as_str() {
+            Ok(ou_d) => {
+                if ou_d != "Authenticator Attestation" {
+                    trace!("ou != Authenticator Attestation");
+                    return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+                }
+            }
+            Err(_) => {
+                trace!("ou invalid");
+                return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+            }
+        },
+        None => {
+            trace!("ou not found");
+            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+        }
+    }
+
+    // If the related attestation root certificate is used for multiple authenticator models,
+    // the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
+    // containing the AAGUID as a 16-byte OCTET STRING. The extension MUST NOT be marked as critical.
+    //
+    // We already check that the value matches the AAGUID in attestation
+    // verification, so we only have to check the critical requirement here.
+    //
+    // The problem with this check, is that it's not actually required that this
+    // oid be present at all ...
+    check_extension(
+        &x509_cert.get_extension_unique(&FidoGenCeAaguid::OID),
+        false,
+        |fido_gen_ce_aaguid| !fido_gen_ce_aaguid.critical,
+    )?;
+
+    // The Basic Constraints extension MUST have the CA component set to false.
+    check_extension(&x509_cert.basic_constraints(), true, |basic_constraints| {
+        !basic_constraints.value.ca
+    })?;
+
+    // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL
+    // Distribution Point extension [RFC5280] are both OPTIONAL as the status of many
+    // attestation certificates is available through authenticator metadata services. See, for
+    // example, the FIDO Metadata Service [FIDOMetadataService].
+
+    Ok(())
+}
+
 // https://w3c.github.io/webauthn/#fido-u2f-attestation
 // https://medium.com/@herrjemand/verifying-fido-u2f-attestations-in-fido2-f83fab80c355
 pub(crate) fn verify_fidou2f_attestation(
@@ -898,6 +986,90 @@ pub(crate) fn verify_tpm_attestation(
             firmware_version: certinfo.firmware_version,
         },
     ))
+}
+
+pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnError> {
+    let der_bytes = x509.to_der()?;
+    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
+        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
+        .1;
+
+    // TPM attestation certificate MUST have the following fields/extensions:
+
+    // Version MUST be set to 3.
+    if x509_cert.version != X509Version::V3 {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
+
+    // Subject field MUST be set to empty.
+    let subject_name_ref = x509.subject_name();
+    if subject_name_ref.entries().count() != 0 {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
+
+    // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
+    // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
+    check_extension(
+        &x509_cert.subject_alternative_name(),
+        true,
+        |subject_alternative_name| {
+            // From [TPMv2-EK-Profile]:
+            // In accordance with RFC 5280[11], this extension MUST be critical if
+            // subject is empty and SHOULD be non-critical if subject is non-empty.
+            //
+            // We've already returned if the subject is non-empty, so we can just
+            // check that the extension is critical.
+            if !subject_alternative_name.critical {
+                return false;
+            };
+
+            // The issuer MUST include TPM manufacturer, TPM part number and TPM
+            // firmware version, using the directoryName form within the GeneralName
+            // structure.
+            subject_alternative_name
+                .value
+                .general_names
+                .iter()
+                .any(|general_name| {
+                    if let GeneralName::DirectoryName(x509_name) = general_name {
+                        TpmSanData::try_from(x509_name)
+                            .and_then(|san_data| {
+                                tpm_device_attribute_parser(san_data.manufacturer.as_bytes())
+                                    .map_err(|_| WebauthnError::ParseNOMFailure)
+                            })
+                            .and_then(|(_, manufacturer_bytes)| {
+                                TpmVendor::try_from(manufacturer_bytes)
+                            })
+                            .is_ok()
+                    } else {
+                        false
+                    }
+                })
+        },
+    )?;
+
+    // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
+    check_extension(
+        &x509_cert.extended_key_usage(),
+        true,
+        |extended_key_usage| {
+            extended_key_usage
+                .value
+                .other
+                .contains(&der_parser::oid!(2.23.133 .8 .3))
+        },
+    )?;
+
+    // The Basic Constraints extension MUST have the CA component set to false.
+    check_extension(&x509_cert.basic_constraints(), true, |basic_constraints| {
+        !basic_constraints.value.ca
+    })?;
+
+    // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
+    // Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
+    // available through metadata services. See, for example, the FIDO Metadata Service [FIDOMetadataService].
+
+    Ok(())
 }
 
 pub(crate) fn verify_apple_anonymous_attestation(

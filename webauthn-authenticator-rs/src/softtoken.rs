@@ -900,7 +900,7 @@ mod tests {
         let name = "william";
 
         let (chal, reg_state) = wan
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 &unique_id,
                 name,
                 name,
@@ -938,7 +938,7 @@ mod tests {
         info!("Credential -> {:?}", cred);
 
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None)
+            .generate_challenge_authenticate(vec![cred], None, None, None)
             .unwrap();
 
         let r = wa
@@ -980,7 +980,7 @@ mod tests {
         let name = "william";
 
         let (chal, reg_state) = wan
-            .generate_challenge_register_options(
+            .generate_challenge_register(
                 &unique_id,
                 name,
                 name,
@@ -1032,7 +1032,7 @@ mod tests {
         let mut wa = WebauthnAuthenticator::new(soft_token);
 
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None)
+            .generate_challenge_authenticate(vec![cred], None, None, None)
             .unwrap();
 
         let r = wa

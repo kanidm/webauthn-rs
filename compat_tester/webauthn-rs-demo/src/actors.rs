@@ -326,7 +326,7 @@ impl WebauthnActor {
 
         let user_unique_id = Uuid::new_v4();
 
-        let (ccr, rs) = self.wan.generate_challenge_register_options(
+        let (ccr, rs) = self.wan.generate_challenge_register(
             user_unique_id.as_bytes(),
             &username,
             &username,
@@ -360,7 +360,6 @@ impl WebauthnActor {
 
         // If use_cred_id is set, only allow this cred to be used. This also allows
         // some extra "stuff".
-
         let (acr, st) = match use_cred_id {
             Some(use_cred_id) => {
                 let cred = creds
@@ -369,9 +368,11 @@ impl WebauthnActor {
                     .ok_or(WebauthnError::CredentialNotFound)?;
 
                 self.wan
-                    .generate_challenge_authenticate_credential(cred, uv, extensions)
+                    .generate_challenge_authenticate(vec![cred], uv, extensions, None)
             }
-            None => self.wan.generate_challenge_authenticate(creds, extensions),
+            None => self
+                .wan
+                .generate_challenge_authenticate(creds, None, extensions, None),
         }?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);

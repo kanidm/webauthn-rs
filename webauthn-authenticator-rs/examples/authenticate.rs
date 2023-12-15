@@ -248,7 +248,7 @@ async fn main() {
     let name = "william";
 
     let (chal, reg_state) = wan
-        .generate_challenge_register_options(
+        .generate_challenge_register(
             &unique_id,
             name,
             name,
@@ -290,11 +290,13 @@ async fn main() {
         let (chal, auth_state) = wan
             .generate_challenge_authenticate(
                 vec![cred.clone()],
+                None,
                 Some(RequestAuthenticationExtensions {
                     appid: Some("example.app.id".to_string()),
                     uvm: None,
                     hmac_get_secret: None,
                 }),
+                None,
             )
             .unwrap();
 

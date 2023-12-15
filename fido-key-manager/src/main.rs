@@ -22,7 +22,7 @@ use webauthn_authenticator_rs::{
     ui::Cli,
     SHA256Hash,
 };
-use webauthn_rs_core::interface::COSEKeyType;
+use webauthn_rs_core::proto::COSEKeyType;
 
 /// Parses a Base-16 encoded string.
 ///

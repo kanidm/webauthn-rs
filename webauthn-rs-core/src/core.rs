@@ -33,8 +33,9 @@ use crate::internals::*;
 use crate::proto::*;
 use base64urlsafedata::Base64UrlSafeData;
 
-/// This is the core of the Webauthn operations. It provides 4 interfaces that you will likely
-/// use the most:
+/// The Core Webauthn handler.
+///
+/// It provides 4 interfaces methods for registering and then authenticating credentials.
 /// * generate_challenge_register
 /// * register_credential
 /// * generate_challenge_authenticate
@@ -77,8 +78,8 @@ impl WebauthnCore {
     /// If you still choose to continue, and use this directly, be aware that:
     ///
     /// * This function signature MAY change WITHOUT NOTICE and WITHIN MINOR VERSIONS
-    /// * That you are responsible for UPHOLDING many invariants within webauthn that are NOT DOCUMENTED
     /// * You MUST understand the webauthn specification in excruciating detail to understand the traps within it
+    /// * That you are responsible for UPHOLDING many invariants within webauthn that are NOT DOCUMENTED in the webauthn specification
     ///
     /// Seriously. Use `webauthn-rs` instead.
     pub fn new_unsafe_experts_only(
@@ -114,44 +115,6 @@ impl WebauthnCore {
         Challenge::new(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
     }
 
-    /// Generate a new challenge for client registration.
-    /// Same as `generate_challenge_register_options` but with simple, default options
-    pub fn generate_challenge_register(
-        &self,
-        user_unique_id: &[u8],
-        user_name: &str,
-        user_display_name: &str,
-        user_verification_required: bool,
-    ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
-        let policy = if user_verification_required {
-            Some(UserVerificationPolicy::Required)
-        } else {
-            // I'm so mad about ctap2.0 you have no idea.
-            Some(UserVerificationPolicy::Preferred)
-        };
-
-        let attestation = AttestationConveyancePreference::None;
-        let exclude_credentials = None;
-        let extensions = None;
-        let credential_algorithms = COSEAlgorithm::secure_algs();
-        let require_resident_key = false;
-        let authenticator_attachment = None;
-
-        self.generate_challenge_register_options(
-            user_unique_id,
-            user_name,
-            user_display_name,
-            attestation,
-            policy,
-            exclude_credentials,
-            extensions,
-            credential_algorithms,
-            require_resident_key,
-            authenticator_attachment,
-            false,
-        )
-    }
-
     /// Generate a new challenge for client registration. This is the first step in
     /// the lifecycle of a credential. This function will return the
     /// creationchallengeresponse which is suitable for serde json serialisation
@@ -163,7 +126,7 @@ impl WebauthnCore {
     /// persist. It is strongly advised you associate this RegistrationState with the
     /// UserId of the requester.
     #[allow(clippy::too_many_arguments)]
-    pub fn generate_challenge_register_options(
+    pub fn generate_challenge_register(
         &self,
         user_unique_id: &[u8],
         user_name: &str,
@@ -171,13 +134,11 @@ impl WebauthnCore {
         attestation: AttestationConveyancePreference,
         policy: Option<UserVerificationPolicy>,
         exclude_credentials: Option<Vec<CredentialID>>,
-
         extensions: Option<RequestRegistrationExtensions>,
-
         credential_algorithms: Vec<COSEAlgorithm>,
         require_resident_key: bool,
         authenticator_attachment: Option<AuthenticatorAttachment>,
-        experimental_reject_passkeys: bool,
+        experimental_reject_synchronised_authenticators: bool,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
 
@@ -186,25 +147,6 @@ impl WebauthnCore {
         }
 
         let user_id: UserId = user_unique_id.to_vec();
-
-        // Setup our extensions.
-        // unimplemented!();
-
-        // resident key needs cred props
-
-        // user verification needs credProtect (?)
-
-        // Have a UV strict?
-
-        // minPinLength
-
-        // hmacSecret
-
-        // credProps
-
-        // userVerificationMethod
-
-        //
 
         let challenge = self.generate_challenge();
 
@@ -268,7 +210,8 @@ impl WebauthnCore {
             require_resident_key,
             authenticator_attachment,
             extensions: extensions.unwrap_or_default(),
-            experimental_allow_passkeys: !experimental_reject_passkeys,
+            experimental_allow_synchronised_authenticators:
+                !experimental_reject_synchronised_authenticators,
         };
 
         // This should have an opaque type of username + chal + policy
@@ -305,7 +248,7 @@ impl WebauthnCore {
             require_resident_key: _,
             authenticator_attachment: _,
             extensions,
-            experimental_allow_passkeys,
+            experimental_allow_synchronised_authenticators,
         } = state;
         let chal: &ChallengeRef = challenge.into();
 
@@ -319,7 +262,7 @@ impl WebauthnCore {
             attestation_cas,
             false,
             extensions,
-            *experimental_allow_passkeys,
+            *experimental_allow_synchronised_authenticators,
         )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
@@ -350,7 +293,7 @@ impl WebauthnCore {
         attestation_cas: Option<&AttestationCaList>,
         danger_disable_certificate_time_checks: bool,
         req_extn: &RequestRegistrationExtensions,
-        experimental_allow_passkeys: bool,
+        experimental_allow_synchronised_authenticators: bool,
     ) -> Result<Credential, WebauthnError> {
         // Internal management - if the attestation ca list is some, but is empty, we need to fail!
         if attestation_cas
@@ -636,8 +579,8 @@ impl WebauthnCore {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
         }
 
-        // OUT OF SPEC - Allow rejection of passkeys if desired by the caller.
-        if !experimental_allow_passkeys && credential.backup_eligible {
+        // OUT OF SPEC - Allow rejection of synchronised credentials if desired by the caller.
+        if !experimental_allow_synchronised_authenticators && credential.backup_eligible {
             error!("Credential counter is 0 - may indicate that it is a passkey and not bound to hardware.");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
@@ -843,87 +786,37 @@ impl WebauthnCore {
         Ok(data.authenticator_data)
     }
 
-    /// Authenticate a set of credentials, deriving the correct user verification policy
-    /// for them in a secure manner.
+    /// Authenticate a set of credentials allowing the user verification policy to be set.
+    /// If no credentials are provided, this will start a discoverable credential authentication.
+    ///
+    /// Policy defines the require UserVerification policy. This MUST be consistent with the
+    /// credentials being used in the authentication.
+    ///
+    /// `allow_backup_eligible_upgrade` allows rejecting credentials whos backup eligibility
+    /// has changed between registration and authentication.
     pub fn generate_challenge_authenticate(
         &self,
         creds: Vec<Credential>,
-        extensions: Option<RequestAuthenticationExtensions>,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        // Should this filter on cred.verified instead rather than the policy?
-        // Or do we need to send Preferred instead of Discouraged due to ctap2.0?
-        //
-        // https://github.com/kanidm/webauthn-rs/issues/91
-        //
-        let mut policies =
-            BTreeSet::from_iter(creds.iter().map(|cred| cred.registration_policy.to_owned()));
-        if policies.len() > 1 {
-            return Err(WebauthnError::InconsistentUserVerificationPolicy);
-        }
-        let policy = policies
-            .pop_first()
-            .ok_or(WebauthnError::CredentialNotFound)?;
-
-        self.generate_challenge_authenticate_inner(creds, policy, extensions, false)
-    }
-
-    /// Authenticate a single credential, with the ability to override the userVerification
-    /// policy requested, or extensions in use. If userVerification is `None`, the policy from
-    /// registration is used.
-    ///
-    /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
-    /// understand how this interacts with the single credential in use, and how that may impact
-    /// your system security.
-    ///
-    /// If in doubt, do NOT use this function!
-    pub fn generate_challenge_authenticate_credential(
-        &self,
-        cred: Credential,
         policy: Option<UserVerificationPolicy>,
         extensions: Option<RequestAuthenticationExtensions>,
+        allow_backup_eligible_upgrade: Option<bool>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        let policy = policy.unwrap_or(cred.registration_policy);
-        self.generate_challenge_authenticate_inner(vec![cred], policy, extensions, false)
-    }
+        let policy = if let Some(policy) = policy {
+            policy
+        } else {
+            let mut policies =
+                BTreeSet::from_iter(creds.iter().map(|cred| cred.registration_policy.to_owned()));
+            if policies.len() > 1 {
+                return Err(WebauthnError::InconsistentUserVerificationPolicy);
+            }
+            policies
+                .pop_first()
+                .ok_or(WebauthnError::CredentialNotFound)?
+        };
 
-    /// Authenticate a set of credentials allowing the user verification policy to be set.
-    ///
-    /// NOTE: Over-riding the UserVerificationPolicy may have SECURITY consequences. You should
-    /// understand how this interacts with the single credential in use, and how that may impact
-    /// your system security.
-    ///
-    /// If in doubt, do NOT use this function!
-    pub fn generate_challenge_authenticate_policy(
-        &self,
-        creds: Vec<Credential>,
-        policy: UserVerificationPolicy,
-        extensions: Option<RequestAuthenticationExtensions>,
-        allow_backup_eligible_upgrade: bool,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        self.generate_challenge_authenticate_inner(
-            creds,
-            policy,
-            extensions,
-            allow_backup_eligible_upgrade,
-        )
-    }
+        // Defaults to false.
+        let allow_backup_eligible_upgrade = allow_backup_eligible_upgrade.unwrap_or_default();
 
-    /// Begin a discoverable authentication session.
-    pub fn generate_challenge_authenticate_discoverable(
-        &self,
-        policy: UserVerificationPolicy,
-        extensions: Option<RequestAuthenticationExtensions>,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
-        self.generate_challenge_authenticate_inner(vec![], policy, extensions, false)
-    }
-
-    fn generate_challenge_authenticate_inner(
-        &self,
-        creds: Vec<Credential>,
-        policy: UserVerificationPolicy,
-        extensions: Option<RequestAuthenticationExtensions>,
-        allow_backup_eligible_upgrade: bool,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
         let chal = self.generate_challenge();
 
         // Get the user's existing creds if any.
@@ -1177,162 +1070,6 @@ impl WebauthnCore {
         self.rp_name.as_str()
     }
 }
-
-/*
-/// The WebauthnConfig type allows site-specific customisation of the Webauthn library.
-/// This provides a set of callbacks which are used to supply data to various structures
-/// and calls, as well as callbacks to manage data persistence and retrieval.
-pub trait WebauthnConfig {
-    /// Returns a reference to your relying parties name. This is generally any text identifier
-    /// you wish, but should rarely if ever change. Changes to the relying party name may
-    /// confuse authenticators and will cause their credentials to be lost.
-    ///
-    /// Examples of names could be `My Awesome Site`, `https://my-awesome-site.com.au`
-    fn get_relying_party_name(&self) -> &str;
-
-    /// Returns a reference to your sites origin. The origin is the URL to your site with
-    /// protocol and port. This should rarely, if ever change. In production usage this
-    /// value must always be https://, however http://localhost is acceptable for testing
-    /// only. We may add warnings or errors for non-https:// urls in the future. Changing this
-    /// may cause associated authenticators to lose credentials.
-    ///
-    /// Examples of this value could be. `https://my-site.com.au`, `https://my-site.com.au:8443`
-    fn get_origin(&self) -> &url::Url;
-
-    /// Returns the relying party id. This should never change, and is used as an id
-    /// in cryptographic operations and credential scoping. This is defined as the domain name
-    /// of the service, minus all protocol, port and location data. For example:
-    ///   `https://name:port/path -> name`
-    ///
-    /// If changed, all associated credentials will be lost in all authenticators.
-    ///
-    /// Examples of this value for the site `https://my-site.com.au/auth` is `my-site.com.au`
-    fn get_relying_party_id(&self) -> &str;
-
-    /// Get the list of valid credential algorithms that this service can accept. Unless you have
-    /// speific requirements around this, we advise you leave this function to the default
-    /// implementation.
-    fn get_credential_algorithms(&self) -> Vec<COSEAlgorithm> {
-        vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]
-    }
-
-    /// Return a timeout on how long the authenticator has to respond to a challenge. This value
-    /// defaults to 60000 milliseconds. You likely won't need to implement this function, and should
-    /// rely on the defaults.
-    fn get_authenticator_timeout(&self) -> u32 {
-        AUTHENTICATOR_TIMEOUT
-    }
-
-    /// Returns the default attestation type. Options are `None`, `Direct` and `Indirect`.
-    /// Defaults to `None`.
-    ///
-    /// DANGER: The client *may* alter this value, causing the registration to not contain
-    /// an attestation. This is *not* a verified property.
-    ///
-    /// You *must* also implement policy_verify_trust if you change this from `None` else
-    /// this can be BYPASSED.
-    fn get_attestation_preference(&self) -> AttestationConveyancePreference {
-        AttestationConveyancePreference::None
-    }
-
-    /// Get the preferred policy on authenticator attachment hint. Defaults to None (use
-    /// any attachment method).
-    ///
-    /// Default of None allows any attachment method.
-    ///
-    /// WARNING: This is not enforced, as the client may modify the registration request to
-    /// disregard this, and no part of the registration response indicates attachement. This
-    /// is purely a hint, and is NOT a security enforcment.
-    fn get_authenticator_attachment(&self) -> Option<AuthenticatorAttachment> {
-        None
-    }
-
-    /// Get the site policy on if the registration should use a resident key so that
-    /// username and other details can be embedded into the authenticator
-    /// to allow bypassing that part of the interaction flow.
-    ///
-    /// Defaults to "false" aka non-resident keys.
-    /// See also: <https://www.w3.org/TR/webauthn/#resident-credential>
-    ///
-    /// WARNING: This is not enforced as the client may modify the registration request
-    /// to disregard this, and no part of the registration process indicates residence of
-    /// the credentials. This is not a security enforcement.
-    fn get_require_resident_key(&self) -> bool {
-        false
-    }
-
-    /// If the attestation format is not supported, should we ignore verifying the attestation
-    fn ignore_unsupported_attestation_formats(&self) -> bool {
-        false
-    }
-
-    /// Decides the verifier must error on invalid counter values
-    fn require_valid_counter_value(&self) -> bool {
-        true
-    }
-
-    /// A callback to allow trust decisions to be made over the attestation of the
-    /// credential. It's important for your implementation of this callback to follow
-    /// the advice of the w3c standard, notably:
-    ///
-    /// Assess the attestation trustworthiness using the outputs of the verification procedure in step 19, as follows:
-    /// * If no attestation was provided, verify that None attestation is acceptable under Relying Party policy.
-    /// * If self attestation was used, verify that self attestation is acceptable under Relying Party policy.
-    /// * Otherwise, use the X.509 certificates returned as the attestation trust path from the verification
-    ///   procedure to verify that the attestation public key either correctly chains up to an acceptable
-    ///   root certificate, or is itself an acceptable certificate (i.e., it and the root certificate
-    ///   obtained previously may be the same).
-    ///
-    /// The default implementation of this method rejects Uncertain attestation, and
-    /// will "blindly trust" self attestation and the other types as valid.
-    /// If you have strict security requirements we strongly recommend you implement this function,
-    /// and we may in the future provide a stronger default relying party policy.
-    fn policy_verify_trust(&self, pad: ParsedAttestationData) -> Result<(), ()> {
-        debug!("policy_verify_trust -> {:?}", pad);
-        match pad {
-            ParsedAttestationData::Basic(_attest_cert) => Ok(()),
-            ParsedAttestationData::Self_ => Ok(()),
-            ParsedAttestationData::AttCa(_attest_cert, _ca_chain) => Ok(()),
-            ParsedAttestationData::AnonCa(_attest_cert, _ca_chain) => Ok(()),
-            ParsedAttestationData::None => Ok(()),
-            // TODO: trust is unimplemented here
-            ParsedAttestationData::ECDAA => Err(()),
-            // We don't trust Uncertain attestations
-            ParsedAttestationData::Uncertain => Err(()),
-        }
-    }
-
-    /// Get the site policy on whether cross origin credentials are allowed.
-    ///
-    /// A credential is cross origin if the ECMAScript context in which the
-    /// credential creation functions were invoked belonged to a different
-    /// origin than that of the RP the credential is being created for.
-    ///
-    /// WARNING: Most browsers do not currently send the `crossOrigin` value so
-    /// we assume where the key is absent that the credential was not created in
-    /// a cross-origin context.
-    fn allow_cross_origin(&self) -> bool {
-        false
-    }
-
-    /// Allow subdomains of origin to be valid to use credentils from the parent origin. This
-    /// exists due to a subtle confusion in the webauthn specification. In
-    /// https://www.w3.org/TR/webauthn-2/#scope we see that the relying party ID is intended
-    /// to allow effective domains to be validated by the client for the origin that we are
-    /// using, however in https://www.w3.org/TR/webauthn-2/#sctn-registering-a-new-credential step
-    /// 9 it is requested that origin *equality* is performed. This would disallow subdomains
-    /// of the effective domain from being use.
-    ///
-    /// By default we take the "strict" behaviour to only allow exact origin matches, but some
-    /// applications may wish subdomains of origin to valid. Consider idm.example.com and
-    /// host.idm.example.com where a credential should be valid for either.
-    ///
-    /// In most cases you DO NOT need to enable this option.
-    fn allow_subdomains_origin(&self) -> bool {
-        false
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {
@@ -2483,8 +2220,8 @@ mod tests {
 
     fn register_userid(
         user_unique_id: &[u8],
-        name: &str,
-        display_name: &str,
+        user_name: &str,
+        user_display_name: &str,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
         #![allow(clippy::unwrap_used)]
 
@@ -2497,9 +2234,28 @@ mod tests {
             None,
         );
 
-        let policy = true;
+        let policy = Some(UserVerificationPolicy::Required);
 
-        wan.generate_challenge_register(user_unique_id, name, display_name, policy)
+        let attestation = AttestationConveyancePreference::None;
+        let exclude_credentials = None;
+        let extensions = None;
+        let credential_algorithms = COSEAlgorithm::secure_algs();
+        let require_resident_key = false;
+        let authenticator_attachment = None;
+
+        wan.generate_challenge_register(
+            user_unique_id,
+            user_name,
+            user_display_name,
+            attestation,
+            policy,
+            exclude_credentials,
+            extensions,
+            credential_algorithms,
+            require_resident_key,
+            authenticator_attachment,
+            false,
+        )
     }
 
     #[test]
@@ -2970,7 +2726,7 @@ mod tests {
         // Ensure we get a bad result.
 
         assert!(
-            wan.generate_challenge_authenticate(creds.clone(), None)
+            wan.generate_challenge_authenticate(creds.clone(), None, None, None)
                 .unwrap_err()
                 == WebauthnError::InconsistentUserVerificationPolicy
         );
@@ -2995,7 +2751,7 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone(), None);
+        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None);
         debug!("{:?}", r);
         assert!(r.is_ok());
 
@@ -3019,7 +2775,7 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone(), None);
+        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None);
         debug!("{:?}", r);
         assert!(r.is_ok());
     }
