@@ -326,19 +326,18 @@ impl WebauthnActor {
 
         let user_unique_id = Uuid::new_v4();
 
-        let (ccr, rs) = self.wan.generate_challenge_register(
-            user_unique_id.as_bytes(),
-            &username,
-            &username,
-            attestation.unwrap_or(AttestationConveyancePreference::None),
-            uv,
-            None,
-            extensions,
-            algorithm.unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
-            false,
-            attachment,
-            false,
-        )?;
+        let builder = self
+            .wan
+            .new_challenge_register_builder(user_unique_id.as_bytes(), &username, &username)?
+            .attestation(attestation.unwrap_or(AttestationConveyancePreference::None))
+            .user_verification_policy(uv.unwrap_or_default())
+            .extensions(extensions)
+            .authenticator_attachment(attachment)
+            .credential_algorithms(
+                algorithm.unwrap_or_else(|| vec![COSEAlgorithm::ES256, COSEAlgorithm::RS256]),
+            );
+
+        let (ccr, rs) = self.wan.generate_challenge_register(builder)?;
 
         debug!("complete ChallengeRegister -> {:?}", ccr);
         Ok((ccr, rs))

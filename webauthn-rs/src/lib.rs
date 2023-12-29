@@ -57,7 +57,7 @@
 //! * any possible webauthn authenticator - security key, tpm, touch id, etc
 //! * a platform authenticator - built into a device such as touch id, tpm, etc. This excludes security keys.
 //! * a synchronised credential - backed by a cloud keychain like Apple iCloud or Bitwarden.
-//! * a resident key (rk) - a stored, discoverable credential allowing usernameless flows
+//! * a resident key (RK) - a stored, discoverable credential allowing usernameless flows
 //!
 //! Each of these definitions have different pros and cons, and different usability implications. For
 //! example, passkeys as resident keys means you can accidentally brick many ctap2.0 devices by exhausting
@@ -66,12 +66,13 @@
 //! Passkeys as synced credentials means only certain devices with specific browser combinations
 //! or extensions can use passkeys.
 //!
-//! In this library we chose to define passkey's as "any possible authenticator". This conforms to the
-//! w3c webauthn workgroup goal to enable all users to choose their authenticator, without any negative
-//! penalities or traps.
-//! If the device opportunistically creates a resident key (such as Apple iCloud Keychain) then in
-//! the future we *may* allow usernameless
-//! flows once we are satisfied with the state of these ui's in browsers.
+//! In this library we chose to define passkeys as "any possible authenticator". This definition
+//! aligns with the W3C WebAuthn Working Group's mission of enabling strong authentication without
+//! compromising end-user experience, regardless of their authenticator's modality.
+//!
+//! We may look to enable (but not require) usernameless flows in the future for on devices which
+//! opportunistically create resident keys (such as Apple's iCloud Keychain). However, the platform
+//! and browser user experience is not good enough to justify enabling these flows at present.
 //!
 //! # Features
 //!
@@ -533,13 +534,6 @@ impl Webauthn {
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
     ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
-        let attestation = AttestationConveyancePreference::None;
-        let credential_algorithms = self.algorithms.clone();
-        let require_resident_key = false;
-        let authenticator_attachment = None;
-        let policy = Some(UserVerificationPolicy::Required);
-        let reject_passkeys = false;
-
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
                 // Since this may contain PII, we want to enforce this. We also
@@ -556,20 +550,24 @@ impl Webauthn {
             hmac_create_secret: None,
         });
 
-        self.core
-            .generate_challenge_register(
+        let builder = self
+            .core
+            .new_challenge_register_builder(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
-                attestation,
-                policy,
-                exclude_credentials,
-                extensions,
-                credential_algorithms,
-                require_resident_key,
-                authenticator_attachment,
-                reject_passkeys,
-            )
+            )?
+            .attestation(AttestationConveyancePreference::None)
+            .credential_algorithms(self.algorithms.clone())
+            .require_resident_key(false)
+            .authenticator_attachment(None)
+            .user_verification_policy(UserVerificationPolicy::Required)
+            .reject_synchronised_authenticators(false)
+            .exclude_credentials(exclude_credentials)
+            .extensions(extensions);
+
+        self.core
+            .generate_challenge_register(builder)
             .map(|(ccr, rs)| (ccr, PasskeyRegistration { rs }))
     }
 
@@ -596,13 +594,6 @@ impl Webauthn {
         user_display_name: &str,
         exclude_credentials: Option<Vec<CredentialID>>,
     ) -> WebauthnResult<(CreationChallengeResponse, PasskeyRegistration)> {
-        let attestation = AttestationConveyancePreference::None;
-        let credential_algorithms = self.algorithms.clone();
-        let require_resident_key = true;
-        let authenticator_attachment = Some(AuthenticatorAttachment::Platform);
-        let policy = Some(UserVerificationPolicy::Required);
-        let reject_passkeys = false;
-
         let extensions = Some(RequestRegistrationExtensions {
             // Android doesn't support cred protect.
             cred_protect: None,
@@ -612,20 +603,26 @@ impl Webauthn {
             hmac_create_secret: None,
         });
 
-        self.core
-            .generate_challenge_register(
+        let builder = self
+            .core
+            .new_challenge_register_builder(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
-                attestation,
-                policy,
-                exclude_credentials,
-                extensions,
-                credential_algorithms,
-                require_resident_key,
-                authenticator_attachment,
-                reject_passkeys,
-            )
+            )?
+            .attestation(AttestationConveyancePreference::None)
+            .credential_algorithms(self.algorithms.clone())
+            // Required for android to work
+            .require_resident_key(true)
+            // Prevent accidentally triggering RK on security keys
+            .authenticator_attachment(Some(AuthenticatorAttachment::Platform))
+            .user_verification_policy(UserVerificationPolicy::Required)
+            .reject_synchronised_authenticators(false)
+            .exclude_credentials(exclude_credentials)
+            .extensions(extensions);
+
+        self.core
+            .generate_challenge_register(builder)
             .map(|(ccr, rs)| (ccr, PasskeyRegistration { rs }))
     }
 
@@ -864,29 +861,30 @@ impl Webauthn {
             hmac_create_secret: None,
         });
 
-        let credential_algorithms = self.algorithms.clone();
-        let require_resident_key = false;
         let policy = if self.user_presence_only_security_keys {
-            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
+            UserVerificationPolicy::Discouraged_DO_NOT_USE
         } else {
-            Some(UserVerificationPolicy::Preferred)
+            UserVerificationPolicy::Preferred
         };
-        let reject_passkeys = true;
 
-        self.core
-            .generate_challenge_register(
+        let builder = self
+            .core
+            .new_challenge_register_builder(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
-                attestation,
-                policy,
-                exclude_credentials,
-                extensions,
-                credential_algorithms,
-                require_resident_key,
-                ui_hint_authenticator_attachment,
-                reject_passkeys,
-            )
+            )?
+            .attestation(attestation)
+            .credential_algorithms(self.algorithms.clone())
+            .require_resident_key(false)
+            .authenticator_attachment(ui_hint_authenticator_attachment)
+            .user_verification_policy(policy)
+            .reject_synchronised_authenticators(false)
+            .exclude_credentials(exclude_credentials)
+            .extensions(extensions);
+
+        self.core
+            .generate_challenge_register(builder)
             .map(|(ccr, rs)| {
                 (
                     ccr,
@@ -1120,15 +1118,9 @@ impl Webauthn {
         ui_hint_authenticator_attachment: Option<AuthenticatorAttachment>,
         // extensions
     ) -> WebauthnResult<(CreationChallengeResponse, AttestedPasskeyRegistration)> {
-        let attestation = AttestationConveyancePreference::Direct;
         if attestation_ca_list.is_empty() {
             return Err(WebauthnError::MissingAttestationCaList);
         }
-
-        let credential_algorithms = self.algorithms.clone();
-        let require_resident_key = false;
-        let policy = Some(UserVerificationPolicy::Required);
-        let reject_passkeys = true;
 
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
@@ -1147,20 +1139,24 @@ impl Webauthn {
             hmac_create_secret: Some(true),
         });
 
-        self.core
-            .generate_challenge_register(
+        let builder = self
+            .core
+            .new_challenge_register_builder(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
-                attestation,
-                policy,
-                exclude_credentials,
-                extensions,
-                credential_algorithms,
-                require_resident_key,
-                ui_hint_authenticator_attachment,
-                reject_passkeys,
-            )
+            )?
+            .attestation(AttestationConveyancePreference::Direct)
+            .credential_algorithms(self.algorithms.clone())
+            .require_resident_key(false)
+            .authenticator_attachment(ui_hint_authenticator_attachment)
+            .user_verification_policy(UserVerificationPolicy::Required)
+            .reject_synchronised_authenticators(true)
+            .exclude_credentials(exclude_credentials)
+            .extensions(extensions);
+
+        self.core
+            .generate_challenge_register(builder)
             .map(|(ccr, rs)| {
                 (
                     ccr,
@@ -1365,12 +1361,6 @@ impl Webauthn {
             return Err(WebauthnError::MissingAttestationCaList);
         }
 
-        let attestation = AttestationConveyancePreference::Direct;
-        let credential_algorithms = self.algorithms.clone();
-        let require_resident_key = true;
-        let policy = Some(UserVerificationPolicy::Required);
-        let reject_passkeys = true;
-
         // credProtect
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
@@ -1388,20 +1378,24 @@ impl Webauthn {
             hmac_create_secret: Some(true),
         });
 
-        self.core
-            .generate_challenge_register(
+        let builder = self
+            .core
+            .new_challenge_register_builder(
                 user_unique_id.as_bytes(),
                 user_name,
                 user_display_name,
-                attestation,
-                policy,
-                exclude_credentials,
-                extensions,
-                credential_algorithms,
-                require_resident_key,
-                ui_hint_authenticator_attachment,
-                reject_passkeys,
-            )
+            )?
+            .attestation(AttestationConveyancePreference::Direct)
+            .credential_algorithms(self.algorithms.clone())
+            .require_resident_key(true)
+            .authenticator_attachment(ui_hint_authenticator_attachment)
+            .user_verification_policy(UserVerificationPolicy::Required)
+            .reject_synchronised_authenticators(true)
+            .exclude_credentials(exclude_credentials)
+            .extensions(extensions);
+
+        self.core
+            .generate_challenge_register(builder)
             .map(|(ccr, rs)| {
                 (
                     ccr,

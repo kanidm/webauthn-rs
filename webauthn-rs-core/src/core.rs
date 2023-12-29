@@ -16,7 +16,6 @@
 #![warn(missing_docs)]
 
 use rand::prelude::*;
-use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::time::Duration;
 use url::Url;
@@ -63,6 +62,74 @@ pub struct WebauthnCore {
     allow_cross_origin: bool,
     allow_subdomains_origin: bool,
     allow_any_port: bool,
+}
+
+/// A builder allowing customisation of a client registration challenge.
+pub struct ChallengeRegisterBuilder {
+    user_unique_id: Vec<u8>,
+    user_name: String,
+    user_display_name: String,
+    attestation: AttestationConveyancePreference,
+    policy: UserVerificationPolicy,
+    exclude_credentials: Option<Vec<CredentialID>>,
+    extensions: Option<RequestRegistrationExtensions>,
+    credential_algorithms: Vec<COSEAlgorithm>,
+    require_resident_key: bool,
+    authenticator_attachment: Option<AuthenticatorAttachment>,
+    reject_synchronised_authenticators: bool,
+}
+
+impl ChallengeRegisterBuilder {
+    /// Set the attestation conveyance preference. Defaults to None.
+    pub fn attestation(mut self, value: AttestationConveyancePreference) -> Self {
+        self.attestation = value;
+        self
+    }
+
+    /// Request a user verification policy. Defaults to Preferred.
+    pub fn user_verification_policy(mut self, value: UserVerificationPolicy) -> Self {
+        self.policy = value;
+        self
+    }
+
+    /// A list of credentials that the users agent will exclude from the registration.
+    /// This is not a security control - it exists to help guide the user and the UI
+    /// to avoid duplicate registration of credentials.
+    pub fn exclude_credentials(mut self, value: Option<Vec<CredentialID>>) -> Self {
+        self.exclude_credentials = value;
+        self
+    }
+
+    /// Define extensions to be requested in the request. Defaults to None.
+    pub fn extensions(mut self, value: Option<RequestRegistrationExtensions>) -> Self {
+        self.extensions = value;
+        self
+    }
+
+    /// Define the set of allowed credential algorithms. Defaults to the secure list.
+    pub fn credential_algorithms(mut self, value: Vec<COSEAlgorithm>) -> Self {
+        self.credential_algorithms = value;
+        self
+    }
+
+    /// A flag to require that the authenticator must create a resident key. Defaults
+    /// to false.
+    pub fn require_resident_key(mut self, value: bool) -> Self {
+        self.require_resident_key = value;
+        self
+    }
+
+    /// Set the authenticator attachement preference. Defaults to None.
+    pub fn authenticator_attachment(mut self, value: Option<AuthenticatorAttachment>) -> Self {
+        self.authenticator_attachment = value;
+        self
+    }
+
+    /// Flag that synchronised authenticators should not be allowed to register. Defaults to false.
+    pub fn reject_synchronised_authenticators(mut self, value: bool) -> Self {
+        self.reject_synchronised_authenticators = value;
+        self
+    }
 }
 
 impl WebauthnCore {
@@ -115,9 +182,39 @@ impl WebauthnCore {
         Challenge::new(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
     }
 
-    /// Generate a new challenge for client registration. This is the first step in
-    /// the lifecycle of a credential. This function will return the
-    /// creationchallengeresponse which is suitable for serde json serialisation
+    /// Generate a new challenge builder for client registration. This is the first step in
+    /// the lifecycle of a credential. This function will return a register builder
+    /// allowing you to customise the parameters that will be sent to the client.
+    pub fn new_challenge_register_builder(
+        &self,
+        user_unique_id: &[u8],
+        user_name: &str,
+        user_display_name: &str,
+    ) -> Result<ChallengeRegisterBuilder, WebauthnError> {
+        if user_unique_id.is_empty() || user_display_name.is_empty() || user_name.is_empty() {
+            return Err(WebauthnError::InvalidUsername);
+        }
+
+        Ok(ChallengeRegisterBuilder {
+            user_unique_id: user_unique_id.to_vec(),
+            user_name: user_name.to_string(),
+            user_display_name: user_display_name.to_string(),
+            credential_algorithms: COSEAlgorithm::secure_algs(),
+            attestation: Default::default(),
+            policy: UserVerificationPolicy::Preferred,
+            exclude_credentials: Default::default(),
+            extensions: Default::default(),
+            require_resident_key: Default::default(),
+            authenticator_attachment: Default::default(),
+            reject_synchronised_authenticators: Default::default(),
+        })
+    }
+
+    /// Generate a new challenge for client registration from the parameters defined by the
+    /// `ChallengeRegisterBuilder`.
+    ///
+    /// This function will return the
+    /// `CreationChallengeResponse` which is suitable for serde json serialisation
     /// to be sent to the client.
     /// The client (generally a web browser) will pass this JSON
     /// structure to the `navigator.credentials.create()` javascript function for registration.
@@ -128,25 +225,21 @@ impl WebauthnCore {
     #[allow(clippy::too_many_arguments)]
     pub fn generate_challenge_register(
         &self,
-        user_unique_id: &[u8],
-        user_name: &str,
-        user_display_name: &str,
-        attestation: AttestationConveyancePreference,
-        policy: Option<UserVerificationPolicy>,
-        exclude_credentials: Option<Vec<CredentialID>>,
-        extensions: Option<RequestRegistrationExtensions>,
-        credential_algorithms: Vec<COSEAlgorithm>,
-        require_resident_key: bool,
-        authenticator_attachment: Option<AuthenticatorAttachment>,
-        experimental_reject_synchronised_authenticators: bool,
+        challenge_builder: ChallengeRegisterBuilder,
     ) -> Result<(CreationChallengeResponse, RegistrationState), WebauthnError> {
-        let policy = policy.unwrap_or(UserVerificationPolicy::Preferred);
-
-        if user_unique_id.is_empty() || user_display_name.is_empty() || user_name.is_empty() {
-            return Err(WebauthnError::InvalidUsername);
-        }
-
-        let user_id: UserId = user_unique_id.to_vec();
+        let ChallengeRegisterBuilder {
+            user_unique_id,
+            user_name,
+            user_display_name,
+            attestation,
+            policy,
+            exclude_credentials,
+            extensions,
+            credential_algorithms,
+            require_resident_key,
+            authenticator_attachment,
+            reject_synchronised_authenticators,
+        } = challenge_builder;
 
         let challenge = self.generate_challenge();
 
@@ -166,9 +259,9 @@ impl WebauthnCore {
                     id: self.rp_id.clone(),
                 },
                 user: User {
-                    id: Base64UrlSafeData(user_id),
-                    name: user_name.to_string(),
-                    display_name: user_display_name.to_string(),
+                    id: Base64UrlSafeData(user_unique_id),
+                    name: user_name,
+                    display_name: user_display_name,
                 },
                 challenge: challenge.clone().into(),
                 pub_key_cred_params: credential_algorithms
@@ -210,8 +303,7 @@ impl WebauthnCore {
             require_resident_key,
             authenticator_attachment,
             extensions: extensions.unwrap_or_default(),
-            experimental_allow_synchronised_authenticators:
-                !experimental_reject_synchronised_authenticators,
+            allow_synchronised_authenticators: !reject_synchronised_authenticators,
         };
 
         // This should have an opaque type of username + chal + policy
@@ -248,7 +340,7 @@ impl WebauthnCore {
             require_resident_key: _,
             authenticator_attachment: _,
             extensions,
-            experimental_allow_synchronised_authenticators,
+            allow_synchronised_authenticators,
         } = state;
         let chal: &ChallengeRef = challenge.into();
 
@@ -262,7 +354,7 @@ impl WebauthnCore {
             attestation_cas,
             false,
             extensions,
-            *experimental_allow_synchronised_authenticators,
+            *allow_synchronised_authenticators,
         )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
@@ -293,7 +385,7 @@ impl WebauthnCore {
         attestation_cas: Option<&AttestationCaList>,
         danger_disable_certificate_time_checks: bool,
         req_extn: &RequestRegistrationExtensions,
-        experimental_allow_synchronised_authenticators: bool,
+        allow_synchronised_authenticators: bool,
     ) -> Result<Credential, WebauthnError> {
         // Internal management - if the attestation ca list is some, but is empty, we need to fail!
         if attestation_cas
@@ -580,7 +672,7 @@ impl WebauthnCore {
         }
 
         // OUT OF SPEC - Allow rejection of synchronised credentials if desired by the caller.
-        if !experimental_allow_synchronised_authenticators && credential.backup_eligible {
+        if !allow_synchronised_authenticators && credential.backup_eligible {
             error!("Credential counter is 0 - may indicate that it is a passkey and not bound to hardware.");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
@@ -804,14 +896,18 @@ impl WebauthnCore {
         let policy = if let Some(policy) = policy {
             policy
         } else {
-            let mut policies =
-                BTreeSet::from_iter(creds.iter().map(|cred| cred.registration_policy.to_owned()));
-            if policies.len() > 1 {
-                return Err(WebauthnError::InconsistentUserVerificationPolicy);
+            let policy = creds
+                .get(0)
+                .map(|cred| cred.registration_policy.to_owned())
+                .ok_or(WebauthnError::CredentialNotFound)?;
+
+            for cred in creds.iter() {
+                if cred.registration_policy != policy {
+                    return Err(WebauthnError::InconsistentUserVerificationPolicy);
+                }
             }
-            policies
-                .pop_first()
-                .ok_or(WebauthnError::CredentialNotFound)?
+
+            policy
         };
 
         // Defaults to false.
@@ -2234,28 +2330,19 @@ mod tests {
             None,
         );
 
-        let policy = Some(UserVerificationPolicy::Required);
+        let builder =
+            wan.new_challenge_register_builder(user_unique_id, user_name, user_display_name)?;
 
-        let attestation = AttestationConveyancePreference::None;
-        let exclude_credentials = None;
-        let extensions = None;
-        let credential_algorithms = COSEAlgorithm::secure_algs();
-        let require_resident_key = false;
-        let authenticator_attachment = None;
+        let builder = builder
+            .user_verification_policy(UserVerificationPolicy::Required)
+            .attestation(AttestationConveyancePreference::None)
+            .exclude_credentials(None)
+            .extensions(None)
+            .credential_algorithms(COSEAlgorithm::secure_algs())
+            .require_resident_key(false)
+            .authenticator_attachment(None);
 
-        wan.generate_challenge_register(
-            user_unique_id,
-            user_name,
-            user_display_name,
-            attestation,
-            policy,
-            exclude_credentials,
-            extensions,
-            credential_algorithms,
-            require_resident_key,
-            authenticator_attachment,
-            false,
-        )
+        wan.generate_challenge_register(builder)
     }
 
     #[test]

@@ -107,11 +107,12 @@ pub struct PubKeyCredParams {
 }
 
 /// <https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference>
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum AttestationConveyancePreference {
     /// Do not request attestation.
     /// <https://www.w3.org/TR/webauthn/#dom-attestationconveyancepreference-none>
+    #[default]
     None,
 
     /// Request attestation in a semi-anonymized form.

@@ -247,21 +247,13 @@ async fn main() {
     ];
     let name = "william";
 
-    let (chal, reg_state) = wan
-        .generate_challenge_register(
-            &unique_id,
-            name,
-            name,
-            AttestationConveyancePreference::None,
-            Some(opt.verification_policy.into()),
-            None,
-            None,
-            COSEAlgorithm::secure_algs(),
-            false,
-            None,
-            false,
-        )
-        .unwrap();
+    let builder = wan
+        .new_challenge_register_builder(&unique_id, name, name)
+        .unwrap()
+        .attestation(AttestationConveyancePreference::None)
+        .user_verification_policy(opt.verification_policy.into());
+
+    let (chal, reg_state) = wan.generate_challenge_register(builder).unwrap();
 
     info!("🍿 challenge -> {:x?}", chal);
 
