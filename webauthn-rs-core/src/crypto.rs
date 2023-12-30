@@ -384,7 +384,7 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
                         .and_then(|ct_str| {
                             trace!(?ct_str);
                             match ct_str.as_str() {
-                                "EDDSA" => Ok(-8),
+                                "EdDSA" => Ok(-8),
                                 _ => Err(WebauthnError::COSEKeyInvalidCBORValue)
                             }
                         })

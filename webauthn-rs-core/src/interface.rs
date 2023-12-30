@@ -85,7 +85,7 @@ pub enum EDDSACurve {
 }
 
 impl EDDSACurve {
-    /// Returns the size in bytes of the coordinate components x for the specified curve
+    /// Returns the size in bytes of the coordinate for the specified curve
     pub(crate) fn coordinate_size(&self) -> usize {
         match self {
             Self::ED25519 => 32,

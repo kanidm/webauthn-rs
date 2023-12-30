@@ -3124,7 +3124,6 @@ mod tests {
             false,
         );
         debug!("{:?}", result);
-        // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
         assert!(result.is_ok());
     }
 
