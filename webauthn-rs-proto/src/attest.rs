@@ -162,8 +162,6 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
     fn from(data: web_sys::PublicKeyCredential) -> RegisterPublicKeyCredential {
         use js_sys::Uint8Array;
 
-        // is_user_verifying_platform_authenticator_available
-
         // AuthenticatorAttestationResponse has getTransports but web_sys isn't exposing it?
         let transports = None;
 

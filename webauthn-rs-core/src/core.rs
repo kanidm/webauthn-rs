@@ -699,11 +699,13 @@ impl WebauthnCore {
         // For us, we return the credential for the caller to persist.
         // If trust failed, we have already returned an Err before this point.
 
-        // TODO: Associate the credentialId with the transport hints returned by calling
+        // Associate the credentialId with the transport hints returned by calling
         // credential.response.getTransports(). This value SHOULD NOT be modified before or after
         // storing it. It is RECOMMENDED to use this value to populate the transports of the
         // allowCredentials option in future get() calls to help the client know how to find a
         // suitable authenticator.
+        //
+        // Done as part of credential construction if the transports are valid/trusted.
 
         Ok(credential)
     }
@@ -3079,8 +3081,7 @@ mod tests {
             false,
         );
         debug!("{:?}", result);
-        // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -3124,7 +3125,7 @@ mod tests {
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
-        assert!(result.is_err());
+        assert!(result.is_ok());
     }
 
     // ⚠️  Currently IGNORED as it appears that pixel 3a send INVALID attestation requests.

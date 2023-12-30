@@ -29,7 +29,7 @@ use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::AuthenticatorBackend;
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
-use webauthn_rs_proto::{AttestationConveyancePreference, COSEAlgorithm, UserVerificationPolicy};
+use webauthn_rs_proto::{AttestationConveyancePreference, UserVerificationPolicy};
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "Register and authenticate test")]
