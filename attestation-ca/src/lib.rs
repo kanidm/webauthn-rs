@@ -125,7 +125,6 @@ impl AttestationCa {
         if self.blanket_allow || other.blanket_allow {
             self.blanket_allow = true;
             self.aaguids.clear();
-            return;
         } else {
             self.blanket_allow = false;
             for (o_aaguid, o_device) in other.aaguids.iter() {
@@ -142,7 +141,6 @@ impl AttestationCa {
         // more restrictive, or we also are a blanket allow
         if other.blanket_allow() {
             // Do nothing
-            return;
         } else if self.blanket_allow {
             // Just set our aaguids to other, and remove our blanket allow.
             self.blanket_allow = false;

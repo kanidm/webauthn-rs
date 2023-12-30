@@ -548,21 +548,13 @@ mod tests {
         ];
         let name = "william";
 
-        let (chal, reg_state) = wan
-            .generate_challenge_register_options(
-                &unique_id,
-                name,
-                name,
-                AttestationConveyancePreference::Direct,
-                Some(UserVerificationPolicy::Preferred),
-                None,
-                None,
-                COSEAlgorithm::secure_algs(),
-                false,
-                None,
-                false,
-            )
-            .unwrap();
+        let builder = wan
+            .new_challenge_register_builder(&unique_id, name, name)
+            .unwrap()
+            .attestation(AttestationConveyancePreference::Direct)
+            .user_verification_policy(UserVerificationPolicy::Preferred);
+
+        let (chal, reg_state) = wan.generate_challenge_register(builder).unwrap();
 
         info!("🍿 challenge -> {:x?}", chal);
 
@@ -578,7 +570,7 @@ mod tests {
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None)
+            .generate_challenge_authenticate(vec![cred], None, None, None)
             .unwrap();
 
         let r = wa

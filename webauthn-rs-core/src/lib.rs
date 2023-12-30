@@ -4,12 +4,14 @@
 //! to allow strong, passwordless, cryptographic authentication to be performed. Webauthn
 //! is able to operate with many authenticator types, such as U2F.
 //!
-//! This library aims to provide a secure Webauthn implementation that you can
-//! plug into your application, so that you can provide Webauthn to your users.
+//! ⚠️  ⚠️  ⚠️  THIS IS UNSAFE. AVOID USING THIS DIRECTLY ⚠️  ⚠️  ⚠️
 //!
-//! To use this library yourself, you will want to reference the `WebauthnConfig` trait to
-//! develop site specific policy and configuration, and the `Webauthn` struct for Webauthn
-//! interactions.
+//! If possible, use the `webauthn-rs` crate, and it's safe wrapper instead!
+//!
+//! Webauthn as a standard has many traps that in the worst cases, may lead to
+//! bypasses and full account compromises. Many of the features of webauthn are
+//! NOT security policy, but user interface hints. Many options can NOT be
+//! enforced. `webauthn-rs` handles these correctly. USE `webauthn-rs` INSTEAD.
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -37,9 +39,9 @@ mod constants;
 pub mod attestation;
 pub mod crypto;
 
-pub mod core;
+mod core;
 pub mod error;
-pub mod interface;
+mod interface;
 pub mod internals;
 
 /// Protocol bindings
@@ -48,8 +50,5 @@ pub mod proto {
     pub use base64urlsafedata::Base64UrlSafeData;
     pub use webauthn_rs_proto::*;
 }
-
-pub use attestation::verify_attestation_ca_chain;
-pub use attestation::AttestationFormat;
 
 pub use crate::core::*;

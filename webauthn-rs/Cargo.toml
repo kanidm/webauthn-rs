@@ -16,7 +16,9 @@ features = ["danger-allow-state-serialisation", "danger-user-presence-only-secur
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-preview-features = ["conditional-ui", "attestation"]
+default = ["attestation"]
+
+preview-features = ["conditional-ui"]
 resident-key-support = []
 conditional-ui = []
 attestation = []
