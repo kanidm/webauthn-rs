@@ -899,7 +899,7 @@ impl WebauthnCore {
             policy
         } else {
             let policy = creds
-                .get(0)
+                .first()
                 .map(|cred| cred.registration_policy.to_owned())
                 .ok_or(WebauthnError::CredentialNotFound)?;
 

@@ -447,7 +447,7 @@ pub(crate) fn verify_packed_attestation(
 
             // Must have at least one x509 cert, this is the leaf certificate.
             let attestn_cert = arr_x509
-                .get(0)
+                .first()
                 .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
             trace!(?attestn_cert);
@@ -676,7 +676,7 @@ pub(crate) fn verify_fidou2f_attestation(
 
     // Let certificate public key be the public key conveyed by att_cert.
     let cerificate_public_key = arr_x509
-        .get(0)
+        .first()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
@@ -824,7 +824,7 @@ pub(crate) fn verify_tpm_attestation(
 
     // Must have at least one x509 cert
     let aik_cert = arr_x509
-        .get(0)
+        .first()
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // Verify that the public key specified by the parameters and unique fields of pubArea is
@@ -1346,7 +1346,7 @@ pub(crate) fn verify_android_safetynet_attestation(
                 .get_x5c_chain()?
                 .ok_or(SafetyNetError::MissingCertChain)?;
 
-            let leaf_cert = certs.get(0).ok_or(SafetyNetError::BadCert)?;
+            let leaf_cert = certs.first().ok_or(SafetyNetError::BadCert)?;
 
             // Verify with the internal certificate.
             let jws: compact_jwt::Jws<SafteyNetAttestResponse> = jwsu.validate_embeded()?;
