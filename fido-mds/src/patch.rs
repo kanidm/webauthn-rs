@@ -165,7 +165,7 @@ fn user_verification_method_yk5lightning(
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     // We know the
 
-    let code_accuracy = match uvm_and.get(0).and_then(|inner| inner.get(1)) {
+    let code_accuracy = match uvm_and.first().and_then(|inner| inner.get(1)) {
         Some(UserVerificationMethod::PasscodeInternal(cad)) => cad.clone(),
         res => {
             error!("Expected UVM::PasscodeInternal, found {:?}", res);
@@ -192,7 +192,7 @@ fn user_verification_method_yk5lightning(
 fn user_verification_method_rsads100(
     uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
-    let code_accuracy = match uvm_and.get(0).and_then(|inner| inner.get(1)) {
+    let code_accuracy = match uvm_and.first().and_then(|inner| inner.get(1)) {
         Some(UserVerificationMethod::PasscodeExternal(cad)) => cad.clone(),
         res => {
             error!("Expected UVM::PasscodeInternal, found {:?}", res);
@@ -268,7 +268,7 @@ fn user_verification_method_authenton1(
     uvm_and: &[Vec<UserVerificationMethod>],
 ) -> Result<Vec<Vec<UserVerificationMethod>>, ()> {
     debug!(?uvm_and);
-    let code_accuracy = match uvm_and.get(0).and_then(|inner| inner.get(2)) {
+    let code_accuracy = match uvm_and.first().and_then(|inner| inner.get(2)) {
         Some(UserVerificationMethod::PasscodeExternal(cad)) => cad.clone(),
         res => {
             error!("Expected UVM::PasscodeInternal, found {:?}", res);

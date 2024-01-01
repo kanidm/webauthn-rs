@@ -329,7 +329,7 @@ impl From<BioSubCommand> for Option<BTreeMap<Value, Value>> {
                 ),
             ])),
             FingerprintEnumerateEnrollments => None,
-            FingerprintSetFriendlyName(t) => t.try_into().ok(),
+            FingerprintSetFriendlyName(t) => Some(t.into()),
             FingerprintRemoveEnrollment(id) => {
                 Some(BTreeMap::from([(Value::Integer(0x01), Value::Bytes(id))]))
             }
