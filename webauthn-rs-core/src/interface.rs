@@ -84,6 +84,16 @@ pub enum EDDSACurve {
     ED448 = 7,
 }
 
+impl EDDSACurve {
+    /// Returns the size in bytes of the coordinate for the specified curve
+    pub(crate) fn coordinate_size(&self) -> usize {
+        match self {
+            Self::ED25519 => 32,
+            Self::ED448 => 57,
+        }
+    }
+}
+
 /// An ECDSACurve identifier. You probably will never need to alter
 /// or use this value, as it is set inside the Credential for you.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -163,7 +173,7 @@ pub struct COSEOKPKey {
     /// The curve that this key references.
     pub curve: EDDSACurve,
     /// The key's public X coordinate.
-    pub x: [u8; 32],
+    pub x: Base64UrlSafeData,
 }
 
 /// A COSE RSA PublicKey. This is a provided credential from a registered

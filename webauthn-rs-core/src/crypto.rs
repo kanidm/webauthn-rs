@@ -38,6 +38,9 @@ fn pkey_verify_signature(
                 .map_err(WebauthnError::OpenSSLError)?;
             Ok(verifier)
         }
+        COSEAlgorithm::EDDSA => {
+            sign::Verifier::new_without_digest(pkey).map_err(WebauthnError::OpenSSLError)
+        }
         COSEAlgorithm::INSECURE_RS1 => {
             error!("INSECURE SHA1 USAGE DETECTED");
             Err(WebauthnError::CredentialInsecureCryptography)
@@ -48,11 +51,9 @@ fn pkey_verify_signature(
         }
     }?;
 
+    // ed25519/ed448 require oneshot mode.
     verifier
-        .update(verification_data)
-        .map_err(WebauthnError::OpenSSLError)?;
-    verifier
-        .verify(signature)
+        .verify_oneshot(signature, verification_data)
         .map_err(WebauthnError::OpenSSLError)
 }
 
@@ -366,13 +367,13 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             // return it
             Ok(cose_key)
         } else if key_type == (COSEKeyTypeId::EC_OKP as i128) && (type_ == COSEAlgorithm::EDDSA) {
-            debug!(?d, "WebauthnError::COSEKeyInvalidType - EC_OKP");
             // https://datatracker.ietf.org/doc/html/rfc8152#section-13.2
 
             let curve_type_value = m
                 .get(&serde_cbor_2::Value::Integer(-1))
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
-            let curve_type = cbor_try_i128!(curve_type_value)?;
+            let curve = cbor_try_i128!(curve_type_value).and_then(EDDSACurve::try_from)?;
+
             /*
                 // Some keys may return this as a string rather than int.
                 // The only key so far is the solokey and it's ed25519 support
@@ -395,18 +396,15 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
                 .ok_or(WebauthnError::COSEKeyInvalidCBORValue)?;
             let x = cbor_try_bytes!(x_value)?;
 
-            if x.len() != 32 {
+            if x.len() != curve.coordinate_size() {
                 return Err(WebauthnError::COSEKeyEDDSAXInvalid);
             }
-
-            let mut x_temp = [0; 32];
-            x_temp.copy_from_slice(x);
 
             let cose_key = COSEKey {
                 type_,
                 key: COSEKeyType::EC_OKP(COSEOKPKey {
-                    curve: EDDSACurve::try_from(curve_type)?,
-                    x: x_temp,
+                    curve,
+                    x: x.to_vec().into(),
                 }),
             };
 
@@ -414,7 +412,6 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             //   "   Applications MUST check that the curve and the key type are
             //     consistent and reject a key if they are not."
             // this means feeding the values to openssl to validate them for us!
-
             cose_key.validate()?;
             // return it
             Ok(cose_key)
@@ -508,43 +505,7 @@ impl COSEKey {
     }
 
     pub(crate) fn validate(&self) -> Result<(), WebauthnError> {
-        match &self.key {
-            COSEKeyType::EC_EC2(ec2k) => {
-                // Get the curve type
-                let curve = ec2k.curve.to_openssl_nid();
-                let ec_group =
-                    ec::EcGroup::from_curve_name(curve).map_err(WebauthnError::OpenSSLError)?;
-
-                let xbn =
-                    bn::BigNum::from_slice(ec2k.x.as_ref()).map_err(WebauthnError::OpenSSLError)?;
-                let ybn =
-                    bn::BigNum::from_slice(ec2k.y.as_ref()).map_err(WebauthnError::OpenSSLError)?;
-
-                let ec_key = ec::EcKey::from_public_key_affine_coordinates(&ec_group, &xbn, &ybn)
-                    .map_err(WebauthnError::OpenSSLError)?;
-
-                ec_key.check_key().map_err(WebauthnError::OpenSSLError)
-            }
-            COSEKeyType::RSA(rsak) => {
-                let nbn =
-                    bn::BigNum::from_slice(rsak.n.as_ref()).map_err(WebauthnError::OpenSSLError)?;
-                let ebn = bn::BigNum::from_slice(&rsak.e).map_err(WebauthnError::OpenSSLError)?;
-
-                let _rsa_key = rsa::Rsa::from_public_components(nbn, ebn)
-                    .map_err(WebauthnError::OpenSSLError)?;
-                /*
-                // Only applies to keys with private components!
-                rsa_key
-                    .check_key()
-                    .map_err(WebauthnError::OpenSSLError)
-                */
-                Ok(())
-            }
-            COSEKeyType::EC_OKP(_edk) => {
-                warn!("ED25519 or ED448 keys are not currently supported");
-                Err(WebauthnError::COSEKeyEDUnsupported)
-            }
-        }
+        self.get_openssl_pkey().map(|_| ())
     }
 
     /// Retrieve the public key of this COSEKey as an OpenSSL structure
@@ -582,9 +543,14 @@ impl COSEKey {
                 let p = pkey::PKey::from_rsa(rsa_key).map_err(WebauthnError::OpenSSLError)?;
                 Ok(p)
             }
-            _ => {
-                debug!("get_openssl_pkey");
-                Err(WebauthnError::COSEKeyInvalidType)
+            COSEKeyType::EC_OKP(edk) => {
+                let id = match &edk.curve {
+                    EDDSACurve::ED25519 => pkey::Id::ED25519,
+                    EDDSACurve::ED448 => pkey::Id::ED448,
+                };
+
+                pkey::PKey::public_key_from_raw_bytes(&edk.x.0, id)
+                    .map_err(WebauthnError::OpenSSLError)
             }
         }
     }
@@ -729,6 +695,54 @@ mod tests {
                 assert_eq!(pkey.curve, ECDSACurve::SECP521R1);
             }
             _ => panic!("Key should be parsed EC2 key"),
+        }
+    }
+
+    #[test]
+    fn cbor_ed25519() {
+        let hex_data = hex!(
+            "
+                A4         // Map - 4 elements
+                01 01      //   1:   1,  ; kty: OKP key type
+                03 27      //   3:  -8,  ; alg: EDDSA signature algorithm
+                20 06      //  -1:   6,  ; crv: Ed25519 curve
+                21 58 20   43565027f918beb00257d112b903d15b93f5cbc7562dfc8458fbefd714546e3c // -2:   x,  ; Y-coordinate");
+        let val: Value = serde_cbor_2::from_slice(&hex_data).unwrap();
+        let key = COSEKey::try_from(&val).unwrap();
+        assert_eq!(key.type_, COSEAlgorithm::EDDSA);
+        match key.key {
+            COSEKeyType::EC_OKP(pkey) => {
+                assert_eq!(
+                    pkey.x.as_ref(),
+                    hex!("43565027f918beb00257d112b903d15b93f5cbc7562dfc8458fbefd714546e3c")
+                );
+                assert_eq!(pkey.curve, EDDSACurve::ED25519);
+            }
+            _ => panic!("Key should be parsed OKP key"),
+        }
+    }
+
+    #[test]
+    fn cbor_ed448() {
+        let hex_data = hex!(
+            "
+                A4         // Map - 4 elements
+                01 01      //   1:   1,  ; kty: OKP key type
+                03 27      //   3:  -8,  ; alg: EDDSA signature algorithm
+                20 07      //  -1:   7,  ; crv: Ed448 curve
+                21 58 39   0c04658f79c3fd86c4b3d676057b76353126e9b905a7e204c07846c1a2ab3791b02fc5e9c6930345ea7bf8524b944220d4bd711c010c9b2a80 // -2:   x,  ; Y-coordinate");
+        let val: Value = serde_cbor_2::from_slice(&hex_data).unwrap();
+        let key = COSEKey::try_from(&val).unwrap();
+        assert_eq!(key.type_, COSEAlgorithm::EDDSA);
+        match key.key {
+            COSEKeyType::EC_OKP(pkey) => {
+                assert_eq!(
+                    pkey.x.as_ref(),
+                    hex!("0c04658f79c3fd86c4b3d676057b76353126e9b905a7e204c07846c1a2ab3791b02fc5e9c6930345ea7bf8524b944220d4bd711c010c9b2a80")
+                );
+                assert_eq!(pkey.curve, EDDSACurve::ED448);
+            }
+            _ => panic!("Key should be parsed OKP key"),
         }
     }
 }

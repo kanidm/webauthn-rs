@@ -50,6 +50,8 @@ impl COSEAlgorithm {
             COSEAlgorithm::RS256,
             // COSEAlgorithm::RS384,
             // COSEAlgorithm::RS512
+            // -- Testing required
+            // COSEAlgorithm::EDDSA,
         ]
     }
 
