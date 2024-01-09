@@ -199,7 +199,7 @@ use webauthn_rs_core::WebauthnCore;
 
 use crate::interface::*;
 
-/// Fake `CredentialID` generator. See [WebauthnFakeCredentialGenerator] for more details.
+/// Fake `CredentialID` generator. See [WebauthnFakeCredentialGenerator](fake::WebauthnFakeCredentialGenerator) for more details.
 pub mod fake {
     pub use webauthn_rs_core::fake::*;
 }

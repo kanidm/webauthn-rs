@@ -199,7 +199,7 @@ impl FakeCredentialIDDistribution for FakePasskeyDistribution {
 /// To achieve this, the generator uses a seeded CSPRNG for each operation. The CSPRNG is seeded
 /// from the HMAC of the username. The HMAC is keyed from an input that the site provides.
 ///
-/// The HMAC key should not be disclosed, as knowledge of the HMAC key will allow an external
+/// The HMAC key MUST NOT be disclosed, as knowledge of the HMAC key will allow an external
 /// party to determine which IDs are generated and which are not.
 pub struct WebauthnFakeCredentialGenerator<D>
 where
@@ -214,8 +214,25 @@ impl<D> WebauthnFakeCredentialGenerator<D>
 where
     D: FakeCredentialIDDistribution,
 {
+    /// Generate a new random HMAC key for the credential generator. You MUST persist this key for
+    /// future use.
+    pub fn new_hmac_key() -> Result<Vec<u8>, WebauthnError> {
+        let mut key = vec![0; 16];
+
+        openssl::rand::rand_bytes(&mut key)
+            .map_err(WebauthnError::OpenSSLError)
+            .map(|_| key)
+    }
+}
+
+impl<D> WebauthnFakeCredentialGenerator<D>
+where
+    D: FakeCredentialIDDistribution,
+{
     /// Create a new HMAC keyed fake credential generator. You should associate a distribution type
-    /// using type annotations.
+    /// using type annotations. The `hmac_key` is a secret value. Disclosure of it will allow an
+    /// external party to determine if `CredentialID`s are genuine or faked. Rotation of this key
+    /// may also allow detection of genuine or fake credentials.
     pub fn new(hmac_key: &[u8]) -> Result<Self, WebauthnError> {
         let hmac_key = pkey::PKey::hmac(hmac_key).map_err(WebauthnError::OpenSSLError)?;
 
@@ -259,10 +276,10 @@ mod tests {
         let cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
             WebauthnFakeCredentialGenerator::new(&[0, 1, 2, 3]).unwrap();
 
-        let cred_a = cred_gen.generate("a".as_bytes()).unwrap();
+        let cred_a = cred_gen.generate(b"a").unwrap();
         assert!(cred_a.is_empty());
 
-        let cred_b = cred_gen.generate("b".as_bytes()).unwrap();
+        let cred_b = cred_gen.generate(b"b").unwrap();
         assert_eq!(
             cred_b,
             vec![Base64UrlSafeData(vec![
@@ -271,10 +288,10 @@ mod tests {
             ])]
         );
 
-        let cred_c = cred_gen.generate("c".as_bytes()).unwrap();
+        let cred_c = cred_gen.generate(b"c").unwrap();
         assert!(cred_c.is_empty());
 
-        let cred_d = cred_gen.generate("d".as_bytes()).unwrap();
+        let cred_d = cred_gen.generate(b"d").unwrap();
         assert_eq!(
             cred_d,
             vec![Base64UrlSafeData(vec![
@@ -285,7 +302,7 @@ mod tests {
             ])]
         );
 
-        let cred_e = cred_gen.generate("e".as_bytes()).unwrap();
+        let cred_e = cred_gen.generate(b"e").unwrap();
         assert_eq!(
             cred_e,
             vec![
@@ -308,8 +325,8 @@ mod tests {
         let alt_cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
             WebauthnFakeCredentialGenerator::new(&[3, 2, 1, 0]).unwrap();
 
-        let alt_cred_a = alt_cred_gen.generate("a".as_bytes()).unwrap();
-        assert!(alt_cred_a != cred_a);
+        let alt_cred_a = alt_cred_gen.generate(b"a").unwrap();
+        assert_ne!(alt_cred_a, cred_a);
         assert_eq!(
             alt_cred_a,
             vec![Base64UrlSafeData(vec![
