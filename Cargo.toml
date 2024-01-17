@@ -20,7 +20,6 @@ members = [
     # Authenticator CLI,
     "authenticator-cli",
     # Tutorial / Example sites.
-    "tutorial/server/cli",
     "tutorial/server/tide",
     "tutorial/server/axum",
     "tutorial/server/actix_web",
@@ -38,6 +37,8 @@ members = [
     "compat_tester/webauthn-rs-demo-shared",
     # Ssh Key Attestation
     "sshkey-attest",
+    # RP Proxy
+    "webauthn-rp-proxy",
 ]
 
 # Due to --cfg=web_sys_unstable_apis

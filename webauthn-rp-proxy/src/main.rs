@@ -85,7 +85,7 @@ struct AuthenticateFinishResponse {
 }
 
 fn main() {
-    let arguments = App::new("webauthn-cli")
+    let arguments = App::new("webauthn-rp-proxy")
 	.arg(
 	    Arg::with_name("step")
 		.long("--step")
