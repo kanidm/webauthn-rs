@@ -36,13 +36,13 @@ struct RegisterStartRequest {
     rp_origin: String,
     user_display_name: String,
     user_name: String,
-    uuid: String
+    uuid: String,
 }
 
 #[derive(Serialize)]
 struct RegisterStartResponse {
     client: CreationChallengeResponse,
-    server: PasskeyRegistration
+    server: PasskeyRegistration,
 }
 
 #[derive(Deserialize)]
@@ -50,25 +50,25 @@ struct RegisterFinishRequest {
     register_public_key_credential: RegisterPublicKeyCredential,
     passkey_registration: PasskeyRegistration,
     rp_id: String,
-    rp_origin: String
+    rp_origin: String,
 }
 
 #[derive(Serialize)]
 struct RegisterFinishResponse {
-    server: Passkey
+    server: Passkey,
 }
 
 #[derive(Deserialize)]
 struct AuthenticateStartRequest {
     passkeys: Vec<Passkey>,
     rp_id: String,
-    rp_origin: String
+    rp_origin: String,
 }
 
 #[derive(Serialize)]
 struct AuthenticateStartResponse {
     client: RequestChallengeResponse,
-    server: PasskeyAuthentication
+    server: PasskeyAuthentication,
 }
 
 #[derive(Deserialize)]
@@ -76,12 +76,12 @@ struct AuthenticateFinishRequest {
     passkey_authentication: PasskeyAuthentication,
     public_key_credential: PublicKeyCredential,
     rp_id: String,
-    rp_origin: String
+    rp_origin: String,
 }
 
 #[derive(Serialize)]
 struct AuthenticateFinishResponse {
-    server: AuthenticationResult
+    server: AuthenticationResult,
 }
 
 fn main() {
@@ -101,16 +101,26 @@ fn main() {
 
     let mut buffer = String::new();
 
-    io::stdin().read_to_string(&mut buffer).expect("Failed to read from stdin.");
+    io::stdin()
+        .read_to_string(&mut buffer)
+        .expect("Failed to read from stdin.");
 
     let step_value = arguments.value_of("step").unwrap();
 
     match step_value {
-	"authenticate-start" => {let _ = authenticate_start(&buffer);}
-	"authenticate-finish" => {let _ = authenticate_finish(&buffer);}
-	"register-start" => {let _ = register_start(&buffer);}
-	"register-finish" => {let _ = register_finish(&buffer);}
-	_ => unreachable!("impossible")
+        "authenticate-start" => {
+            let _ = authenticate_start(&buffer);
+        }
+        "authenticate-finish" => {
+            let _ = authenticate_finish(&buffer);
+        }
+        "register-start" => {
+            let _ = register_start(&buffer);
+        }
+        "register-finish" => {
+            let _ = register_finish(&buffer);
+        }
+        _ => unreachable!("impossible"),
     }
 }
 
@@ -118,19 +128,21 @@ fn register_start(data: &str) -> Result<()> {
     let rsr: RegisterStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&rsr.rp_origin).expect("Invalid URL.");
     let uuid = Uuid::parse_str(&rsr.uuid).expect("Invalid UUID.");
-    let builder = WebauthnBuilder::new(&rsr.rp_id, &rp_origin)
-	.expect("Invalid configuration (new).");
+    let builder =
+        WebauthnBuilder::new(&rsr.rp_id, &rp_origin).expect("Invalid configuration (new).");
     let webauthn = builder.build().expect("Invalid configuration (build).");
     let (creation_challenge_response, passkey_registration) = webauthn
-	.start_passkey_registration(
+        .start_passkey_registration(
             uuid,
             &rsr.user_name,
             &rsr.user_display_name,
-            Some(rsr.exclude_credentials))
-	.expect("Failed to start registration.");
+            Some(rsr.exclude_credentials),
+        )
+        .expect("Failed to start registration.");
     let response = RegisterStartResponse {
-	client: creation_challenge_response,
-	server: passkey_registration };
+        client: creation_challenge_response,
+        server: passkey_registration,
+    };
 
     println!("{}", serde_json::to_string_pretty(&response)?);
     Ok(())
@@ -141,11 +153,12 @@ fn register_finish(data: &str) -> Result<()> {
     let pkr: PasskeyRegistration = rfr.passkey_registration;
     let rp_origin = Url::parse(&rfr.rp_origin).expect("Invalid URL.");
     let rpkc: RegisterPublicKeyCredential = rfr.register_public_key_credential;
-    let builder = WebauthnBuilder::new(&rfr.rp_id, &rp_origin)
-	.expect("Invalid configuration (new).");
+    let builder =
+        WebauthnBuilder::new(&rfr.rp_id, &rp_origin).expect("Invalid configuration (new).");
     let webauthn = builder.build().expect("Invalid configuration (build).");
-    let pk = webauthn.finish_passkey_registration(&rpkc, &pkr)
-	.expect("Failed to finish registration.");
+    let pk = webauthn
+        .finish_passkey_registration(&rpkc, &pkr)
+        .expect("Failed to finish registration.");
     let response = RegisterFinishResponse { server: pk };
 
     println!("{}", serde_json::to_string_pretty(&response)?);
@@ -155,16 +168,16 @@ fn register_finish(data: &str) -> Result<()> {
 fn authenticate_start(data: &str) -> Result<()> {
     let asr: AuthenticateStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&asr.rp_origin).expect("Invalid URL.");
-    let builder = WebauthnBuilder::new(&asr.rp_id, &rp_origin)
-	.expect("Invalid configuration (new).");
+    let builder =
+        WebauthnBuilder::new(&asr.rp_id, &rp_origin).expect("Invalid configuration (new).");
     let webauthn = builder.build().expect("Invalid configuration (build).");
     let passkeys = asr.passkeys;
     let (request_challenge_response, passkey_authentication) = webauthn
-	.start_passkey_authentication(&passkeys)
-	.expect("Failed to start authentication.");
+        .start_passkey_authentication(&passkeys)
+        .expect("Failed to start authentication.");
     let response = AuthenticateStartResponse {
-	client: request_challenge_response,
-    	server: passkey_authentication
+        client: request_challenge_response,
+        server: passkey_authentication,
     };
 
     println!("{}", serde_json::to_string_pretty(&response)?);
@@ -176,11 +189,12 @@ fn authenticate_finish(data: &str) -> Result<()> {
     let rp_origin = Url::parse(&afr.rp_origin).expect("Invalid URL.");
     let pka: PasskeyAuthentication = afr.passkey_authentication;
     let pkc: PublicKeyCredential = afr.public_key_credential;
-    let builder = WebauthnBuilder::new(&afr.rp_id, &rp_origin)
-	.expect("Invalid configuration (new).");
+    let builder =
+        WebauthnBuilder::new(&afr.rp_id, &rp_origin).expect("Invalid configuration (new).");
     let webauthn = builder.build().expect("Invalid configuration (build).");
-    let ar = webauthn.finish_passkey_authentication(&pkc, &pka)
-	.expect("Failed to finish authentication.");
+    let ar = webauthn
+        .finish_passkey_authentication(&pkc, &pka)
+        .expect("Failed to finish authentication.");
     let response = AuthenticateFinishResponse { server: ar };
 
     println!("{}", serde_json::to_string_pretty(&response)?);
