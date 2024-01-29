@@ -1,6 +1,11 @@
 //! [BerTlvParser] is an [Iterator]-based BER-TLV parser.
+//!
+//! This implements a subset of [the BER-TLV specification][0] to handle
+//! YubiKey's non-conformant configuration format.
+//!
+//! [0]: https://www.itu.int/rec/T-REC-X.690-202102-I/en
 
-/// An [Iterator]-based Compact-TLV parser.
+/// An [Iterator]-based BER-TLV parser.
 pub(crate) struct BerTlvParser<'a> {
     b: &'a [u8],
 }
@@ -10,10 +15,7 @@ impl BerTlvParser<'_> {
     pub fn new(tlv: &[u8]) -> BerTlvParser {
         // Skip null bytes at the start
         let mut i = 0;
-        loop {
-            if i >= tlv.len() || tlv[i] != 0 {
-                break;
-            }
+        while i < tlv.len() && tlv[i] == 0 {
             i += 1;
         }
 
@@ -52,20 +54,37 @@ impl BerTlvParser<'_> {
 }
 
 impl<'a> Iterator for BerTlvParser<'a> {
-    /// A BER-TLV item, a tuple of `class, tag, value`.
-    type Item = (u8, u16, &'a [u8]);
+    /// A BER-TLV item, a tuple of `class, constructed, tag, value`.
+    type Item = (u8, bool, u16, &'a [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.stop_if_empty()?;
 
-        // 5.2.2.1: BER-TLV tag fields
-        let class = self.b[0] >> 5;
+        // ISO/IEC 7816-4:2005 §5.2.2.1: BER-TLV tag fields
+        // Rec. ITU-T X.690 §8.1.2: BER identifier octets
+        let class = self.b[0] >> 6;
+        let constructed = self.b[0] & 0x20 != 0;
         let mut tag = u16::from(self.b[0] & 0x1f);
         self.b = &self.b[1..];
+
         if tag == 0x1f {
             self.stop_if_empty()?;
             // 0b???1_1111 = 2 or 3 byte tag value
             tag = u16::from(self.b[0]);
+            if tag < 0x1f {
+                // Rec. ITU-T X.690 §8.1.2.3
+                error!("low tag number ({tag}) incorrectly encoded in high tag number form");
+                self.brick();
+                return None;
+            }
+
+            if tag == 0x80 {
+                // Rec. ITU-T X.690 §8.1.2.4.2 (c)
+                error!("high tag number incorrectly encoded with padding");
+                self.brick();
+                return None;
+            }
+
             self.b = &self.b[1..];
 
             // 2 byte tag value as 0b0???_???? (31..=127)
@@ -73,13 +92,19 @@ impl<'a> Iterator for BerTlvParser<'a> {
             if tag & 0x80 == 0x80 {
                 self.stop_if_empty()?;
 
+                if self.b[0] & 0x80 != 0 {
+                    error!("tag values longer than 3 bytes not supported");
+                    self.brick();
+                    return None;
+                }
                 tag = (tag & 0x7f) << 7;
                 tag |= u16::from(self.b[0]) & 0x7f;
                 self.b = &self.b[1..];
             }
         }
 
-        // 5.2.2.2 BER-TLV length fields
+        // ISO/IEC 7816-4:2005 §5.2.2.2 BER-TLV length fields
+        // Rec. ITU-T X.690 §8.1.3: BER length octets
         self.stop_if_empty()?;
         let len = self.b[0];
         self.b = &self.b[1..];
@@ -134,7 +159,7 @@ impl<'a> Iterator for BerTlvParser<'a> {
         self.stop_and_brick_if_less_than(len)?;
         let v = &self.b[..len];
         self.b = &self.b[len..];
-        Some((class, tag, v))
+        Some((class, constructed, tag, v))
     }
 }
 
@@ -144,9 +169,10 @@ mod tests {
 
     fn assert_tlv_parser(expected: &[(u8, u16, &[u8])], p: BerTlvParser<'_>) {
         let mut i = 0;
-        for (actual_cls, actual_tag, actual_val) in p {
+        for (actual_cls, actual_constructed, actual_tag, actual_val) in p {
             let (expected_cls, expected_tag, expected_val) = expected[i];
             assert_eq!(expected_cls, actual_cls, "cls mismatch at {i}");
+            assert!(!actual_constructed, "unexpected constructed value at {i}");
             assert_eq!(expected_tag, actual_tag, "tag mismatch at {i}");
             assert_eq!(
                 expected_val, actual_val,
@@ -245,5 +271,40 @@ mod tests {
 
         let p = BerTlvParser::new(&v[1..]);
         assert_tlv_parser(expected.as_slice(), p);
+    }
+
+    #[test]
+    fn low_tag_number_as_high() {
+        let b = hex::decode("9f01020000").unwrap();
+        let mut p = BerTlvParser::new(&b);
+        assert!(p.next().is_none());
+    }
+
+    #[test]
+    fn high_tag_number_padded() {
+        let b = hex::decode("9f8001020000").unwrap();
+        let mut p = BerTlvParser::new(&b);
+        assert!(p.next().is_none());
+    }
+
+    #[test]
+    fn huge_tag_number_not_supported() {
+        let b = hex::decode("9f8f8f0f020000").unwrap();
+        let mut p = BerTlvParser::new(&b);
+        assert!(p.next().is_none());
+    }
+
+    #[test]
+    fn indefinite_form_not_supported() {
+        let b = hex::decode("018012340000").unwrap();
+        let mut p = BerTlvParser::new(&b);
+        assert!(p.next().is_none());
+    }
+
+    #[test]
+    fn really_long_length_not_supported() {
+        let b = hex::decode("018500000000020000").unwrap();
+        let mut p = BerTlvParser::new(&b);
+        assert!(p.next().is_none());
     }
 }

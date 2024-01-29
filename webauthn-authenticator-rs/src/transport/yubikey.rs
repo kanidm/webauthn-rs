@@ -114,9 +114,16 @@ pub enum FormFactor {
 /// ## Payload format
 ///
 /// * `u8`: length
-/// * BER-TLV payload
+/// * BER-TLV-like payload
 ///
-/// BER-TLV tag values are one of the values in [`ConfigKey`].
+/// The payload is BER-TLV-like, with some differences:
+///
+/// * all tags (incorrectly) use the universal class (0x00)
+/// * tag numbers are one of the values in [`ConfigKey`]
+/// * values are encoded directly
+///
+/// BER-TLV tag values are one of the values in [`ConfigKey`], which are all in
+/// the universal class (0x00).
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct YubiKeyConfig {
     /// Device serial number. This isn't available on all devices.
@@ -162,8 +169,8 @@ impl YubiKeyConfig {
         };
         let parser = BerTlvParser::new(&b[1..]);
 
-        for (cls, tag, val) in parser {
-            if cls != 0 {
+        for (cls, constructed, tag, val) in parser {
+            if cls != 0 || constructed {
                 continue;
             }
             let Some(key) = ConfigKey::from_u16(tag) else {
