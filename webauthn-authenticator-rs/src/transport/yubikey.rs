@@ -118,12 +118,9 @@ pub enum FormFactor {
 ///
 /// The payload is BER-TLV-like, with some differences:
 ///
-/// * all tags (incorrectly) use the universal class (0x00)
+/// * all tags use the universal class (0x00)
 /// * tag numbers are one of the values in [`ConfigKey`]
 /// * values are encoded directly
-///
-/// BER-TLV tag values are one of the values in [`ConfigKey`], which are all in
-/// the universal class (0x00).
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct YubiKeyConfig {
     /// Device serial number. This isn't available on all devices.
