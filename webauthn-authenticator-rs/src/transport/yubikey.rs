@@ -451,9 +451,10 @@ mod tests {
             challenge_response_timeout: 15,
             ..Default::default()
         };
-        let v =
-            hex::decode("260102023f030202020204cafe123404010405030502040602000007010f0801000a01000f0100")
-                .unwrap();
+        let v = hex::decode(
+            "260102023f030202020204cafe123404010405030502040602000007010f0801000a01000f0100",
+        )
+        .unwrap();
         let cfg = YubiKeyConfig::from_bytes(v.as_slice()).unwrap();
         assert_eq!(expected, cfg);
     }
