@@ -31,6 +31,7 @@ tracing.workspace = true
 openssl.workspace = true
 # We could consider replacing this with openssl rand.
 rand.workspace = true
+rand_chacha.workspace = true
 url = { workspace = true, features = ["serde"] }
 x509-parser = "0.13.0"
 der-parser = "7.0.0"
