@@ -16,15 +16,17 @@
 //!
 //! ## NFC
 //!
+//! **NFC support is not yet implemented.**
+//!
 //! Management app AID: `a000000527471117`
+//!
+//! All commands sent with CLA = `0x00`, P2 = `0x00`.
 //!
 //! INS    | P1     | Description | Request | Response
 //! ------ | ------ | ----------- | ------- | --------
 //! `0x16` | `0x11` | Set legacy device config | ... | ...
 //! `0x1D` | `0x00` | Get device config | _none_ | [`YubiKeyConfig`]
 //! `0x1C` | `0x00` | Set device config | [`YubiKeyConfig`] | none?
-//!
-//! All commands sent with CLA = `0x00`, P2 = `0x00`.
 //!
 //! ## References
 //!
@@ -33,7 +35,7 @@
 //! [0]: https://github.com/Yubico/yubikey-manager/blob/51a7ae438c923189788a1e31d3de18d452131942/yubikit/management.py#L223
 use async_trait::async_trait;
 use bitflags::bitflags;
-use num_traits::cast::{FromPrimitive, ToPrimitive};
+use num_traits::cast::FromPrimitive;
 
 use crate::{prelude::WebauthnCError, tlv::ber::BerTlvParser};
 

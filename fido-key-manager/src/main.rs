@@ -12,11 +12,9 @@ use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use tokio_stream::StreamExt;
 #[cfg(feature = "solokey")]
-use webauthn_authenticator_rs::ctap2::SoloKeyAuthenticator;
+use webauthn_authenticator_rs::{ctap2::SoloKeyAuthenticator, prelude::WebauthnCError};
 #[cfg(feature = "yubikey")]
 use webauthn_authenticator_rs::ctap2::YubiKeyAuthenticator;
-#[cfg(any(feature = "solokey", feature = "yubikey"))]
-use webauthn_authenticator_rs::prelude::WebauthnCError;
 use webauthn_authenticator_rs::{
     ctap2::{
         commands::UserCM, select_one_device, select_one_device_predicate,

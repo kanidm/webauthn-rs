@@ -20,7 +20,7 @@ use super::Ctap20Authenticator;
 /// vendor-specific commands, this may cause unexpected or undesirable behaviour
 /// on other vendors' keys.
 ///
-/// Protocol notes are in TODO
+/// Protocol notes are in [`crate::transport::yubikey`].
 #[async_trait]
 pub trait YubiKeyAuthenticator {
     async fn get_yubikey_config(&mut self) -> Result<YubiKeyConfig, WebauthnCError>;
