@@ -61,7 +61,6 @@ impl<'a> Iterator for BerTlvParser<'a> {
         // 5.2.2.1: BER-TLV tag fields
         let class = self.b[0] >> 5;
         let mut tag = u16::from(self.b[0] & 0x1f);
-        // trace!(?class, ?tag);
         self.b = &self.b[1..];
         if tag == 0x1f {
             self.stop_if_empty()?;
@@ -130,7 +129,6 @@ impl<'a> Iterator for BerTlvParser<'a> {
                 return None;
             }
         };
-        // info!(?len);
 
         let len = len as usize;
         self.stop_and_brick_if_less_than(len)?;

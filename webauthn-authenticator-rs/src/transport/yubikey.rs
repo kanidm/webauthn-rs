@@ -163,7 +163,6 @@ impl YubiKeyConfig {
         let parser = BerTlvParser::new(&b[1..]);
 
         for (cls, tag, val) in parser {
-            // trace!(?cls, ?tag, ?val);
             if cls != 0 {
                 continue;
             }
@@ -427,6 +426,33 @@ mod tests {
         };
         let v =
             hex::decode("230102023f030202180204cafe123404010305030501020602000007010f0801000a0100")
+                .unwrap();
+        let cfg = YubiKeyConfig::from_bytes(v.as_slice()).unwrap();
+        assert_eq!(expected, cfg);
+    }
+
+    #[test]
+    fn yubikey_5c_nano() {
+        let _ = tracing_subscriber::fmt().try_init();
+        let expected = YubiKeyConfig {
+            serial: Some(0xcafe1234),
+            form_factor: FormFactor::UsbCNano,
+            version: [5, 2, 4],
+            supported_usb_interfaces: Interface::OTP
+                | Interface::CTAP1
+                | Interface::CTAP2
+                | Interface::OPENPGP
+                | Interface::PIV
+                | Interface::OATH,
+            enabled_usb_interfaces: Interface::CTAP1 | Interface::CTAP2,
+            supported_nfc_interfaces: Interface::empty(),
+            enabled_nfc_interfaces: Interface::empty(),
+            auto_eject_timeout: 0,
+            challenge_response_timeout: 15,
+            ..Default::default()
+        };
+        let v =
+            hex::decode("260102023f030202020204cafe123404010405030502040602000007010f0801000a01000f0100")
                 .unwrap();
         let cfg = YubiKeyConfig::from_bytes(v.as_slice()).unwrap();
         assert_eq!(expected, cfg);
