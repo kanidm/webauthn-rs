@@ -21,8 +21,7 @@ tracking and managing these is very complicated and time consuming.
 This is subject to change as [OpenSSL's release strategy][0] evolves, or if we
 encounter bugs or limitations with particular versions of OpenSSL.
 
-The `openssl-sys` crate's `vendored` feature still targets OpenSSL v1.1, so is
-**unsupported**.
+As of `openssl` crate version 0.10.56, the `vendored` feature on the `openssl` crate uses OpenSSL v3, thus using the `vendored` flag is a option. However, it's worth considering whether vendored OpenSSL is the right approach for your project, as can make updating in the case of OpenSSL vulnerabilities harder, and upstream packagers may not support it.
 
 [0]: https://www.openssl.org/policies/releasestrat.html
 [1]: https://www.openssl.org/support/contracts.html
