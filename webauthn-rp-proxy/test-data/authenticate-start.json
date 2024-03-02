@@ -1,0 +1,38 @@
+{
+  "passkeys": [
+    {
+      "cred": {
+        "cred_id": "Abr4cz81v7rNJR7OnKUJeB297HaWkpwUeEPAWAGTkAWA62e0fw20tf6LDL6CWmsZ3yVse9Yw1tpXpNLK5q7e2Po",
+        "cred": {
+          "type_": "ES256",
+          "key": {
+            "EC_EC2": {
+              "curve": "SECP256R1",
+              "x": "HvbGIj6R0H5dnvpqNZwKacuF3KN18CdZKEPBLSrndao",
+              "y": "bpEXmUfWwhW0XwIEREPdUr-RxBH-QIprEWFxSgki6Ms"
+            }
+          }
+        },
+        "counter": 0,
+        "transports": null,
+        "user_verified": true,
+        "backup_eligible": false,
+        "backup_state": false,
+        "registration_policy": "required",
+        "extensions": {
+          "cred_protect": "Ignored",
+          "hmac_create_secret": "NotRequested",
+          "appid": "NotRequested",
+          "cred_props": "Ignored"
+        },
+        "attestation": {
+          "data": "None",
+          "metadata": "None"
+        },
+        "attestation_format": "None"
+      }
+    }
+  ],
+  "rp_id": "localhost",
+  "rp_origin": "http://localhost:8443"
+}
