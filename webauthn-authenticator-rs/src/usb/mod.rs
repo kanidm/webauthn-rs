@@ -15,6 +15,8 @@ mod framing;
 mod responses;
 #[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
 mod solokey;
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-yubikey"))]
+mod yubikey;
 
 use fido_hid_rs::{
     HidReportBytes, HidSendReportBytes, USBDevice, USBDeviceImpl, USBDeviceInfo, USBDeviceInfoImpl,

@@ -115,6 +115,26 @@ Command | Description
 `solo-key-info` | get all connected SoloKeys' unique ID, firmware version and secure boot status
 `solo-key-random` | get some random bytes from a SoloKey
 
+### YubiKey
+
+> **Tip:** this functionality is only available when `fido-key-manager` is built
+> with `--features yubikey`.
+
+This only supports [YubiKey 5 series][yk5] and [Security Key by Yubico][sky]
+devices via USB HID with the CTAP 2.0 interface (FIDO2) enabled. NFC support may
+be added in future.
+
+YubiKey 4 and earlier support is not planned - they do not support CTAP 2.0,
+they use a different config format and protocol, and some firmware versions
+report bogus data.
+
+Command | Description
+------- | -----------
+`yubikey-get-config` | gets a connected YubiKey's device info, firmware version and interface configuration
+
+[yk5]: https://www.yubico.com/products/yubikey-5-overview/
+[sky]: https://www.yubico.com/products/security-key/
+
 ## Platform-specific notes
 
 Bluetooth is currently disabled by default, as it's not particularly reliable on

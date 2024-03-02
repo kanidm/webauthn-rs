@@ -11,6 +11,8 @@ use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
 use tokio_stream::StreamExt;
+#[cfg(feature = "yubikey")]
+use webauthn_authenticator_rs::ctap2::YubiKeyAuthenticator;
 #[cfg(feature = "solokey")]
 use webauthn_authenticator_rs::{ctap2::SoloKeyAuthenticator, prelude::WebauthnCError};
 use webauthn_authenticator_rs::{
@@ -205,6 +207,8 @@ pub enum Opt {
     #[cfg(feature = "solokey")]
     /// Gets some random bytes from a connected SoloKey 2 or Trussed device.
     SoloKeyRandom,
+    #[cfg(feature = "yubikey")]
+    YubikeyGetConfig,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -753,6 +757,22 @@ async fn main() {
                 .await
                 .expect("Error getting random data");
             println!("Random bytes: {}", hex::encode(r));
+        }
+
+        #[cfg(feature = "yubikey")]
+        Opt::YubikeyGetConfig => {
+            // TODO: filter this to just YubiKey devices in a safe way
+            println!("Insert a YubiKey device...");
+            let mut token: CtapAuthenticator<AnyToken, Cli> =
+                select_one_device(stream, &ui).await.unwrap();
+
+            let cfg = token
+                .get_yubikey_config()
+                .await
+                .expect("Error getting YubiKey config");
+
+            println!("YubiKey config:");
+            println!("{cfg}")
         }
     }
 }

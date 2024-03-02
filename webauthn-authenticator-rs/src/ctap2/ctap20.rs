@@ -533,7 +533,10 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let ret = self.token.transmit(mc, self.ui_callback).await;
 
         if let Err(WebauthnCError::Ctap(e)) = ret {
-            if e == CtapError::Ctap2PinAuthInvalid || e == CtapError::Ctap2PinNotSet {
+            if e == CtapError::Ctap2PinAuthInvalid
+                || e == CtapError::Ctap2PinNotSet
+                || e == CtapError::Ctap2PinInvalid
+            {
                 // User pressed the button
                 return Ok(());
             }

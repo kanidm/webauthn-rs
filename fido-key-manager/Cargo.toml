@@ -24,6 +24,7 @@ bluetooth = ["webauthn-authenticator-rs/bluetooth"]
 nfc = ["webauthn-authenticator-rs/nfc"]
 usb = ["webauthn-authenticator-rs/usb"]
 solokey = ["webauthn-authenticator-rs/vendor-solokey"]
+yubikey = ["webauthn-authenticator-rs/vendor-yubikey"]
 
 default = ["nfc", "usb"]
 

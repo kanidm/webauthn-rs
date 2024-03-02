@@ -52,6 +52,8 @@ ctap2 = [
 ctap2-management = ["ctap2"]
 # Support for SoloKey's vendor commands
 vendor-solokey = []
+# Support for YubiKey's vendor commands
+vendor-yubikey = []
 nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
 softpasskey = ["crypto", "softtoken"]

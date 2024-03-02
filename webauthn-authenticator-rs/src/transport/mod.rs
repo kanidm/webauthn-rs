@@ -7,6 +7,8 @@ pub mod iso7816;
 pub(crate) mod solokey;
 #[cfg(any(doc, feature = "bluetooth", feature = "usb"))]
 pub(crate) mod types;
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-yubikey"))]
+pub(crate) mod yubikey;
 
 pub use crate::transport::any::{AnyToken, AnyTransport};
 
