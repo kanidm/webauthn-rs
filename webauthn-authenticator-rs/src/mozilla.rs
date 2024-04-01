@@ -80,7 +80,7 @@ impl MozillaAuthenticator {
                         continue;
                     }
                     PinError::InvalidPin(attempts) => {
-                        debug!(
+                        error!(
                             "Wrong PIN! {}",
                             attempts.map_or("Try again.".to_string(), |a| format!(
                                 "You have {} attempts left.",
@@ -96,9 +96,7 @@ impl MozillaAuthenticator {
                         error!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
                     }
                     PinError::PinBlocked => {
-                        error!(
-                            "Too many failed attempts. Your device has been blocked. Reset it."
-                        )
+                        error!("Too many failed attempts. Your device has been blocked. Reset it.")
                     }
                     e => {
                         error!("Unexpected error: {:?}", e)
