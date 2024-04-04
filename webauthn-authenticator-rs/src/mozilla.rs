@@ -67,7 +67,7 @@ impl MozillaAuthenticator {
                     debug!("STATUS: success using device: {}", dev_info);
                 }
                 Ok(StatusUpdate::SelectDeviceNotice) => {
-                    debug!("STATUS: Please select a device by touching one of them.");
+                    info!("STATUS: Please select a device by touching one of them.");
                 }
                 Ok(StatusUpdate::DeviceSelected(dev_info)) => {
                     debug!("STATUS: Continuing with device: {}", dev_info);
