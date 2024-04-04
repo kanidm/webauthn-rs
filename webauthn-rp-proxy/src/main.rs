@@ -1,33 +1,33 @@
+//! A simple command-line wrapper around webauthn-rs
+
+//! There are four commands, each representing a server-side step in
+//! the basic webauthn protocol:
+
+//! - register-start
+//! - register-finish
+//! - authenticate-start
+//! - authenticate-finish
+
+//! The program's --step argument specifies which step from the list
+//! above is being invoked.  It reads the corresponding JSON Request
+//! struct below from stdin, carries out the webauthn step, and writes
+//! the JSON Response struct to stdout if no errors occur.
+
+//! The Response structs contain fields labeled client and server.  The
+//! value in the client field should be sent to the browser.  The value
+//! in the server field should be used on the server, AND SHOULD NOT BE
+//! SENT TO THE CLIENT LEST SECURITY BE COMPROMISED.
+
+//! The purpose of this program is twofold: to facilitate testing, and
+//! to make it easy to implement webauthn in other programming
+//! languages by doing simple JSON I/O to this program.
+
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
 use std::io::{self, Read};
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
-
-// A simple command-line wrapper around webauthn-rs
-
-// There are four commands, each representing a server-side step in
-// the basic webauthn protocol:
-
-// - register-start
-// - register-finish
-// - authenticate-start
-// - authenticate-finish
-
-// The program's --step argument specifies which step from the list
-// above is being invoked.  It reads the corresponding JSON Request
-// struct below from stdin, carries out the webauthn step, and writes
-// the JSON Response struct to stdout if no errors occur.
-
-// The Response structs contain fields labeled client and server.  The
-// value in the client field should be sent to the browser.  The value
-// in the server field should be used on the server, AND SHOULD NOT BE
-// SENT TO THE CLIENT LEST SECURITY BE COMPROMISED.
-
-// The purpose of this program is twofold: to facilitate testing, and
-// to make it easy to implement webauthn in other programming
-// languages by doing simple JSON I/O to this program.
 
 #[derive(Deserialize)]
 struct RegisterStartRequest {
