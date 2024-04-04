@@ -1,4 +1,4 @@
-use clap::{App, Arg};
+use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::Result;
 use std::io::{self, Read};
@@ -84,47 +84,43 @@ struct AuthenticateFinishResponse {
     server: AuthenticationResult,
 }
 
-fn main() {
-    let arguments = App::new("webauthn-rp-proxy")
-	.arg(
-	    Arg::with_name("step")
-		.long("--step")
-		.takes_value(true)
-		.required(true)
-		.possible_values(&["authenticate-start",
-				   "authenticate-finish",
-				   "register-start",
-				   "register-finish"])
-		.help("either authenticate-start, authenticate-finish, register-start, or register-finish"),
-	)
-	.get_matches();
+#[derive(Debug, Subcommand)]
+pub enum Step {
+    AuthenticateStart,
+    AuthenticateFinish,
+    RegisterStart,
+    RegisterFinish,
+}
 
+#[derive(Debug, Parser)]
+#[clap(
+    about = "a simple command-line wrapper around webauthn-rs",
+    name = "webauthnrs-proxy",
+    version = "0.1.0"
+)]
+pub struct Args {
+    #[clap(subcommand)]
+    pub step: Step,
+    #[clap(long)]
+    pub pretty_print: bool,
+}
+
+fn main() {
+    let args = Args::parse();
     let mut buffer = String::new();
 
     io::stdin()
         .read_to_string(&mut buffer)
         .expect("Failed to read from stdin.");
-
-    let step_value = arguments.value_of("step").unwrap();
-
-    match step_value {
-        "authenticate-start" => {
-            let _ = authenticate_start(&buffer);
-        }
-        "authenticate-finish" => {
-            let _ = authenticate_finish(&buffer);
-        }
-        "register-start" => {
-            let _ = register_start(&buffer);
-        }
-        "register-finish" => {
-            let _ = register_finish(&buffer);
-        }
-        _ => unreachable!("impossible"),
-    }
+    let _ = match args.step {
+        Step::AuthenticateFinish => authenticate_finish(&buffer, args.pretty_print),
+        Step::AuthenticateStart => authenticate_start(&buffer, args.pretty_print),
+        Step::RegisterFinish => register_finish(&buffer, args.pretty_print),
+        Step::RegisterStart => register_start(&buffer, args.pretty_print),
+    };
 }
 
-fn register_start(data: &str) -> Result<()> {
+fn register_start(data: &str, pretty_print: bool) -> Result<()> {
     let rsr: RegisterStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&rsr.rp_origin).expect("Invalid URL.");
     let uuid = Uuid::parse_str(&rsr.uuid).expect("Invalid UUID.");
@@ -144,11 +140,15 @@ fn register_start(data: &str) -> Result<()> {
         server: passkey_registration,
     };
 
-    println!("{}", serde_json::to_string_pretty(&response)?);
+    if pretty_print {
+        println!("{}", serde_json::to_string_pretty(&response)?);
+    } else {
+        println!("{}", serde_json::to_string(&response)?);
+    }
     Ok(())
 }
 
-fn register_finish(data: &str) -> Result<()> {
+fn register_finish(data: &str, pretty_print: bool) -> Result<()> {
     let rfr: RegisterFinishRequest = serde_json::from_str(data)?;
     let pkr: PasskeyRegistration = rfr.passkey_registration;
     let rp_origin = Url::parse(&rfr.rp_origin).expect("Invalid URL.");
@@ -161,11 +161,15 @@ fn register_finish(data: &str) -> Result<()> {
         .expect("Failed to finish registration.");
     let response = RegisterFinishResponse { server: pk };
 
-    println!("{}", serde_json::to_string_pretty(&response)?);
+    if pretty_print {
+        println!("{}", serde_json::to_string_pretty(&response)?);
+    } else {
+        println!("{}", serde_json::to_string(&response)?);
+    }
     Ok(())
 }
 
-fn authenticate_start(data: &str) -> Result<()> {
+fn authenticate_start(data: &str, pretty_print: bool) -> Result<()> {
     let asr: AuthenticateStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&asr.rp_origin).expect("Invalid URL.");
     let builder =
@@ -180,11 +184,15 @@ fn authenticate_start(data: &str) -> Result<()> {
         server: passkey_authentication,
     };
 
-    println!("{}", serde_json::to_string_pretty(&response)?);
+    if pretty_print {
+        println!("{}", serde_json::to_string_pretty(&response)?);
+    } else {
+        println!("{}", serde_json::to_string(&response)?);
+    }
     Ok(())
 }
 
-fn authenticate_finish(data: &str) -> Result<()> {
+fn authenticate_finish(data: &str, pretty_print: bool) -> Result<()> {
     let afr: AuthenticateFinishRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&afr.rp_origin).expect("Invalid URL.");
     let pka: PasskeyAuthentication = afr.passkey_authentication;
@@ -197,6 +205,10 @@ fn authenticate_finish(data: &str) -> Result<()> {
         .expect("Failed to finish authentication.");
     let response = AuthenticateFinishResponse { server: ar };
 
-    println!("{}", serde_json::to_string_pretty(&response)?);
+    if pretty_print {
+        println!("{}", serde_json::to_string_pretty(&response)?);
+    } else {
+        println!("{}", serde_json::to_string(&response)?);
+    }
     Ok(())
 }
