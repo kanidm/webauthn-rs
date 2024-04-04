@@ -112,12 +112,14 @@ fn main() {
     io::stdin()
         .read_to_string(&mut buffer)
         .expect("Failed to read from stdin.");
-    let _ = match args.step {
+
+    let result = match args.step {
         Step::AuthenticateFinish => authenticate_finish(&buffer, args.pretty_print),
         Step::AuthenticateStart => authenticate_start(&buffer, args.pretty_print),
         Step::RegisterFinish => register_finish(&buffer, args.pretty_print),
         Step::RegisterStart => register_start(&buffer, args.pretty_print),
     };
+    result.expect("Failure in Webauthn step.");
 }
 
 fn register_start(data: &str, pretty_print: bool) -> Result<()> {
