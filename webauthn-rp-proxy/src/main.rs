@@ -122,6 +122,16 @@ fn main() {
     result.expect("Failure in Webauthn step.");
 }
 
+macro_rules! to_string_maybe_pretty {
+    ($pp:expr, $response:expr) => {
+        if $pp {
+            println!("{}", serde_json::to_string_pretty(&$response)?);
+        } else {
+            println!("{}", serde_json::to_string(&$response)?);
+        }
+    };
+}
+
 fn register_start(data: &str, pretty_print: bool) -> Result<()> {
     let rsr: RegisterStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&rsr.rp_origin).expect("Invalid URL.");
@@ -141,11 +151,7 @@ fn register_start(data: &str, pretty_print: bool) -> Result<()> {
         server: passkey_registration,
     };
 
-    if pretty_print {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        println!("{}", serde_json::to_string(&response)?);
-    }
+    to_string_maybe_pretty!(pretty_print, response);
     Ok(())
 }
 
@@ -162,11 +168,7 @@ fn register_finish(data: &str, pretty_print: bool) -> Result<()> {
         .expect("Failed to finish registration.");
     let response = RegisterFinishResponse { server: pk };
 
-    if pretty_print {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        println!("{}", serde_json::to_string(&response)?);
-    }
+    to_string_maybe_pretty!(pretty_print, response);
     Ok(())
 }
 
@@ -185,11 +187,7 @@ fn authenticate_start(data: &str, pretty_print: bool) -> Result<()> {
         server: passkey_authentication,
     };
 
-    if pretty_print {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        println!("{}", serde_json::to_string(&response)?);
-    }
+    to_string_maybe_pretty!(pretty_print, response);
     Ok(())
 }
 
@@ -206,10 +204,6 @@ fn authenticate_finish(data: &str, pretty_print: bool) -> Result<()> {
         .expect("Failed to finish authentication.");
     let response = AuthenticateFinishResponse { server: ar };
 
-    if pretty_print {
-        println!("{}", serde_json::to_string_pretty(&response)?);
-    } else {
-        println!("{}", serde_json::to_string(&response)?);
-    }
+    to_string_maybe_pretty!(pretty_print, response);
     Ok(())
 }
