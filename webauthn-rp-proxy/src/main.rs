@@ -36,7 +36,7 @@ struct RegisterStartRequest {
     rp_origin: String,
     user_display_name: String,
     user_name: String,
-    uuid: String,
+    uuid: Uuid,
 }
 
 #[derive(Serialize)]
@@ -123,13 +123,12 @@ fn main() {
 fn register_start(data: &str, pretty_print: bool) -> Result<()> {
     let rsr: RegisterStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&rsr.rp_origin).expect("Invalid URL.");
-    let uuid = Uuid::parse_str(&rsr.uuid).expect("Invalid UUID.");
     let builder =
         WebauthnBuilder::new(&rsr.rp_id, &rp_origin).expect("Invalid configuration (new).");
     let webauthn = builder.build().expect("Invalid configuration (build).");
     let (creation_challenge_response, passkey_registration) = webauthn
         .start_passkey_registration(
-            uuid,
+            rsr.uuid,
             &rsr.user_name,
             &rsr.user_display_name,
             Some(rsr.exclude_credentials),
