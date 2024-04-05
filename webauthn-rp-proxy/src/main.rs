@@ -145,7 +145,10 @@ fn to_string_maybe_pretty<T: Serialize>(pretty_print: bool, value: &T) -> String
 fn to_json_result<T: Serialize>(pretty_print: bool, value: Result<T>) -> Result<String, String> {
     match value {
         Ok(v) => Ok(to_string_maybe_pretty(pretty_print, &v)),
-        Err(e) => Err(to_string_maybe_pretty(pretty_print, &json!({ "error": &e.to_string() }))),
+        Err(e) => Err(to_string_maybe_pretty(
+            pretty_print,
+            &json!({ "error": &e.to_string() }),
+        )),
     }
 }
 
