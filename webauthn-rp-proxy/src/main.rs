@@ -22,10 +22,12 @@
 //! to make it easy to implement webauthn in other programming
 //! languages by doing simple JSON I/O to this program.
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
-use serde_json::Result;
-use std::io::{self, Read};
+use serde_json::json;
+use std::io::{self, Read, Write};
+use std::process;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
@@ -113,97 +115,105 @@ fn main() {
         .read_to_string(&mut buffer)
         .expect("Failed to read from stdin.");
 
-    let result = match args.step {
+    let json = match args.step {
         Step::AuthenticateFinish => authenticate_finish(&buffer, args.pretty_print),
         Step::AuthenticateStart => authenticate_start(&buffer, args.pretty_print),
         Step::RegisterFinish => register_finish(&buffer, args.pretty_print),
         Step::RegisterStart => register_start(&buffer, args.pretty_print),
     };
-    result.expect("Failure in Webauthn step.");
+
+    // Output only JSON.  Set exit code.
+    println!("{}", json.clone().unwrap_or_else(|s| s));
+    io::stdout().flush().unwrap();
+    process::exit(if json.is_ok() { 0 } else { 1 });
 }
 
-macro_rules! to_string_maybe_pretty {
-    ($pp:expr, $response:expr) => {
-        if $pp {
-            println!("{}", serde_json::to_string_pretty(&$response)?);
-        } else {
-            println!("{}", serde_json::to_string(&$response)?);
+fn to_string_maybe_pretty<T: Serialize>(pretty_print: bool, value: &T) -> String {
+    if pretty_print {
+        match serde_json::to_string_pretty(value) {
+            Ok(v) => v,
+            Err(_e) => String::from("{\"error\": \"Error serializing value\"}"),
         }
-    };
+    } else {
+        match serde_json::to_string(value) {
+            Ok(v) => v,
+            Err(_e) => String::from("{\"error\": \"Error serializing value\"}"),
+        }
+    }
 }
 
-fn register_start(data: &str, pretty_print: bool) -> Result<()> {
+fn to_json_result<T: Serialize>(pretty_print: bool, value: Result<T>) -> Result<String, String> {
+    match value {
+        Ok(v) => Ok(to_string_maybe_pretty(pretty_print, &v)),
+        Err(e) => Err(to_string_maybe_pretty(pretty_print, &json!({ "error": &e.to_string() }))),
+    }
+}
+
+fn register_start_helper(data: &str) -> Result<RegisterStartResponse> {
     let rsr: RegisterStartRequest = serde_json::from_str(data)?;
-    let rp_origin = Url::parse(&rsr.rp_origin).expect("Invalid URL.");
-    let builder =
-        WebauthnBuilder::new(&rsr.rp_id, &rp_origin).expect("Invalid configuration (new).");
-    let webauthn = builder.build().expect("Invalid configuration (build).");
-    let (creation_challenge_response, passkey_registration) = webauthn
-        .start_passkey_registration(
-            rsr.uuid,
-            &rsr.user_name,
-            &rsr.user_display_name,
-            Some(rsr.exclude_credentials),
-        )
-        .expect("Failed to start registration.");
-    let response = RegisterStartResponse {
+    let rp_origin = Url::parse(&rsr.rp_origin)?;
+    let builder = WebauthnBuilder::new(&rsr.rp_id, &rp_origin)?;
+    let webauthn = builder.build()?;
+    let (creation_challenge_response, passkey_registration) = webauthn.start_passkey_registration(
+        rsr.uuid,
+        &rsr.user_name,
+        &rsr.user_display_name,
+        Some(rsr.exclude_credentials),
+    )?;
+    Ok(RegisterStartResponse {
         client: creation_challenge_response,
         server: passkey_registration,
-    };
-
-    to_string_maybe_pretty!(pretty_print, response);
-    Ok(())
+    })
 }
 
-fn register_finish(data: &str, pretty_print: bool) -> Result<()> {
+fn register_start(data: &str, pretty_print: bool) -> Result<String, String> {
+    to_json_result(pretty_print, register_start_helper(data))
+}
+
+fn register_finish_helper(data: &str) -> Result<RegisterFinishResponse> {
     let rfr: RegisterFinishRequest = serde_json::from_str(data)?;
     let pkr: PasskeyRegistration = rfr.passkey_registration;
-    let rp_origin = Url::parse(&rfr.rp_origin).expect("Invalid URL.");
+    let rp_origin = Url::parse(&rfr.rp_origin)?;
     let rpkc: RegisterPublicKeyCredential = rfr.register_public_key_credential;
-    let builder =
-        WebauthnBuilder::new(&rfr.rp_id, &rp_origin).expect("Invalid configuration (new).");
-    let webauthn = builder.build().expect("Invalid configuration (build).");
-    let pk = webauthn
-        .finish_passkey_registration(&rpkc, &pkr)
-        .expect("Failed to finish registration.");
-    let response = RegisterFinishResponse { server: pk };
-
-    to_string_maybe_pretty!(pretty_print, response);
-    Ok(())
+    let builder = WebauthnBuilder::new(&rfr.rp_id, &rp_origin)?;
+    let webauthn = builder.build()?;
+    let pk = webauthn.finish_passkey_registration(&rpkc, &pkr)?;
+    Ok(RegisterFinishResponse { server: pk })
 }
 
-fn authenticate_start(data: &str, pretty_print: bool) -> Result<()> {
+fn register_finish(data: &str, pretty_print: bool) -> Result<String, String> {
+    to_json_result(pretty_print, register_finish_helper(data))
+}
+
+fn authenticate_start_helper(data: &str) -> Result<AuthenticateStartResponse> {
     let asr: AuthenticateStartRequest = serde_json::from_str(data)?;
-    let rp_origin = Url::parse(&asr.rp_origin).expect("Invalid URL.");
-    let builder =
-        WebauthnBuilder::new(&asr.rp_id, &rp_origin).expect("Invalid configuration (new).");
-    let webauthn = builder.build().expect("Invalid configuration (build).");
+    let rp_origin = Url::parse(&asr.rp_origin)?;
+    let builder = WebauthnBuilder::new(&asr.rp_id, &rp_origin)?;
+    let webauthn = builder.build()?;
     let passkeys = asr.passkeys;
-    let (request_challenge_response, passkey_authentication) = webauthn
-        .start_passkey_authentication(&passkeys)
-        .expect("Failed to start authentication.");
-    let response = AuthenticateStartResponse {
+    let (request_challenge_response, passkey_authentication) =
+        webauthn.start_passkey_authentication(&passkeys)?;
+    Ok(AuthenticateStartResponse {
         client: request_challenge_response,
         server: passkey_authentication,
-    };
-
-    to_string_maybe_pretty!(pretty_print, response);
-    Ok(())
+    })
 }
 
-fn authenticate_finish(data: &str, pretty_print: bool) -> Result<()> {
+fn authenticate_start(data: &str, pretty_print: bool) -> Result<String, String> {
+    to_json_result(pretty_print, authenticate_start_helper(data))
+}
+
+fn authenticate_finish_helper(data: &str) -> Result<AuthenticateFinishResponse> {
     let afr: AuthenticateFinishRequest = serde_json::from_str(data)?;
-    let rp_origin = Url::parse(&afr.rp_origin).expect("Invalid URL.");
+    let rp_origin = Url::parse(&afr.rp_origin)?;
     let pka: PasskeyAuthentication = afr.passkey_authentication;
     let pkc: PublicKeyCredential = afr.public_key_credential;
-    let builder =
-        WebauthnBuilder::new(&afr.rp_id, &rp_origin).expect("Invalid configuration (new).");
-    let webauthn = builder.build().expect("Invalid configuration (build).");
-    let ar = webauthn
-        .finish_passkey_authentication(&pkc, &pka)
-        .expect("Failed to finish authentication.");
-    let response = AuthenticateFinishResponse { server: ar };
+    let builder = WebauthnBuilder::new(&afr.rp_id, &rp_origin)?;
+    let webauthn = builder.build()?;
+    let ar = webauthn.finish_passkey_authentication(&pkc, &pka)?;
+    Ok(AuthenticateFinishResponse { server: ar })
+}
 
-    to_string_maybe_pretty!(pretty_print, response);
-    Ok(())
+fn authenticate_finish(data: &str, pretty_print: bool) -> Result<String, String> {
+    to_json_result(pretty_print, authenticate_finish_helper(data))
 }
