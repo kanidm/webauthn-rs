@@ -131,16 +131,13 @@ fn main() {
 }
 
 fn to_string_maybe_pretty<T: Serialize>(pretty_print: bool, value: &T) -> String {
-    if pretty_print {
-        match serde_json::to_string_pretty(value) {
-            Ok(v) => v,
-            Err(_e) => String::from("{\"error\": \"Error serializing value\"}"),
-        }
+    match if pretty_print {
+        serde_json::to_string_pretty(value)
     } else {
-        match serde_json::to_string(value) {
-            Ok(v) => v,
-            Err(_e) => String::from("{\"error\": \"Error serializing value\"}"),
-        }
+        serde_json::to_string(value)
+    } {
+        Ok(v) => v,
+        Err(_e) => String::from("{\"error\": \"error serializing value\"}"),
     }
 }
 
