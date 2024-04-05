@@ -20,6 +20,9 @@
 //! value in the server field should be used on the server, AND SHOULD
 //! NOT BE SENT TO THE CLIENT LEST SECURITY BE COMPROMISED.
 
+//! The --pretty-print option adds indentation and line breaks to the
+//! JSON output, making it easier to read.
+
 //! The purpose of this program is twofold: to facilitate testing, and
 //! to make it easy to implement Webauthn in other programming
 //! languages by doing simple JSON I/O with this program.
