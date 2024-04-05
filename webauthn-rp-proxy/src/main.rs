@@ -117,11 +117,12 @@ fn main() {
         .read_to_string(&mut buffer)
         .expect("Failed to read from stdin.");
 
+    let pp = args.pretty_print;
     let json = match args.step {
-        Step::AuthenticateFinish => authenticate_finish(&buffer, args.pretty_print),
-        Step::AuthenticateStart => authenticate_start(&buffer, args.pretty_print),
-        Step::RegisterFinish => register_finish(&buffer, args.pretty_print),
-        Step::RegisterStart => register_start(&buffer, args.pretty_print),
+        Step::AuthenticateFinish => to_json_result(pp, authenticate_finish(&buffer)),
+        Step::AuthenticateStart => to_json_result(pp, authenticate_start(&buffer)),
+        Step::RegisterFinish => to_json_result(pp, register_finish(&buffer)),
+        Step::RegisterStart => to_json_result(pp, register_start(&buffer)),
     };
 
     // Output only JSON.  Set exit code.
@@ -151,7 +152,7 @@ fn to_json_result<T: Serialize>(pretty_print: bool, value: Result<T>) -> Result<
     }
 }
 
-fn register_start_helper(data: &str) -> Result<RegisterStartResponse> {
+fn register_start(data: &str) -> Result<RegisterStartResponse> {
     let rsr: RegisterStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&rsr.rp_origin)?;
     let builder = WebauthnBuilder::new(&rsr.rp_id, &rp_origin)?;
@@ -168,11 +169,7 @@ fn register_start_helper(data: &str) -> Result<RegisterStartResponse> {
     })
 }
 
-fn register_start(data: &str, pretty_print: bool) -> Result<String, String> {
-    to_json_result(pretty_print, register_start_helper(data))
-}
-
-fn register_finish_helper(data: &str) -> Result<RegisterFinishResponse> {
+fn register_finish(data: &str) -> Result<RegisterFinishResponse> {
     let rfr: RegisterFinishRequest = serde_json::from_str(data)?;
     let pkr: PasskeyRegistration = rfr.passkey_registration;
     let rp_origin = Url::parse(&rfr.rp_origin)?;
@@ -183,11 +180,7 @@ fn register_finish_helper(data: &str) -> Result<RegisterFinishResponse> {
     Ok(RegisterFinishResponse { server: pk })
 }
 
-fn register_finish(data: &str, pretty_print: bool) -> Result<String, String> {
-    to_json_result(pretty_print, register_finish_helper(data))
-}
-
-fn authenticate_start_helper(data: &str) -> Result<AuthenticateStartResponse> {
+fn authenticate_start(data: &str) -> Result<AuthenticateStartResponse> {
     let asr: AuthenticateStartRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&asr.rp_origin)?;
     let builder = WebauthnBuilder::new(&asr.rp_id, &rp_origin)?;
@@ -201,11 +194,7 @@ fn authenticate_start_helper(data: &str) -> Result<AuthenticateStartResponse> {
     })
 }
 
-fn authenticate_start(data: &str, pretty_print: bool) -> Result<String, String> {
-    to_json_result(pretty_print, authenticate_start_helper(data))
-}
-
-fn authenticate_finish_helper(data: &str) -> Result<AuthenticateFinishResponse> {
+fn authenticate_finish(data: &str) -> Result<AuthenticateFinishResponse> {
     let afr: AuthenticateFinishRequest = serde_json::from_str(data)?;
     let rp_origin = Url::parse(&afr.rp_origin)?;
     let pka: PasskeyAuthentication = afr.passkey_authentication;
@@ -214,8 +203,4 @@ fn authenticate_finish_helper(data: &str) -> Result<AuthenticateFinishResponse> 
     let webauthn = builder.build()?;
     let ar = webauthn.finish_passkey_authentication(&pkc, &pka)?;
     Ok(AuthenticateFinishResponse { server: ar })
-}
-
-fn authenticate_finish(data: &str, pretty_print: bool) -> Result<String, String> {
-    to_json_result(pretty_print, authenticate_finish_helper(data))
 }
