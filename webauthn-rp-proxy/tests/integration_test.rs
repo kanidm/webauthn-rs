@@ -36,6 +36,7 @@ mod tests {
     fn test_register_finish() -> Result<(), Error> {
         let v = run("register-finish", "tests/data/register-finish.json")?;
 
+        assert!(v.get("client").is_none());
         assert!(v.get("error").is_none());
         assert!(v["server"].is_object());
         assert!(v["server"]["cred"]["cred_id"].is_string());
@@ -58,6 +59,7 @@ mod tests {
     fn test_authenticate_finish() -> Result<(), Error> {
         let v = run("authenticate-finish", "tests/data/authenticate-finish.json")?;
 
+        assert!(v.get("client").is_none());
         assert!(v.get("error").is_none());
         assert!(v["server"].is_object());
         assert!(v["server"]["cred_id"].is_string());
