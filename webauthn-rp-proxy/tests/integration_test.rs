@@ -15,7 +15,9 @@ mod tests {
             .output()
             .expect("failed to execute process");
 
-        Ok(serde_json::from_str(&String::from_utf8_lossy(&output.stdout).to_string())?)
+        Ok(serde_json::from_str(
+            &String::from_utf8_lossy(&output.stdout).to_string(),
+        )?)
     }
 
     #[test]
@@ -64,9 +66,15 @@ mod tests {
 
     #[test]
     fn test_authenticate_finish_fail() -> Result<(), Error> {
-        let v = run("authenticate-finish", "tests/data/authenticate-finish-fail.json")?;
+        let v = run(
+            "authenticate-finish",
+            "tests/data/authenticate-finish-fail.json",
+        )?;
 
-        assert_eq!(v["error"], "missing field `credentials` at line 40 column 5");
+        assert_eq!(
+            v["error"],
+            "missing field `credentials` at line 40 column 5"
+        );
         Ok(())
     }
 }
