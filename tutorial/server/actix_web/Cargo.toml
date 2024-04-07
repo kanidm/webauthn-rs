@@ -9,7 +9,7 @@ authors = ["Niklas Pfister <git@omikron.dev>"]
 
 [dependencies]
 # Webframework
-actix-web = { version = "~4.2" }
+actix-web = { version = "~4.5.1" }
 # Session framework for actix-web
 actix-session = { version = "~0.7", features = ["cookie-session"] }
 # Async trait, anyhow, chrono, once_cell and rand are required for the implementation of a
@@ -19,7 +19,7 @@ actix-session = { version = "~0.7", features = ["cookie-session"] }
 async-trait = { version = "~0.1" }
 anyhow = { version = "~1.0" }
 chrono = { version = "~0.4" }
-once_cell = { version = "~1.17" }
+once_cell = { version = "~1.18" }
 rand.workspace = true
 
 # Serve static file. Used to serve wasm
