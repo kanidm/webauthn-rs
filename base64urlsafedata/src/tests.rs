@@ -1,5 +1,4 @@
 use super::*;
-use std::convert::TryFrom;
 
 #[test]
 fn test_try_from() {

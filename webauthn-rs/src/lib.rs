@@ -441,7 +441,7 @@ impl<'a> WebauthnBuilder<'a> {
 /// You **MUST** only use it in tightly controlled environments where you supply devices to your
 /// users.
 ///
-/// > You should use [`start_attested_resident_key_registration`](Webauthn::start_attested_resident_key_registration) (still in development)
+/// > You should use [`start_attested_resident_key_registration`](Webauthn::start_attested_resident_key_registration) (still in development, requires `resident-key-support` feature)
 ///
 ///
 /// __I want a security token along with an external password to create multi-factor authentication__
@@ -591,7 +591,10 @@ impl Webauthn {
     /// on your site ahead of time to choose between a security key / screen unlock
     /// (triggered by [`start_passkey_registration`](Webauthn::start_passkey_registration))
     /// or a 'Google Passkey stored in Google Password Manager' (triggered by this function).
-    #[cfg(feature = "workaround-google-passkey-specific-issues")]
+    #[cfg(any(
+        all(doc, not(doctest)),
+        feature = "workaround-google-passkey-specific-issues"
+    ))]
     pub fn start_google_passkey_in_google_password_manager_only_registration(
         &self,
         user_unique_id: Uuid,
@@ -988,7 +991,7 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl Webauthn {
     /// Initiate the registration of a new attested_passkey key for a user. A attested_passkey key is a
     /// cryptographic authenticator that is a self-contained multifactor authenticator. This means
@@ -1266,7 +1269,7 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "conditional-ui")]
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
 impl Webauthn {
     /// This function will initiate a conditional ui authentication for discoverable
     /// credentials.
@@ -1350,7 +1353,7 @@ impl Webauthn {
     }
 }
 
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 impl Webauthn {
     /// TODO
     pub fn start_attested_resident_key_registration(
