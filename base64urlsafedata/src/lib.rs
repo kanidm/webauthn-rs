@@ -101,7 +101,6 @@ use base64::{
     Engine,
 };
 use serde::{Serialize, Serializer};
-use std::convert::TryFrom;
 use std::fmt;
 use std::hash::Hash;
 

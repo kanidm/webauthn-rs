@@ -5,7 +5,6 @@
 
 #![allow(non_camel_case_types)]
 
-use core::convert::TryFrom;
 use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 
 use super::error::*;

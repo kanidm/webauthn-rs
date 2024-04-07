@@ -4,11 +4,9 @@
 use crate::attestation::AttestationFormat;
 use crate::error::WebauthnError;
 use crate::proto::*;
-use base64urlsafedata::Base64UrlSafeData;
 use serde::Deserialize;
 
 use std::borrow::Borrow;
-use std::convert::TryFrom;
 use std::ops::Deref;
 
 use nom::bytes::complete::{tag, take};
@@ -1298,7 +1296,6 @@ mod tests {
     };
     use crate::interface::*;
     use base64::{engine::general_purpose::STANDARD, Engine};
-    use std::convert::TryFrom;
 
     #[test]
     fn deserialise_register_response() {
