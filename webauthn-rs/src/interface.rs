@@ -147,7 +147,7 @@ impl PartialEq for Passkey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 pub struct AttestedPasskeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
@@ -167,7 +167,7 @@ pub struct AttestedPasskeyRegistration {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 pub struct AttestedPasskeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -178,12 +178,12 @@ pub struct AttestedPasskeyAuthentication {
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 pub struct AttestedPasskey {
     pub(crate) cred: Credential,
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl AttestedPasskey {
     /// Retrieve a reference to this AttestedPasskey Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
@@ -252,38 +252,38 @@ impl AttestedPasskey {
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl std::borrow::Borrow<CredentialID> for AttestedPasskey {
     fn borrow(&self) -> &CredentialID {
         &self.cred.cred_id
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl PartialEq for AttestedPasskey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl Eq for AttestedPasskey {}
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl PartialOrd for AttestedPasskey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cred.cred_id.cmp(&other.cred.cred_id))
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl Ord for AttestedPasskey {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.cred.cred_id.cmp(&other.cred.cred_id)
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl From<&AttestedPasskey> for Passkey {
     fn from(k: &AttestedPasskey) -> Self {
         Passkey {
@@ -292,7 +292,7 @@ impl From<&AttestedPasskey> for Passkey {
     }
 }
 
-#[cfg(feature = "attestation")]
+#[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl From<AttestedPasskey> for Passkey {
     fn from(k: AttestedPasskey) -> Self {
         Passkey { cred: k.cred }
@@ -430,7 +430,7 @@ impl From<Credential> for SecurityKey {
     }
 }
 
-/// An in progress registration session for a [AttestedResidentKey].
+/// An in progress registration session for an [AttestedResidentKey].
 ///
 /// WARNING ⚠️  YOU MUST STORE THIS VALUE SERVER SIDE.
 ///
@@ -444,7 +444,7 @@ impl From<Credential> for SecurityKey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 pub struct AttestedResidentKeyRegistration {
     pub(crate) rs: RegistrationState,
     pub(crate) ca_list: AttestationCaList,
@@ -464,7 +464,7 @@ pub struct AttestedResidentKeyRegistration {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 pub struct AttestedResidentKeyAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -482,12 +482,12 @@ pub struct AttestedResidentKeyAuthentication {
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 pub struct AttestedResidentKey {
     pub(crate) cred: Credential,
 }
 
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 impl AttestedResidentKey {
     /// Retrieve a reference to this Resident Key's credential ID.
     pub fn cred_id(&self) -> &CredentialID {
@@ -556,14 +556,14 @@ impl AttestedResidentKey {
     }
 }
 
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 impl PartialEq for AttestedResidentKey {
     fn eq(&self, other: &Self) -> bool {
         self.cred.cred_id == other.cred.cred_id
     }
 }
 
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 impl From<&AttestedResidentKey> for Passkey {
     fn from(k: &AttestedResidentKey) -> Self {
         Passkey {
@@ -572,7 +572,7 @@ impl From<&AttestedResidentKey> for Passkey {
     }
 }
 
-#[cfg(feature = "resident-key-support")]
+#[cfg(any(all(doc, not(doctest)), feature = "resident-key-support"))]
 impl From<AttestedResidentKey> for Passkey {
     fn from(k: AttestedResidentKey) -> Self {
         Passkey { cred: k.cred }
@@ -615,7 +615,7 @@ impl From<Credential> for AttestedResidentKey {
     feature = "danger-allow-state-serialisation",
     derive(Serialize, Deserialize)
 )]
-#[cfg(feature = "conditional-ui")]
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
 pub struct DiscoverableAuthentication {
     pub(crate) ast: AuthenticationState,
 }
@@ -626,12 +626,15 @@ pub struct DiscoverableAuthentication {
 /// Generally this is used as part of conditional ui which allows autofill of discovered
 /// credentials in username fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg(feature = "conditional-ui")]
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
 pub struct DiscoverableKey {
     pub(crate) cred: Credential,
 }
 
-#[cfg(all(feature = "conditional-ui", feature = "resident-key-support"))]
+#[cfg(any(
+    all(doc, not(doctest)),
+    all(feature = "conditional-ui", feature = "resident-key-support")
+))]
 impl From<&AttestedResidentKey> for DiscoverableKey {
     fn from(k: &AttestedResidentKey) -> Self {
         DiscoverableKey {
@@ -640,14 +643,20 @@ impl From<&AttestedResidentKey> for DiscoverableKey {
     }
 }
 
-#[cfg(all(feature = "conditional-ui", feature = "resident-key-support"))]
+#[cfg(any(
+    all(doc, not(doctest)),
+    all(feature = "conditional-ui", feature = "resident-key-support")
+))]
 impl From<AttestedResidentKey> for DiscoverableKey {
     fn from(k: AttestedResidentKey) -> Self {
         DiscoverableKey { cred: k.cred }
     }
 }
 
-#[cfg(all(feature = "conditional-ui", feature = "attestation"))]
+#[cfg(any(
+    all(doc, not(doctest)),
+    all(feature = "conditional-ui", feature = "attestation")
+))]
 impl From<&AttestedPasskey> for DiscoverableKey {
     fn from(k: &AttestedPasskey) -> Self {
         DiscoverableKey {
@@ -656,14 +665,17 @@ impl From<&AttestedPasskey> for DiscoverableKey {
     }
 }
 
-#[cfg(all(feature = "conditional-ui", feature = "attestation"))]
+#[cfg(any(
+    all(doc, not(doctest)),
+    all(feature = "conditional-ui", feature = "attestation")
+))]
 impl From<AttestedPasskey> for DiscoverableKey {
     fn from(k: AttestedPasskey) -> Self {
         DiscoverableKey { cred: k.cred }
     }
 }
 
-#[cfg(feature = "conditional-ui")]
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
 impl From<&Passkey> for DiscoverableKey {
     fn from(k: &Passkey) -> Self {
         DiscoverableKey {
@@ -672,7 +684,7 @@ impl From<&Passkey> for DiscoverableKey {
     }
 }
 
-#[cfg(feature = "conditional-ui")]
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
 impl From<Passkey> for DiscoverableKey {
     fn from(k: Passkey) -> Self {
         DiscoverableKey { cred: k.cred }

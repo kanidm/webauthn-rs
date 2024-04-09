@@ -56,6 +56,8 @@ jobs:
           pkgs: openssl
           triplet: x64-windows-static-md
           token: ${{ github.token }}
+      # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
+      - run: cargo update -p bumpalo --precise 3.14.0
       - run: cargo build --workspace --exclude webauthn-authenticator-rs
 
       # Don't run clippy on Windows, we only need to run it on Linux

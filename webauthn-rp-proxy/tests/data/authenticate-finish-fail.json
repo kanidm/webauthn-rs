@@ -1,0 +1,55 @@
+{
+  "passkey_authentication": {
+    "ast": {
+      "NOT_CREDENTIALS": [
+        {
+          "cred_id": "Adabs0P_0SZOJeDPZPiQGrJO6HpW57j90cTSNvLQg06kXEIcXHXbKPzqPhusFFdRUqhqzcfYFpc81GEDhm2m0qs",
+          "cred": {
+            "type_": "ES256",
+            "key": {
+              "EC_EC2": {
+                "curve": "SECP256R1",
+                "x": "jPJ21rAQk1W1Sn8hNafIKmId9iL1VYPBmg-st-BcCHg",
+                "y": "WEYHf4kAMsjLXoWdxWx9t-EbNSgUAg7RG_-4BfEYtJw"
+              }
+            }
+          },
+          "counter": 0,
+          "transports": null,
+          "user_verified": true,
+          "backup_eligible": false,
+          "backup_state": false,
+          "registration_policy": "required",
+          "extensions": {
+            "cred_protect": "Ignored",
+            "hmac_create_secret": "NotRequested",
+            "appid": "NotRequested",
+            "cred_props": "Ignored"
+          },
+          "attestation": {
+            "data": "None",
+            "metadata": "None"
+          },
+          "attestation_format": "None"
+        }
+      ],
+      "policy": "required",
+      "challenge": "3Wp8Oqum3-zvB9eStp6YuUQTIVzf_b6TIh_t2wbCuAw",
+      "appid": null,
+      "allow_backup_eligible_upgrade": true
+    }
+  },
+  "public_key_credential": {
+    "id": "Adabs0P_0SZOJeDPZPiQGrJO6HpW57j90cTSNvLQg06kXEIcXHXbKPzqPhusFFdRUqhqzcfYFpc81GEDhm2m0qs",
+    "rawId": "Adabs0P_0SZOJeDPZPiQGrJO6HpW57j90cTSNvLQg06kXEIcXHXbKPzqPhusFFdRUqhqzcfYFpc81GEDhm2m0qs",
+    "response": {
+      "authenticatorData": "SZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2MFAAAAAQ",
+      "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uZ2V0IiwiY2hhbGxlbmdlIjoiM1dwOE9xdW0zLXp2QjllU3RwNll1VVFUSVZ6Zl9iNlRJaF90MndiQ3VBdyIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODQ0MyIsImNyb3NzT3JpZ2luIjpmYWxzZX0",
+      "signature": "MEUCIQCJNAjFDXDse91FJt_nDPnYCYQamE7ndSVWAD-VjGn_QAIgQDDGNxQsIDNdgJX7tmok6oJqU-aC1tXdUrYN-Ykwmh8",
+      "userHandle": ""
+    },
+    "type": "public-key"
+  },
+  "rp_id": "localhost",
+  "rp_origin": "http://localhost:8443"
+}

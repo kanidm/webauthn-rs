@@ -16,7 +16,6 @@
 #![warn(missing_docs)]
 
 use rand::prelude::*;
-use std::convert::TryFrom;
 use std::time::Duration;
 use url::Url;
 
@@ -30,7 +29,6 @@ use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
-use base64urlsafedata::Base64UrlSafeData;
 
 /// The Core Webauthn handler.
 ///
