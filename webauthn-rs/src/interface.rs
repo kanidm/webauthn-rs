@@ -49,10 +49,10 @@ pub struct PasskeyAuthentication {
 /// Yubikey, a Windows Hello TPM, or even a password manager softtoken.
 ///
 /// Passkeys *may* opportunistically have some properties such as discoverability (residence). This
-/// is not a guarantee since enforcing residence on devices like yubikeys that have limited storage
+/// is not a guarantee since enforcing residence on devices like Yubikeys that have limited storage
 /// and no administration of resident keys may break the device.
 ///
-/// These can be safely serialised and deserialised from a database for persistance.
+/// These can be safely serialised and deserialised from a database for persistence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Passkey {
     pub(crate) cred: Credential,
@@ -74,10 +74,10 @@ impl Passkey {
         &self.cred.cred
     }
 
-    /// Post authentication, update this credentials properties.
+    /// Post authentication, update this credential's properties.
     ///
     /// To determine if this is required, you can inspect the result of
-    /// `authentication_result.needs_update()`. Counter intuitively, most passkeys
+    /// `authentication_result.needs_update()`. Counterintuitively, most passkeys
     /// will never need their properties updated! This is because many passkeys lack an
     /// internal device activation counter (due to their synchronisation), and the
     /// backup-state flags are rarely if ever changed.
@@ -174,7 +174,7 @@ pub struct AttestedPasskeyAuthentication {
 
 /// An attested passkey for a user. This is a specialisation of [Passkey] as you can
 /// limit the make and models of authenticators that a user may register. Additionally
-/// these keys will always enforce userverification.
+/// these keys will always enforce user verification.
 ///
 /// These can be safely serialised and deserialised from a database for use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,13 +196,13 @@ impl AttestedPasskey {
     }
 
     /// Retrieve a reference to the attestation used during this [`Credential`]'s
-    /// registration. This can tell you information about the manufacterer and
+    /// registration. This can tell you information about the manufacturer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestation {
         &self.cred.attestation
     }
 
-    /// Post authentication, update this credentials properties.
+    /// Post authentication, update this credential's properties.
     ///
     /// To determine if this is required, you can inspect the result of
     /// `authentication_result.needs_update()`. Generally this will always
@@ -373,13 +373,13 @@ impl SecurityKey {
     }
 
     /// Retrieve a reference to the attestation used during this [`Credential`]'s
-    /// registration. This can tell you information about the manufacterer and
+    /// registration. This can tell you information about the manufacturer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestation {
         &self.cred.attestation
     }
 
-    /// Post authentication, update this credentials properties.
+    /// Post authentication, update this credential's properties.
     ///
     /// To determine if this is required, you can inspect the result of
     /// `authentication_result.needs_update()`. Generally this will always
@@ -500,13 +500,13 @@ impl AttestedResidentKey {
     }
 
     /// Retrieve a reference to the attestation used during this [`Credential`]'s
-    /// registration. This can tell you information about the manufacterer and
+    /// registration. This can tell you information about the manufacturer and
     /// what type of credential it is.
     pub fn attestation(&self) -> &ParsedAttestation {
         &self.cred.attestation
     }
 
-    /// Post authentication, update this credentials properties.
+    /// Post authentication, update this credential'ds properties.
     ///
     /// To determine if this is required, you can inspect the result of
     /// `authentication_result.needs_update()`. Generally this will always
