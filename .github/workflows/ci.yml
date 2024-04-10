@@ -70,13 +70,15 @@ jobs:
       # --help should be enough to find an issue.
       - run: cargo run --bin cable-tunnel-server-backend -- --help
       - run: cargo run --bin cable-tunnel-server-frontend -- --help
+      - run: cargo run --bin fido-mds-tool -- --help
       # fido-key-manager requires elevation on Windows, which cargo can't
       # handle.
       - if: runner.os != 'windows'
         run: cargo run --bin fido-key-manager -- --help
       - if: runner.os != 'windows'
         run: cargo run --bin fido-key-manager --features solokey -- --help
-      - run: cargo run --bin fido-mds-tool -- --help
+      - if: runner.os != 'windows'
+        run: cargo run --bin fido-key-manager --features yubikey -- --help
 
   authenticator:
     name: webauthn-authenticator-rs test
@@ -92,7 +94,7 @@ jobs:
           - softtoken
           - usb
           - bluetooth,nfc,usb,ctap2-management
-          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb,vendor-solokey
+          - bluetooth,cable,cable-override-tunnel,ctap2-management,nfc,softpasskey,softtoken,usb,vendor-solokey,vendor-yubikey
         os:
           - ubuntu-latest
           - windows-latest

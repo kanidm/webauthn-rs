@@ -131,6 +131,9 @@ mod pin_uv;
 #[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
 #[doc(hidden)]
 mod solokey;
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-yubikey"))]
+#[doc(hidden)]
+mod yubikey;
 
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
@@ -165,6 +168,10 @@ pub use self::{
 #[cfg(any(all(doc, not(doctest)), feature = "vendor-solokey"))]
 #[doc(inline)]
 pub use self::solokey::SoloKeyAuthenticator;
+
+#[cfg(any(all(doc, not(doctest)), feature = "vendor-yubikey"))]
+#[doc(inline)]
+pub use self::yubikey::YubiKeyAuthenticator;
 
 /// Abstraction for different versions of the CTAP2 protocol.
 ///
