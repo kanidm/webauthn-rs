@@ -106,7 +106,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
     // their username at any time.
     let username: String = request.param("username")?.parse()?;
 
-    // Since a user's username could change at anytime, we need to bind to a unique id.
+    // Since a user's username could change at any time, we need to bind to a unique id.
     // We use uuid's for this purpose, and you should generate these randomly. If the
     // username does exist and is found, we can match back to our unique id. This is
     // important in authentication, where presented credentials may *only* provide
@@ -120,7 +120,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
             .unwrap_or_else(Uuid::new_v4)
     };
 
-    // Remove any previous registrations that may have occured from the session.
+    // Remove any previous registrations that may have occurred from the session.
     let session = request.session_mut();
     session.remove("reg_state");
 
@@ -141,7 +141,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
         exclude_credentials,
     ) {
         Ok((ccr, reg_state)) => {
-            // Note that due to the session store in use being a server side memory store, this is
+            // Note that due to the session store in use being a server side memory store, it is
             // safe to store the reg_state into the session since it is not client controlled and
             // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             request
@@ -160,7 +160,7 @@ async fn start_register(mut request: tide::Request<AppState>) -> tide::Result {
     Ok(res)
 }
 
-// 4. The browser has completed it's steps and the user has created a public key
+// 4. The browser has completed its steps and the user has created a public key
 // on their device. Now we have the registration options sent to us, and we need
 // to verify these and persist them.
 
@@ -241,7 +241,7 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
     // some other process.
     let username: String = request.param("username")?.parse()?;
 
-    // Remove any previous authentication that may have occured from the session.
+    // Remove any previous authentication that may have occurred from the session.
     let session = request.session_mut();
     session.remove("auth_state");
 
@@ -269,7 +269,7 @@ async fn start_authentication(mut request: tide::Request<AppState>) -> tide::Res
             // Drop the mutex to allow the mut borrows below to proceed
             drop(users_guard);
 
-            // Note that due to the session store in use being a server side memory store, this is
+            // Note that due to the session store in use being a server side memory store, it is
             // safe to store the auth_state into the session since it is not client controlled and
             // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             request

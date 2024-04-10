@@ -253,7 +253,7 @@ impl<'a> WebauthnBuilder<'a> {
     ///
     /// # Safety
     ///
-    /// rp_id is what Credentials (Authenticators) bind themself to - rp_id can NOT be changed
+    /// rp_id is what Credentials (Authenticators) bind themselves to - rp_id can NOT be changed
     /// without breaking all of your users' associated credentials in the future!
     ///
     /// # Examples
@@ -349,7 +349,7 @@ impl<'a> WebauthnBuilder<'a> {
     /// and/or vision impairments. Even a minor skin condition can make it hard
     /// to use a fingerprint reader!
     ///
-    /// Consult the [Webauthn specification's accessibilty considerations][2],
+    /// Consult the [Webauthn specification's accessibility considerations][2],
     /// [WCAG 2.1's "Enough time" guideline][3] and
     /// ["Timeouts" success criterion][4] when choosing a value, particularly if
     /// it is *shorter* than the default.
@@ -433,7 +433,7 @@ impl<'a> WebauthnBuilder<'a> {
 /// > You should use [`start_attested_passkey_registration`](Webauthn::start_attested_passkey_registration)
 ///
 ///
-/// __I want users to have their identites stored on their devices, and for them to authenticate with
+/// __I want users to have their identities stored on their devices, and for them to authenticate with
 /// strong multi-factor cryptographic authentication limited to a known set of trusted authenticator types__
 ///
 /// This authenticator type consumes limited storage space on users' authenticators, and may result in failures or device
@@ -542,7 +542,7 @@ impl Webauthn {
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
                 // Since this may contain PII, we want to enforce this. We also
-                // want the device to strictly enforce it's UV state.
+                // want the device to strictly enforce its UV state.
                 credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
                 // If set to true, causes many authenticators to shit the bed. We have to just hope
                 // and pray instead. This is because many device classes when they see this extension
@@ -853,7 +853,7 @@ impl Webauthn {
             None
         } else {
             Some(CredProtect {
-                // We want the device to strictly enforce it's UV state.
+                // We want the device to strictly enforce its UV state.
                 credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
                 // If set to true, causes many authenticators to shit the bed. Since this type doesn't
                 // have the same strict rules about attestation, then we just use this opportunistically.
@@ -905,7 +905,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [SecurityKeyRegistration]. The details of the Authenticator
+    /// and the server provides its paired [SecurityKeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
@@ -920,8 +920,8 @@ impl Webauthn {
     /// to any other account.
     ///
     /// # Verifying specific device models
-    /// If you wish to assert a specifc type of device model is in use, you can inspect the
-    /// SecurityKey `attestation()` and it's associated metadata. You can use this to check for
+    /// If you wish to assert a specific type of device model is in use, you can inspect the
+    /// SecurityKey `attestation()` and its associated metadata. You can use this to check for
     /// specific device aaguids for example.
     ///
     pub fn finish_securitykey_registration(
@@ -1001,17 +1001,17 @@ impl Webauthn {
     ///
     /// As a result, the server *only* requires this attested_passkey key to authenticate the user
     /// and assert their identity. Because of this reliance on the authenticator, attestation of
-    /// the authenticator and it's properties is strongly recommended.
+    /// the authenticator and its properties is strongly recommended.
     ///
     /// The primary difference to a passkey, is that these credentials *can not* 'roam' between multiple
     /// devices, and must be bound to a single authenticator. This precludes the use of certain types
     /// of authenticators (such as Apple's Passkeys as these are always synced).
     ///
     /// Additionally, these credentials must provide an attestation certificate of authenticity
-    /// which will be cryptographically validated to stricly enforce that only certain devices may be used.
+    /// which will be cryptographically validated to strictly enforce that only certain devices may be used.
     ///
     /// You *should* recommend to the user to register multiple attested_passkey keys to their account on
-    /// seperate devices so that they have fall back authentication in the case of device failure or loss.
+    /// separate devices so that they have fall back authentication in the case of device failure or loss.
     ///
     /// You *should* have a workflow that allows a user to register new devices without a need to register
     /// other factors. For example, allow a QR code that can be scanned from a phone, or a one-time
@@ -1069,7 +1069,7 @@ impl Webauthn {
     /// # let webauthn = builder.build()
     /// #     .expect("Invalid configuration");
     /// #
-    /// // you must store this user's unique id with the account. Alternatelly you can
+    /// // you must store this user's unique id with the account. Alternatively you can
     /// // use an existed UUID source.
     /// let user_unique_id = Uuid::new_v4();
     ///
@@ -1133,7 +1133,7 @@ impl Webauthn {
         let extensions = Some(RequestRegistrationExtensions {
             cred_protect: Some(CredProtect {
                 // Since this may contain PII, we need to enforce this. We also
-                // want the device to strictly enforce it's UV state.
+                // want the device to strictly enforce its UV state.
                 credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
                 // Set to true since this function requires attestation, and attestation is really
                 // only viable on FIDO2/CTAP2 creds that actually support this.
@@ -1177,7 +1177,7 @@ impl Webauthn {
     }
 
     /// Complete the registration of the credential. The user agent (e.g. a browser) will return the data of `RegisterPublicKeyCredential`,
-    /// and the server provides it's paired [AttestedPasskeyRegistration]. The details of the Authenticator
+    /// and the server provides its paired [AttestedPasskeyRegistration]. The details of the Authenticator
     /// based on the registration parameters are asserted.
     ///
     /// # Errors
@@ -1188,8 +1188,8 @@ impl Webauthn {
     /// authentications via [crate::Webauthn::start_attested_passkey_authentication].
     ///
     /// # Verifying specific device models
-    /// If you wish to assert a specifc type of device model is in use, you can inspect the
-    /// AttestedPasskey `attestation()` and it's associated metadata. You can use this to check for
+    /// If you wish to assert a specific type of device model is in use, you can inspect the
+    /// AttestedPasskey `attestation()` and its associated metadata. You can use this to check for
     /// specific device aaguids for example.
     ///
     pub fn finish_attested_passkey_registration(

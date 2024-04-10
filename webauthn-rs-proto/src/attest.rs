@@ -40,7 +40,7 @@ pub struct PublicKeyCredentialCreationOptions {
     pub extensions: Option<RequestRegistrationExtensions>,
 }
 
-/// A JSON serializable challenge which is issued to the user's webbrowser
+/// A JSON serializable challenge which is issued to the user's web browser
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
@@ -126,7 +126,7 @@ pub struct AuthenticatorAttestationResponseRaw {
 }
 
 /// A client response to a registration challenge. This contains all required
-/// information to asses and assert trust in a credentials legitimacy, followed
+/// information to assess and assert trust in a credential's legitimacy, followed
 /// by registration to a user.
 ///
 /// You should not need to handle the inner content of this structure - you should

@@ -1,5 +1,5 @@
 //! Extended Structs and representations for Webauthn Operations. These types are designed
-//! to allow persistance and should not change.
+//! to allow persistence and should not change.
 
 use crate::attestation::{verify_attestation_ca_chain, AttestationFormat};
 use crate::error::*;
@@ -202,9 +202,9 @@ pub enum COSEKeyType {
     //    | Symmetric | 4     | Symmetric Keys                                |
     //    | Reserved  | 0     | This value is reserved                        |
     //    +-----------+-------+-----------------------------------------------+
-    /// Identifies this as an Eliptic Curve octet key pair
+    /// Identifies this as an Elliptic Curve octet key pair
     EC_OKP(COSEOKPKey),
-    /// Identifies this as an Eliptic Curve EC2 key
+    /// Identifies this as an Elliptic Curve EC2 key
     EC_EC2(COSEEC2Key),
     // EC_Symmetric,
     // EC_Reserved, // should always be invalid.
@@ -271,7 +271,7 @@ pub struct Credential {
     /// processor, and may have impacts on your risk assessments and modeling.
     pub backup_eligible: bool,
     /// This credential has indicated that it is currently backed up OR that it
-    /// is shared between mulitple devices.
+    /// is shared between multiple devices.
     pub backup_state: bool,
     /// During registration, the policy that was requested from this
     /// credential. This is used to understand if the how the verified
@@ -290,16 +290,16 @@ pub struct Credential {
 
 impl Credential {
     /// Re-verify this Credential's attestation chain. This re-applies the same process
-    /// for certificate authority verification that occured at registration. This can
+    /// for certificate authority verification that occurred at registration. This can
     /// be useful if you want to re-assert your credentials match an updated or changed
-    /// ca_list from the time that registration occured. This can also be useful to
+    /// ca_list from the time that registration occurred. This can also be useful to
     /// re-determine certain properties of your device that may exist.
     pub fn verify_attestation<'a>(
         &'_ self,
         ca_list: &'a AttestationCaList,
     ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
         // Formerly we disabled this due to apple, but they no longer provide
-        // meaningful attesation so we can re-enable it.
+        // meaningful attestation so we can re-enable it.
         let danger_disable_certificate_time_checks = false;
         verify_attestation_ca_chain(
             &self.attestation.data,
@@ -425,8 +425,8 @@ impl Default for ParsedAttestation {
     }
 }
 
-/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData. This
-/// metadata may allow identification of the device and it's specific properties.
+/// The processed Attestation that the Authenticator is providing in its AttestedCredentialData. This
+/// metadata may allow identification of the device and its specific properties.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttestationMetadata {
     /// no metadata available for this device.
@@ -470,7 +470,7 @@ pub enum AttestationMetadata {
     },
 }
 
-/// The processed Attestation that the Authenticator is providing in it's AttestedCredentialData
+/// The processed Attestation that the Authenticator is providing in its AttestedCredentialData
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     try_from = "SerialisableAttestationData",
@@ -484,10 +484,10 @@ pub enum ParsedAttestationData {
     /// it uses the credential private key to create the attestation signature
     Self_,
     /// The credential is authenticated using a CA, and may provide a
-    /// ca chain to validate to it's root.
+    /// ca chain to validate to its root.
     AttCa(Vec<x509::X509>),
     /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
-    /// validate to it's root.
+    /// validate to its root.
     AnonCa(Vec<x509::X509>),
     /// Unimplemented
     ECDAA,
@@ -634,7 +634,7 @@ pub struct AttestedCredentialData {
     pub credential_pk: serde_cbor_2::Value,
 }
 
-/// Information about the authentication that occured.
+/// Information about the authentication that occurred.
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticationResult {
     /// The credential ID that was used to authenticate.
@@ -664,7 +664,7 @@ impl AuthenticationResult {
     }
 
     /// If this authentication result should be applied to the associated
-    /// credential to update it's properties.
+    /// credential to update its properties.
     pub fn needs_update(&self) -> bool {
         self.needs_update
     }
