@@ -58,19 +58,19 @@ impl MozillaAuthenticator {
         let _thread_handle = thread::spawn(move || loop {
             match status_rx.recv() {
                 Ok(StatusUpdate::DeviceAvailable { dev_info }) => {
-                    println!("STATUS: device available: {}", dev_info)
+                    debug!("STATUS: device available: {}", dev_info)
                 }
                 Ok(StatusUpdate::DeviceUnavailable { dev_info }) => {
-                    println!("STATUS: device unavailable: {}", dev_info)
+                    debug!("STATUS: device unavailable: {}", dev_info)
                 }
                 Ok(StatusUpdate::Success { dev_info }) => {
-                    println!("STATUS: success using device: {}", dev_info);
+                    debug!("STATUS: success using device: {}", dev_info);
                 }
                 Ok(StatusUpdate::SelectDeviceNotice) => {
-                    println!("STATUS: Please select a device by touching one of them.");
+                    info!("STATUS: Please select a device by touching one of them.");
                 }
                 Ok(StatusUpdate::DeviceSelected(dev_info)) => {
-                    println!("STATUS: Continuing with device: {}", dev_info);
+                    debug!("STATUS: Continuing with device: {}", dev_info);
                 }
                 Ok(StatusUpdate::PinError(error, sender)) => match error {
                     PinError::PinRequired => {
@@ -80,7 +80,7 @@ impl MozillaAuthenticator {
                         continue;
                     }
                     PinError::InvalidPin(attempts) => {
-                        println!(
+                        error!(
                             "Wrong PIN! {}",
                             attempts.map_or("Try again.".to_string(), |a| format!(
                                 "You have {} attempts left.",
@@ -93,19 +93,17 @@ impl MozillaAuthenticator {
                         continue;
                     }
                     PinError::PinAuthBlocked => {
-                        eprintln!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
+                        error!("Too many failed attempts in one row. Your device has been temporarily blocked. Please unplug it and plug in again.")
                     }
                     PinError::PinBlocked => {
-                        eprintln!(
-                            "Too many failed attempts. Your device has been blocked. Reset it."
-                        )
+                        error!("Too many failed attempts. Your device has been blocked. Reset it.")
                     }
                     e => {
-                        eprintln!("Unexpected error: {:?}", e)
+                        error!("Unexpected error: {:?}", e)
                     }
                 },
                 Err(RecvError) => {
-                    println!("STATUS: end");
+                    debug!("STATUS: end");
                     return;
                 }
             }
@@ -196,7 +194,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         let (attestation_object, client_data) = match register_result {
             Ok(RegisterResult::CTAP1(_, _)) => return Err(WebauthnCError::PlatformAuthenticator),
             Ok(RegisterResult::CTAP2(a, c)) => {
-                println!("Ok!");
+                trace!("Ok!");
                 (a, c)
             }
             Err(_e) => return Err(WebauthnCError::PlatformAuthenticator),
