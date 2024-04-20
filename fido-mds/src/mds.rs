@@ -322,6 +322,9 @@ pub enum AuthenticationAlgorithm {
     /// rsassa_pkcsv15_sha256_raw
     #[serde(rename = "rsassa_pkcsv15_sha256_raw")]
     RsassaPkcsv15Sha256Raw,
+    /// rsassa_pkcsv15_sha1_raw
+    #[serde(rename = "rsassa_pkcsv15_sha1_raw")]
+    RsassaPkcsv15Sha1Raw,
 }
 
 impl fmt::Display for AuthenticationAlgorithm {
@@ -345,6 +348,9 @@ impl fmt::Display for AuthenticationAlgorithm {
             }
             AuthenticationAlgorithm::RsassaPkcsv15Sha256Raw => {
                 write!(f, "rsassa_pkcsv15_sha256_raw")
+            }
+            AuthenticationAlgorithm::RsassaPkcsv15Sha1Raw => {
+                write!(f, "rsassa_pkcsv15_sha1_raw")
             }
         }
     }
