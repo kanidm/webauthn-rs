@@ -146,7 +146,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             .collect::<Result<Vec<_>, _>>()?;
 
         let ctap_args = RegisterArgsCtap2 {
-            challenge: options.challenge.0,
+            challenge: options.challenge.into(),
             relying_party: RelyingParty {
                 id: options.rp.id,
                 name: Some(options.rp.name),
@@ -154,7 +154,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             },
             origin: origin.to_string(),
             user: User {
-                id: options.user.id.0,
+                id: options.user.id.into(),
                 name: Some(options.user.name),
                 display_name: Some(options.user.display_name),
                 icon: None,
@@ -248,7 +248,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             .iter()
             .map(|cred| {
                 PublicKeyCredentialDescriptor {
-                    id: cred.id.0.clone(),
+                    id: cred.id.clone().into(),
                     // It appears we have to always specify the lower transport in this
                     // library due to discovered bugs
                     transports: vec![Transport::USB],
@@ -257,7 +257,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
             .collect();
 
         let ctap_args = SignArgsCtap2 {
-            challenge: options.challenge.0.clone(),
+            challenge: options.challenge.into(),
             origin: origin.to_string(),
             relying_party_id: options.rp_id,
             allow_list,

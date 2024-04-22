@@ -142,8 +142,8 @@ impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
                 let id = &mut mut_ptr._ids[i];
                 *l_ptr.add(i) = WEBAUTHN_CREDENTIAL_EX {
                     dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
-                    cbId: id.0.len() as u32,
-                    pbId: id.0.as_mut_ptr() as *mut _,
+                    cbId: id.len() as u32,
+                    pbId: id.as_mut().as_mut_ptr() as *mut _,
                     pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
                     dwTransports: credential.transports(),
                 };

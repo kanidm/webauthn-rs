@@ -465,8 +465,8 @@ impl U2FToken for SoftPasskey {
             .iter()
             .filter_map(|ac| {
                 self.tokens
-                    .get(&ac.id.0)
-                    .map(|v| (ac.id.0.clone(), v.clone()))
+                    .get(ac.id.as_ref())
+                    .map(|v| (ac.id.clone().into(), v.clone()))
             })
             .take(1)
             .next();
