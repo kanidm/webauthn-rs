@@ -257,7 +257,7 @@ impl WebauthnCore {
                     id: self.rp_id.clone(),
                 },
                 user: User {
-                    id: Base64UrlSafeData::from(user_unique_id),
+                    id: user_unique_id.into(),
                     name: user_name,
                     display_name: user_display_name,
                 },
@@ -277,7 +277,7 @@ impl WebauthnCore {
                         .cloned()
                         .map(|id| PublicKeyCredentialDescriptor {
                             type_: "public-key".to_string(),
-                            id,
+                            id: id.as_ref().into(),
                             transports: None,
                         })
                         .collect()
@@ -920,7 +920,7 @@ impl WebauthnCore {
             .iter()
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
-                id: cred.cred_id.clone(),
+                id: cred.cred_id.as_ref().into(),
                 transports: cred.transports.clone(),
             })
             .collect();
@@ -1178,7 +1178,7 @@ mod tests {
     use crate::proto::*;
     use crate::WebauthnCore as Webauthn;
     use base64::{engine::general_purpose::STANDARD, Engine};
-    use base64urlsafedata::Base64UrlSafeData;
+    use base64urlsafedata::{Base64UrlSafeData, HumanBinaryData};
     use std::time::Duration;
     use url::Url;
 
@@ -1392,7 +1392,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -1437,7 +1437,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -1495,7 +1495,7 @@ mod tests {
 
         // Create the fake credential that we know is associated
         let cred = Credential {
-            cred_id: Base64UrlSafeData::from(vec![
+            cred_id: HumanBinaryData::from(vec![
                 106, 223, 133, 124, 161, 172, 56, 141, 181, 18, 27, 66, 187, 181, 113, 251, 187,
                 123, 20, 169, 41, 80, 236, 138, 92, 137, 4, 4, 16, 255, 188, 47, 158, 202, 111,
                 192, 117, 110, 152, 245, 95, 22, 200, 172, 71, 154, 40, 181, 212, 64, 80, 17, 238,
@@ -1619,7 +1619,7 @@ mod tests {
         let cred = Credential {
             counter: 1,
             transports: None,
-            cred_id: Base64UrlSafeData::from(vec![
+            cred_id: HumanBinaryData::from(vec![
                 179, 64, 237, 0, 28, 248, 197, 30, 213, 228, 250, 139, 28, 11, 156, 130, 69, 242,
                 21, 48, 84, 77, 103, 163, 66, 204, 167, 147, 82, 214, 212,
             ]),
@@ -2731,7 +2731,7 @@ mod tests {
         // Given two credentials with differening policy
         let mut creds = vec![
             Credential {
-                cred_id: Base64UrlSafeData::from(vec![
+                cred_id: HumanBinaryData::from(vec![
                     205, 198, 18, 130, 133, 220, 73, 23, 199, 211, 240, 143, 220, 154, 172, 117,
                     91, 18, 164, 211, 24, 147, 16, 203, 118, 76, 33, 65, 31, 92, 236, 211, 79, 67,
                     240, 30, 65, 247, 46, 134, 19, 136, 170, 209, 11, 115, 37, 12, 88, 244, 244,
@@ -2771,7 +2771,7 @@ mod tests {
                 attestation_format: AttestationFormat::None,
             },
             Credential {
-                cred_id: Base64UrlSafeData::from(vec![
+                cred_id: HumanBinaryData::from(vec![
                     211, 204, 163, 253, 101, 149, 83, 136, 242, 175, 211, 104, 215, 131, 122, 175,
                     187, 84, 13, 3, 21, 24, 11, 138, 50, 137, 55, 225, 180, 109, 49, 28, 98, 8, 28,
                     181, 149, 241, 106, 124, 110, 149, 154, 198, 23, 8, 8, 4, 41, 69, 236, 203,
@@ -3051,7 +3051,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"NE6dm0mgUe47-X0Yf5nRdhYokY3A8XAzs10KBLGlVY0\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3094,7 +3094,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"rRPXQ7lps3xBQzX3dDAor9fHwH_ff55gUU-8wwZVK-g\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3138,7 +3138,7 @@ mod tests {
             None,
             None,
         );
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"Y0j5PX0VXeKb2150k6sAh1QNRBJ3iTv8WBsUfgn_pRs\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3182,7 +3182,7 @@ mod tests {
             None,
             None,
         );
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"CxQSmkUusCl8ig6qyA0Cp4qFU4Y960OAYGX1c24G-fo\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3225,7 +3225,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"55Wztjbgks9UkS5jYthawNFik0HSiYuCSB5pzNbT6k0\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3268,7 +3268,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"t_We131NpwllyPL0x26bzZgkF5f_XvA7Ocb4b98zlxM\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3316,7 +3316,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"FKVseWmr5DxQ_H9iTyoTgRPIClLspXO0XbOKQfMuaFc\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3363,7 +3363,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData = Base64UrlSafeData::from(vec![
+        let chal: HumanBinaryData = HumanBinaryData::from(vec![
             108, 33, 62, 167, 162, 234, 36, 63, 176, 231, 161, 58, 41, 233, 117, 157, 210, 244,
             123, 28, 194, 100, 34, 68, 32, 1, 183, 240, 100, 225, 182, 48,
         ]);
@@ -3483,7 +3483,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"dfo+HlqJp3MLK+J5TLxxmvXJieS3zGwdk9G9H9bPezg=\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3522,7 +3522,7 @@ mod tests {
 
     #[test]
     fn test_google_safetynet_2() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"B3q5igjVbIpBwqnK18k0mgAOLnXTK/Mmv3JTsSMyEKg=\"").unwrap();
 
         let response = r#"{
@@ -3580,7 +3580,7 @@ mod tests {
 
     #[test]
     fn test_google_android_key() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"Tf65bS6D5temh2BwvptqgBPb25iZDRxjwC5ans91IIJDrcrOpnWTK4LVgFjeUV4GDMe44w8SI5NsZssIXTUvDg\"").unwrap();
 
         let response = r#"{
@@ -3649,7 +3649,7 @@ mod tests {
 
     #[test]
     fn test_tpm_ecc_aseigler() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"E2YebMmG9992XialpFL1lkPptOIBPeKsphNkt1JcbKk\"").unwrap();
 
         let response = r#"{
@@ -3714,7 +3714,7 @@ mod tests {
 
     #[test]
     fn test_solokey_v2_a_sealed_attestation() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"VEP2Y5lrFKvfNZCt-js1BivzIRjDCXERNRswVPGT1tw\"").unwrap();
         let response = r#"{
             "id": "owBYr08K20VJPLwjmm6fiIPE9iqvr31mfxoi1S-gj3mrvsmeSSUd70rMHJpbMBxnm7MlTX8hPpXz2NKVkEVrVGrrJOayYhdthzPeRqPQsFj_f2qkhJrt3xSIzDb6ZzS1hcME5xE76_XKdbH9-ZEUztxN9lR8GjX5TO9e1WsEfeY6yriqKRZ-xgA3BU081GOZWZ00cggWPEEmll1gkYepDDjrwH0a2CXaV-oSs50rRIuD9JkBTKCqEYK6IG-CBMtTEwJQA042FkAQ_RpWpziVVyXfWA",
@@ -3767,7 +3767,7 @@ mod tests {
 
     #[test]
     fn test_solokey_v2_a_sealed_ed25519_invalid_cbor() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"KlJqz0evSPAw8cTWpup6SkYJw-RTziV0BBuMH8R-zVM\"").unwrap();
 
         let response = r#"{

@@ -510,7 +510,6 @@ cred_struct! {
 
 #[cfg(test)]
 mod test {
-    use base64urlsafedata::Base64UrlSafeData;
     use webauthn_rs_core::proto::{COSEEC2Key, COSEKeyType, ECDSACurve};
     use webauthn_rs_proto::COSEAlgorithm;
 
@@ -835,16 +834,18 @@ mod test {
                         type_: COSEAlgorithm::ES256,
                         key: COSEKeyType::EC_EC2(COSEEC2Key {
                             curve: ECDSACurve::SECP256R1,
-                            x: Base64UrlSafeData::from(vec![
+                            x: vec![
                                 0x6f, 0xd0, 0x2c, 0xd1, 0x31, 0x25, 0x1d, 0x12, 0xda, 0x03, 0x8a,
                                 0x1b, 0xd2, 0xdb, 0xb6, 0x47, 0xe2, 0x45, 0x4d, 0x71, 0x47, 0x7a,
                                 0xd3, 0x1d, 0xbd, 0x7c, 0xdb, 0x15, 0xd2, 0x8d, 0xf8, 0xbf
-                            ]),
-                            y: Base64UrlSafeData::from(vec![
+                            ]
+                            .into(),
+                            y: vec![
                                 0x04, 0x42, 0x2c, 0xca, 0xa2, 0x61, 0xc1, 0x97, 0x92, 0x1a, 0xab,
                                 0xad, 0xa5, 0x57, 0x8e, 0x91, 0x55, 0xde, 0x56, 0xc4, 0xca, 0xd9,
                                 0x1d, 0x8d, 0xd0, 0x7e, 0xe3, 0x78, 0x71, 0xf9, 0xf1, 0xf5
-                            ])
+                            ]
+                            .into()
                         })
                     }),
                     cred_protect: Some(CredentialProtectionPolicy::UserVerificationOptional),
@@ -920,16 +921,18 @@ mod test {
                         type_: COSEAlgorithm::ES256,
                         key: COSEKeyType::EC_EC2(COSEEC2Key {
                             curve: ECDSACurve::SECP256R1,
-                            x: Base64UrlSafeData::from(vec![
+                            x: vec![
                                 0x6f, 0xd0, 0x2c, 0xd1, 0x31, 0x25, 0x1d, 0x12, 0xda, 0x03, 0x8a,
                                 0x1b, 0xd2, 0xdb, 0xb6, 0x47, 0xe2, 0x45, 0x4d, 0x71, 0x47, 0x7a,
                                 0xd3, 0x1d, 0xbd, 0x7c, 0xdb, 0x15, 0xd2, 0x8d, 0xf8, 0xbf
-                            ]),
-                            y: Base64UrlSafeData::from(vec![
+                            ]
+                            .into(),
+                            y: vec![
                                 0x04, 0x42, 0x2c, 0xca, 0xa2, 0x61, 0xc1, 0x97, 0x92, 0x1a, 0xab,
                                 0xad, 0xa5, 0x57, 0x8e, 0x91, 0x55, 0xde, 0x56, 0xc4, 0xca, 0xd9,
                                 0x1d, 0x8d, 0xd0, 0x7e, 0xe3, 0x78, 0x71, 0xf9, 0xf1, 0xf5
-                            ])
+                            ]
+                            .into()
                         })
                     }),
                     cred_protect: Some(CredentialProtectionPolicy::UserVerificationOptional),

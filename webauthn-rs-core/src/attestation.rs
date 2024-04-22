@@ -8,6 +8,7 @@ use crate::crypto::{
 use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
+use base64urlsafedata::HumanBinaryData;
 use openssl::hash::MessageDigest;
 use openssl::sha::sha256;
 use openssl::stack;
@@ -1289,7 +1290,7 @@ pub(crate) fn verify_android_safetynet_attestation(
         timestamp_ms: u64,
         nonce: Base64UrlSafeData,
         apk_package_name: String,
-        apk_certificate_digest_sha256: Vec<Base64UrlSafeData>,
+        apk_certificate_digest_sha256: Vec<HumanBinaryData>,
         cts_profile_match: bool,
         basic_integrity: bool,
         evaluation_type: Option<String>,

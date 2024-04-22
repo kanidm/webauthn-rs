@@ -11,7 +11,8 @@ use webauthn_rs_proto::options::*;
 
 pub use webauthn_attestation_ca::*;
 
-use base64urlsafedata::Base64UrlSafeData;
+use base64urlsafedata::HumanBinaryData;
+
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -33,7 +34,7 @@ pub type Counter = u32;
 pub struct RegistrationState {
     pub(crate) policy: UserVerificationPolicy,
     pub(crate) exclude_credentials: Vec<CredentialID>,
-    pub(crate) challenge: Base64UrlSafeData,
+    pub(crate) challenge: HumanBinaryData,
     pub(crate) credential_algorithms: Vec<COSEAlgorithm>,
     pub(crate) require_resident_key: bool,
     pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
@@ -47,7 +48,7 @@ pub struct RegistrationState {
 pub struct AuthenticationState {
     pub(crate) credentials: Vec<Credential>,
     pub(crate) policy: UserVerificationPolicy,
-    pub(crate) challenge: Base64UrlSafeData,
+    pub(crate) challenge: HumanBinaryData,
     pub(crate) appid: Option<String>,
     pub(crate) allow_backup_eligible_upgrade: bool,
 }
@@ -144,9 +145,9 @@ pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
     /// The key's public X coordinate.
-    pub x: Base64UrlSafeData,
+    pub x: HumanBinaryData,
     /// The key's public Y coordinate.
-    pub y: Base64UrlSafeData,
+    pub y: HumanBinaryData,
 }
 
 impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
@@ -173,7 +174,7 @@ pub struct COSEOKPKey {
     /// The curve that this key references.
     pub curve: EDDSACurve,
     /// The key's public X coordinate.
-    pub x: Base64UrlSafeData,
+    pub x: HumanBinaryData,
 }
 
 /// A COSE RSA PublicKey. This is a provided credential from a registered
@@ -183,7 +184,7 @@ pub struct COSEOKPKey {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSERSAKey {
     /// An RSA modulus
-    pub n: Base64UrlSafeData,
+    pub n: HumanBinaryData,
     /// An RSA exponent
     pub e: [u8; 3],
 }
@@ -239,10 +240,16 @@ pub struct COSEKey {
     pub key: COSEKeyType,
 }
 
+/// The ID of this Credential
+pub type CredentialID = HumanBinaryData;
+
+/// The current latest Credential Format
+pub type Credential = CredentialV5;
+
 /// A user's authenticator credential. It contains an id, the public key
 /// and a counter of how many times the authenticator has been used.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Credential {
+pub struct CredentialV5 {
     /// The ID of this credential.
     pub cred_id: CredentialID,
     /// The public key of this credential
@@ -321,7 +328,7 @@ impl From<CredentialV3> for Credential {
 
         // prior to 20220520 no multi-device credentials existed to migrate from.
         Credential {
-            cred_id: Base64UrlSafeData::from(cred_id),
+            cred_id: HumanBinaryData::from(cred_id),
             cred,
             counter,
             transports: None,
@@ -370,13 +377,13 @@ pub struct CredentialV3 {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SerialisableAttestationData {
     /// See [ParsedAttestationData::Basic]
-    Basic(Vec<Base64UrlSafeData>),
+    Basic(Vec<HumanBinaryData>),
     /// See [ParsedAttestationData::Self_]
     Self_,
     /// See [ParsedAttestationData::AttCa]
-    AttCa(Vec<Base64UrlSafeData>),
+    AttCa(Vec<HumanBinaryData>),
     /// See [ParsedAttestationData::AnonCa]
-    AnonCa(Vec<Base64UrlSafeData>),
+    AnonCa(Vec<HumanBinaryData>),
     /// See [ParsedAttestationData::ECDAA]
     ECDAA,
     /// See [ParsedAttestationData::None]
@@ -460,7 +467,7 @@ pub enum AttestationMetadata {
         /// the name of apk that originated this key operation
         apk_package_name: String,
         /// cert chain for this apk
-        apk_certificate_digest_sha256: Vec<Base64UrlSafeData>,
+        apk_certificate_digest_sha256: Vec<HumanBinaryData>,
         /// A stricter verdict of device integrity. If the value of ctsProfileMatch is true, then the profile of the device running your app matches the profile of a device that has passed Android compatibility testing and has been approved as a Google-certified Android device.
         cts_profile_match: bool,
         /// A more lenient verdict of device integrity. If only the value of basicIntegrity is true, then the device running your app likely wasn't tampered with. However, the device hasn't necessarily passed Android compatibility testing.
@@ -506,22 +513,22 @@ impl Into<SerialisableAttestationData> for ParsedAttestationData {
             ParsedAttestationData::Basic(chain) => SerialisableAttestationData::Basic(
                 chain
                     .into_iter()
-                    .map(|c| Base64UrlSafeData::from(c.to_der().expect("Invalid DER")))
+                    .map(|c| HumanBinaryData::from(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::Self_ => SerialisableAttestationData::Self_,
             ParsedAttestationData::AttCa(chain) => SerialisableAttestationData::AttCa(
-                // Base64UrlSafeData::from(c.to_der().expect("Invalid DER")),
+                // HumanBinaryData::from(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| Base64UrlSafeData::from(c.to_der().expect("Invalid DER")))
+                    .map(|c| HumanBinaryData::from(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::AnonCa(chain) => SerialisableAttestationData::AnonCa(
-                // Base64UrlSafeData::from(c.to_der().expect("Invalid DER")),
+                // HumanBinaryData::from(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| Base64UrlSafeData::from(c.to_der().expect("Invalid DER")))
+                    .map(|c| HumanBinaryData::from(c.to_der().expect("Invalid DER")))
                     .collect(),
             ),
             ParsedAttestationData::ECDAA => SerialisableAttestationData::ECDAA,
