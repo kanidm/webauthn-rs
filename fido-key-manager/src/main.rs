@@ -583,7 +583,7 @@ async fn main() {
                     match &public_key.key {
                         COSEKeyType::EC_OKP(okp) => {
                             println!("  Octet key pair, curve {:?}", okp.curve);
-                            println!("    X-coordinate: {}", hex::encode(&okp.x.0));
+                            println!("    X-coordinate: {}", hex::encode(&okp.x));
                         }
                         COSEKeyType::EC_EC2(ec) => {
                             println!("  Elliptic curve key, curve {:?}", ec.curve);
