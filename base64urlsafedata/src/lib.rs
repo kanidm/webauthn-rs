@@ -125,7 +125,7 @@ static ALLOWED_DECODING_FORMATS: &[GeneralPurpose] =
 /// [0]: https://docs.rs/serde/latest/serde/trait.Serializer.html#method.is_human_readable
 /// [sec5]: https://datatracker.ietf.org/doc/html/rfc4648#section-5
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct Base64UrlSafeData(pub Vec<u8>);
+pub struct Base64UrlSafeData(Vec<u8>);
 
 common_impls!(Base64UrlSafeData);
 

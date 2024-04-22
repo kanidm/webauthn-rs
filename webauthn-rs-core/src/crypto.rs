@@ -548,7 +548,7 @@ impl COSEKey {
                     EDDSACurve::ED448 => pkey::Id::ED448,
                 };
 
-                pkey::PKey::public_key_from_raw_bytes(&edk.x.0, id)
+                pkey::PKey::public_key_from_raw_bytes(edk.x.as_ref(), id)
                     .map_err(WebauthnError::OpenSSLError)
             }
         }
