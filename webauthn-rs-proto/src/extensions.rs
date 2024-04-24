@@ -284,7 +284,12 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
 /// <https://www.w3.org/TR/webauthn-3/#sctn-authenticator-credential-properties-extension>
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct CredProps {
-    rk: bool,
+    /// A user agent supplied hint that this credential *may* have created a resident key. It is
+    /// retured from the user agent, not the authenticator meaning that this is an unreliable
+    /// signal.
+    ///
+    /// Note that this extension is UNSIGNED and may have been altered by page javascript.
+    pub rk: bool,
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
