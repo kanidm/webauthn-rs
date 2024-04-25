@@ -5,12 +5,13 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
 
+pub use webauthn_rs_core::proto::CredentialID;
 pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticationExtensions, AuthenticatorAttachment,
-    COSEAlgorithm, CreationChallengeResponse, CredProtect, CredentialID,
-    CredentialProtectionPolicy, ExtnState, Mediation, PublicKeyCredential,
-    RegisterPublicKeyCredential, RegisteredExtensions, RequestAuthenticationExtensions,
-    RequestChallengeResponse, RequestRegistrationExtensions, UserVerificationPolicy,
+    COSEAlgorithm, CreationChallengeResponse, CredProtect, CredentialProtectionPolicy, ExtnState,
+    Mediation, PublicKeyCredential, RegisterPublicKeyCredential, RegisteredExtensions,
+    RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
+    UserVerificationPolicy,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]

@@ -257,7 +257,7 @@ impl WebauthnCore {
                     id: self.rp_id.clone(),
                 },
                 user: User {
-                    id: Base64UrlSafeData(user_unique_id),
+                    id: user_unique_id.into(),
                     name: user_name,
                     display_name: user_display_name,
                 },
@@ -277,7 +277,7 @@ impl WebauthnCore {
                         .cloned()
                         .map(|id| PublicKeyCredentialDescriptor {
                             type_: "public-key".to_string(),
-                            id,
+                            id: id.as_ref().into(),
                             transports: None,
                         })
                         .collect()
@@ -421,7 +421,7 @@ impl WebauthnCore {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the create() call.
-        if data.client_data_json.challenge.0 != chal.as_ref() {
+        if data.client_data_json.challenge.as_slice() != chal.as_ref() {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -685,7 +685,7 @@ impl WebauthnCore {
         // OUT OF SPEC - exclude any credential that is in our exclude list.
         let excluded = exclude_credentials
             .iter()
-            .any(|credid| credid.0.as_slice() == credential.cred_id.0.as_slice());
+            .any(|credid| credid.as_slice() == credential.cred_id.as_slice());
 
         if excluded {
             return Err(WebauthnError::CredentialAlteredAlgFromRequest);
@@ -745,7 +745,7 @@ impl WebauthnCore {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the PublicKeyCredentialRequestOptions passed to the get() call.
-        if c.challenge.0 != chal.as_ref() {
+        if c.challenge.as_slice() != chal.as_ref() {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -920,7 +920,7 @@ impl WebauthnCore {
             .iter()
             .map(|cred| AllowCredentials {
                 type_: "public-key".to_string(),
-                id: cred.cred_id.clone(),
+                id: cred.cred_id.as_ref().into(),
                 transports: cred.transports.clone(),
             })
             .collect();
@@ -1011,7 +1011,7 @@ impl WebauthnCore {
             // inappropriate for your use case), look up the corresponding credential public key.
             let mut found_cred: Option<&Credential> = None;
             for cred in creds {
-                if cred.cred_id.0 == rsp.raw_id.0 {
+                if cred.cred_id.as_slice() == rsp.raw_id.as_slice() {
                     found_cred = Some(cred);
                     break;
                 }
@@ -1178,7 +1178,7 @@ mod tests {
     use crate::proto::*;
     use crate::WebauthnCore as Webauthn;
     use base64::{engine::general_purpose::STANDARD, Engine};
-    use base64urlsafedata::Base64UrlSafeData;
+    use base64urlsafedata::{Base64UrlSafeData, HumanBinaryData};
     use std::time::Duration;
     use url::Url;
 
@@ -1392,7 +1392,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -1437,7 +1437,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"qabSCYW_PPKKBAW5_qEsPF3Q3prQeYBORfDMArsoKdg\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -1495,7 +1495,7 @@ mod tests {
 
         // Create the fake credential that we know is associated
         let cred = Credential {
-            cred_id: Base64UrlSafeData(vec![
+            cred_id: HumanBinaryData::from(vec![
                 106, 223, 133, 124, 161, 172, 56, 141, 181, 18, 27, 66, 187, 181, 113, 251, 187,
                 123, 20, 169, 41, 80, 236, 138, 92, 137, 4, 4, 16, 255, 188, 47, 158, 202, 111,
                 192, 117, 110, 152, 245, 95, 22, 200, 172, 71, 154, 40, 181, 212, 64, 80, 17, 238,
@@ -1619,7 +1619,7 @@ mod tests {
         let cred = Credential {
             counter: 1,
             transports: None,
-            cred_id: Base64UrlSafeData(vec![
+            cred_id: HumanBinaryData::from(vec![
                 179, 64, 237, 0, 28, 248, 197, 30, 213, 228, 250, 139, 28, 11, 156, 130, 69, 242,
                 21, 48, 84, 77, 103, 163, 66, 204, 167, 147, 82, 214, 212,
             ]),
@@ -1738,14 +1738,14 @@ mod tests {
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "uZcVDBVS68E_MtAgeQpElJxldF_6cY9sSvbWqx_qRh8wiu42lyRBRmh5yFeD_r9k130dMbFHBHI9RTFgdJQIzQ".to_string(),
-            raw_id: Base64UrlSafeData(
+            raw_id: Base64UrlSafeData::from(
                 STANDARD.decode("uZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzQ==").unwrap()
             ),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(
+                attestation_object: Base64UrlSafeData::from(
                     STANDARD.decode("o2NmbXRmcGFja2VkZ2F0dFN0bXSjY2FsZyZjc2lnWEcwRQIhAKAZODmj+uF5qXsDY2NFol3apRjld544KRUpHzwfk5cbAiBnp2gHmamr2xr46ilQuhzIR9BwMlwtxWd6IT2QEYeo7WN4NWOBWQLBMIICvTCCAaWgAwIBAgIEK/F8eDANBgkqhkiG9w0BAQsFADAuMSwwKgYDVQQDEyNZdWJpY28gVTJGIFJvb3QgQ0EgU2VyaWFsIDQ1NzIwMDYzMTAgFw0xNDA4MDEwMDAwMDBaGA8yMDUwMDkwNDAwMDAwMFowbjELMAkGA1UEBhMCU0UxEjAQBgNVBAoMCVl1YmljbyBBQjEiMCAGA1UECwwZQXV0aGVudGljYXRvciBBdHRlc3RhdGlvbjEnMCUGA1UEAwweWXViaWNvIFUyRiBFRSBTZXJpYWwgNzM3MjQ2MzI4MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEdMLHhCPIcS6bSPJZWGb8cECuTN8H13fVha8Ek5nt+pI8vrSflxb59Vp4bDQlH8jzXj3oW1ZwUDjHC6EnGWB5i6NsMGowIgYJKwYBBAGCxAoCBBUxLjMuNi4xLjQuMS40MTQ4Mi4xLjcwEwYLKwYBBAGC5RwCAQEEBAMCAiQwIQYLKwYBBAGC5RwBAQQEEgQQxe9V/62aS5+1gK3rr+Am0DAMBgNVHRMBAf8EAjAAMA0GCSqGSIb3DQEBCwUAA4IBAQCLbpN2nXhNbunZANJxAn/Cd+S4JuZsObnUiLnLLS0FPWa01TY8F7oJ8bE+aFa4kTe6NQQfi8+yiZrQ8N+JL4f7gNdQPSrH+r3iFd4SvroDe1jaJO4J9LeiFjmRdcVa+5cqNF4G1fPCofvw9W4lKnObuPakr0x/icdVq1MXhYdUtQk6Zr5mBnc4FhN9qi7DXqLHD5G7ZFUmGwfIcD2+0m1f1mwQS8yRD5+/aDCf3vutwddoi3crtivzyromwbKklR4qHunJ75LGZLZA8pJ/mXnUQ6TTsgRqPvPXgQPbSyGMf2z/DIPbQqCD/Bmc4dj9o6LozheBdDtcZCAjSPTAd/uiaGF1dGhEYXRhWMS3tF916xTswLEZrAO3fy8EzMmvvR8f5wWM7F5+4KJ0ikEAAAACxe9V/62aS5+1gK3rr+Am0ABAuZcVDBVS68E/MtAgeQpElJxldF/6cY9sSvbWqx/qRh8wiu42lyRBRmh5yFeD/r9k130dMbFHBHI9RTFgdJQIzaUBAgMmIAEhWCDCfn9t/BeDFfwG32Ms/owb5hFeBYUcaCmQRauVoRrI8yJYII97t5wYshX4dZ+iRas0vPwaOwYvZ1wTOnVn+QDbCF/E").unwrap()
                 ),
-                client_data_json: Base64UrlSafeData(
+                client_data_json: Base64UrlSafeData::from(
                     STANDARD.decode("eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwib3JpZ2luIjoiaHR0cHM6XC9cLzE3Mi4yMC4wLjE0MTo4NDQzIiwiY2hhbGxlbmdlIjoidHZSMW0tZF9vaFhyd1Z4UWpNZ0g4S25vdkhaN0JSV2habURONFRWTXBOVSJ9").unwrap()
                 ),
                 transports: None,
@@ -1876,12 +1876,12 @@ mod tests {
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "KwlEDOBCBc9P1YU3NWihYLCeY-I9KGMhPap9vwHbVoI".to_string(),
-            raw_id: Base64UrlSafeData(vec![
+            raw_id: Base64UrlSafeData::from(vec![
                 43, 9, 68, 12, 224, 66, 5, 207, 79, 213, 133, 55, 53, 104, 161, 96, 176, 158, 99,
                 226, 61, 40, 99, 33, 61, 170, 125, 191, 1, 219, 86, 130,
             ]),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(vec![
+                attestation_object: Base64UrlSafeData::from(vec![
                     163, 99, 102, 109, 116, 100, 110, 111, 110, 101, 103, 97, 116, 116, 83, 116,
                     109, 116, 160, 104, 97, 117, 116, 104, 68, 97, 116, 97, 89, 1, 103, 108, 41,
                     129, 232, 231, 178, 172, 146, 198, 102, 0, 255, 160, 250, 221, 227, 137, 40,
@@ -1906,7 +1906,7 @@ mod tests {
                     164, 102, 42, 141, 173, 102, 140, 52, 57, 43, 115, 12, 238, 89, 33, 67, 1, 0,
                     1,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
                     103, 101, 34, 58, 34, 70, 81, 107, 121, 48, 70, 113, 110, 109, 86, 53, 75, 89,
@@ -1945,17 +1945,17 @@ mod tests {
 
         let rsp_d = PublicKeyCredential {
             id: "KwlEDOBCBc9P1YU3NWihYLCeY-I9KGMhPap9vwHbVoI".to_string(),
-            raw_id: Base64UrlSafeData(vec![
+            raw_id: Base64UrlSafeData::from(vec![
                 43, 9, 68, 12, 224, 66, 5, 207, 79, 213, 133, 55, 53, 104, 161, 96, 176, 158, 99,
                 226, 61, 40, 99, 33, 61, 170, 125, 191, 1, 219, 86, 130,
             ]),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: Base64UrlSafeData(vec![
+                authenticator_data: Base64UrlSafeData::from(vec![
                     108, 41, 129, 232, 231, 178, 172, 146, 198, 102, 0, 255, 160, 250, 221, 227,
                     137, 40, 196, 142, 208, 221, 115, 246, 47, 198, 69, 45, 165, 107, 42, 27, 5, 0,
                     0, 0, 1,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 103, 101, 116, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110, 103, 101, 34,
                     58, 34, 118, 88, 82, 45, 97, 48, 111, 100, 48, 114, 86, 106, 115, 113, 51, 87,
@@ -1966,7 +1966,7 @@ mod tests {
                     58, 56, 48, 56, 48, 34, 44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105,
                     110, 34, 58, 102, 97, 108, 115, 101, 125,
                 ]),
-                signature: Base64UrlSafeData(vec![
+                signature: Base64UrlSafeData::from(vec![
                     77, 253, 152, 83, 184, 198, 5, 16, 68, 51, 178, 5, 228, 20, 148, 168, 182, 3,
                     201, 59, 162, 181, 96, 221, 67, 136, 230, 61, 252, 0, 38, 244, 143, 98, 100,
                     14, 226, 223, 234, 58, 72, 9, 230, 190, 0, 189, 176, 101, 172, 176, 146, 25,
@@ -1984,7 +1984,7 @@ mod tests {
                     237, 221, 115, 182, 37, 187, 29, 250, 103, 178, 104, 69, 153, 47, 212, 76, 200,
                     242,
                 ]),
-                user_handle: Some(Base64UrlSafeData(vec![109, 99, 104, 97, 110])),
+                user_handle: Some(Base64UrlSafeData::from(vec![109, 99, 104, 97, 110])),
             },
             extensions: AuthenticationExtensionsClientOutputs::default(),
             type_: "public-key".to_string(),
@@ -2021,12 +2021,12 @@ mod tests {
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "0_n4aTCbomLUQXr07c7Ea-J0iNvdYmW0bUGuN6-ceGA".to_string(),
-            raw_id: Base64UrlSafeData(vec![
+            raw_id: Base64UrlSafeData::from(vec![
                 211, 249, 248, 105, 48, 155, 162, 98, 212, 65, 122, 244, 237, 206, 196, 107, 226,
                 116, 136, 219, 221, 98, 101, 180, 109, 65, 174, 55, 175, 156, 120, 96,
             ]),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(vec![
+                attestation_object: Base64UrlSafeData::from(vec![
                     163, 99, 102, 109, 116, 99, 116, 112, 109, 103, 97, 116, 116, 83, 116, 109,
                     116, 166, 99, 97, 108, 103, 57, 255, 254, 99, 115, 105, 103, 89, 1, 0, 5, 3,
                     162, 216, 151, 57, 210, 103, 145, 121, 161, 186, 63, 232, 221, 255, 89, 37, 17,
@@ -2275,7 +2275,7 @@ mod tests {
                     185, 245, 104, 105, 62, 142, 124, 34, 9, 157, 167, 188, 243, 112, 104, 248, 63,
                     50, 19, 53, 173, 69, 12, 39, 252, 9, 69, 223, 33, 67, 1, 0, 1,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
                     103, 101, 34, 58, 34, 73, 108, 121, 57, 116, 68, 90, 99, 89, 76, 103, 66, 121,
@@ -2381,12 +2381,12 @@ mod tests {
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "u_tliFf-aXRLg9XIz-SuQ0XBlbE".to_string(),
-            raw_id: Base64UrlSafeData(vec![
+            raw_id: Base64UrlSafeData::from(vec![
                 187, 251, 101, 136, 87, 254, 105, 116, 75, 131, 213, 200, 207, 228, 174, 67, 69,
                 193, 149, 177,
             ]),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(vec![
+                attestation_object: Base64UrlSafeData::from(vec![
                     163, 99, 102, 109, 116, 101, 97, 112, 112, 108, 101, 103, 97, 116, 116, 83,
                     116, 109, 116, 162, 99, 97, 108, 103, 38, 99, 120, 53, 99, 130, 89, 2, 71, 48,
                     130, 2, 67, 48, 130, 1, 201, 160, 3, 2, 1, 2, 2, 6, 1, 118, 69, 82, 254, 167,
@@ -2461,7 +2461,7 @@ mod tests {
                     152, 173, 94, 147, 57, 2, 250, 21, 5, 51, 116, 174, 217, 39, 160, 35, 12, 249,
                     120, 237, 52, 148, 171, 134, 138, 205, 26, 173,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
                     103, 101, 34, 58, 34, 74, 84, 98, 107, 55, 121, 101, 107, 73, 75, 79, 90, 81,
@@ -2592,12 +2592,12 @@ mod tests {
 
         let rsp_d = RegisterPublicKeyCredential {
             id: "u_tliFf-aXRLg9XIz-SuQ0XBlbE".to_string(),
-            raw_id: Base64UrlSafeData(vec![
+            raw_id: Base64UrlSafeData::from(vec![
                 187, 251, 101, 136, 87, 254, 105, 116, 75, 131, 213, 200, 207, 228, 174, 67, 69,
                 193, 149, 177,
             ]),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(vec![
+                attestation_object: Base64UrlSafeData::from(vec![
                     163, 99, 102, 109, 116, 101, 97, 112, 112, 108, 101, 103, 97, 116, 116, 83,
                     116, 109, 116, 162, 99, 97, 108, 103, 38, 99, 120, 53, 99, 130, 89, 2, 71, 48,
                     130, 2, 67, 48, 130, 1, 201, 160, 3, 2, 1, 2, 2, 6, 1, 118, 69, 82, 254, 167,
@@ -2671,7 +2671,7 @@ mod tests {
                     34, 88, 32, 105, 249, 199, 167, 152, 173, 94, 147, 57, 2, 250, 21, 5, 51, 116,
                     174, 217, 39, 160, 35, 12, 249, 120, 237, 52, 148, 171, 134, 138, 205, 26, 173,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
                     103, 101, 34, 58, 34, 74, 84, 98, 107, 55, 121, 101, 107, 73, 75, 79, 90, 81,
@@ -2731,7 +2731,7 @@ mod tests {
         // Given two credentials with differening policy
         let mut creds = vec![
             Credential {
-                cred_id: Base64UrlSafeData(vec![
+                cred_id: HumanBinaryData::from(vec![
                     205, 198, 18, 130, 133, 220, 73, 23, 199, 211, 240, 143, 220, 154, 172, 117,
                     91, 18, 164, 211, 24, 147, 16, 203, 118, 76, 33, 65, 31, 92, 236, 211, 79, 67,
                     240, 30, 65, 247, 46, 134, 19, 136, 170, 209, 11, 115, 37, 12, 88, 244, 244,
@@ -2771,7 +2771,7 @@ mod tests {
                 attestation_format: AttestationFormat::None,
             },
             Credential {
-                cred_id: Base64UrlSafeData(vec![
+                cred_id: HumanBinaryData::from(vec![
                     211, 204, 163, 253, 101, 149, 83, 136, 242, 175, 211, 104, 215, 131, 122, 175,
                     187, 84, 13, 3, 21, 24, 11, 138, 50, 137, 55, 225, 180, 109, 49, 28, 98, 8, 28,
                     181, 149, 241, 106, 124, 110, 149, 154, 198, 23, 8, 8, 4, 41, 69, 236, 203,
@@ -2881,7 +2881,7 @@ mod tests {
 
         let id =
             "zIQDbMsgDg89LbWHAMLrpgI4w5Bz5Hy8U6F-gaUmda1fgwgn6NzhXQFJwEDfowsiY0NTgdU2jjAG2PmzaD5aWA".to_string();
-        let raw_id = Base64UrlSafeData(vec![
+        let raw_id = Base64UrlSafeData::from(vec![
             204, 132, 3, 108, 203, 32, 14, 15, 61, 45, 181, 135, 0, 194, 235, 166, 2, 56, 195, 144,
             115, 228, 124, 188, 83, 161, 126, 129, 165, 38, 117, 173, 95, 131, 8, 39, 232, 220,
             225, 93, 1, 73, 192, 64, 223, 163, 11, 34, 99, 67, 83, 129, 213, 54, 142, 48, 6, 216,
@@ -2897,7 +2897,7 @@ mod tests {
             id: id.clone(),
             raw_id: raw_id.clone(),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(vec![
+                attestation_object: Base64UrlSafeData::from(vec![
                     163, 99, 102, 109, 116, 104, 102, 105, 100, 111, 45, 117, 50, 102, 103, 97,
                     116, 116, 83, 116, 109, 116, 162, 99, 115, 105, 103, 88, 70, 48, 68, 2, 32,
                     125, 195, 114, 22, 37, 221, 215, 19, 15, 177, 53, 167, 63, 179, 235, 152, 8,
@@ -2955,7 +2955,7 @@ mod tests {
                     30, 49, 240, 214, 59, 66, 44, 67, 110, 41, 126, 83, 131, 50, 13, 175, 237, 57,
                     225, 87, 38, 132, 17, 54, 52, 22, 0, 142, 54, 255,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
                     103, 101, 34, 58, 34, 114, 117, 50, 100, 81, 112, 57, 71, 50, 74, 83, 67, 117,
@@ -2998,12 +2998,12 @@ mod tests {
             id,
             raw_id,
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: Base64UrlSafeData(vec![
+                authenticator_data: Base64UrlSafeData::from(vec![
                     239, 115, 241, 111, 91, 226, 27, 23, 185, 145, 15, 75, 208, 190, 109, 73, 186,
                     119, 107, 122, 2, 224, 117, 140, 139, 132, 92, 21, 148, 105, 187, 55, 1, 0, 0,
                     3, 237,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 103, 101, 116, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110, 103, 101, 34,
                     58, 34, 102, 122, 84, 81, 56, 57, 90, 89, 84, 121, 73, 77, 52, 112, 72, 90, 50,
@@ -3014,14 +3014,14 @@ mod tests {
                     56, 48, 34, 44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105, 110, 34,
                     58, 102, 97, 108, 115, 101, 125,
                 ]),
-                signature: Base64UrlSafeData(vec![
+                signature: Base64UrlSafeData::from(vec![
                     48, 69, 2, 32, 113, 175, 47, 74, 251, 87, 115, 175, 144, 222, 52, 128, 21, 250,
                     35, 239, 213, 162, 75, 45, 110, 28, 15, 103, 138, 234, 106, 219, 34, 198, 74,
                     74, 2, 33, 0, 204, 144, 147, 62, 250, 6, 11, 19, 239, 90, 108, 6, 126, 165,
                     157, 41, 223, 251, 81, 22, 202, 121, 126, 133, 192, 81, 71, 193, 220, 208, 25,
                     127,
                 ]),
-                user_handle: Some(Base64UrlSafeData(vec![])),
+                user_handle: Some(Base64UrlSafeData::from(vec![])),
             },
             extensions: AuthenticationExtensionsClientOutputs::default(),
             type_: "public-key".to_string(),
@@ -3051,7 +3051,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"NE6dm0mgUe47-X0Yf5nRdhYokY3A8XAzs10KBLGlVY0\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3094,7 +3094,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"rRPXQ7lps3xBQzX3dDAor9fHwH_ff55gUU-8wwZVK-g\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3138,7 +3138,7 @@ mod tests {
             None,
             None,
         );
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"Y0j5PX0VXeKb2150k6sAh1QNRBJ3iTv8WBsUfgn_pRs\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3182,7 +3182,7 @@ mod tests {
             None,
             None,
         );
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"CxQSmkUusCl8ig6qyA0Cp4qFU4Y960OAYGX1c24G-fo\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3225,7 +3225,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"55Wztjbgks9UkS5jYthawNFik0HSiYuCSB5pzNbT6k0\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3268,7 +3268,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"t_We131NpwllyPL0x26bzZgkF5f_XvA7Ocb4b98zlxM\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3316,7 +3316,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"FKVseWmr5DxQ_H9iTyoTgRPIClLspXO0XbOKQfMuaFc\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3363,7 +3363,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData = Base64UrlSafeData(vec![
+        let chal: HumanBinaryData = HumanBinaryData::from(vec![
             108, 33, 62, 167, 162, 234, 36, 63, 176, 231, 161, 58, 41, 233, 117, 157, 210, 244,
             123, 28, 194, 100, 34, 68, 32, 1, 183, 240, 100, 225, 182, 48,
         ]);
@@ -3371,13 +3371,13 @@ mod tests {
 
         let rsp_d: RegisterPublicKeyCredential = RegisterPublicKeyCredential {
             id: "AWtT-NSYHNmZjP2R9JAbBmwf3sWMxs_L4_O2XoIvI8HY-rGPjA".to_string(),
-            raw_id: Base64UrlSafeData(vec![
+            raw_id: Base64UrlSafeData::from(vec![
                 1, 107, 83, 248, 212, 152, 28, 217, 153, 140, 253, 145, 244, 144, 27, 6, 108, 31,
                 222, 197, 140, 198, 207, 203, 227, 243, 182, 94, 130, 47, 35, 193, 216, 250, 177,
                 143, 140,
             ]),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(vec![
+                attestation_object: Base64UrlSafeData::from(vec![
                     163, 99, 102, 109, 116, 102, 112, 97, 99, 107, 101, 100, 103, 97, 116, 116, 83,
                     116, 109, 116, 162, 99, 97, 108, 103, 38, 99, 115, 105, 103, 88, 72, 48, 70, 2,
                     33, 0, 234, 66, 128, 149, 10, 78, 90, 6, 183, 58, 163, 114, 112, 146, 47, 204,
@@ -3396,7 +3396,7 @@ mod tests {
                     28, 142, 154, 9, 9, 149, 94, 254, 147, 235, 38, 4, 215, 26, 217, 51, 245, 151,
                     148, 192, 141, 169,
                 ]),
-                client_data_json: Base64UrlSafeData(vec![
+                client_data_json: Base64UrlSafeData::from(vec![
                     123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110,
                     46, 99, 114, 101, 97, 116, 101, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110,
                     103, 101, 34, 58, 34, 98, 67, 69, 45, 112, 54, 76, 113, 74, 68, 45, 119, 53,
@@ -3483,7 +3483,7 @@ mod tests {
             None,
         );
 
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"dfo+HlqJp3MLK+J5TLxxmvXJieS3zGwdk9G9H9bPezg=\"").unwrap();
         let chal = Challenge::from(chal);
 
@@ -3522,7 +3522,7 @@ mod tests {
 
     #[test]
     fn test_google_safetynet_2() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"B3q5igjVbIpBwqnK18k0mgAOLnXTK/Mmv3JTsSMyEKg=\"").unwrap();
 
         let response = r#"{
@@ -3580,7 +3580,7 @@ mod tests {
 
     #[test]
     fn test_google_android_key() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"Tf65bS6D5temh2BwvptqgBPb25iZDRxjwC5ans91IIJDrcrOpnWTK4LVgFjeUV4GDMe44w8SI5NsZssIXTUvDg\"").unwrap();
 
         let response = r#"{
@@ -3649,7 +3649,7 @@ mod tests {
 
     #[test]
     fn test_tpm_ecc_aseigler() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"E2YebMmG9992XialpFL1lkPptOIBPeKsphNkt1JcbKk\"").unwrap();
 
         let response = r#"{
@@ -3714,7 +3714,7 @@ mod tests {
 
     #[test]
     fn test_solokey_v2_a_sealed_attestation() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"VEP2Y5lrFKvfNZCt-js1BivzIRjDCXERNRswVPGT1tw\"").unwrap();
         let response = r#"{
             "id": "owBYr08K20VJPLwjmm6fiIPE9iqvr31mfxoi1S-gj3mrvsmeSSUd70rMHJpbMBxnm7MlTX8hPpXz2NKVkEVrVGrrJOayYhdthzPeRqPQsFj_f2qkhJrt3xSIzDb6ZzS1hcME5xE76_XKdbH9-ZEUztxN9lR8GjX5TO9e1WsEfeY6yriqKRZ-xgA3BU081GOZWZ00cggWPEEmll1gkYepDDjrwH0a2CXaV-oSs50rRIuD9JkBTKCqEYK6IG-CBMtTEwJQA042FkAQ_RpWpziVVyXfWA",
@@ -3767,7 +3767,7 @@ mod tests {
 
     #[test]
     fn test_solokey_v2_a_sealed_ed25519_invalid_cbor() {
-        let chal: Base64UrlSafeData =
+        let chal: HumanBinaryData =
             serde_json::from_str("\"KlJqz0evSPAw8cTWpup6SkYJw-RTziV0BBuMH8R-zVM\"").unwrap();
 
         let response = r#"{

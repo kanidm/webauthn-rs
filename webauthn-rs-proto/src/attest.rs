@@ -1,10 +1,14 @@
 //! Types related to attestation (Registration)
 
+#[cfg(feature = "wasm")]
+use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{RegistrationExtensionsClientOutputs, RequestRegistrationExtensions};
 use crate::options::*;
+#[cfg(feature = "wasm")]
+use crate::BASE64_ENGINE;
 
 /// <https://w3c.github.io/webauthn/#dictionary-makecredentialoptions>
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -57,8 +61,8 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
         use js_sys::{Array, Object, Uint8Array};
         use wasm_bindgen::JsValue;
 
-        let chal = Uint8Array::from(ccr.public_key.challenge.0.as_slice());
-        let userid = Uint8Array::from(ccr.public_key.user.id.0.as_slice());
+        let chal = Uint8Array::from(ccr.public_key.challenge.as_slice());
+        let userid = Uint8Array::from(ccr.public_key.user.id.as_slice());
 
         let jsv = serde_wasm_bindgen::to_value(&ccr).unwrap();
 
@@ -86,7 +90,7 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
                     )
                     .unwrap();
 
-                    js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.0.as_slice()))
+                    js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.as_slice()))
                         .unwrap();
 
                     if let Some(transports) = &ac.transports {
@@ -183,20 +187,12 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
 
         let data_extensions = data.get_client_extension_results();
 
-        // Now we can convert to the base64 values for json.
-        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
-
-        let data_response_attestation_object_b64 =
-            Base64UrlSafeData(data_response_attestation_object);
-
-        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
-
         RegisterPublicKeyCredential {
-            id: format!("{data_raw_id_b64}"),
-            raw_id: data_raw_id_b64,
+            id: BASE64_ENGINE.encode(&data_raw_id),
+            raw_id: data_raw_id.into(),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: data_response_attestation_object_b64,
-                client_data_json: data_response_client_data_json_b64,
+                attestation_object: data_response_attestation_object.into(),
+                client_data_json: data_response_client_data_json.into(),
                 transports,
             },
             type_: "public-key".to_string(),

@@ -3,8 +3,8 @@ use webauthn_rs::{prelude::Uuid, Webauthn, WebauthnBuilder, DEFAULT_AUTHENTICATO
 use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
 use webauthn_rs_core::proto::{AttestationCaList, AuthenticationState, RegistrationState};
 use webauthn_rs_core::proto::{
-    AuthenticationResult, Base64UrlSafeData, CreationChallengeResponse, Credential,
-    PublicKeyCredential, RegisterPublicKeyCredential, RequestChallengeResponse,
+    AuthenticationResult, CreationChallengeResponse, Credential, PublicKeyCredential,
+    RegisterPublicKeyCredential, RequestChallengeResponse,
 };
 use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_demo_shared::*;
@@ -114,7 +114,7 @@ impl WebauthnActor {
                     user_unique_id,
                     &username,
                     &username,
-                    Some(vec![Base64UrlSafeData(vec![0x00, 0x01, 0x02, 0x03])]),
+                    Some(vec![vec![0x00, 0x01, 0x02, 0x03].into()]),
                 )
                 .map(|(ccr, rs)| (ccr, RegistrationTypedState::Passkey(rs)))?,
             RegisterWithType::AttestedPasskey(strict) => {

@@ -6,7 +6,9 @@ use crate::{
     crypto::{compute_sha256, get_group},
     ctap2::commands::{value_to_vec_u8, GetInfoResponse},
     error::WebauthnCError,
+    BASE64_ENGINE,
 };
+use base64::Engine;
 use openssl::x509::{
     extension::{AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier},
     X509NameBuilder, X509Ref, X509ReqBuilder, X509,
@@ -588,14 +590,12 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         // Okay, now persist the token. We shouldn't fail from here.
         self.tokens.insert(key_handle.clone(), ecpriv_der);
 
-        let id: String = Base64UrlSafeData(key_handle.clone()).to_string();
-
         let rego = RegisterPublicKeyCredential {
-            id,
-            raw_id: Base64UrlSafeData(key_handle),
+            id: BASE64_ENGINE.encode(&key_handle),
+            raw_id: key_handle.into(),
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData(ao_bytes),
-                client_data_json: Base64UrlSafeData(vec![]),
+                attestation_object: ao_bytes.into(),
+                client_data_json: Base64UrlSafeData::new(),
                 transports: Some(vec![AuthenticatorTransport::Internal]),
             },
             type_: "public-key".to_string(),
@@ -646,15 +646,13 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
             )
             .collect();
 
-        let id: String = Base64UrlSafeData(u2sd.key_handle.clone()).to_string();
-
         Ok(PublicKeyCredential {
-            id,
-            raw_id: Base64UrlSafeData(u2sd.key_handle.clone()),
+            id: BASE64_ENGINE.encode(&u2sd.key_handle),
+            raw_id: u2sd.key_handle.into(),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: Base64UrlSafeData(authdata),
-                client_data_json: Base64UrlSafeData(vec![]),
-                signature: Base64UrlSafeData(u2sd.signature),
+                authenticator_data: authdata.into(),
+                client_data_json: Base64UrlSafeData::new(),
+                signature: u2sd.signature.into(),
                 user_handle: None,
             },
             type_: "public-key".to_string(),
@@ -700,8 +698,8 @@ impl U2FToken for SoftToken {
             .iter()
             .filter_map(|ac| {
                 self.tokens
-                    .get(&ac.id.0)
-                    .map(|v| (ac.id.0.clone(), v.clone()))
+                    .get(ac.id.as_ref())
+                    .map(|v| (ac.id.clone().into(), v.clone()))
             })
             .take(1)
             .next();
@@ -1049,7 +1047,7 @@ mod tests {
                 id: "example.com".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData(user_id),
+                id: Base64UrlSafeData::from(user_id),
                 name: "sampleuser".to_string(),
                 display_name: "Sample User".to_string(),
             },
@@ -1130,7 +1128,7 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ) as usize;
-        let cred_id = Base64UrlSafeData(
+        let cred_id = Base64UrlSafeData::from(
             (verification_data[cred_id_off + 2..cred_id_off + 2 + cred_id_len]).to_vec(),
         );
 

@@ -71,6 +71,12 @@ macro_rules! common_impls {
             }
         }
 
+        impl AsMut<[u8]> for $type {
+            fn as_mut(&mut self) -> &mut [u8] {
+                &mut self.0
+            }
+        }
+
         macro_rules! partial_eq_impl {
             ($other:ty) => {
                 impl PartialEq<$other> for $type {

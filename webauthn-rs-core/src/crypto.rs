@@ -491,8 +491,8 @@ impl COSEKey {
             COSEKeyType::EC_EC2(ecpk) => {
                 let r: [u8; 1] = [0x04];
                 Ok(r.iter()
-                    .chain(ecpk.x.0.iter())
-                    .chain(ecpk.y.0.iter())
+                    .chain(ecpk.x.iter())
+                    .chain(ecpk.y.iter())
                     .copied()
                     .collect())
             }
@@ -548,7 +548,7 @@ impl COSEKey {
                     EDDSACurve::ED448 => pkey::Id::ED448,
                 };
 
-                pkey::PKey::public_key_from_raw_bytes(&edk.x.0, id)
+                pkey::PKey::public_key_from_raw_bytes(edk.x.as_ref(), id)
                     .map_err(WebauthnError::OpenSSLError)
             }
         }

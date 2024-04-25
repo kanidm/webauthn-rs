@@ -106,7 +106,7 @@ impl<T: AuthenticatorBackendHashedClientData> AuthenticatorBackend for T {
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
         let mut cred = self.perform_register(client_data_hash, options, timeout_ms)?;
-        cred.response.client_data_json = Base64UrlSafeData(client_data);
+        cred.response.client_data_json = Base64UrlSafeData::from(client_data);
 
         Ok(cred)
     }
@@ -123,7 +123,7 @@ impl<T: AuthenticatorBackendHashedClientData> AuthenticatorBackend for T {
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
         let mut cred = self.perform_auth(client_data_hash, options, timeout_ms)?;
-        cred.response.client_data_json = Base64UrlSafeData(client_data);
+        cred.response.client_data_json = Base64UrlSafeData::from(client_data);
         Ok(cred)
     }
 }
@@ -146,7 +146,7 @@ pub fn perform_register_with_request(
     let options = PublicKeyCredentialCreationOptions {
         rp: request.rp,
         user: request.user,
-        challenge: Base64UrlSafeData(vec![]),
+        challenge: Base64UrlSafeData::new(),
         pub_key_cred_params: request.pub_key_cred_params,
         timeout: Some(timeout_ms),
         exclude_credentials: Some(request.exclude_list),
@@ -163,7 +163,7 @@ pub fn perform_register_with_request(
     // attestation_object is a MakeCredentialResponse, with string keys
     // rather than u32, we need to convert it.
     let resp: MakeCredentialResponse =
-        serde_cbor_2::de::from_slice(cred.response.attestation_object.0.as_slice())
+        serde_cbor_2::de::from_slice(cred.response.attestation_object.as_slice())
             .map_err(|_| WebauthnCError::Cbor)?;
 
     // Write value with u32 keys
@@ -187,7 +187,7 @@ pub fn perform_auth_with_request(
     timeout_ms: u32,
 ) -> Result<Vec<u8>, WebauthnCError> {
     let options = PublicKeyCredentialRequestOptions {
-        challenge: Base64UrlSafeData(vec![]),
+        challenge: Base64UrlSafeData::new(),
         timeout: Some(timeout_ms),
         rp_id: request.rp_id,
         allow_credentials: request.allow_list,
@@ -203,8 +203,8 @@ pub fn perform_auth_with_request(
             id: cred.raw_id,
             transports: None,
         }),
-        auth_data: Some(cred.response.authenticator_data.0),
-        signature: Some(cred.response.signature.0),
+        auth_data: Some(cred.response.authenticator_data.into()),
+        signature: Some(cred.response.signature.into()),
         number_of_credentials: None,
         user_selected: None,
         large_blob_key: None,

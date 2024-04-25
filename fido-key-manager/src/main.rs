@@ -583,15 +583,15 @@ async fn main() {
                     match &public_key.key {
                         COSEKeyType::EC_OKP(okp) => {
                             println!("  Octet key pair, curve {:?}", okp.curve);
-                            println!("    X-coordinate: {}", hex::encode(&okp.x.0));
+                            println!("    X-coordinate: {}", hex::encode(&okp.x));
                         }
                         COSEKeyType::EC_EC2(ec) => {
                             println!("  Elliptic curve key, curve {:?}", ec.curve);
-                            println!("    X-coordinate: {}", hex::encode(&ec.x.0));
-                            println!("    Y-coordinate: {}", hex::encode(&ec.y.0));
+                            println!("    X-coordinate: {}", hex::encode(&ec.x));
+                            println!("    Y-coordinate: {}", hex::encode(&ec.y));
                         }
                         COSEKeyType::RSA(rsa) => {
-                            println!("  RSA modulus: {}", hex::encode(&rsa.n.0));
+                            println!("  RSA modulus: {}", hex::encode(&rsa.n));
                             println!("    Exponent: {}", hex::encode(rsa.e));
                         }
                     }

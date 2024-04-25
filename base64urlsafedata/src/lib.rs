@@ -125,7 +125,7 @@ static ALLOWED_DECODING_FORMATS: &[GeneralPurpose] =
 /// [0]: https://docs.rs/serde/latest/serde/trait.Serializer.html#method.is_human_readable
 /// [sec5]: https://datatracker.ietf.org/doc/html/rfc4648#section-5
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct Base64UrlSafeData(pub Vec<u8>);
+pub struct Base64UrlSafeData(Vec<u8>);
 
 common_impls!(Base64UrlSafeData);
 
@@ -138,25 +138,6 @@ impl From<HumanBinaryData> for Base64UrlSafeData {
 impl PartialEq<HumanBinaryData> for Base64UrlSafeData {
     fn eq(&self, other: &HumanBinaryData) -> bool {
         self.0.eq(other)
-    }
-}
-
-impl fmt::Display for Base64UrlSafeData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", URL_SAFE_NO_PAD.encode(self))
-    }
-}
-
-impl TryFrom<&str> for Base64UrlSafeData {
-    type Error = ();
-
-    fn try_from(v: &str) -> Result<Self, Self::Error> {
-        for config in ALLOWED_DECODING_FORMATS {
-            if let Ok(data) = config.decode(v) {
-                return Ok(Base64UrlSafeData(data));
-            }
-        }
-        Err(())
     }
 }
 

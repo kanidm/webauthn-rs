@@ -1,10 +1,14 @@
 //! Types related to authentication (Assertion)
 
+#[cfg(feature = "wasm")]
+use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 
 use crate::extensions::{AuthenticationExtensionsClientOutputs, RequestAuthenticationExtensions};
 use crate::options::*;
+#[cfg(feature = "wasm")]
+use crate::BASE64_ENGINE;
 
 /// The requested options for the authentication
 #[derive(Debug, Serialize, Clone, Deserialize)]
@@ -69,7 +73,7 @@ impl From<RequestChallengeResponse> for web_sys::CredentialRequestOptions {
         let jsv = serde_wasm_bindgen::to_value(&rcr).unwrap();
         let pkcco = js_sys::Reflect::get(&jsv, &"publicKey".into()).unwrap();
 
-        let chal = Uint8Array::from(rcr.public_key.challenge.0.as_slice());
+        let chal = Uint8Array::from(rcr.public_key.challenge.as_slice());
         js_sys::Reflect::set(&pkcco, &"challenge".into(), &chal).unwrap();
 
         if let Some(extensions) = rcr.public_key.extensions {
@@ -86,7 +90,7 @@ impl From<RequestChallengeResponse> for web_sys::CredentialRequestOptions {
                 js_sys::Reflect::set(&obj, &"type".into(), &JsValue::from_str(ac.type_.as_str()))
                     .unwrap();
 
-                js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.0.as_slice()))
+                js_sys::Reflect::set(&obj, &"id".into(), &Uint8Array::from(ac.id.as_slice()))
                     .unwrap();
 
                 if let Some(transports) = &ac.transports {
@@ -158,7 +162,7 @@ impl PublicKeyCredential {
 
     /// Retrieve the credential id that was provided in this authentication
     pub fn get_credential_id(&self) -> &[u8] {
-        self.raw_id.0.as_slice()
+        self.raw_id.as_slice()
     }
 }
 
@@ -197,24 +201,14 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
         let data_extensions = data.get_client_extension_results();
         web_sys::console::log_1(&data_extensions);
 
-        // Base64 it
-
-        let data_raw_id_b64 = Base64UrlSafeData(data_raw_id);
-        let data_response_client_data_json_b64 = Base64UrlSafeData(data_response_client_data_json);
-        let data_response_authenticator_data_b64 =
-            Base64UrlSafeData(data_response_authenticator_data);
-        let data_response_signature_b64 = Base64UrlSafeData(data_response_signature);
-
-        let data_response_user_handle_b64 = data_response_user_handle.map(Base64UrlSafeData);
-
         PublicKeyCredential {
-            id: format!("{data_raw_id_b64}"),
-            raw_id: data_raw_id_b64,
+            id: BASE64_ENGINE.encode(&data_raw_id),
+            raw_id: data_raw_id.into(),
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: data_response_authenticator_data_b64,
-                client_data_json: data_response_client_data_json_b64,
-                signature: data_response_signature_b64,
-                user_handle: data_response_user_handle_b64,
+                authenticator_data: data_response_authenticator_data.into(),
+                client_data_json: data_response_client_data_json.into(),
+                signature: data_response_signature.into(),
+                user_handle: data_response_user_handle.map(Into::into),
             },
             extensions: data_extensions.into(),
             type_: "public-key".to_string(),
