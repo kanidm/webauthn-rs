@@ -1,11 +1,11 @@
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
 
+use base64urlsafedata::HumanBinaryData;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
 
-pub use webauthn_rs_core::proto::CredentialID;
 pub use webauthn_rs_proto::{
     AttestationConveyancePreference, AuthenticationExtensions, AuthenticatorAttachment,
     COSEAlgorithm, CreationChallengeResponse, CredProtect, CredentialProtectionPolicy, ExtnState,
@@ -13,6 +13,8 @@ pub use webauthn_rs_proto::{
     RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
     UserVerificationPolicy,
 };
+
+pub type CredentialID = HumanBinaryData;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum AttestationLevel {

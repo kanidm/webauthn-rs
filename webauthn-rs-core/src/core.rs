@@ -22,7 +22,7 @@ use url::Url;
 use crate::attestation::{
     verify_android_key_attestation, verify_android_safetynet_attestation,
     verify_apple_anonymous_attestation, verify_attestation_ca_chain, verify_fidou2f_attestation,
-    verify_packed_attestation, verify_tpm_attestation, AttestationFormat,
+    verify_packed_attestation, verify_tpm_attestation,
 };
 use crate::constants::CHALLENGE_SIZE_BYTES;
 use crate::crypto::compute_sha256;
@@ -74,7 +74,9 @@ pub struct ChallengeRegisterBuilder {
     credential_algorithms: Vec<COSEAlgorithm>,
     require_resident_key: bool,
     authenticator_attachment: Option<AuthenticatorAttachment>,
+    attestation_formats: Option<Vec<AttestationFormat>>,
     reject_synchronised_authenticators: bool,
+    hints: Option<Vec<PublicKeyCredentialHints>>,
 }
 
 impl ChallengeRegisterBuilder {
@@ -126,6 +128,21 @@ impl ChallengeRegisterBuilder {
     /// Flag that synchronised authenticators should not be allowed to register. Defaults to false.
     pub fn reject_synchronised_authenticators(mut self, value: bool) -> Self {
         self.reject_synchronised_authenticators = value;
+        self
+    }
+
+    /// Add the set of hints for which public keys may satisfy this request.
+    pub fn hints(mut self, hints: Option<Vec<PublicKeyCredentialHints>>) -> Self {
+        self.hints = hints;
+        self
+    }
+
+    /// Add the set of attestation formats that will be accepted in this operation
+    pub fn attestation_formats(
+        mut self,
+        attestation_formats: Option<Vec<AttestationFormat>>,
+    ) -> Self {
+        self.attestation_formats = attestation_formats;
         self
     }
 }
@@ -205,6 +222,8 @@ impl WebauthnCore {
             require_resident_key: Default::default(),
             authenticator_attachment: Default::default(),
             reject_synchronised_authenticators: Default::default(),
+            hints: Default::default(),
+            attestation_formats: Default::default(),
         })
     }
 
@@ -236,7 +255,9 @@ impl WebauthnCore {
             credential_algorithms,
             require_resident_key,
             authenticator_attachment,
+            attestation_formats,
             reject_synchronised_authenticators,
+            hints,
         } = challenge_builder;
 
         let challenge = self.generate_challenge();
@@ -270,6 +291,7 @@ impl WebauthnCore {
                     })
                     .collect(),
                 timeout: Some(timeout_millis),
+                hints,
                 attestation: Some(attestation),
                 exclude_credentials: exclude_credentials.as_ref().map(|creds| {
                     creds
@@ -289,6 +311,7 @@ impl WebauthnCore {
                     user_verification: policy,
                 }),
                 extensions: extensions.clone(),
+                attestation_formats,
             },
         };
 
@@ -529,7 +552,8 @@ impl WebauthnCore {
         //  https://w3c.github.io/webauthn-3/#none-attestation
         //  https://www.w3.org/TR/webauthn-3/#sctn-apple-anonymous-attestation
         //
-        let attest_format = AttestationFormat::try_from(data.attestation_object.fmt.as_str())?;
+        let attest_format = AttestationFormat::try_from(data.attestation_object.fmt.as_str())
+            .map_err(|()| WebauthnError::AttestationNotSupported)?;
 
         // Verify that attStmt is a correct attestation statement, conveying a valid attestation
         // signature, by using the attestation statement format fmt’s verification procedure given
@@ -570,7 +594,7 @@ impl WebauthnCore {
                 &data.attestation_object,
                 &client_data_json_hash,
             )?,
-            AttestationFormat::AndroidSafetyNet => verify_android_safetynet_attestation(
+            AttestationFormat::AndroidSafetynet => verify_android_safetynet_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
@@ -626,7 +650,10 @@ impl WebauthnCore {
             // but in this case because we have the ca_list and none was the result (which happens)
             // in some cases, we need to map that through. But we need verify_attesation_ca_chain
             // to still return these option types due to re-attestation in the future.
-            let ca_crt = ca_crt.ok_or(WebauthnError::AttestationNotVerifiable)?;
+            let ca_crt = ca_crt.ok_or_else(|| {
+                warn!("device attested with a certificate not present in attestation ca chain");
+                WebauthnError::AttestationNotVerifiable
+            })?;
             Some(ca_crt)
         } else {
             None
@@ -892,6 +919,7 @@ impl WebauthnCore {
         policy: Option<UserVerificationPolicy>,
         extensions: Option<RequestAuthenticationExtensions>,
         allow_backup_eligible_upgrade: Option<bool>,
+        hints: Option<Vec<PublicKeyCredentialHints>>,
     ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
         let policy = if let Some(policy) = policy {
             policy
@@ -941,6 +969,7 @@ impl WebauthnCore {
                 allow_credentials: ac,
                 user_verification: policy,
                 extensions,
+                hints,
             },
             mediation: None,
         };
@@ -1171,7 +1200,6 @@ impl WebauthnCore {
 mod tests {
     #![allow(clippy::panic)]
 
-    use crate::attestation::AttestationFormat;
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
     use crate::internals::*;
@@ -2813,7 +2841,7 @@ mod tests {
         // Ensure we get a bad result.
 
         assert!(
-            wan.generate_challenge_authenticate(creds.clone(), None, None, None)
+            wan.generate_challenge_authenticate(creds.clone(), None, None, None, None)
                 .unwrap_err()
                 == WebauthnError::InconsistentUserVerificationPolicy
         );
@@ -2838,7 +2866,7 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None);
+        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None, None);
         debug!("{:?}", r);
         assert!(r.is_ok());
 
@@ -2862,7 +2890,7 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None);
+        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None, None);
         debug!("{:?}", r);
         assert!(r.is_ok());
     }

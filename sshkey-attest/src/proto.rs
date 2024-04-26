@@ -1,8 +1,7 @@
 //! Serialisable formats of attested ssh keys
 
 use serde::{Deserialize, Serialize};
-use webauthn_rs_core::attestation::AttestationFormat;
-use webauthn_rs_core::proto::{ParsedAttestation, RegisteredExtensions};
+use webauthn_rs_core::proto::{AttestationFormat, ParsedAttestation, RegisteredExtensions};
 
 pub use sshkeys::PublicKey;
 

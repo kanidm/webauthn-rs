@@ -341,52 +341,6 @@ where
         })
 }
 
-/// The type of attestation on the credential
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash)]
-pub enum AttestationFormat {
-    /// Packed attestation
-    Packed,
-    /// TPM attestation (like Micrsoft)
-    Tpm,
-    /// Android hardware attestation
-    AndroidKey,
-    /// Older Android Safety Net
-    AndroidSafetyNet,
-    /// Old U2F attestation type
-    FIDOU2F,
-    /// Apple touchID/faceID
-    AppleAnonymous,
-    /// No attestation
-    None,
-}
-
-impl AttestationFormat {
-    /// Only a small number of devices correctly report their transports. These are
-    /// limited to attested devices, and exclusively packed (fido2) and tpms. Most
-    /// other devices/browsers will get this wrong, meaning that authentication will
-    /// fail or not offer the correct transports to the user.
-    pub(crate) fn transports_valid(&self) -> bool {
-        matches!(self, AttestationFormat::Packed | AttestationFormat::Tpm)
-    }
-}
-
-impl TryFrom<&str> for AttestationFormat {
-    type Error = WebauthnError;
-
-    fn try_from(a: &str) -> Result<AttestationFormat, Self::Error> {
-        match a {
-            "packed" => Ok(AttestationFormat::Packed),
-            "tpm" => Ok(AttestationFormat::Tpm),
-            "android-key" => Ok(AttestationFormat::AndroidKey),
-            "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
-            "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
-            "apple" => Ok(AttestationFormat::AppleAnonymous),
-            "none" => Ok(AttestationFormat::None),
-            _ => Err(WebauthnError::AttestationNotSupported),
-        }
-    }
-}
-
 // Perform the Verification procedure for 8.2. Packed Attestation Statement Format
 // https://w3c.github.io/webauthn/#sctn-packed-attestation
 pub(crate) fn verify_packed_attestation(
@@ -1432,9 +1386,11 @@ pub fn verify_attestation_ca_chain<'a>(
         ParsedAttestationData::AnonCa(chain) => chain,
         ParsedAttestationData::Self_ | ParsedAttestationData::None => {
             // nothing to check
+            debug!("No attestation present");
             return Ok(None);
         }
         ParsedAttestationData::ECDAA | ParsedAttestationData::Uncertain => {
+            debug!("attestation is an unsupported format");
             return Err(WebauthnError::AttestationNotVerifiable);
         }
     };

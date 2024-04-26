@@ -289,6 +289,7 @@ async fn main() {
                     hmac_get_secret: None,
                 }),
                 None,
+                None,
             )
             .unwrap();
 

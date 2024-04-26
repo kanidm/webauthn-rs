@@ -1,7 +1,6 @@
 //! Internal structures for parsing webauthn registrations and challenges. This *may* change
 //! at anytime and should not be relied on in your library.
 
-use crate::attestation::AttestationFormat;
 use crate::error::WebauthnError;
 use crate::proto::*;
 use serde::Deserialize;
@@ -188,7 +187,9 @@ impl Credential {
         let backup_eligible = auth_data.backup_eligible;
         let backup_state = auth_data.backup_state;
 
-        let transports = if attestation_format.transports_valid() {
+        let transports = if attestation_format == AttestationFormat::Packed
+            || attestation_format == AttestationFormat::Tpm
+        {
             transports.clone()
         } else {
             None
