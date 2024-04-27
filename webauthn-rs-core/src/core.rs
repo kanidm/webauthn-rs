@@ -942,6 +942,8 @@ impl WebauthnCore {
     /// step in authentication of a credential. This function will return an
     /// authentication builder allowing you to customise the parameters that will be
     /// sent to the client.
+    ///
+    /// If creds is an empty `Vec` this implies a discoverable authentication attempt.
     pub fn new_challenge_authenticate_builder(
         &self,
         creds: Vec<Credential>,
@@ -976,14 +978,13 @@ impl WebauthnCore {
     /// Generate a new challenge for client authentication from the parameters defined by the
     /// [ChallengeAuthenticateBuilder].
     ///
-    /// This function will return the
-    /// [RequestChallengeResponse] which is suitable for serde json serialisation
-    /// to be sent to the client. The client (generally a web browser) will pass this JSON
-    /// structure to the `navigator.credentials.create()` javascript function for registration.
+    /// This function will return:
     ///
-    /// It also returns an [AuthenticationState], that you *must*
-    /// persist. It is strongly advised you associate this AuthenticationState with a
-    /// private session ID that is unique to this request.
+    /// * a [RequestChallengeResponse], which is sent to the client (and can be serialised as JSON).
+    ///   A web application would then pass the structure to the browser's navigator.credentials.create() API to trigger authentication.
+    ///
+    /// * an [AuthenticationState], which must be persisted on the server side. Your application
+    ///   must associate the state with a private session ID, to prevent use in other sessions.
     pub fn generate_challenge_authenticate(
         &self,
         challenge_builder: ChallengeAuthenticateBuilder,
