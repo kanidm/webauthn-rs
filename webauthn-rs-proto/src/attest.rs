@@ -27,10 +27,6 @@ pub struct PublicKeyCredentialCreationOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
 
-    /// The requested attestation level from the device.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attestation: Option<AttestationConveyancePreference>,
-
     /// Credential ID's that are excluded from being able to be registered.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exclude_credentials: Option<Vec<PublicKeyCredentialDescriptor>>,
@@ -38,6 +34,18 @@ pub struct PublicKeyCredentialCreationOptions {
     /// Criteria defining which authenticators may be used in this operation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authenticator_selection: Option<AuthenticatorSelectionCriteria>,
+
+    /// Hints defining which credentials may be used in this operation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hints: Option<Vec<PublicKeyCredentialHints>>,
+
+    /// The requested attestation level from the device.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<AttestationConveyancePreference>,
+
+    /// The list of attestation formats that the RP will accept.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation_formats: Option<Vec<AttestationFormat>>,
 
     /// Non-standard extensions that may be used by the browser/authenticator.
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -179,6 +179,56 @@ impl ToString for AuthenticatorTransport {
     }
 }
 
+/// The type of attestation on the credential
+///
+/// <https://www.iana.org/assignments/webauthn/webauthn.xhtml>
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub enum AttestationFormat {
+    /// Packed attestation
+    #[serde(rename = "packed", alias = "Packed")]
+    Packed,
+    /// TPM attestation (like Microsoft)
+    #[serde(rename = "tpm", alias = "Tpm", alias = "TPM")]
+    Tpm,
+    /// Android hardware attestation
+    #[serde(rename = "android-key", alias = "AndroidKey")]
+    AndroidKey,
+    /// Older Android Safety Net
+    #[serde(
+        rename = "android-safetynet",
+        alias = "AndroidSafetyNet",
+        alias = "AndroidSafetynet"
+    )]
+    AndroidSafetyNet,
+    /// Old U2F attestation type
+    #[serde(rename = "fido-u2f", alias = "FIDOU2F")]
+    FIDOU2F,
+    /// Apple touchID/faceID
+    #[serde(rename = "apple", alias = "AppleAnonymous")]
+    AppleAnonymous,
+    /// No attestation
+    #[serde(rename = "none", alias = "None")]
+    None,
+}
+
+impl TryFrom<&str> for AttestationFormat {
+    type Error = ();
+
+    fn try_from(a: &str) -> Result<AttestationFormat, Self::Error> {
+        match a {
+            "packed" => Ok(AttestationFormat::Packed),
+            "tpm" => Ok(AttestationFormat::Tpm),
+            "android-key" => Ok(AttestationFormat::AndroidKey),
+            "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
+            "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
+            "apple" => Ok(AttestationFormat::AppleAnonymous),
+            "none" => Ok(AttestationFormat::None),
+            // _ => Err(WebauthnError::AttestationNotSupported),
+            _ => Err(()),
+        }
+    }
+}
+
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct PublicKeyCredentialDescriptor {
@@ -207,6 +257,21 @@ pub enum AuthenticatorAttachment {
     /// <https://www.w3.org/TR/webauthn/#attachment>
     #[serde(rename = "cross-platform")]
     CrossPlatform,
+}
+
+/// A hint as to the class of device that is expected to fufil this operation.
+///
+/// <https://www.w3.org/TR/webauthn-3/#enumdef-publickeycredentialhints>
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[allow(unused)]
+pub enum PublicKeyCredentialHints {
+    /// The credential is a removable security key
+    SecurityKey,
+    /// The credential is a platform authenticator
+    ClientDevice,
+    /// The credential will come from an external device
+    Hybrid,
 }
 
 /// The Relying Party's requirements for client-side discoverable credentials.

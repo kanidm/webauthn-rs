@@ -8,6 +8,7 @@ rust-version = "1.70.0"
 core = ["webauthn-rs-core"]
 
 [dependencies]
+base64urlsafedata.workspace = true
 serde.workspace = true
 
 webauthn-rs-core = { workspace = true, optional = true }

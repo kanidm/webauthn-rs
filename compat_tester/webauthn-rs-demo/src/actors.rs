@@ -367,11 +367,15 @@ impl WebauthnActor {
                     .ok_or(WebauthnError::CredentialNotFound)?;
 
                 self.wan
-                    .generate_challenge_authenticate(vec![cred], uv, extensions, None)
+                    .new_challenge_authenticate_builder(vec![cred], uv)
+                    .map(|builder| builder.extensions(extensions))
+                    .and_then(|b| self.wan.generate_challenge_authenticate(b))
             }
             None => self
                 .wan
-                .generate_challenge_authenticate(creds, None, extensions, None),
+                .new_challenge_authenticate_builder(creds, None)
+                .map(|builder| builder.extensions(extensions))
+                .and_then(|b| self.wan.generate_challenge_authenticate(b)),
         }?;
 
         debug!("complete ChallengeAuthenticate -> {:?}", acr);

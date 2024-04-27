@@ -151,7 +151,9 @@ pub fn perform_register_with_request(
         timeout: Some(timeout_ms),
         exclude_credentials: Some(request.exclude_list),
         // TODO
+        hints: None,
         attestation: None,
+        attestation_formats: None,
         authenticator_selection: None,
         extensions: None,
     };
@@ -192,6 +194,7 @@ pub fn perform_auth_with_request(
         rp_id: request.rp_id,
         allow_credentials: request.allow_list,
         // TODO
+        hints: None,
         user_verification: webauthn_rs_proto::UserVerificationPolicy::Preferred,
         extensions: None,
     };

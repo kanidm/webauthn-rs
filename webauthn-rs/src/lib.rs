@@ -211,12 +211,12 @@ pub mod prelude {
     pub use base64urlsafedata::Base64UrlSafeData;
     pub use url::Url;
     pub use uuid::Uuid;
-    pub use webauthn_rs_core::attestation::AttestationFormat;
     pub use webauthn_rs_core::error::{WebauthnError, WebauthnResult};
     #[cfg(feature = "danger-credential-internals")]
     pub use webauthn_rs_core::proto::Credential;
     pub use webauthn_rs_core::proto::{
-        AttestationCa, AttestationCaList, AttestationCaListBuilder, AuthenticatorAttachment,
+        AttestationCa, AttestationCaList, AttestationCaListBuilder, AttestationFormat,
+        AuthenticatorAttachment,
     };
     pub use webauthn_rs_core::proto::{
         AttestationMetadata, AuthenticationResult, AuthenticationState, CreationChallengeResponse,
@@ -569,6 +569,7 @@ impl Webauthn {
             .user_verification_policy(UserVerificationPolicy::Required)
             .reject_synchronised_authenticators(false)
             .exclude_credentials(exclude_credentials)
+            .hints(None)
             .extensions(extensions);
 
         self.core
@@ -627,6 +628,7 @@ impl Webauthn {
             .user_verification_policy(UserVerificationPolicy::Required)
             .reject_synchronised_authenticators(false)
             .exclude_credentials(exclude_credentials)
+            .hints(Some(vec![PublicKeyCredentialHints::ClientDevice]))
             .extensions(extensions);
 
         self.core
@@ -677,15 +679,18 @@ impl Webauthn {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let policy = Some(UserVerificationPolicy::Required);
-        let allow_backup_eligible_upgrade = Some(true);
+        let allow_backup_eligible_upgrade = true;
+        let hints = None;
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, PasskeyAuthentication { ast }))
     }
 
@@ -889,6 +894,7 @@ impl Webauthn {
             .user_verification_policy(policy)
             .reject_synchronised_authenticators(false)
             .exclude_credentials(exclude_credentials)
+            .hints(Some(vec![PublicKeyCredentialHints::SecurityKey]))
             .extensions(extensions);
 
         self.core
@@ -952,21 +958,25 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
 
         let policy = if self.user_presence_only_security_keys {
-            UserVerificationPolicy::Discouraged_DO_NOT_USE
+            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
         } else {
-            UserVerificationPolicy::Preferred
+            Some(UserVerificationPolicy::Preferred)
         };
 
+        let hints = Some(vec![PublicKeyCredentialHints::SecurityKey]);
+
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                Some(policy),
-                extensions,
-                allow_backup_eligible_upgrade,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
     }
 
@@ -1003,12 +1013,23 @@ impl Webauthn {
     /// and assert their identity. Because of this reliance on the authenticator, attestation of
     /// the authenticator and its properties is strongly recommended.
     ///
-    /// The primary difference to a passkey, is that these credentials *can not* 'roam' between multiple
-    /// devices, and must be bound to a single authenticator. This precludes the use of certain types
-    /// of authenticators (such as Apple's Passkeys as these are always synced).
+    /// The primary difference to a passkey, is that these credentials must provide an attestation
+    /// certificate which will be cryptographically validated to strictly enforce that only certain
+    /// devices may be registered.
     ///
-    /// Additionally, these credentials must provide an attestation certificate of authenticity
-    /// which will be cryptographically validated to strictly enforce that only certain devices may be used.
+    /// This attestation requires that private key material is bound to a single hardware
+    /// authenticator, and cannot be copied or moved out of it. At present, all widely deployed
+    /// Hybrid authenticators (Apple iCloud Keychain and Google Passkeys in Google Password
+    /// Manager) are synchronised authenticators which can roam between multiple devices, and so can
+    /// never be attested.
+    ///
+    /// As of webauthn-rs v0.5.0, this creates a registration challenge with
+    /// [credential selection hints](PublicKeyCredentialHints) that only use ClientDevice or
+    /// SecurityKey devices, so a user-agent supporting Webauthn L3 won't offer to use Hybrid
+    /// credentials. On user-agents not supporting Webauthn L3, and on older versions of
+    /// webauthn-rs, user-agents would show a QR code and a user could attempt to register a
+    /// Hybrid authenticator, but it would always fail at the end -- which is a frustrating user
+    /// experience!
     ///
     /// You *should* recommend to the user to register multiple attested_passkey keys to their account on
     /// separate devices so that they have fall back authentication in the case of device failure or loss.
@@ -1161,6 +1182,17 @@ impl Webauthn {
             .user_verification_policy(UserVerificationPolicy::Required)
             .reject_synchronised_authenticators(true)
             .exclude_credentials(exclude_credentials)
+            .hints(Some(
+                // hybrid does NOT perform attestation
+                vec![
+                    PublicKeyCredentialHints::ClientDevice,
+                    PublicKeyCredentialHints::SecurityKey,
+                ],
+            ))
+            .attestation_formats(Some(vec![
+                AttestationFormat::Packed,
+                AttestationFormat::Tpm,
+            ]))
             .extensions(extensions);
 
         self.core
@@ -1227,15 +1259,22 @@ impl Webauthn {
         });
 
         let policy = Some(UserVerificationPolicy::Required);
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
+
+        let hints = Some(vec![
+            PublicKeyCredentialHints::SecurityKey,
+            PublicKeyCredentialHints::ClientDevice,
+        ]);
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, AttestedPasskeyAuthentication { ast }))
     }
 
@@ -1285,15 +1324,18 @@ impl Webauthn {
             uvm: Some(true),
             hmac_get_secret: None,
         });
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
+        let hints = None;
 
         self.core
-            .generate_challenge_authenticate(
-                vec![],
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-            )
+            .new_challenge_authenticate_builder(Vec::with_capacity(0), policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(mut rcr, ast)| {
                 // Force conditional ui - this is not a generic discoverable credential
                 // workflow!
@@ -1400,6 +1442,17 @@ impl Webauthn {
             .user_verification_policy(UserVerificationPolicy::Required)
             .reject_synchronised_authenticators(true)
             .exclude_credentials(exclude_credentials)
+            .hints(Some(
+                // hybrid does NOT perform attestation
+                vec![
+                    PublicKeyCredentialHints::ClientDevice,
+                    PublicKeyCredentialHints::SecurityKey,
+                ],
+            ))
+            .attestation_formats(Some(vec![
+                AttestationFormat::Packed,
+                AttestationFormat::Tpm,
+            ]))
             .extensions(extensions);
 
         self.core
@@ -1450,15 +1503,22 @@ impl Webauthn {
         });
 
         let policy = Some(UserVerificationPolicy::Required);
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
+
+        let hints = Some(vec![
+            PublicKeyCredentialHints::SecurityKey,
+            PublicKeyCredentialHints::ClientDevice,
+        ]);
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, AttestedResidentKeyAuthentication { ast }))
     }
 

@@ -928,7 +928,8 @@ mod tests {
         info!("Credential -> {:?}", cred);
 
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None, None, None)
+            .new_challenge_authenticate_builder(vec![cred], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
             .unwrap();
 
         let r = wa
@@ -1014,7 +1015,8 @@ mod tests {
         let mut wa = WebauthnAuthenticator::new(soft_token);
 
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None, None, None)
+            .new_challenge_authenticate_builder(vec![cred], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
             .unwrap();
 
         let r = wa

@@ -25,6 +25,11 @@ pub struct PublicKeyCredentialRequestOptions {
     pub allow_credentials: Vec<AllowCredentials>,
     /// The verification policy the browser will request.
     pub user_verification: UserVerificationPolicy,
+
+    /// Hints defining which types credentials may be used in this operation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hints: Option<Vec<PublicKeyCredentialHints>>,
+
     /// extensions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub extensions: Option<RequestAuthenticationExtensions>,
