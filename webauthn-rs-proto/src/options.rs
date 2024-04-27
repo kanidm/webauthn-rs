@@ -187,7 +187,7 @@ pub enum AttestationFormat {
     /// Packed attestation
     #[serde(rename = "packed", alias = "Packed")]
     Packed,
-    /// TPM attestation (like Micrsoft)
+    /// TPM attestation (like Microsoft)
     #[serde(rename = "tpm", alias = "Tpm", alias = "TPM")]
     Tpm,
     /// Android hardware attestation
@@ -197,9 +197,9 @@ pub enum AttestationFormat {
     #[serde(
         rename = "android-safetynet",
         alias = "AndroidSafetyNet",
-        alias = "AndroidSafteynet"
+        alias = "AndroidSafetynet"
     )]
-    AndroidSafetynet,
+    AndroidSafetyNet,
     /// Old U2F attestation type
     #[serde(rename = "fido-u2f", alias = "FIDOU2F")]
     FIDOU2F,
@@ -219,7 +219,7 @@ impl TryFrom<&str> for AttestationFormat {
             "packed" => Ok(AttestationFormat::Packed),
             "tpm" => Ok(AttestationFormat::Tpm),
             "android-key" => Ok(AttestationFormat::AndroidKey),
-            "android-safetynet" => Ok(AttestationFormat::AndroidSafetynet),
+            "android-safetynet" => Ok(AttestationFormat::AndroidSafetyNet),
             "fido-u2f" => Ok(AttestationFormat::FIDOU2F),
             "apple" => Ok(AttestationFormat::AppleAnonymous),
             "none" => Ok(AttestationFormat::None),

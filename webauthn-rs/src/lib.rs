@@ -1011,12 +1011,23 @@ impl Webauthn {
     /// and assert their identity. Because of this reliance on the authenticator, attestation of
     /// the authenticator and its properties is strongly recommended.
     ///
-    /// The primary difference to a passkey, is that these credentials *can not* 'roam' between multiple
-    /// devices, and must be bound to a single authenticator. This precludes the use of certain types
-    /// of authenticators (such as Apple's Passkeys as these are always synced).
+    /// The primary difference to a passkey, is that these credentials must provide an attestation
+    /// certificate which will be cryptographically validated to strictly enforce that only certain
+    /// devices may be registered.
     ///
-    /// Additionally, these credentials must provide an attestation certificate of authenticity
-    /// which will be cryptographically validated to strictly enforce that only certain devices may be used.
+    /// This attestation requires that private key material is bound to a single hardware
+    /// authenticator, and cannot be copied or moved out of it. At present, all widely deployed
+    /// Hybrid authenticators (Apple iCloud Keychain and Google Passkeys in Google Password
+    /// Manager) are synchronised authenticators which can roam between multiple devices, and so can
+    /// never be attested.
+    ///
+    /// As of webauthn-rs v0.5.0, this creates a registration challenge with
+    /// [credential selection hints](PublicKeyCredentialHints) that only use ClientDevice or
+    /// SecurityKey devices, so a user-agent supporting Webauthn L3 won't offer to use Hybrid
+    /// credentials. On user-agents not supporting Webauthn L3, and on older versions of
+    /// webauthn-rs, user-agents would show a QR code and a user could attempt to register a
+    /// Hybrid authenticator, but it would always fail at the end -- which is a frustrating user
+    /// experience!
     ///
     /// You *should* recommend to the user to register multiple attested_passkey keys to their account on
     /// separate devices so that they have fall back authentication in the case of device failure or loss.
@@ -1170,7 +1181,7 @@ impl Webauthn {
             .reject_synchronised_authenticators(true)
             .exclude_credentials(exclude_credentials)
             .hints(Some(
-                // hybrid can NOT perform attestation
+                // hybrid does NOT perform attestation
                 vec![
                     PublicKeyCredentialHints::ClientDevice,
                     PublicKeyCredentialHints::SecurityKey,
@@ -1428,7 +1439,7 @@ impl Webauthn {
             .reject_synchronised_authenticators(true)
             .exclude_credentials(exclude_credentials)
             .hints(Some(
-                // hybrid can NOT perform attestation
+                // hybrid does NOT perform attestation
                 vec![
                     PublicKeyCredentialHints::ClientDevice,
                     PublicKeyCredentialHints::SecurityKey,

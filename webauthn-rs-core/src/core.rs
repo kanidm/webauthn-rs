@@ -594,7 +594,7 @@ impl WebauthnCore {
                 &data.attestation_object,
                 &client_data_json_hash,
             )?,
-            AttestationFormat::AndroidSafetynet => verify_android_safetynet_attestation(
+            AttestationFormat::AndroidSafetyNet => verify_android_safetynet_attestation(
                 acd,
                 &data.attestation_object,
                 &client_data_json_hash,
