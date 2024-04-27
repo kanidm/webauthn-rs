@@ -679,17 +679,18 @@ impl Webauthn {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
         let policy = Some(UserVerificationPolicy::Required);
-        let allow_backup_eligible_upgrade = Some(true);
+        let allow_backup_eligible_upgrade = true;
         let hints = None;
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-                hints,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, PasskeyAuthentication { ast }))
     }
 
@@ -957,24 +958,25 @@ impl Webauthn {
     ) -> WebauthnResult<(RequestChallengeResponse, SecurityKeyAuthentication)> {
         let extensions = None;
         let creds = creds.iter().map(|sk| sk.cred.clone()).collect();
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
 
         let policy = if self.user_presence_only_security_keys {
-            UserVerificationPolicy::Discouraged_DO_NOT_USE
+            Some(UserVerificationPolicy::Discouraged_DO_NOT_USE)
         } else {
-            UserVerificationPolicy::Preferred
+            Some(UserVerificationPolicy::Preferred)
         };
 
         let hints = Some(vec![PublicKeyCredentialHints::SecurityKey]);
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                Some(policy),
-                extensions,
-                allow_backup_eligible_upgrade,
-                hints,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, SecurityKeyAuthentication { ast }))
     }
 
@@ -1257,7 +1259,7 @@ impl Webauthn {
         });
 
         let policy = Some(UserVerificationPolicy::Required);
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
 
         let hints = Some(vec![
             PublicKeyCredentialHints::SecurityKey,
@@ -1265,13 +1267,14 @@ impl Webauthn {
         ]);
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-                hints,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, AttestedPasskeyAuthentication { ast }))
     }
 
@@ -1321,17 +1324,18 @@ impl Webauthn {
             uvm: Some(true),
             hmac_get_secret: None,
         });
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
         let hints = None;
 
         self.core
-            .generate_challenge_authenticate(
-                vec![],
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-                hints,
-            )
+            .new_challenge_authenticate_builder(Vec::with_capacity(0), policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(mut rcr, ast)| {
                 // Force conditional ui - this is not a generic discoverable credential
                 // workflow!
@@ -1499,7 +1503,7 @@ impl Webauthn {
         });
 
         let policy = Some(UserVerificationPolicy::Required);
-        let allow_backup_eligible_upgrade = Some(false);
+        let allow_backup_eligible_upgrade = false;
 
         let hints = Some(vec![
             PublicKeyCredentialHints::SecurityKey,
@@ -1507,13 +1511,14 @@ impl Webauthn {
         ]);
 
         self.core
-            .generate_challenge_authenticate(
-                creds,
-                policy,
-                extensions,
-                allow_backup_eligible_upgrade,
-                hints,
-            )
+            .new_challenge_authenticate_builder(creds, policy)
+            .map(|builder| {
+                builder
+                    .extensions(extensions)
+                    .allow_backup_eligible_upgrade(allow_backup_eligible_upgrade)
+                    .hints(hints)
+            })
+            .and_then(|b| self.core.generate_challenge_authenticate(b))
             .map(|(rcr, ast)| (rcr, AttestedResidentKeyAuthentication { ast }))
     }
 

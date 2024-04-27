@@ -79,6 +79,16 @@ pub struct ChallengeRegisterBuilder {
     hints: Option<Vec<PublicKeyCredentialHints>>,
 }
 
+/// A builder allowing customisation of a client authentication challenge.
+#[derive(Debug)]
+pub struct ChallengeAuthenticateBuilder {
+    creds: Vec<Credential>,
+    policy: UserVerificationPolicy,
+    extensions: Option<RequestAuthenticationExtensions>,
+    allow_backup_eligible_upgrade: bool,
+    hints: Option<Vec<PublicKeyCredentialHints>>,
+}
+
 impl ChallengeRegisterBuilder {
     /// Set the attestation conveyance preference. Defaults to None.
     pub fn attestation(mut self, value: AttestationConveyancePreference) -> Self {
@@ -143,6 +153,29 @@ impl ChallengeRegisterBuilder {
         attestation_formats: Option<Vec<AttestationFormat>>,
     ) -> Self {
         self.attestation_formats = attestation_formats;
+        self
+    }
+}
+
+impl ChallengeAuthenticateBuilder {
+    /// Define extensions to be requested in the request. Defaults to None.
+    pub fn extensions(mut self, value: Option<RequestAuthenticationExtensions>) -> Self {
+        self.extensions = value;
+        self
+    }
+
+    /// Allow authenticators to modify their backup eligibility. This can occur
+    /// where some formerly hardware bound devices become roaming ones. If in
+    /// double leave this value as default (false, rejects credentials that
+    /// post-create move from single device to roaming).
+    pub fn allow_backup_eligible_upgrade(mut self, value: bool) -> Self {
+        self.allow_backup_eligible_upgrade = value;
+        self
+    }
+
+    /// Add the set of hints for which public keys may satisfy this request.
+    pub fn hints(mut self, hints: Option<Vec<PublicKeyCredentialHints>>) -> Self {
+        self.hints = hints;
         self
     }
 }
@@ -905,22 +938,15 @@ impl WebauthnCore {
         Ok(data.authenticator_data)
     }
 
-    /// Authenticate a set of credentials allowing the user verification policy to be set.
-    /// If no credentials are provided, this will start a discoverable credential authentication.
-    ///
-    /// Policy defines the require UserVerification policy. This MUST be consistent with the
-    /// credentials being used in the authentication.
-    ///
-    /// `allow_backup_eligible_upgrade` allows rejecting credentials whos backup eligibility
-    /// has changed between registration and authentication.
-    pub fn generate_challenge_authenticate(
+    /// Generate a new challenge builder for client authentication. This is the first
+    /// step in authentication of a credential. This function will return an
+    /// authentication builder allowing you to customise the parameters that will be
+    /// sent to the client.
+    pub fn new_challenge_authenticate_builder(
         &self,
         creds: Vec<Credential>,
         policy: Option<UserVerificationPolicy>,
-        extensions: Option<RequestAuthenticationExtensions>,
-        allow_backup_eligible_upgrade: Option<bool>,
-        hints: Option<Vec<PublicKeyCredentialHints>>,
-    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
+    ) -> Result<ChallengeAuthenticateBuilder, WebauthnError> {
         let policy = if let Some(policy) = policy {
             policy
         } else {
@@ -938,8 +964,37 @@ impl WebauthnCore {
             policy
         };
 
-        // Defaults to false.
-        let allow_backup_eligible_upgrade = allow_backup_eligible_upgrade.unwrap_or_default();
+        Ok(ChallengeAuthenticateBuilder {
+            creds,
+            policy,
+            extensions: Default::default(),
+            allow_backup_eligible_upgrade: Default::default(),
+            hints: Default::default(),
+        })
+    }
+
+    /// Generate a new challenge for client authentication from the parameters defined by the
+    /// [ChallengeAuthenticateBuilder].
+    ///
+    /// This function will return the
+    /// [RequestChallengeResponse] which is suitable for serde json serialisation
+    /// to be sent to the client. The client (generally a web browser) will pass this JSON
+    /// structure to the `navigator.credentials.create()` javascript function for registration.
+    ///
+    /// It also returns an [AuthenticationState], that you *must*
+    /// persist. It is strongly advised you associate this AuthenticationState with a
+    /// private session ID that is unique to this request.
+    pub fn generate_challenge_authenticate(
+        &self,
+        challenge_builder: ChallengeAuthenticateBuilder,
+    ) -> Result<(RequestChallengeResponse, AuthenticationState), WebauthnError> {
+        let ChallengeAuthenticateBuilder {
+            creds,
+            policy,
+            extensions,
+            allow_backup_eligible_upgrade,
+            hints,
+        } = challenge_builder;
 
         let chal = self.generate_challenge();
 
@@ -2841,7 +2896,7 @@ mod tests {
         // Ensure we get a bad result.
 
         assert!(
-            wan.generate_challenge_authenticate(creds.clone(), None, None, None, None)
+            wan.new_challenge_authenticate_builder(creds.clone(), None)
                 .unwrap_err()
                 == WebauthnError::InconsistentUserVerificationPolicy
         );
@@ -2866,7 +2921,11 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None, None);
+        let builder = wan
+            .new_challenge_authenticate_builder(creds.clone(), None)
+            .expect("Unable to create authenticate builder");
+
+        let r = wan.generate_challenge_authenticate(builder);
         debug!("{:?}", r);
         assert!(r.is_ok());
 
@@ -2890,7 +2949,12 @@ mod tests {
                 .unwrap();
         }
 
-        let r = wan.generate_challenge_authenticate(creds.clone(), None, None, None, None);
+        let builder = wan
+            .new_challenge_authenticate_builder(creds.clone(), None)
+            .expect("Unable to create authenticate builder");
+
+        let r = wan.generate_challenge_authenticate(builder);
+
         debug!("{:?}", r);
         assert!(r.is_ok());
     }

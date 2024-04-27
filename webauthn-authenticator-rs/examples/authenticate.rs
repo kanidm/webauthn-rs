@@ -280,17 +280,15 @@ async fn main() {
             .connect_provider(CableRequestType::GetAssertion, &ui)
             .await;
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(
-                vec![cred.clone()],
-                None,
-                Some(RequestAuthenticationExtensions {
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .map(|builder| {
+                builder.extensions(Some(RequestAuthenticationExtensions {
                     appid: Some("example.app.id".to_string()),
                     uvm: None,
                     hmac_get_secret: None,
-                }),
-                None,
-                None,
-            )
+                }))
+            })
+            .and_then(|b| wan.generate_challenge_authenticate(b))
             .unwrap();
 
         let r = u
