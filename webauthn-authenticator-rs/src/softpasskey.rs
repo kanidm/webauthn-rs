@@ -568,7 +568,7 @@ mod tests {
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
         let (chal, auth_state) = wan
-            .generate_challenge_authenticate(vec![cred], None, None, None)
+            .generate_challenge_authenticate(vec![cred], None, None, None, None)
             .unwrap();
 
         let r = wa
