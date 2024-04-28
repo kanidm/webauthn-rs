@@ -23,9 +23,10 @@ nom.workspace = true
 openssl.workspace = true
 serde.workspace = true
 serde_cbor_2.workspace = true
-sshkeys = { git = "https://github.com/dnaeon/rust-sshkeys.git", rev = "fa5bd02dd6e90ee724fdb981253c1e7726a7f534", features = [
-    "serde",
-] }
+sshkeys = { version = "0.3.2", features = ["serde"] }
+# sshkeys = { git = "https://github.com/dnaeon/rust-sshkeys.git", rev = "fa5bd02dd6e90ee724fdb981253c1e7726a7f534", features = [
+#     "serde",
+# ] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 webauthn-rs-core.workspace = true

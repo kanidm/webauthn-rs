@@ -5,6 +5,8 @@ edition = "2021"
 rust-version = "1.70.0"
 authors = ["Arthur A. Gleckler <aag@alum.mit.edu>"]
 license = "MPL-2.0"
+readme = "README.md"
+description = "Webauthn RP CLI Proxy"
 
 [dependencies]
 anyhow = "1.0"

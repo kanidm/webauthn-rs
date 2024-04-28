@@ -7,7 +7,7 @@ pub use sshkeys::PublicKey;
 
 /// An attested public key. This contains the ssh public key as well as the
 /// attestation metadata.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AttestedPublicKey {
     /// The ssh public key
     pub pubkey: PublicKey,
