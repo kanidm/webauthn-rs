@@ -1,6 +1,6 @@
 [package]
 name = "fido-key-manager"
-version = "0.1.0"
+version = "0.5.0"
 authors = ["Michael Farrell <micolous+git@gmail.com>"]
 categories = ["authentication"]
 description = "Management CLI for FIDO/CTAP 2.x authenticators"
