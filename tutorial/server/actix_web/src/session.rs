@@ -5,7 +5,6 @@ use std::sync::Mutex;
 use actix_session::storage::{LoadError, SaveError, SessionKey, SessionStore, UpdateError};
 use actix_web::cookie::time::Duration;
 use anyhow::anyhow;
-use async_trait::async_trait;
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
@@ -27,7 +26,6 @@ Implementation of the [SessionStore] trait of [actix_session].
 #[derive(Default)]
 pub(crate) struct MemorySession;
 
-#[async_trait(?Send)]
 impl SessionStore for MemorySession {
     async fn load(
         &self,
@@ -74,8 +72,8 @@ impl SessionStore for MemorySession {
                 },
             );
 
-        Ok(SessionKey::try_from(session_key)
-            .map_err(|_| SaveError::Serialization(anyhow!("Invalid Session Key Error")))?)
+        SessionKey::try_from(session_key)
+            .map_err(|_| SaveError::Serialization(anyhow!("Invalid Session Key Error")))
     }
 
     async fn update(
