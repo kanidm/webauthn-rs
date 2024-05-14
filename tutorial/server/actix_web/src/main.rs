@@ -1,5 +1,4 @@
-use core::panic;
-use std::path::PathBuf;
+use std::path::Path;
 
 use actix_session::SessionMiddleware;
 use actix_web::cookie::Key;
@@ -23,7 +22,7 @@ mod startup;
 
 #[tokio::main]
 async fn main() {
-    if std::env::var("RUST_LOG").is_err() {
+    if std::env::var_os("RUST_LOG").is_none() {
         std::env::set_var("RUST_LOG", "info");
     }
 
@@ -36,7 +35,7 @@ async fn main() {
 
     let (webauthn, webauthn_users) = startup();
 
-    if !PathBuf::from(WASM_DIR).exists() {
+    if !Path::new(WASM_DIR).exists() {
         panic!("{} does not exist, can't serve WASM files.", WASM_DIR);
     } else {
         info!("Found WASM files OK");

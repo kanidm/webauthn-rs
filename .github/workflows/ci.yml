@@ -1,4 +1,4 @@
-on: [push, pull_request]
+on: [ push, pull_request ]
 
 name: CI
 
@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, 1.70.0]
+        rust_version: [ stable, 1.70.0 ]
         os:
           - ubuntu-latest
           - windows-latest
@@ -58,13 +58,13 @@ jobs:
           token: ${{ github.token }}
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
-      - run: cargo build --workspace --exclude webauthn-authenticator-rs
+      - run: cargo build --workspace --exclude webauthn-authenticator-rs --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
-        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs --all-targets
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets
 
-      - run: cargo test --workspace --exclude webauthn-authenticator-rs
+      - run: cargo test --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
@@ -85,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, 1.70.0]
+        rust_version: [ stable, 1.70.0 ]
         features:
           - bluetooth
           - cable
@@ -186,7 +186,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [stable, nightly]
+        rust_version: [ stable, nightly ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -233,3 +233,32 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - run: ./.github/check_built_docs.sh
+
+  tutorial:
+    name: Tutorial builds
+    strategy:
+      fail-fast: false
+      matrix:
+        rust_version: [ stable ]
+        os:
+          - ubuntu-latest
+          - windows-latest
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust_version }}
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: v0.4.2
+      - if: runner.os == 'windows'
+        uses: johnwason/vcpkg-action@v4
+        with:
+          pkgs: openssl
+          triplet: x64-windows-static-md
+          token: ${{ github.token }}
+
+      - run: cargo build -p actix_web -p web_authn -p tide-server

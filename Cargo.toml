@@ -22,7 +22,7 @@ members = [
     # Tutorial / Example sites.
     "tutorial/server/tide",
     "tutorial/server/axum",
-    # "tutorial/server/actix_web",
+    "tutorial/server/actix_web",
     "tutorial/wasm",
     # Attestatation struct format
     "attestation-ca",
