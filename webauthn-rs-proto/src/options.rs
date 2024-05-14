@@ -3,6 +3,7 @@
 
 use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::{collections::BTreeMap, str::FromStr};
 
 /// Defines the User Authenticator Verification policy. This is documented
@@ -163,8 +164,14 @@ impl FromStr for AuthenticatorTransport {
     }
 }
 
-impl ToString for AuthenticatorTransport {
-    fn to_string(&self) -> String {
+impl Display for AuthenticatorTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_ref())
+    }
+}
+
+impl AsRef<str> for AuthenticatorTransport {
+    fn as_ref(&self) -> &'static str {
         use AuthenticatorTransport::*;
         match self {
             Usb => "usb",
@@ -175,7 +182,6 @@ impl ToString for AuthenticatorTransport {
             Hybrid => "hybrid",
             Unknown => "unknown",
         }
-        .to_string()
     }
 }
 

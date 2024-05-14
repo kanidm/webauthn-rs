@@ -50,6 +50,7 @@ where
     ) -> Result<CredentialManagementResponse, WebauthnCError>;
 
     /// Send a [CredSubCommand] using a provided `pin_uv_auth_token` session.
+    #[allow(dead_code)]
     async fn cred_mgmt_with_session(
         &mut self,
         sub_command: CredSubCommand,

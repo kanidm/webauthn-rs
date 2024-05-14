@@ -1,3 +1,4 @@
+#![allow(clippy::empty_docs)]
 //! Extensions for wasm types that are not part of web-sys
 use wasm_bindgen::prelude::*;
 

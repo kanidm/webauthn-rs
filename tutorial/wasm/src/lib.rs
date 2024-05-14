@@ -59,7 +59,7 @@ impl App {
             return AppState::Error("A username must be provided".to_string());
         }
 
-        self.last_username = username.clone();
+        self.last_username.clone_from(&username);
 
         // The fetch is done in a future/promise.
         ctx.link().send_future(async {
@@ -226,7 +226,7 @@ impl App {
             return AppState::Error("A username must be provided".to_string());
         }
 
-        self.last_username = username.clone();
+        self.last_username.clone_from(&username);
 
         // The fetch is done in a future/promise.
         ctx.link().send_future(async {

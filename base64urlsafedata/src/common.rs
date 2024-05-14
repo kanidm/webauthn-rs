@@ -15,6 +15,12 @@ macro_rules! common_impls {
             }
         }
 
+        impl Default for $type {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+
         impl std::ops::Deref for $type {
             type Target = Vec<u8>;
 
