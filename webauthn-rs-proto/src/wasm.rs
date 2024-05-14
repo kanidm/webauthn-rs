@@ -1,9 +1,9 @@
-#![allow(clippy::empty_docs)]
 //! Extensions for wasm types that are not part of web-sys
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
+    /// Public Key Credential Extension
     pub type PublicKeyCredentialExt;
 
     #[wasm_bindgen(static_method_of = PublicKeyCredentialExt, js_class = "PublicKeyCredential", js_name = isConditionalMediationAvailable, catch)]
