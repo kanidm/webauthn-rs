@@ -4,6 +4,7 @@ const OPENSSL_DOC: &str = "https://github.com/kanidm/webauthn-rs/blob/master/Ope
 
 fn main() {
     // LibreSSL reports as OpenSSL v2 (which was skipped).
+    #[allow(clippy::unusual_byte_groupings)]
     if number() < 0x2_00_00_00_0 {
         println!(
             r#"

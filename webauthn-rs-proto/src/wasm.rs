@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {
+    /// Public Key Credential Extension
     pub type PublicKeyCredentialExt;
 
     #[wasm_bindgen(static_method_of = PublicKeyCredentialExt, js_class = "PublicKeyCredential", js_name = isConditionalMediationAvailable, catch)]
