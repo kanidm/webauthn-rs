@@ -4,15 +4,11 @@
 //! This allows parsing the fido metadata blob and consuming it's content. See `FidoMds`
 //! for more.
 
-// use base64urlsafedata::Base64UrlSafeData;
-use compact_jwt::{Jws, JwsUnverified, JwtError};
-use openssl::stack;
+use compact_jwt::{crypto::JwsX509VerifierBuilder, JwsCompact, JwsVerifier, JwtError};
 use openssl::x509;
-use openssl::x509::store;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
-use tracing::{debug, error};
 
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -1089,67 +1085,24 @@ impl FromStr for FidoMds {
         let root_ca = x509::X509::from_pem(GLOBAL_SIGN_ROOT_CA_R3.as_bytes())
             .map_err(|_| JwtError::OpenSSLError)?;
 
-        let mut ca_store = store::X509StoreBuilder::new().map_err(|_| JwtError::OpenSSLError)?;
-        ca_store
-            .add_cert(root_ca)
-            .map_err(|_| JwtError::OpenSSLError)?;
-
-        let ca_store = ca_store.build();
-
-        let jws = JwsUnverified::from_str(s)?;
+        let jws = JwsCompact::from_str(s)?;
 
         let fullchain = jws
             .get_x5c_chain()
             .and_then(|chain| chain.ok_or(JwtError::InvalidHeaderFormat))?;
 
-        let (leaf, chain) = fullchain
-            .split_first()
-            .ok_or(JwtError::InvalidHeaderFormat)?;
-
-        let mut chain_stack = stack::Stack::new().map_err(|_| JwtError::OpenSSLError)?;
-
-        for crt in chain.iter() {
-            chain_stack
-                .push(crt.clone())
-                .map_err(|_| JwtError::OpenSSLError)?;
-        }
-
-        let mut ca_ctx = x509::X509StoreContext::new().map_err(|_| JwtError::OpenSSLError)?;
-
-        // Given the ca_store, the leaf cert, and the chain between leaf to ca_store, verify
-        // the certificate chain.
-        let res: Result<_, _> = ca_ctx
-            .init(&ca_store, leaf, &chain_stack, |ca_ctx_ref| {
-                ca_ctx_ref.verify_cert().map(|_| {
-                    let res = ca_ctx_ref.error();
-                    debug!("{:?}", res);
-                    if res == x509::X509VerifyResult::OK {
-                        Ok(())
-                    } else {
-                        debug!(
-                            "ca_ctx_ref verify cert - error depth={}, sn={:?}",
-                            ca_ctx_ref.error_depth(),
-                            ca_ctx_ref.current_cert().map(|crt| crt.subject_name())
-                        );
-                        Err(JwtError::X5cPublicKeyDenied)
-                    }
-                })
-            })
-            .map_err(|e| {
-                // If an openssl error occured, dump it here.
-                error!(?e);
-                JwtError::OpenSSLError
-            })?;
-
-        debug!(?res);
-        res?;
+        let verifier = JwsX509VerifierBuilder::new()
+            .add_fullchain(fullchain)
+            .add_trust_root(root_ca)
+            .build()
+            .map_err(|_| JwtError::OpenSSLError)?;
 
         // Now we can release the embedded cert, since we have asserted the trust in the chain
         // that has signed this metadata.
+        let released = verifier.verify(&jws)?;
 
-        let x: Jws<FidoMds> = jws.validate_embeded()?;
+        let metadata: FidoMds = released.from_json().map_err(|_| JwtError::Serde)?;
 
-        let metadata = x.into_inner();
         // trace!(?metadata);
 
         Ok(metadata)
