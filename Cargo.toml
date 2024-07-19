@@ -62,7 +62,7 @@ webauthn-rs-device-catalog = { path = "./device-catalog" }
 async-std = { version = "1.6", features = ["attributes"] }
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
-compact_jwt = "0.2.3"
+compact_jwt = "0.4.2"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
