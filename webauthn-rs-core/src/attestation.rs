@@ -9,6 +9,7 @@ use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
 use base64urlsafedata::HumanBinaryData;
+use compact_jwt::{crypto::JwsX509Verifier, JwsCompact, JwsVerifier};
 use openssl::hash::MessageDigest;
 use openssl::sha::sha256;
 use openssl::stack;
@@ -1291,18 +1292,21 @@ pub(crate) fn verify_android_safetynet_attestation(
         |token: &str| -> Result<(Vec<x509::X509>, SafteyNetAttestResponse), SafetyNetError> {
             trace!(?token);
             use std::str::FromStr;
-            let jwsu = compact_jwt::JwsUnverified::from_str(token)?;
+            let jwsu = JwsCompact::from_str(token)?;
 
             let certs = jwsu
                 .get_x5c_chain()?
                 .ok_or(SafetyNetError::MissingCertChain)?;
 
-            let leaf_cert = certs.first().ok_or(SafetyNetError::BadCert)?;
+            let leaf_cert = certs.first().cloned().ok_or(SafetyNetError::BadCert)?;
 
             // Verify with the internal certificate.
-            let jws: compact_jwt::Jws<SafteyNetAttestResponse> = jwsu.validate_embeded()?;
+            let verifier = JwsX509Verifier::from_x509(leaf_cert.clone())
+                .map_err(|_| SafetyNetError::BadCert)?;
 
-            let verified_claims = jws.into_inner();
+            let verified_claims: SafteyNetAttestResponse = verifier
+                .verify(&jwsu)
+                .and_then(|jws| jws.from_json().map_err(|_| compact_jwt::JwtError::Serde))?;
 
             // 3. Verify that the nonce attribute in the payload of response is identical to the Base64 encoding of the SHA-256 hash of the concatenation of authenticatorData and clientDataHash.
             if verified_claims.nonce != data_to_verify.as_slice() {
