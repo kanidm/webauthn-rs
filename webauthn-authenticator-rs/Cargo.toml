@@ -11,6 +11,7 @@ repository = "https://github.com/kanidm/webauthn-rs"
 
 [features]
 nfc_raw_transmit = ["nfc"]
+nfc_allow_ignored_readers = []
 
 # Basic command line `UiCallback` implementation
 ui-cli = ["dep:rpassword"]
