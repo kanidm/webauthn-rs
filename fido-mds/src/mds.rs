@@ -103,6 +103,7 @@ pub struct BiometricAccuracyDescriptor {
     /// in related biometricStatusReport as specified in FIDOMetadataService).
     #[serde(rename = "selfAttestedFAR")]
     pub self_attested_far: Option<f32>,
+
     /// Maximum number of alternative templates from different fingers allowed (for other modalities,
     /// multiple parts of the body that can be used interchangeably), e.g. 3 if the user is allowed
     /// to enroll up to 3 different fingers to a fingerprint based authenticator.
@@ -115,6 +116,10 @@ pub struct BiometricAccuracyDescriptor {
     /// until an alternative user verification method succeeded. All alternative user verification
     /// methods must be specified appropriately in the metadata in userVerificationDetails.
     pub block_slowdown: Option<u16>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    #[serde(rename = "iAPARThreshold")]
+    pub iapar_threshold: Option<serde_json::Value>,
 }
 
 impl Hash for BiometricAccuracyDescriptor {
@@ -319,6 +324,9 @@ pub enum AuthenticationAlgorithm {
     /// secp384r1_ecdsa_sha384_raw
     #[serde(rename = "secp384r1_ecdsa_sha384_raw")]
     Secp384r1EcdsaSha384Raw,
+    /// secp521r1_ecdsa_sha512_raw
+    #[serde(rename = "secp521r1_ecdsa_sha512_raw")]
+    Secp521r1EcdsaSha512Raw,
     /// rsassa_pkcsv15_sha256_raw
     #[serde(rename = "rsassa_pkcsv15_sha256_raw")]
     RsassaPkcsv15Sha256Raw,
@@ -345,6 +353,9 @@ impl fmt::Display for AuthenticationAlgorithm {
             AuthenticationAlgorithm::Ed25519EddsaSha512Raw => write!(f, "ed25519_eddsa_sha512_raw"),
             AuthenticationAlgorithm::Secp384r1EcdsaSha384Raw => {
                 write!(f, "secp384r1_ecdsa_sha384_raw")
+            }
+            AuthenticationAlgorithm::Secp521r1EcdsaSha512Raw => {
+                write!(f, "secp521r1_ecdsa_sha512_raw")
             }
             AuthenticationAlgorithm::RsassaPkcsv15Sha256Raw => {
                 write!(f, "rsassa_pkcsv15_sha256_raw")
@@ -991,6 +1002,9 @@ pub struct StatusReport {
     /// The Document Version of the Authenticator Security Requirements (DV)
     /// FIDOAuthenticatorSecurityRequirements the implementation is certified to, e.g. "1.2.0".
     pub certification_requirements_version: Option<String>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    certification_profiles: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
