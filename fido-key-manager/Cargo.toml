@@ -28,6 +28,8 @@ yubikey = ["webauthn-authenticator-rs/vendor-yubikey"]
 
 default = ["nfc", "usb"]
 
+disable_windows_manifest = []
+
 [dependencies]
 webauthn-authenticator-rs = { workspace = true, features = ["ui-cli", "ctap2-management"] }
 

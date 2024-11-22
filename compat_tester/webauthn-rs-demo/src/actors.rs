@@ -44,9 +44,9 @@ pub enum TypedCredential {
 }
 
 pub struct WebauthnActor {
-    pub rp_name: String,
-    pub rp_id: String,
-    pub rp_origin: Url,
+    // pub rp_name: String,
+    // pub rp_id: String,
+    // pub rp_origin: Url,
     /// Used for testing with compat.
     wan: WebauthnCore,
     /// For demoing the simple cases.
@@ -81,9 +81,9 @@ impl WebauthnActor {
             .expect("Failed to build swan");
 
         WebauthnActor {
-            rp_name,
-            rp_id,
-            rp_origin,
+            // rp_name,
+            // rp_id,
+            // rp_origin,
             wan,
             swan,
             device_cat_strict,

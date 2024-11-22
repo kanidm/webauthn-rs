@@ -235,7 +235,7 @@ pub struct EcdaaAnchor {
     pub x: String,
     /// base64url encoding of the result of ECPoint2ToB of the ECPoint2 Y = P_2^yY=P
     /// See FIDOEcdaaAlgorithm for the definition of ECPoint2ToB.
-    #[serde(rename = "X")]
+    #[serde(rename = "Y")]
     pub y: String,
     /// base64url encoding of the result of BigNumberToB(cc). See section "Issuer Specific ECDAA Parameters" in FIDOEcdaaAlgorithm for an explanation of cc. See FIDOEcdaaAlgorithm for the definition of BigNumberToB.
     pub c: String,

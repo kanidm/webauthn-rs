@@ -133,7 +133,7 @@ fn ignored_reader(reader_name: &CStr) -> bool {
 
     let r = IGNORED_READERS.iter().any(|i| reader_name.contains(i));
 
-    #[cfg(nfc_allow_ignored_readers)]
+    #[cfg(feature = "nfc_allow_ignored_readers")]
     if r {
         warn!("allowing ignored reader: {reader_name:?}");
         return false;
