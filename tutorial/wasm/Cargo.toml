@@ -2,7 +2,6 @@
 name = "wasm"
 version = "0.1.1"
 edition = "2021"
-rust-version = "1.70.0"
 authors = ["William Brown <william@blackhats.net.au>"]
 
 [lib]

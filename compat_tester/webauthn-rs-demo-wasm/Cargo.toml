@@ -3,7 +3,6 @@ name = "webauthn_rs_demo_wasm"
 version = "0.1.0"
 authors = ["William Brown <william@blackhats.net.au>"]
 edition = "2021"
-rust-version = "1.70.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
