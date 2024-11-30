@@ -1,13 +1,14 @@
 [package]
 name = "webauthn-authenticator-rs"
-version = "0.5.0"
-authors = ["William Brown <william@blackhats.net.au>"]
-edition = "2021"
-rust-version = "1.70.0"
-license = "MPL-2.0"
 description = "Webauthn Authenticator Client Library"
-# documentation = "https://docs.rs/kanidm/latest/kanidm/"
-repository = "https://github.com/kanidm/webauthn-rs"
+
+version = { workspace = true }
+authors = { workspace = true }
+rust-version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
 
 [features]
 nfc_raw_transmit = ["nfc"]
