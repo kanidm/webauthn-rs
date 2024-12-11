@@ -14,7 +14,8 @@ use hyper::{
 };
 
 use cable_tunnel_server_common::*;
-use tokio::{io::AsyncWriteExt, net::TcpStream, sync::RwLock};
+use hyper_util::rt::TokioIo;
+use tokio::{io::AsyncWriteExt as _, net::TcpStream, sync::RwLock};
 use tokio_native_tls::TlsConnector;
 use tokio_tungstenite::MaybeTlsStream;
 
@@ -199,6 +200,7 @@ async fn handle_request(
             }
         }
     };
+    let backend_socket = TokioIo::new(backend_socket);
 
     let (mut sender, conn) = match hyper::client::conn::http1::handshake(backend_socket).await {
         Ok(v) => v,
@@ -239,22 +241,24 @@ async fn handle_request(
     // Set up the "upgrade" handler to connect the two sockets together
     tokio::task::spawn(async move {
         // Upgrade the connection to the backend
-        let mut backend_upgraded = match hyper::upgrade::on(&mut backend_res).await {
+        let backend_upgraded = match hyper::upgrade::on(&mut backend_res).await {
             Ok(u) => u,
             Err(e) => {
                 error!("failure upgrading connection to backend: {e}");
                 return;
             }
         };
+        let mut backend_upgraded = TokioIo::new(backend_upgraded);
 
         // Upgrade the connection from the client
-        let mut client_upgraded = match hyper::upgrade::on(&mut req).await {
+        let client_upgraded = match hyper::upgrade::on(&mut req).await {
             Ok(u) => u,
             Err(e) => {
                 error!("failure upgrading connection to client: {e}");
                 return;
             }
         };
+        let mut client_upgraded = TokioIo::new(client_upgraded);
 
         // Connect the two streams together directly.
         match tokio::io::copy_bidirectional(&mut backend_upgraded, &mut client_upgraded).await {
