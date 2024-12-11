@@ -318,7 +318,7 @@ impl<'a, T: Token, U: UiCallback> Deref for CtapAuthenticator<'a, T, U> {
 /// [CTAP 2.0 compatible interface][Ctap20Authenticator].
 ///
 /// All CTAP2 tokens support these base commands.
-impl<'a, T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'a, T, U> {
+impl<T: Token, U: UiCallback> DerefMut for CtapAuthenticator<'_, T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         use CtapAuthenticator::*;
         match self {

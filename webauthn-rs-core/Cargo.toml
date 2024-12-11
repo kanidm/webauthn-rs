@@ -36,13 +36,13 @@ openssl.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 url = { workspace = true, features = ["serde"] }
-x509-parser = "0.13.0"
-der-parser = "7.0.0"
+x509-parser = "0.16"
+der-parser = "9.0"
 compact_jwt.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-hex-literal = "0.3"
+hex-literal = "0.4"
 tracing-subscriber.workspace = true
 webauthn-rs-device-catalog.workspace = true
 

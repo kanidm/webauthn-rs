@@ -259,9 +259,8 @@ where
             // to be different for this.
             // .or_else(|| caller_origin.host_str())
             .ok_or(WebauthnCError::Security)
-            .map_err(|e| {
-                error!("origin has no domain or host_str (ip address only?)");
-                e
+            .inspect_err(|err| {
+                error!(?err, "origin has no domain or host_str (ip address only?)");
             })?;
 
         trace!("effective domain -> {:x?}", effective_domain);
@@ -321,9 +320,8 @@ where
             // to be different for this.
             // .or_else(|| caller_origin.host_str())
             .ok_or(WebauthnCError::Security)
-            .map_err(|e| {
-                error!("origin has no domain or host_str");
-                e
+            .inspect_err(|err| {
+                error!(?err, "origin has no domain or host_str");
             })?;
 
         trace!("effective domain -> {:x?}", effective_domain);
