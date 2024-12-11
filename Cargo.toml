@@ -76,10 +76,13 @@ compact_jwt = "0.4.2"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
-http-body = "=1.0.0-rc.2"
-http-body-util = "=0.1.0-rc.2"
-hyper = { version = "=1.0.0-rc.3", default-features = false, features = [
+http-body = "1.0.1"
+http-body-util = "0.1.2"
+hyper = { version = "1.5.1", default-features = false, features = [
     "http1",
+] }
+hyper-util = { version = "0.1.10", features = [
+    "tokio",
 ] }
 nom = "7.1"
 peg = "0.8.1"
@@ -100,14 +103,14 @@ tokio = { version = "1.22.0", features = [
 ] }
 tokio-native-tls = "^0.3.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
+tokio-tungstenite = { version = "^0.24.0", features = ["native-tls"] }
 tracing = "^0.1.35"
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
     "std",
     "fmt",
 ] }
-tungstenite = { version = "^0.18.0", default-features = false, features = [
+tungstenite = { version = "^0.24.0", default-features = false, features = [
     "handshake",
 ] }
 url = "2"

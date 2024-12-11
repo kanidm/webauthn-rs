@@ -322,10 +322,10 @@ pub async fn run_server<F, R, ResBody, T>(
     bind_address: SocketAddr,
     tls_acceptor: Option<TlsAcceptor>,
     server_state: T,
-    mut request_handler: F,
+    request_handler: F,
 ) -> Result<(), Box<dyn StdError>>
 where
-    F: FnMut(Arc<T>, SocketAddr, Request<Incoming>) -> R + Copy + Send + Sync + 'static,
+    F: Fn(Arc<T>, SocketAddr, Request<Incoming>) -> R + Copy + Send + Sync + 'static,
     R: Future<Output = Result<Response<ResBody>, Infallible>> + Send,
     ResBody: Body + Send + 'static,
     <ResBody as Body>::Error: Into<Box<dyn StdError + Send + Sync>>,
@@ -346,7 +346,9 @@ where
         };
         let server_state = server_state.clone();
         let service =
-            service_fn(move |req| request_handler(server_state.clone(), remote_addr, req));
+            service_fn(move |req| {
+                request_handler(server_state.clone(), remote_addr, req)
+            });
         let tls_acceptor = tls_acceptor.clone();
 
         let span = info_span!("handle_connection", addr = remote_addr.to_string());
@@ -362,6 +364,7 @@ where
                         }
                     },
                 };
+                let stream = hyper_util::rt::tokio::TokioIo::new(stream);
 
                 let conn =
                     hyper::server::conn::http1::Builder::new().serve_connection(stream, service);
