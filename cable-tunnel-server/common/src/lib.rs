@@ -346,9 +346,7 @@ where
         };
         let server_state = server_state.clone();
         let service =
-            service_fn(move |req| {
-                request_handler(server_state.clone(), remote_addr, req)
-            });
+            service_fn(move |req| request_handler(server_state.clone(), remote_addr, req));
         let tls_acceptor = tls_acceptor.clone();
 
         let span = info_span!("handle_connection", addr = remote_addr.to_string());

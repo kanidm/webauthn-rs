@@ -1,9 +1,5 @@
-use axum::{
-    error_handling::HandleErrorLayer, extract::Extension, http::StatusCode, response::IntoResponse,
-    routing::post, BoxError, Router,
-};
+use axum::{extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Router};
 use std::{net::SocketAddr, path::PathBuf};
-use tower::ServiceBuilder;
 use tower_sessions::{
     cookie::{time::Duration, SameSite},
     Expiry, MemoryStore, SessionManagerLayer,
@@ -46,17 +42,6 @@ async fn main() {
     let app_state = AppState::new();
 
     let session_store = MemoryStore::default();
-    let session_service = ServiceBuilder::new()
-        .layer(HandleErrorLayer::new(|_: BoxError| async {
-            StatusCode::BAD_REQUEST
-        }))
-        .layer(
-            SessionManagerLayer::new(session_store)
-                .with_name("webauthnrs")
-                .with_same_site(SameSite::Strict)
-                .with_secure(false) // TODO: change this to true when running on an HTTPS/production server instead of locally
-                .with_expiry(Expiry::OnInactivity(Duration::seconds(360))),
-        );
 
     // build our application with a route
     let app = Router::new()
@@ -65,7 +50,13 @@ async fn main() {
         .route("/login_start/:username", post(start_authentication))
         .route("/login_finish", post(finish_authentication))
         .layer(Extension(app_state))
-        .layer(session_service)
+        .layer(
+            SessionManagerLayer::new(session_store)
+                .with_name("webauthnrs")
+                .with_same_site(SameSite::Strict)
+                .with_secure(false) // TODO: change this to true when running on an HTTPS/production server instead of locally
+                .with_expiry(Expiry::OnInactivity(Duration::seconds(360))),
+        )
         .fallback(handler_404);
 
     #[cfg(feature = "wasm")]
@@ -88,10 +79,11 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     info!("listening on {addr}");
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .unwrap();
+        .expect("Unable to spawn tcp listener");
+
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn handler_404() -> impl IntoResponse {

@@ -78,7 +78,7 @@ impl AnyTransport {
 }
 
 #[async_trait]
-impl<'b> Transport<'b> for AnyTransport {
+impl Transport<'_> for AnyTransport {
     type Token = AnyToken;
 
     #[allow(unreachable_code)]

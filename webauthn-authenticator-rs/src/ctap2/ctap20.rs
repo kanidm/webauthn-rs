@@ -478,7 +478,6 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     /// * CTAP 2.1 [§6.1.2 authenticatorMakeCredential Algorithm][0], step 1.
     ///
     /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#sctn-makeCred-authnr-alg
-
     pub async fn selection(&mut self) -> Result<(), WebauthnCError> {
         if !self.token.has_button() {
             // The token doesn't have a button on a transport level (ie: NFC),
@@ -560,8 +559,8 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
     }
 }
 
-impl<'a, T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
-    for Ctap20Authenticator<'a, T, U>
+impl<T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
+    for Ctap20Authenticator<'_, T, U>
 {
     fn perform_register(
         &mut self,

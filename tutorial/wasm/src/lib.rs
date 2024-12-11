@@ -84,9 +84,9 @@ impl App {
 
     // Do the fetch in the background.
     async fn register_begin(username: String) -> Result<AppMsg, FetchError> {
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
 
         let dest = format!("/register_start/{username}");
         let request = Request::new_with_str_and_init(&dest, &opts)?;
@@ -168,10 +168,10 @@ impl App {
             .map(|s| JsValue::from(&s))
             .expect("Failed to serialise rpkc");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/register_finish", &opts)?;
         request
@@ -240,9 +240,9 @@ impl App {
 
     // Do the fetch in the background.
     async fn authenticate_begin(username: String) -> Result<AppMsg, FetchError> {
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
 
         let dest = format!("/login_start/{username}");
         let request = Request::new_with_str_and_init(&dest, &opts)?;
@@ -317,10 +317,10 @@ impl App {
             .map(|s| JsValue::from(&s))
             .expect("Failed to serialise pkc");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/login_finish", &opts)?;
         request
