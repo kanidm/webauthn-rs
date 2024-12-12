@@ -30,7 +30,7 @@ impl<'a, T: Token, U: UiCallback> Deref for Ctap21PreAuthenticator<'a, T, U> {
     }
 }
 
-impl<'a, T: Token, U: UiCallback> DerefMut for Ctap21PreAuthenticator<'a, T, U> {
+impl<T: Token, U: UiCallback> DerefMut for Ctap21PreAuthenticator<'_, T, U> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.authenticator
     }
@@ -47,9 +47,7 @@ impl<'a, T: Token, U: UiCallback> CtapAuthenticatorVersion<'a, T, U>
     }
 }
 
-impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U>
-    for Ctap21PreAuthenticator<'a, T, U>
-{
+impl<T: Token, U: UiCallback> BiometricAuthenticatorInfo<U> for Ctap21PreAuthenticator<'_, T, U> {
     #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     type RequestType = PrototypeBioEnrollmentRequest;
 
@@ -59,8 +57,8 @@ impl<'a, T: Token, U: UiCallback> BiometricAuthenticatorInfo<U>
     }
 }
 
-impl<'a, T: Token, U: UiCallback> CredentialManagementAuthenticatorInfo<U>
-    for Ctap21PreAuthenticator<'a, T, U>
+impl<T: Token, U: UiCallback> CredentialManagementAuthenticatorInfo<U>
+    for Ctap21PreAuthenticator<'_, T, U>
 {
     #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
     type RequestType = PrototypeCredentialManagementRequest;

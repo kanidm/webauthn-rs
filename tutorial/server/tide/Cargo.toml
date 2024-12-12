@@ -1,5 +1,5 @@
 [package]
-name = "tide-server"
+name = "tide_tutorial"
 version = "0.1.0"
 edition = "2021"
 authors = ["William Brown <william@blackhats.net.au>"]

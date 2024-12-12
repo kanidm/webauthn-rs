@@ -389,7 +389,7 @@ impl NFCTransport {
 }
 
 #[async_trait]
-impl<'b> Transport<'b> for NFCTransport {
+impl Transport<'_> for NFCTransport {
     type Token = NFCCard;
 
     async fn watch(&self) -> Result<BoxStream<TokenEvent<Self::Token>>, WebauthnCError> {
@@ -454,9 +454,8 @@ fn transmit(
 
     trace!(">>> {}", hex::encode(&req));
 
-    let rapdu = card.transmit(&req, &mut resp).map_err(|e| {
-        error!("Failed to transmit APDU command to card: {}", e);
-        e
+    let rapdu = card.transmit(&req, &mut resp).inspect_err(|err| {
+        error!("Failed to transmit APDU command to card: {}", err);
     })?;
 
     trace!("<<< {}", hex::encode(rapdu));
@@ -531,9 +530,8 @@ impl NFCCard {
 
         let card = ctx
             .connect(reader_name, ShareMode::Exclusive, Protocols::ANY)
-            .map_err(|e| {
-                error!("Error connecting to card: {:?}", e);
-                e
+            .inspect_err(|err| {
+                error!("Error connecting to card: {:?}", err);
             })?;
 
         Ok(NFCCard {
