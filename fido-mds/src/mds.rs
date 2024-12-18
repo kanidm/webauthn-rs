@@ -329,6 +329,9 @@ pub enum AuthenticationAlgorithm {
     /// rsassa_pkcsv15_sha1_raw
     #[serde(rename = "rsassa_pkcsv15_sha1_raw")]
     RsassaPkcsv15Sha1Raw,
+    /// rsassa_pss_sha256_raw
+    #[serde(rename = "rsassa_pss_sha256_raw")]
+    RsassaPssSha256Raw,
 }
 
 impl fmt::Display for AuthenticationAlgorithm {
@@ -358,6 +361,9 @@ impl fmt::Display for AuthenticationAlgorithm {
             }
             AuthenticationAlgorithm::RsassaPkcsv15Sha1Raw => {
                 write!(f, "rsassa_pkcsv15_sha1_raw")
+            }
+            AuthenticationAlgorithm::RsassaPssSha256Raw => {
+                write!(f, "rsassa_pss_sha256_raw")
             }
         }
     }
@@ -1101,7 +1107,10 @@ impl FromStr for FidoMds {
         // that has signed this metadata.
         let released = verifier.verify(&jws)?;
 
-        let metadata: FidoMds = released.from_json().map_err(|_| JwtError::Serde)?;
+        let metadata: FidoMds = released.from_json().map_err(|serde_err| {
+            tracing::error!(?serde_err);
+            JwtError::Serde
+        })?;
 
         // trace!(?metadata);
 
