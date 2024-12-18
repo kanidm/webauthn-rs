@@ -44,4 +44,4 @@ tracing-subscriber.workspace = true
 webauthn-rs-core.workspace = true
 
 [build-dependencies]
-embed-resource = "2.1"
+embed-resource = "3"

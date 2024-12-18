@@ -18,6 +18,7 @@ clap.workspace = true
 hex.workspace = true
 http-body-util.workspace = true
 hyper = { workspace = true, features = ["client", "server"] }
+hyper-util.workspace = true
 tokio.workspace = true
 tokio-native-tls.workspace = true
 tokio-tungstenite.workspace = true
