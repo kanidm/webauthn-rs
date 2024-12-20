@@ -76,7 +76,7 @@ pub async fn start_register(
     };
 
     // Remove any previous registrations that may have occured from the session.
-    session.remove_value("reg_state");
+    let _ = session.remove_value("reg_state").await;
 
     // If the user has any other credentials, we exclude these here so they can't be duplicate registered.
     // It also hints to the browser that only new credentials should be "blinked" for interaction.
@@ -100,6 +100,7 @@ pub async fn start_register(
             // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             session
                 .insert("reg_state", (username, user_unique_id, reg_state))
+                .await
                 .expect("Failed to insert");
             info!("Registration Successful!");
             Json(ccr)
@@ -121,7 +122,7 @@ pub async fn finish_register(
     session: Session,
     Json(reg): Json<RegisterPublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
-    let (username, user_unique_id, reg_state) = match session.get("reg_state")? {
+    let (username, user_unique_id, reg_state) = match session.get("reg_state").await? {
         Some((username, user_unique_id, reg_state)) => (username, user_unique_id, reg_state),
         None => {
             error!("Failed to get session");
@@ -129,7 +130,7 @@ pub async fn finish_register(
         }
     };
 
-    session.remove_value("reg_state");
+    let _ = session.remove_value("reg_state").await;
 
     let res = match app_state
         .webauthn
@@ -197,7 +198,7 @@ pub async fn start_authentication(
     // some other process.
 
     // Remove any previous authentication that may have occured from the session.
-    session.remove_value("auth_state");
+    let _ = session.remove_value("auth_state").await;
 
     // Get the set of keys that the user possesses
     let users_guard = app_state.users.lock().await;
@@ -227,6 +228,7 @@ pub async fn start_authentication(
             // not open to replay attacks. If this was a cookie store, this would be UNSAFE.
             session
                 .insert("auth_state", (user_unique_id, auth_state))
+                .await
                 .expect("Failed to insert");
             Json(rcr)
         }
@@ -249,10 +251,11 @@ pub async fn finish_authentication(
     Json(auth): Json<PublicKeyCredential>,
 ) -> Result<impl IntoResponse, WebauthnError> {
     let (user_unique_id, auth_state): (Uuid, PasskeyAuthentication) = session
-        .get("auth_state")?
+        .get("auth_state")
+        .await?
         .ok_or(WebauthnError::CorruptSession)?;
 
-    session.remove_value("auth_state");
+    let _ = session.remove_value("auth_state").await;
 
     let res = match app_state
         .webauthn

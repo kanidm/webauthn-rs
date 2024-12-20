@@ -6,7 +6,7 @@ use actix_web::middleware::Logger;
 use actix_web::web::JsonConfig;
 use actix_web::web::{get, post};
 use actix_web::{App, HttpServer};
-use log::info;
+use tracing::info;
 
 use crate::handler::auth::{
     finish_authentication, finish_register, start_authentication, start_register,
@@ -22,12 +22,11 @@ mod startup;
 
 #[tokio::main]
 async fn main() {
-    if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "info");
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "INFO");
     }
-
-    // Initialize env-logger
-    env_logger::init();
+    // initialize tracing
+    tracing_subscriber::fmt::init();
 
     // Generate secret key for cookies.
     // Normally you would read this from a configuration file.
