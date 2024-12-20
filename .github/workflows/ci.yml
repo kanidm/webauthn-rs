@@ -261,4 +261,4 @@ jobs:
           triplet: x64-windows-static-md
           token: ${{ github.token }}
 
-      - run: cargo build -p actix_web -p web_authn -p tide-server
+      - run: cargo build -p actix_tutorial -p axum_tutorial -p tide_tutorial
