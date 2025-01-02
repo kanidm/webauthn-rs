@@ -13,7 +13,7 @@ actix: wasm
 
 axum: ## Build and run the axum server
 axum:
-	cd server/axum && ./build_wasm.sh && cargo run
+	cd server/axum && cargo run
 
 
 tide: ## Build and run the tide server
