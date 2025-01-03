@@ -1,5 +1,7 @@
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Router};
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
+#[cfg(feature = "wasm")]
+use std::path::PathBuf;
 use tower_sessions::{
     cookie::{time::Duration, SameSite},
     Expiry, MemoryStore, SessionManagerLayer,
