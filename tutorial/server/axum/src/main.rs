@@ -74,7 +74,7 @@ async fn main() {
     #[cfg(feature = "javascript")]
     let app = Router::new()
         .merge(app)
-        .nest_service("/assets", tower_http::services::ServeDir::new("assets/js"));
+        .nest_service("/", tower_http::services::ServeDir::new("assets/js"));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
