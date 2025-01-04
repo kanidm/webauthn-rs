@@ -1,5 +1,7 @@
 use axum::{extract::Extension, http::StatusCode, response::IntoResponse, routing::post, Router};
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
+#[cfg(feature = "wasm")]
+use std::path::PathBuf;
 use tower_sessions::{
     cookie::{time::Duration, SameSite},
     Expiry, MemoryStore, SessionManagerLayer,
@@ -72,7 +74,7 @@ async fn main() {
     #[cfg(feature = "javascript")]
     let app = Router::new()
         .merge(app)
-        .nest_service("/assets", tower_http::services::ServeDir::new("assets/js"));
+        .nest_service("/", tower_http::services::ServeDir::new("assets/js"));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
