@@ -14,6 +14,7 @@ use hyper::{
     upgrade::Upgraded,
     Request, Response, StatusCode,
 };
+use hyper_util::rt::tokio::TokioIo;
 use tokio::{
     select,
     sync::{
@@ -202,7 +203,7 @@ impl CableError {
 #[instrument(level = "info", skip_all, err, fields(addr = addr.to_string()))]
 async fn handle_websocket(
     state: Arc<ServerState>,
-    mut ws_stream: WebSocketStream<Upgraded>,
+    mut ws_stream: WebSocketStream<TokioIo<Upgraded>>,
     tx: Tx,
     mut rx: Rx,
     addr: SocketAddr,
@@ -383,6 +384,7 @@ async fn handle_request(
 
         match hyper::upgrade::on(&mut req).await {
             Ok(upgraded) => {
+                let upgraded = TokioIo::new(upgraded);
                 let ws_stream =
                     WebSocketStream::from_raw_socket(upgraded, Role::Server, config).await;
                 handle_websocket(ss, ws_stream, tx, rx, addr).await.ok();

@@ -1,11 +1,6 @@
 [package]
 name = "sshkey-attest"
-version = "0.5.0"
-authors = ["William Brown <william@blackhats.net.au>"]
-edition = "2021"
-rust-version = "1.70.0"
 description = "FIDO SK SSH Key Attestation"
-repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
 keywords = ["ssh", "openssh", "parser", "attestation", "fido"]
 categories = [
@@ -14,7 +9,14 @@ categories = [
     "parser-implementations",
     "encoding",
 ]
-license = "MPL-2.0"
+
+version = { workspace = true }
+authors = { workspace = true }
+rust-version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 base64.workspace = true

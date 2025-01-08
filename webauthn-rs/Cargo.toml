@@ -1,15 +1,17 @@
 [package]
 name = "webauthn-rs"
-version = "0.5.0"
-authors = ["William Brown <william@blackhats.net.au>"]
-edition = "2021"
-rust-version = "1.70.0"
 description = "Webauthn Framework for Rust Web Servers"
-repository = "https://github.com/kanidm/webauthn-rs"
 readme = "../README.md"
 keywords = ["webauthn", "authentication", "passkeys"]
 categories = ["authentication", "web-programming"]
-license = "MPL-2.0"
+
+version = { workspace = true }
+authors = { workspace = true }
+rust-version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
 
 [package.metadata.docs.rs]
 features = ["danger-allow-state-serialisation", "danger-user-presence-only-security-keys", "danger-credential-internals"]

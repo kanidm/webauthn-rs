@@ -1,7 +1,7 @@
 use crate::mds::{
     UserVerificationMethod as RawUserVerificationMethod, VerificationMethodAndCombinations,
 };
-use crate::UserVerificationMethod;
+use crate::{StatusReport, UserVerificationMethod};
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 
@@ -25,6 +25,8 @@ const VERIMARK_GUARD_FINGERPRINT_HASH: u64 = 3483018605;
 
 const AUTHENTON1: Uuid = uuid::uuid!("b267239b-954f-4041-a01b-ee4f33c145b6");
 const AUTHENTON1_HASH: u64 = 1117557365;
+
+const NITROKEY_3_AM: Uuid = uuid::uuid!("2cd2f727-f6ca-44da-8f48-5c2e5da000a2");
 
 pub(crate) fn mds_user_verification_method_code_accuracy_descriptor(
     uvm: &mut [Vec<VerificationMethodAndCombinations>],
@@ -150,6 +152,19 @@ pub(crate) fn user_verification_method(
             }
         }
         None => Ok(None),
+    }
+}
+
+/// Deny authenticators that have publicly known security vulnerabilities, that FIDO
+/// has not yet acknowledged.
+pub(crate) fn mds_deny_insecure_authenticators(aaguid: Option<Uuid>) -> Option<StatusReport> {
+    match aaguid {
+        Some(NITROKEY_3_AM) => Some(StatusReport::UserKeyRemoteCompromise {
+            effective_date: None,
+            authenticator_version: 0,
+            url: None,
+        }),
+        _ => None,
     }
 }
 

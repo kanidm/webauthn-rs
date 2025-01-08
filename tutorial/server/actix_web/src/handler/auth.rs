@@ -1,8 +1,8 @@
 use actix_session::Session;
 use actix_web::web::{Data, Json, Path};
 use actix_web::HttpResponse;
-use log::{error, info};
 use tokio::sync::Mutex;
+use tracing::{error, info};
 
 use crate::handler::{Error, WebResult};
 use crate::startup::UserData;

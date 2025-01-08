@@ -1,5 +1,5 @@
 [package]
-name = "tide-server"
+name = "tide_tutorial"
 version = "0.1.0"
 edition = "2021"
 authors = ["William Brown <william@blackhats.net.au>"]
@@ -9,7 +9,7 @@ license = "MPL-2.0"
 
 [dependencies]
 webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
-tide.workspace = true
+tide = "0.16"
 async-std.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

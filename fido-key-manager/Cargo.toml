@@ -1,16 +1,18 @@
 [package]
 name = "fido-key-manager"
-version = "0.5.0"
-authors = ["Michael Farrell <micolous+git@gmail.com>"]
 categories = ["authentication"]
 description = "Management CLI for FIDO/CTAP 2.x authenticators"
-edition = "2021"
 keywords = ["ctap", "fido", "passkeys", "webauthn"]
-license = "MPL-2.0"
 readme = "README.md"
-repository = "https://github.com/kanidm/webauthn-rs/"
-rust-version = "1.70.0"
 build = "build.rs"
+
+version = { workspace = true }
+authors = { workspace = true }
+rust-version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
 
 [[bin]]
 name = "fido-key-manager"
@@ -28,6 +30,8 @@ yubikey = ["webauthn-authenticator-rs/vendor-yubikey"]
 
 default = ["nfc", "usb"]
 
+disable_windows_manifest = []
+
 [dependencies]
 webauthn-authenticator-rs = { workspace = true, features = ["ui-cli", "ctap2-management"] }
 
@@ -40,4 +44,4 @@ tracing-subscriber.workspace = true
 webauthn-rs-core.workspace = true
 
 [build-dependencies]
-embed-resource = "2.1"
+embed-resource = "3"

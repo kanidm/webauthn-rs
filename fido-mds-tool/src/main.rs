@@ -182,8 +182,8 @@ fn main() {
 
             let s = match fs::read_to_string(path) {
                 Ok(s) => s,
-                Err(e) => {
-                    tracing::error!(?e);
+                Err(err) => {
+                    tracing::error!(?err, "read_to_string");
                     return;
                 }
             };
@@ -195,8 +195,8 @@ fn main() {
                         eprintln!("{fd}");
                     }
                 }
-                Err(e) => {
-                    tracing::error!(?e);
+                Err(err) => {
+                    tracing::error!(?err, "mds from str");
                 }
             }
         }
@@ -208,8 +208,8 @@ fn main() {
 
             let s = match fs::read_to_string(path) {
                 Ok(s) => s,
-                Err(e) => {
-                    tracing::error!(?e);
+                Err(err) => {
+                    tracing::error!(?err, "read_to_string");
                     return;
                 }
             };
@@ -219,8 +219,8 @@ fn main() {
                     debug!("{} fido metadata avaliable", mds.fido2.len());
                     mds
                 }
-                Err(e) => {
-                    tracing::error!(?e);
+                Err(err) => {
+                    tracing::error!(?err, "mds from str");
                     return;
                 }
             };
@@ -245,8 +245,8 @@ fn main() {
 
             let s = match fs::read_to_string(path) {
                 Ok(s) => s,
-                Err(e) => {
-                    tracing::error!(?e);
+                Err(err) => {
+                    tracing::error!(?err, "read_to_string");
                     return;
                 }
             };
@@ -283,8 +283,8 @@ fn main() {
                         None => warn!("No metadata matched query"),
                     }
                 }
-                Err(e) => {
-                    tracing::error!(?e);
+                Err(err) => {
+                    tracing::error!(?err, "mds from str");
                 }
             }
         }

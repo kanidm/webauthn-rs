@@ -1,17 +1,20 @@
 [package]
 name = "webauthn-rp-proxy"
-version = "0.5.0"
-edition = "2021"
-rust-version = "1.70.0"
 authors = ["Arthur A. Gleckler <aag@alum.mit.edu>"]
-license = "MPL-2.0"
 readme = "README.md"
 description = "Webauthn RP CLI Proxy"
 
+version = { workspace = true }
+rust-version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+
 [dependencies]
-anyhow = "1.0"
-clap = { version = "3.0", features = ["derive"] }
-serde = "1.0"
-serde_json = "1.0"
-uuid = { version = "1.0", features = ["serde"] }
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid = { workspace = true, features = ["serde"] }
 webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }

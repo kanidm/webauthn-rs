@@ -1,8 +1,10 @@
 [package]
-name = "web_authn"
+name = "axum_tutorial"
 version = "0.1.0"
 edition = "2021"
-authors = ["William Brown <william@blackhats.net.au>, Ben Wishovich <ben@benw.is>"]
+authors = [
+    "William Brown <william@blackhats.net.au>, Ben Wishovich <ben@benw.is>",
+]
 license = "MPL-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,17 +13,19 @@ license = "MPL-2.0"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde.workspace = true
-webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
-axum = { version = "0.6.1", features = ["http2"] }
+webauthn-rs = { workspace = true, features = [
+    "danger-allow-state-serialisation",
+] }
+axum = { version = "0.7" }
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v4"] }
 url.workspace = true
 thiserror.workspace = true
-tower = "0.4.13"
-tower-http = { version = "0.4.4", features = ["fs"] }
-tower-sessions = "0.6"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs"] }
+tower-sessions = "0.13"
 
 [features]
-default = ["wasm"]
+default = ["javascript"]
 wasm = []
 javascript = []

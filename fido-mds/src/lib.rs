@@ -1126,7 +1126,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             mut authenticator_get_info,
         } = metadata_statement;
 
-        let status_reports: BTreeSet<_> = status_reports
+        let mut status_reports: BTreeSet<_> = status_reports
             .into_iter()
             .filter_map(|sr| {
                 sr.try_into()
@@ -1140,6 +1140,10 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                     .ok()
             })
             .collect();
+
+        if let Some(status_report) = patch::mds_deny_insecure_authenticators(aaguid) {
+            status_reports.insert(status_report);
+        }
 
         let attestation_root_certificates = attestation_root_certificates.into_iter()
             .filter_map(|cert| {

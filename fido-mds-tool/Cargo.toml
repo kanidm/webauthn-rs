@@ -1,25 +1,27 @@
 [package]
 name = "fido-mds-tool"
-version = "0.5.0"
-authors = ["William Brown <william@blackhats.net.au>"]
-edition = "2021"
-rust-version = "1.70.0"
 description = "Fido Metadata Service parsing tool"
-repository = "https://github.com/kanidm/webauthn-rs"
 readme = "README.md"
 keywords = ["webauthn", "authentication"]
 categories = ["authentication", "web-programming"]
-license = "MPL-2.0"
+
+version = { workspace = true }
+authors = { workspace = true }
+rust-version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
-fido-mds = { version = "0.5.0-dev", path = "../fido-mds" }
-
+fido-mds.workspace = true
 clap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 
 url = { version = "2", features = ["serde"] }
-reqwest = { version = "0.11", features = ["blocking", "native-tls"] }
+
+reqwest = { workspace = true, features = ["blocking"] }
 
 serde_json.workspace = true

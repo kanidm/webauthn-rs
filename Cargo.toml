@@ -1,4 +1,14 @@
-
+[workspace.package]
+version = "0.5.1"
+authors = [
+    "William Brown <william@blackhats.net.au>",
+    "Michael Farrell <micolous+git@gmail.com>",
+]
+rust-version = "1.81"
+edition = "2021"
+repository = "https://github.com/kanidm/webauthn-rs"
+homepage = "https://github.com/kanidm/webauthn-rs"
+license = "MPL-2.0"
 
 [workspace]
 resolver = "2"
@@ -42,44 +52,48 @@ members = [
 ]
 
 # Due to --cfg=web_sys_unstable_apis
-exclude = ["compat_tester/webauthn-rs-demo-wasm"]
+exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [workspace.dependencies]
 # These are in release/dependency order.
-base64urlsafedata = { path = "./base64urlsafedata", version = "0.5.0" }
-fido-hid-rs = { path = "./fido-hid-rs", version = "0.5.0" }
-webauthn-attestation-ca = { path = "./attestation-ca", version = "0.5.0" }
-webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "0.5.0" }
-fido-mds = { path = "./fido-mds", version = "0.5.0" }
-webauthn-rs-core = { path = "./webauthn-rs-core", version = "0.5.0" }
-webauthn-rs = { path = "./webauthn-rs", version = "0.5.0" }
-webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "0.5.0" }
+base64urlsafedata = { path = "./base64urlsafedata", version = "=0.5.1" }
+fido-hid-rs = { path = "./fido-hid-rs", version = "=0.5.1" }
+webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.5.1" }
+webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.5.1" }
+fido-mds = { path = "./fido-mds", version = "=0.5.1" }
+webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.5.1" }
+webauthn-rs = { path = "./webauthn-rs", version = "=0.5.1" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.5.1" }
 
 # Currently un-released
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
 webauthn-rs-device-catalog = { path = "./device-catalog" }
 
 async-std = { version = "1.6", features = ["attributes"] }
+anyhow = "1.0"
 base64 = "0.21"
-clap = { version = "=4.4.18", features = ["derive", "env"] }
-compact_jwt = "0.2.3"
+clap = { version = "^4.5", features = ["derive", "env"] }
+compact_jwt = "0.4.2"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
-http-body = "=1.0.0-rc.2"
-http-body-util = "=0.1.0-rc.2"
-hyper = { version = "=1.0.0-rc.3", default-features = false, features = [
-    "http1",
-] }
+http-body = "1.0.1"
+http-body-util = "0.1.2"
+hyper = { version = "1.5.1", default-features = false, features = ["http1"] }
+hyper-util = { version = "0.1.10", features = ["tokio"] }
 nom = "7.1"
 peg = "0.8.1"
 openssl = "^0.10.56"
+
 rand = "0.8"
 rand_chacha = "0.3.1"
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls-native-roots",
+] }
+
 serde = { version = "^1.0.141", features = ["derive"] }
 serde_cbor_2 = { version = "0.12.0-dev" }
 serde_json = "^1.0.79"
-tide = "0.16"
 thiserror = "^1.0.37"
 tokio = { version = "1.22.0", features = [
     "sync",
@@ -91,14 +105,15 @@ tokio = { version = "1.22.0", features = [
 ] }
 tokio-native-tls = "^0.3.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "^0.18.0", features = ["native-tls"] }
+tokio-tungstenite = { version = "^0.24.0", features = ["native-tls"] }
 tracing = "^0.1.35"
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
     "std",
     "fmt",
 ] }
-tungstenite = { version = "^0.18.0", default-features = false, features = [
+tracing-log = { version = "0.2.0" }
+tungstenite = { version = "^0.24.0", default-features = false, features = [
     "handshake",
 ] }
 url = "2"
