@@ -208,7 +208,7 @@ jobs:
       - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: docs-${{ matrix.rust_version }}
           path: |
@@ -224,7 +224,7 @@ jobs:
       - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --no-deps --document-private-items --all-features
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: docs-${{ matrix.rust_version }}-all_features
           path: |
