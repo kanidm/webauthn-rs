@@ -504,6 +504,9 @@ pub enum AuthenticatorTransport {
     /// usb
     #[serde(rename = "usb")]
     Usb,
+    /// wireless
+    #[serde(rename = "wireless")]
+    Wireless,
     /// nfc
     #[serde(rename = "nfc")]
     Nfc,
@@ -522,6 +525,7 @@ impl fmt::Display for AuthenticatorTransport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AuthenticatorTransport::Usb => write!(f, "usb"),
+            AuthenticatorTransport::Wireless => write!(f, "wireless"),
             AuthenticatorTransport::Nfc => write!(f, "nfc"),
             AuthenticatorTransport::Lightning => write!(f, "lightning"),
             AuthenticatorTransport::Ble => write!(f, "ble"),
@@ -536,6 +540,7 @@ impl FromStr for AuthenticatorTransport {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "usb" => Ok(AuthenticatorTransport::Usb),
+            "wireless" => Ok(AuthenticatorTransport::Wireless),
             "nfc" => Ok(AuthenticatorTransport::Nfc),
             "lightning" => Ok(AuthenticatorTransport::Lightning),
             "ble" => Ok(AuthenticatorTransport::Ble),
