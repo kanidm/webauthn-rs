@@ -54,6 +54,7 @@ pub struct USBToken {
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
+    supports_wink: bool,
     initialised: bool,
 }
 
@@ -69,6 +70,7 @@ impl fmt::Debug for USBToken {
             .field("cid", &self.cid)
             .field("supports_ctap1", &self.supports_ctap1)
             .field("supports_ctap2", &self.supports_ctap2)
+            .field("supports_wink", &self.supports_wink)
             .field("initialised", &self.initialised)
             .finish()
     }
@@ -152,6 +154,7 @@ impl USBToken {
             cid: 0,
             supports_ctap1: false,
             supports_ctap2: false,
+            supports_wink: false,
             initialised: false,
         }
     }
@@ -288,6 +291,7 @@ impl Token for USBToken {
                 self.cid = i.cid;
                 self.supports_ctap1 = i.supports_ctap1();
                 self.supports_ctap2 = i.supports_ctap2();
+                self.supports_wink = i.supports_wink();
 
                 if self.supports_ctap2 {
                     self.initialised = true;
