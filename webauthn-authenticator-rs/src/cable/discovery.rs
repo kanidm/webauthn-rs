@@ -28,7 +28,7 @@ type TunnelId = [u8; 16];
 
 // const BASE64URL: base64::Config = base64::Config::new(base64::CharacterSet::UrlSafe, false);
 
-#[derive(FromPrimitive, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u32)]
 enum DerivedValueType {
     EIDKey = 1,

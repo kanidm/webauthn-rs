@@ -35,7 +35,6 @@
 //! [0]: https://github.com/Yubico/yubikey-manager/blob/51a7ae438c923189788a1e31d3de18d452131942/yubikit/management.py#L223
 use async_trait::async_trait;
 use bitflags::bitflags;
-use num_traits::cast::FromPrimitive;
 
 use crate::{prelude::WebauthnCError, tlv::ber::BerTlvParser};
 
@@ -62,7 +61,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[repr(u16)]
 enum ConfigKey {
     #[default]
@@ -88,7 +87,7 @@ enum ConfigKey {
 /// YubiKey device form factor.
 ///
 /// Only the lower 3 bits of the `u8` are used.
-#[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum FormFactor {
     #[default]
     Unknown = 0x0,
