@@ -84,6 +84,29 @@ enum ConfigKey {
     EnabledNfcInterfaces = 0xe,
 }
 
+impl ConfigKey {
+    fn from_u16(tag: u16) -> Option<Self> {
+        match tag {
+            0x0 => Some(ConfigKey::Unknown),
+            0x1 => Some(ConfigKey::SupportedUsbInterfaces),
+            0x2 => Some(ConfigKey::Serial),
+            0x3 => Some(ConfigKey::EnabledUsbInterfaces),
+            0x4 => Some(ConfigKey::FormFactor),
+            0x5 => Some(ConfigKey::Version),
+            0x6 => Some(ConfigKey::AutoEjectTimeout),
+            0x7 => Some(ConfigKey::ChallengeResponseTimeout),
+            0x8 => Some(ConfigKey::DeviceFlags),
+            0x9 => Some(ConfigKey::AppVersions),
+            0xa => Some(ConfigKey::ConfigLock),
+            0xb => Some(ConfigKey::Unlock),
+            0xc => Some(ConfigKey::Reboot),
+            0xd => Some(ConfigKey::SupportedNfcInterfaces),
+            0xe => Some(ConfigKey::EnabledNfcInterfaces),
+            _ => None,
+        }
+    }
+}
+
 /// YubiKey device form factor.
 ///
 /// Only the lower 3 bits of the `u8` are used.
