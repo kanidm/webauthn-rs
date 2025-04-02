@@ -18,7 +18,6 @@
 //! [ctap21pre]: https://fidoalliance.org/specs/fido2/vendor/BioEnrollmentPrototype.pdf
 use std::{fmt::Debug, time::Duration};
 
-use num_traits::cast::{FromPrimitive, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use serde_cbor_2::Value;
 
@@ -131,7 +130,7 @@ macro_rules! bio_struct {
                 let mut keys = BTreeMap::new();
 
                 modality
-                    .and_then(|v| v.to_i128())
+                    .and_then(|v| Some(i128::from(v)))
                     .map(|v| keys.insert(0x01, Value::Integer(v)));
 
                 if let Some(v) = sub_command {
@@ -228,7 +227,7 @@ impl From<TemplateInfo> for BTreeMap<Value, Value> {
 ///
 /// Returned in [BioEnrollmentResponse::modality] in response to a
 /// [BioEnrollmentRequestTrait::GET_MODALITY] request.
-#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 #[repr(u8)]
 pub enum Modality {
     /// Unsupported modality.
@@ -239,8 +238,24 @@ pub enum Modality {
     Fingerprint = 0x01,
 }
 
+impl TryFrom<u32> for Modality {
+    type Error = &'static str;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(Modality::Unknown),
+            0x01 => Ok(Modality::Fingerprint),
+            _ => Err("Invalid Modality"),
+        }
+    }
+}
+
+impl From<Modality> for i128 {
+    fn from(m: Modality) -> Self {
+        m as i128
+    }
+}
 /// The type of fingerprint sensor on the device.
-#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[repr(u8)]
 pub enum FingerprintKind {
     /// A fingerprint sensor which requires placing the finger straight down
@@ -250,6 +265,17 @@ pub enum FingerprintKind {
     /// A fingerprint sensor which requires swiping the finger across the
     /// sensor.
     Swipe = 0x02,
+}
+
+impl TryFrom<u32> for FingerprintKind {
+    type Error = &'static str;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0x01 => Ok(FingerprintKind::Touch),
+            0x02 => Ok(FingerprintKind::Swipe),
+            _ => Err("Invalid FingerprintKind"),
+        }
+    }
 }
 
 /// Wrapper for biometric command types, which can be passed to
@@ -344,7 +370,7 @@ impl BioSubCommand {
         let sub_command_params: Option<BTreeMap<Value, Value>> = self.to_owned().into();
 
         let mut o = Vec::new();
-        o.push(modality.to_u8().expect("Could not coerce modality into u8"));
+        o.push(modality as u8);
         o.push(subcommand);
         if let Some(p) = sub_command_params
             .as_ref()
@@ -440,11 +466,11 @@ impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
             modality: raw
                 .remove(&0x01)
                 .and_then(|v| value_to_u32(&v, "0x01"))
-                .and_then(Modality::from_u32),
+                .and_then(|v| Modality::try_from(v).ok()),
             fingerprint_kind: raw
                 .remove(&0x02)
                 .and_then(|v| value_to_u32(&v, "0x02"))
-                .and_then(FingerprintKind::from_u32),
+                .and_then(|v| FingerprintKind::try_from(v).ok()),
             max_capture_samples_required_for_enroll: raw
                 .remove(&0x03)
                 .and_then(|v| value_to_u32(&v, "0x03")),
@@ -452,7 +478,7 @@ impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
             last_enroll_sample_status: raw
                 .remove(&0x05)
                 .and_then(|v| value_to_u32(&v, "0x05"))
-                .and_then(EnrollSampleStatus::from_u32),
+                .and_then(|v| EnrollSampleStatus::try_from(v).ok()),
             remaining_samples: raw.remove(&0x06).and_then(|v| value_to_u32(&v, "0x06")),
             template_infos: raw
                 .remove(&0x07)

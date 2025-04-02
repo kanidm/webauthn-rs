@@ -7,9 +7,6 @@
 //!
 //! [0]: https://www.usb.org/sites/default/files/documents/hid1_11.pdf
 
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
-
 use crate::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 
 /// HID descriptor tags; shifted right by 2 bits (removing the `bSize` field).
@@ -21,8 +18,8 @@ use crate::{FIDO_USAGE_PAGE, FIDO_USAGE_U2FHID};
 ///
 /// [0]: https://www.usb.org/sites/default/files/documents/hid1_11.pdf
 #[allow(clippy::unusual_byte_groupings)] // groupings are bTag(4), bType(2)
-#[derive(FromPrimitive)]
 #[repr(u8)]
+#[allow(dead_code)]
 enum Tag {
     // Main items
     Input = 0b1000_00,
@@ -56,6 +53,48 @@ enum Tag {
     StringMinimum = 0b1000_10,
     StringMaximum = 0b1001_10,
     Delimiter = 0b1010_10,
+}
+
+impl TryFrom<u8> for Tag {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            // Main items
+            0b10_0000 => Self::Input,
+            0b10_0100 => Self::Output,
+            0b10_1100 => Self::Feature,
+            0b10_1000 => Self::Collection,
+            0b11_0000 => Self::EndCollection,
+
+            // Global items
+            0b00_0001 => Self::UsagePage,
+            0b00_0101 => Self::LogicalMinimum,
+            0b00_1001 => Self::LogicalMaximum,
+            0b00_1101 => Self::PhysicalMinimum,
+            0b01_0001 => Self::PhysicalMaximum,
+            0b01_0101 => Self::UnitExponent,
+            0b01_1001 => Self::Unit,
+            0b01_1101 => Self::ReportSize,
+            0b10_0001 => Self::ReportID,
+            0b10_0101 => Self::ReportCount,
+            0b10_1001 => Self::Push,
+            0b10_1101 => Self::Pop,
+
+            // Local items
+            0b00_0010 => Self::Usage,
+            0b00_0110 => Self::UsageMinimum,
+            0b00_1010 => Self::UsageMaximum,
+            0b00_1110 => Self::DesignatorIndex,
+            0b01_0010 => Self::DesignatorMinimum,
+            0b01_0110 => Self::DesignatorMaximum,
+            0b01_1110 => Self::StringIndex,
+            0b10_0010 => Self::StringMinimum,
+            0b10_0110 => Self::StringMaximum,
+            0b10_1010 => Self::Delimiter,
+            _ => return Err(()),
+        })
+    }
 }
 
 /// Item in a report descriptor.
@@ -116,7 +155,7 @@ impl<'a> Iterator for DescriptorIterator<'a> {
             }
             i0 >>= 2;
 
-            tag = Tag::from_u8(i0);
+            tag = Tag::try_from(i0).ok();
             // if tag.is_none() {
             //     warn!("unknown short tag: 0b{i0:b}",);
             // }

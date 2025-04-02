@@ -49,7 +49,7 @@ pub enum CableState {
 }
 
 // lastEnrollSampleStatus
-#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum EnrollSampleStatus {
     Good = 0x00,
@@ -67,4 +67,29 @@ pub enum EnrollSampleStatus {
     // 0x0c unused
     NoUserActivity = 0x0d,
     NoUserPresenceTransition = 0x0e,
+}
+
+impl TryFrom<u32> for EnrollSampleStatus {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(EnrollSampleStatus::Good),
+            0x01 => Ok(EnrollSampleStatus::TooHigh),
+            0x02 => Ok(EnrollSampleStatus::TooLow),
+            0x03 => Ok(EnrollSampleStatus::TooLeft),
+            0x04 => Ok(EnrollSampleStatus::TooRight),
+            0x05 => Ok(EnrollSampleStatus::TooFast),
+            0x06 => Ok(EnrollSampleStatus::TooSlow),
+            0x07 => Ok(EnrollSampleStatus::PoorQuality),
+            0x08 => Ok(EnrollSampleStatus::TooSkewed),
+            0x09 => Ok(EnrollSampleStatus::TooShort),
+            0x0a => Ok(EnrollSampleStatus::MergeFailure),
+            0x0b => Ok(EnrollSampleStatus::AlreadyExists),
+            // 0x0c unused
+            0x0d => Ok(EnrollSampleStatus::NoUserActivity),
+            0x0e => Ok(EnrollSampleStatus::NoUserPresenceTransition),
+            _ => Err(value),
+        }
+    }
 }

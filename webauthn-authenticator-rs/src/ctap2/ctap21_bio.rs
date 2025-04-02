@@ -262,7 +262,7 @@ where
 
         // Normalise into Normal Form C
         let friendly_name = friendly_name.nfc().collect::<String>();
-        if friendly_name.as_bytes().len() > r.get_max_template_friendly_name() {
+        if friendly_name.len() > r.get_max_template_friendly_name() {
             return Err(WebauthnCError::FriendlyNameTooLong);
         }
 
