@@ -7,7 +7,8 @@ use authenticator::{
 };
 use std::sync::mpsc::{channel, RecvError};
 use std::thread;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, level_filters::LevelFilter, trace};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Subcommand)]
 #[clap(about = "Authenticator Utility")]
@@ -16,8 +17,16 @@ enum Opt {
 }
 
 fn main() {
-    tracing_subscriber::fmt::init();
-    tracing_log::LogTracer::init().expect("Failed to create tracing log bridge");
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::DEBUG.into())
+                .from_env_lossy(),
+        )
+        .compact()
+        .init();
+
+    info!("Starting...");
 
     let timeout_ms = 25000;
 
