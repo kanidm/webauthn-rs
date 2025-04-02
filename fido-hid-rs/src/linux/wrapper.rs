@@ -25,3 +25,14 @@ pub enum BusType {
     Bluetooth = BUS_BLUETOOTH,
     Virtual = BUS_VIRTUAL,
 }
+
+impl From<u32> for BusType {
+    fn from(value: u32) -> Self {
+        match value {
+            BUS_USB => BusType::Usb,
+            BUS_BLUETOOTH => BusType::Bluetooth,
+            BUS_VIRTUAL => BusType::Virtual,
+            _ => BusType::Virtual,
+        }
+    }
+}

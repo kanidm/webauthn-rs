@@ -19,7 +19,6 @@ use nix::{
     poll::{ppoll, PollFd, PollFlags},
     sys::signalfd::SigSet,
 };
-use num_traits::FromPrimitive;
 use tokio::{sync::mpsc, task::spawn_blocking};
 use tokio_stream::wrappers::ReceiverStream;
 use udev::{Device, Enumerator, EventType, MonitorBuilder};
