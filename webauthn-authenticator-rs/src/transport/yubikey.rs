@@ -130,6 +130,24 @@ pub enum FormFactor {
     UsbCBio = 0x7,
 }
 
+impl TryFrom<u8> for FormFactor {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value & 0x7 {
+            0x0 => Ok(FormFactor::Unknown),
+            0x1 => Ok(FormFactor::UsbAKeychain),
+            0x2 => Ok(FormFactor::UsbANano),
+            0x3 => Ok(FormFactor::UsbCKeychain),
+            0x4 => Ok(FormFactor::UsbCNano),
+            0x5 => Ok(FormFactor::UsbCLightning),
+            0x6 => Ok(FormFactor::UsbABio),
+            0x7 => Ok(FormFactor::UsbCBio),
+            _ => Err(()),
+        }
+    }
+}
+
 /// YubiKey device info / configuration structure
 ///
 /// ## Payload format
@@ -231,7 +249,7 @@ impl YubiKeyConfig {
                     if val.is_empty() {
                         continue;
                     }
-                    if let Some(f) = FormFactor::from_u8(val[0] & 0x7) {
+                    if let Some(f) = FormFactor::try_from(val[0] & 0x7).ok() {
                         o.form_factor = f;
                     }
                     o.is_fips = val[0] & 0x80 != 0;
