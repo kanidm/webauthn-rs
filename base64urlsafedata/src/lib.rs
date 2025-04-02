@@ -84,7 +84,7 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 #[macro_use]
-extern crate paste;
+extern crate pastey;
 
 #[macro_use]
 mod common;
