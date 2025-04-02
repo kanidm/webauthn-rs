@@ -62,7 +62,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive)]
 #[repr(u16)]
 enum ConfigKey {
     #[default]
@@ -88,8 +88,7 @@ enum ConfigKey {
 /// YubiKey device form factor.
 ///
 /// Only the lower 3 bits of the `u8` are used.
-#[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive, ToPrimitive)]
-#[repr(u8)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, FromPrimitive)]
 pub enum FormFactor {
     #[default]
     Unknown = 0x0,

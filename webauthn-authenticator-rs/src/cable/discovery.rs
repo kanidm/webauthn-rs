@@ -2,7 +2,6 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use num_traits::ToPrimitive;
 use openssl::{
     ec::EcKey,
     hash::MessageDigest,
@@ -29,7 +28,7 @@ type TunnelId = [u8; 16];
 
 // const BASE64URL: base64::Config = base64::Config::new(base64::CharacterSet::UrlSafe, false);
 
-#[derive(FromPrimitive, ToPrimitive, Debug, PartialEq, Eq)]
+#[derive(FromPrimitive, Debug, PartialEq, Eq)]
 #[repr(u32)]
 enum DerivedValueType {
     EIDKey = 1,

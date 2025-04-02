@@ -112,7 +112,6 @@ tracing-subscriber = { version = "0.3", features = [
     "std",
     "fmt",
 ] }
-tracing-log = { version = "0.2.0" }
 tungstenite = { version = "^0.24.0", default-features = false, features = [
     "handshake",
 ] }
