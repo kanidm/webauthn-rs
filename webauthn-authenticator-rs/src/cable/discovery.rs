@@ -41,7 +41,7 @@ enum DerivedValueType {
 
 impl DerivedValueType {
     pub fn derive(&self, ikm: &[u8], salt: &[u8], output: &mut [u8]) -> Result<(), WebauthnCError> {
-        let typ = self.to_u32().ok_or(WebauthnCError::Internal)?.to_le_bytes();
+        let typ = (self as u32).to_le_bytes();
         hkdf_sha_256(salt, ikm, Some(&typ), output)
     }
 }
