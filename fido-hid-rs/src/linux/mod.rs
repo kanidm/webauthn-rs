@@ -200,7 +200,7 @@ impl USBDeviceInfoImpl {
         }
 
         // Drop unknown or non-USB BusTypes
-        let bustype = BusType::try_from(info.bustype);
+        let bustype = BusType::try_from(info.bustype)?;
         if bustype != BusType::Usb {
             // trace!(
             //     "{path:?} is not USB HID: {bustype:?} (0x{:x})",
