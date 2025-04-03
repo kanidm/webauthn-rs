@@ -40,7 +40,7 @@ enum DerivedValueType {
 }
 
 impl DerivedValueType {
-    fn to_u32(self) -> u32 {
+    fn to_u32(&self) -> u32 {
         match self {
             Self::EIDKey => 1,
             Self::TunnelID => 2,
