@@ -196,7 +196,7 @@ impl USBDeviceInfoImpl {
 
         let mut info = hidraw_devinfo::default();
         unsafe {
-            hid_ioc_raw_info(fd.as_raw_fd(), &mut info).ok()?;
+            hid_ioc_raw_info(fd.as_raw_fd(), &mut info)?;
         }
 
         // Drop unknown or non-USB BusTypes
