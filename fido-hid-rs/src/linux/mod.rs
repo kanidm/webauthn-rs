@@ -196,11 +196,11 @@ impl USBDeviceInfoImpl {
 
         let mut info = hidraw_devinfo::default();
         unsafe {
-            hid_ioc_raw_info(fd.as_raw_fd(), &mut info)?;
+            hid_ioc_raw_info(fd.as_raw_fd(), &mut info).ok()?;
         }
 
         // Drop unknown or non-USB BusTypes
-        let bustype = BusType::try_from(info.bustype)?;
+        let bustype = BusType::try_from(info.bustype).ok()?;
         if bustype != BusType::Usb {
             // trace!(
             //     "{path:?} is not USB HID: {bustype:?} (0x{:x})",
