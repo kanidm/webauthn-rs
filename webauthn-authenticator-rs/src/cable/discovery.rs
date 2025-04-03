@@ -52,7 +52,7 @@ impl DerivedValueType {
     }
 
     pub fn derive(&self, ikm: &[u8], salt: &[u8], output: &mut [u8]) -> Result<(), WebauthnCError> {
-        hkdf_sha_256(salt, ikm, Some(&self.to_u32().to_le_bytes()), output)
+        hkdf_sha_256(salt, ikm, Some(self.to_u32().to_le_bytes()), output)
     }
 }
 
