@@ -36,3 +36,14 @@ impl BusType {
         }
     }
 }
+
+impl TryFrom<u32> for BusType {
+    type Error = u32;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match BusType::from_u32(value) {
+            Some(bus_type) => Ok(bus_type),
+            None => Err(value),
+        }
+    }
+}
