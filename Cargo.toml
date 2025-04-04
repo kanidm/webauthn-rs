@@ -82,6 +82,7 @@ http-body-util = "0.1.2"
 hyper = { version = "1.5.1", default-features = false, features = ["http1"] }
 hyper-util = { version = "0.1.10", features = ["tokio"] }
 nom = "7.1"
+num-derive = { version = "0.4.2" }
 peg = "0.8.1"
 openssl = "^0.10.56"
 

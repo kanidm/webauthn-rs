@@ -64,6 +64,12 @@ jobs:
       - if: runner.os != 'windows'
         run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets
 
+      - name: javascript feature clippy
+        if: runner.os != 'windows'
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets --features javascript,bluetooth,nfc,usb
+      - name: WASM feature clippy
+        if: runner.os != 'windows'
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets --features wasm,bluetooth,nfc,usb --no-default-features
       - run: cargo test --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Some clap errors manifest as panics at runtime. Running tools with

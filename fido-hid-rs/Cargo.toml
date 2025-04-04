@@ -27,16 +27,25 @@ tracing.workspace = true
 bindgen = "0.65.1"
 
 [dev-dependencies]
-tracing-subscriber.workspace = true
+tracing-subscriber = { workspace = true }
 
 # descriptors tests
-hex.workspace = true
-num-derive = "0.3"
+hex = { workspace = true }
+num-derive = { workspace = true }
 num-traits = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 lazy_static = "1.4.0"
-windows = { version = "0.41.0", features = ["Win32_Foundation", "Win32_Devices_HumanInterfaceDevice", "Devices_Enumeration", "Devices_HumanInterfaceDevice", "Foundation", "Foundation_Collections", "Storage", "Storage_Streams" ] }
+windows = { version = "0.41.0", features = [
+    "Win32_Foundation",
+    "Win32_Devices_HumanInterfaceDevice",
+    "Devices_Enumeration",
+    "Devices_HumanInterfaceDevice",
+    "Foundation",
+    "Foundation_Collections",
+    "Storage",
+    "Storage_Streams",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.9"
@@ -45,6 +54,6 @@ mach2 = "0.4"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.26.2", features = ["ioctl", "poll"] }
-num-derive = "0.3"
+num-derive = { workspace = true }
 num-traits = "0.2"
 udev = "0.7.0"
