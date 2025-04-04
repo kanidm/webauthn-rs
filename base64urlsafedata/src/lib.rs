@@ -84,9 +84,6 @@
 #![deny(clippy::trivially_copy_pass_by_ref)]
 
 #[macro_use]
-extern crate paste;
-
-#[macro_use]
 mod common;
 mod human;
 #[cfg(test)]

@@ -16,7 +16,7 @@ mod tests {
             .expect("failed to execute process");
 
         Ok(serde_json::from_str(
-            &String::from_utf8_lossy(&output.stdout).to_string(),
+            String::from_utf8_lossy(&output.stdout).as_ref(),
         )?)
     }
 
