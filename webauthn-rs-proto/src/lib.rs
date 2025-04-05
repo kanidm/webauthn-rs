@@ -27,3 +27,6 @@ pub use wasm::*;
 
 #[cfg(feature = "wasm")]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_ENGINE;
+
+#[cfg(test)]
+mod tests;
