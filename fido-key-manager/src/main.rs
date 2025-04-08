@@ -209,6 +209,9 @@ pub enum Opt {
     SoloKeyRandom,
     #[cfg(feature = "yubikey")]
     YubikeyGetConfig,
+    #[cfg(feature = "usb")]
+    /// Wink a connected USB device.
+    Wink,
 }
 
 #[derive(Debug, clap::Parser)]
@@ -773,6 +776,21 @@ async fn main() {
 
             println!("YubiKey config:");
             println!("{cfg}")
+        }
+
+        #[cfg(feature = "usb")]
+        Opt::Wink => {
+            use webauthn_authenticator_rs::usb::USBTransport;
+
+            println!("Insert a USB device...");
+            let transport = USBTransport::new().await.unwrap();
+            let mut stream = transport.watch().await.unwrap();
+            while let Some(event) = stream.next().await {
+                if let TokenEvent::Added(mut token) = event {
+                    token.wink().await.expect("failed to wink USB device");
+                    return;
+                }
+            }
         }
     }
 }
