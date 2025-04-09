@@ -215,11 +215,11 @@ impl USBToken {
     /// identification of the device.
     pub async fn wink(&mut self) -> Result<(), WebauthnCError> {
         if !self.initialised {
-            error!("attempted to transmit to uninitialised token");
+            error!("Attempted to transmit to uninitialised token");
             return Err(WebauthnCError::Internal);
         }
         if !self.supports_wink {
-            error!("token does not support wink function");
+            error!("Token does not support the wink function");
             return Err(WebauthnCError::NotSupported);
         }
 

@@ -787,7 +787,7 @@ async fn main() {
             let mut stream = transport.watch().await.unwrap();
             while let Some(event) = stream.next().await {
                 if let TokenEvent::Added(mut token) = event {
-                    token.wink().await.expect("failed to wink USB device");
+                    token.wink().await.expect("Failed to wink USB device");
                     return;
                 }
             }
