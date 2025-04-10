@@ -209,6 +209,11 @@ impl USBToken {
         Response::try_from(&f)
     }
 
+    /// Return whether the token supports the wink function.
+    pub fn supports_wink(&self) -> bool {
+        self.supports_wink
+    }
+
     /// Wink the device.
     ///
     /// This performs a vendor-defined action that provides some visual or audible
