@@ -269,7 +269,7 @@ pub enum AuthenticatorAttachment {
 ///
 /// <https://www.w3.org/TR/webauthn-3/#enumdef-publickeycredentialhints>
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 #[allow(unused)]
 pub enum PublicKeyCredentialHints {
     /// The credential is a removable security key
