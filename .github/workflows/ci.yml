@@ -196,8 +196,6 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
       - uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.4.2
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
@@ -207,7 +205,8 @@ jobs:
       # This tests that all the stubs work properly for optional dependencies,
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
-      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
+      - name: generate docs
+        run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v4
@@ -254,8 +253,6 @@ jobs:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.4.2
       - if: runner.os == 'windows'
         uses: johnwason/vcpkg-action@v4
         with:
