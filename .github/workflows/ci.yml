@@ -41,9 +41,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: v0.4.2
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - if: runner.os != 'windows'
         run: |
@@ -122,9 +120,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: v0.4.2
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - if: runner.os != 'windows'
         run: |
@@ -199,7 +195,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
-      - uses: mozilla-actions/sccache-action@v0.0.3
+      - uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.4.2
       - run: |
@@ -257,7 +253,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.3
+      - uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.4.2
       - if: runner.os == 'windows'
