@@ -38,7 +38,6 @@ rand_chacha.workspace = true
 url = { workspace = true, features = ["serde"] }
 x509-parser = "0.16"
 der-parser = "9.0"
-compact_jwt.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
