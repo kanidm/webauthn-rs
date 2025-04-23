@@ -73,7 +73,9 @@ async-std = { version = "1.6", features = ["attributes"] }
 anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
-compact_jwt = "0.4.2"
+
+compact_jwt = { path = "../compact-jwt" }
+# compact_jwt = "0.4.2"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
