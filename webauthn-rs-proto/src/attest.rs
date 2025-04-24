@@ -165,7 +165,7 @@ pub struct RegisterPublicKeyCredential {
     #[serde(rename = "type")]
     pub type_: String,
     /// Unsigned Client processed extensions.
-    #[serde(default)]
+    #[serde(default, alias = "clientExtensionResults", alias = "extensions")]
     pub extensions: RegistrationExtensionsClientOutputs,
 }
 

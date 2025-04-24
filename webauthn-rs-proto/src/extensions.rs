@@ -295,6 +295,7 @@ pub struct CredProps {
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
 /// The default option here for Options are None, so it can be derived
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct RegistrationExtensionsClientOutputs {
     /// Indicates whether the client used the provided appid extension
     #[serde(default, skip_serializing_if = "Option::is_none")]
