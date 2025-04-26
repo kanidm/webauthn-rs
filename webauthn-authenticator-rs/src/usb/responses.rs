@@ -90,6 +90,7 @@ impl TryFrom<&U2FHIDFrame> for Response {
             U2FHID_INIT => InitResponse::try_from(b).map(Response::Init)?,
             U2FHID_PING => Response::Ping(b.to_vec()),
             U2FHID_MSG => ISO7816ResponseAPDU::try_from(b).map(Response::Msg)?,
+            U2FHID_WINK => Response::Wink,
             U2FHID_CBOR => CBORResponse::try_from(b).map(Response::Cbor)?,
             U2FHID_KEEPALIVE => Response::KeepAlive(KeepAliveStatus::from(b)),
             U2FHID_ERROR => Response::Error(U2FError::from(b)),
