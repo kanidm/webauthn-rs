@@ -3,22 +3,24 @@
 
 use crate::attestation::verify_attestation_ca_chain;
 use crate::error::*;
-pub use crate::internals::AttestationObject;
 use std::fmt;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
-
-pub use webauthn_attestation_ca::*;
-
 use base64urlsafedata::HumanBinaryData;
-
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-
-use openssl::{bn, ec, nid, pkey, x509};
+use openssl::nid;
 use uuid::Uuid;
+use crypto_glue::{
+    ecdsa_p256::{EcdsaP256PublicKey, EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint},
+    traits::{FromEncodedPoint, EncodeDer },
+    x509,
+};
+
+pub use webauthn_attestation_ca::*;
+pub use crate::internals::AttestationObject;
 
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
@@ -150,6 +152,32 @@ pub struct COSEEC2Key {
     pub y: HumanBinaryData,
 }
 
+impl TryFrom<&COSEEC2Key> for EcdsaP256PublicKey {
+    type Error = WebauthnError;
+
+    fn try_from(k: &COSEEC2Key) -> Result<Self, Self::Error> {
+        let mut field_x = EcdsaP256FieldBytes::default();
+        if k.x.len() != field_x.len() {
+            return Err(WebauthnError::COSEKeyECDSAXYInvalid);
+        }
+
+        let mut field_y = EcdsaP256FieldBytes::default();
+        if k.y.len() != field_y.len() {
+            return Err(WebauthnError::COSEKeyECDSAXYInvalid);
+        }
+
+        field_x.copy_from_slice(&k.x);
+        field_y.copy_from_slice(&k.y);
+
+        let ep = EcdsaP256PublicEncodedPoint::from_affine_coordinates(&field_x, &field_y, false);
+
+        EcdsaP256PublicKey::from_encoded_point(&ep)
+            .into_option()
+            .ok_or(WebauthnError::COSEKeyECDSAXYInvalid)
+    }
+}
+
+/*
 impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
     type Error = openssl::error::ErrorStack;
 
@@ -164,6 +192,7 @@ impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
         ec::EcKey::from_public_key(&group, &point)
     }
 }
+*/
 
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
@@ -486,16 +515,16 @@ pub enum AttestationMetadata {
 pub enum ParsedAttestationData {
     /// The credential is authenticated by a signing X509 Certificate
     /// from a vendor or provider.
-    Basic(Vec<x509::X509>),
+    Basic(Vec<x509::Certificate>),
     /// The credential is authenticated using surrogate basic attestation
     /// it uses the credential private key to create the attestation signature
     Self_,
     /// The credential is authenticated using a CA, and may provide a
     /// ca chain to validate to its root.
-    AttCa(Vec<x509::X509>),
+    AttCa(Vec<x509::Certificate>),
     /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
     /// validate to its root.
-    AnonCa(Vec<x509::X509>),
+    AnonCa(Vec<x509::Certificate>),
     /// Unimplemented
     ECDAA,
     /// No Attestation type was provided with this Credential. If in doubt
