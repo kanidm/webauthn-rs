@@ -6,19 +6,9 @@
 #![allow(non_camel_case_types)]
 
 use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
-
 use super::error::*;
 use crate::proto::*;
-
 use x509_parser::prelude::{X509Error, X509Name};
-
-// Why OpenSSL over another rust crate?
-// - The openssl crate allows us to reconstruct a public key from the
-//   x/y group coords, where most others want a pkcs formatted structure. As
-//   a result, it's easiest to use openssl as it gives us exactly what we need
-//   for these operations, and despite it's many challenges as a library, it
-//   has resources and investment into it's maintenance, so we can a least
-//   assert a higher level of confidence in it that <backyard crypto here>.
 
 fn pkey_verify_signature(
     pkey: &pkey::PKeyRef<pkey::Public>,

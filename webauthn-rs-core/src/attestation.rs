@@ -10,13 +10,17 @@ use crate::internals::*;
 use crate::proto::*;
 use openssl::hash::MessageDigest;
 use openssl::stack;
-use openssl::x509;
+use openssl::x509::X509;
 use openssl::x509::store;
 use openssl::x509::verify;
 use uuid::Uuid;
 use x509_parser::oid_registry::Oid;
 use x509_parser::prelude::GeneralName;
-use x509_parser::x509::X509Version;
+use x509_parser::X509Version;
+use crypto_glue::{
+    x509::{self},
+    traits::{DecodeDer},
+};
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
 /// that the value of the extension is equal to some other value
@@ -305,7 +309,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
 
 /// Validate an x509 extension is present in an x509 certificate
 pub fn validate_extension<T>(
-    x509: &x509::X509,
+    x509: &X509,
     data: &<T as AttestationX509Extension>::Output,
 ) -> Result<AttestationMetadata, WebauthnError>
 where
@@ -388,7 +392,7 @@ pub(crate) fn verify_packed_attestation(
                 .map(|values| {
                     cbor_try_bytes!(values)
                         .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                        .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                        .and_then(|b| x509::Certificate::from_der(b).map_err(WebauthnError::OpenSSLError))
                 })
                 .collect();
 
@@ -490,7 +494,7 @@ pub(crate) fn verify_packed_attestation(
 /// [§ 8.2.1 Packed Attestation Statement Certificate Requirements][0]
 ///
 /// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
-pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+pub fn assert_packed_attest_req(pubk: &X509) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
     let der_bytes = pubk.to_der()?;
     let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
@@ -618,7 +622,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .iter()
         .map(|att_cert_bytes| {
             cbor_try_bytes!(att_cert_bytes).and_then(|att_cert| {
-                x509::X509::from_der(att_cert.as_slice()).map_err(WebauthnError::OpenSSLError)
+                X509::from_der(att_cert.as_slice()).map_err(WebauthnError::OpenSSLError)
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -765,7 +769,7 @@ pub(crate) fn verify_tpm_attestation(
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                .and_then(|b| X509::from_der(b).map_err(WebauthnError::OpenSSLError))
         })
         .collect();
 
@@ -937,7 +941,7 @@ pub(crate) fn verify_tpm_attestation(
     ))
 }
 
-pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnError> {
+pub(crate) fn assert_tpm_attest_req(x509: &X509) -> Result<(), WebauthnError> {
     let der_bytes = x509.to_der()?;
     let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
         .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
@@ -1050,7 +1054,7 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                .and_then(|b| X509::from_der(b).map_err(WebauthnError::OpenSSLError))
         })
         .collect();
 
@@ -1137,7 +1141,7 @@ pub(crate) fn verify_android_key_attestation(
             .map(|values| {
                 cbor_try_bytes!(values)
                     .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                    .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                    .and_then(|b| X509::from_der(b).map_err(WebauthnError::OpenSSLError))
             })
             .collect();
 
@@ -1257,7 +1261,7 @@ pub fn verify_attestation_ca_chain<'a>(
 
     let ca_store = ca_store.build();
 
-    let mut ca_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
+    let mut ca_ctx = X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
 
     // Providing the cert and chain, validate we have a ref to our store.
     // Note this is a result<result ... because the inner .init must return an errorstack
@@ -1268,7 +1272,7 @@ pub fn verify_attestation_ca_chain<'a>(
                 // The value as passed in is a boolean that we ignore in favour of the richer error type.
                 let res = ca_ctx_ref.error();
                 debug!("{:?}", res);
-                if res == x509::X509VerifyResult::OK {
+                if res == X509VerifyResult::OK {
                     ca_ctx_ref
                         .chain()
                         .and_then(|chain| {
