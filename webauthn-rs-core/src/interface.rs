@@ -3,24 +3,25 @@
 
 use crate::attestation::verify_attestation_ca_chain;
 use crate::error::*;
-use std::fmt;
-use webauthn_rs_proto::cose::*;
-use webauthn_rs_proto::extensions::*;
-use webauthn_rs_proto::options::*;
 use base64urlsafedata::HumanBinaryData;
+use crypto_glue::{
+    ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint, EcdsaP256PublicKey},
+    traits::{DecodeDer, EncodeDer, FromEncodedPoint},
+    x509,
+};
+use openssl::nid;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use openssl::nid;
+use std::fmt;
+use std::time::SystemTime;
 use uuid::Uuid;
-use crypto_glue::{
-    ecdsa_p256::{EcdsaP256PublicKey, EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint},
-    traits::{FromEncodedPoint, EncodeDer },
-    x509,
-};
+use webauthn_rs_proto::cose::*;
+use webauthn_rs_proto::extensions::*;
+use webauthn_rs_proto::options::*;
 
-pub use webauthn_attestation_ca::*;
 pub use crate::internals::AttestationObject;
+pub use webauthn_attestation_ca::*;
 
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
@@ -336,12 +337,8 @@ impl Credential {
     ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
         // Formerly we disabled this due to apple, but they no longer provide
         // meaningful attestation so we can re-enable it.
-        let danger_disable_certificate_time_checks = false;
-        verify_attestation_ca_chain(
-            &self.attestation.data,
-            ca_list,
-            danger_disable_certificate_time_checks,
-        )
+        let current_time = SystemTime::now();
+        verify_attestation_ca_chain(&self.attestation.data, ca_list, current_time)
     }
 }
 
@@ -576,7 +573,8 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 chain
                     .into_iter()
                     .map(|c| {
-                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                        x509::Certificate::from_der(c.as_slice())
+                            .map_err(|_| WebauthnError::X509DerInvalid)
                     })
                     .collect::<WebauthnResult<_>>()?,
             ),
@@ -586,7 +584,8 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 chain
                     .into_iter()
                     .map(|c| {
-                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                        x509::Certificate::from_der(c.as_slice())
+                            .map_err(|_| WebauthnError::X509DerInvalid)
                     })
                     .collect::<WebauthnResult<_>>()?,
             ),
@@ -595,7 +594,8 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 chain
                     .into_iter()
                     .map(|c| {
-                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                        x509::Certificate::from_der(c.as_slice())
+                            .map_err(|_| WebauthnError::X509DerInvalid)
                     })
                     .collect::<WebauthnResult<_>>()?,
             ),

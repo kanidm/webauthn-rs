@@ -5,10 +5,13 @@
 
 #![allow(non_camel_case_types)]
 
-use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 use super::error::*;
 use crate::proto::*;
-use x509_parser::prelude::{X509Error, X509Name};
+use crypto_glue::{
+    traits::EncodeDer,
+    x509::{Certificate, GeneralName, ObjectIdentifier, OtherName, SubjectAltName},
+};
+use openssl::{bn, ec, hash, nid, pkey, rsa, sha, sign, x509};
 
 fn pkey_verify_signature(
     pkey: &pkey::PKeyRef<pkey::Public>,
@@ -49,45 +52,15 @@ fn pkey_verify_signature(
 /// Validate an x509 signature is valid for the supplied data
 pub fn verify_signature(
     alg: COSEAlgorithm,
-    pubk: &x509::X509,
+    pubk: &Certificate,
     signature: &[u8],
     verification_data: &[u8],
 ) -> Result<bool, WebauthnError> {
+    let pubk = x509::X509::from_der(&pubk.to_der().unwrap()).unwrap();
+
     let pkey = pubk.public_key().map_err(WebauthnError::OpenSSLError)?;
 
     pkey_verify_signature(&pkey, alg, signature, verification_data)
-}
-
-pub(crate) fn check_extension<T, F>(
-    extension: &Result<Option<T>, X509Error>,
-    must_be_present: bool,
-    f: F,
-) -> WebauthnResult<()>
-where
-    F: Fn(&T) -> bool,
-{
-    match extension {
-        Ok(Some(extension)) => {
-            if f(extension) {
-                Ok(())
-            } else {
-                trace!("Custome extension check failed");
-                Err(WebauthnError::AttestationCertificateRequirementsNotMet)
-            }
-        }
-        Ok(None) => {
-            if must_be_present {
-                trace!("Extension not present");
-                Err(WebauthnError::AttestationCertificateRequirementsNotMet)
-            } else {
-                Ok(())
-            }
-        }
-        Err(_) => {
-            debug!("extension present multiple times or invalid");
-            Err(WebauthnError::AttestationCertificateRequirementsNotMet)
-        }
-    }
 }
 
 pub(crate) struct TpmSanData<'a> {
@@ -140,27 +113,41 @@ impl<'a> TpmSanDataBuilder<'a> {
 // pub(crate) const TCG_AT_TPM_MODEL: Oid = der_parser::oid!(2.23.133 .2 .2);
 // pub(crate) const TCG_AT_TPM_VERSION: Oid = der_parser::oid!(2.23.133 .2 .3);
 
-pub(crate) const TCG_AT_TPM_MANUFACTURER_RAW: &[u8] = &der_parser::oid!(raw 2.23.133 .2 .1);
-pub(crate) const TCG_AT_TPM_MODEL_RAW: &[u8] = &der_parser::oid!(raw 2.23.133 .2 .2);
-pub(crate) const TCG_AT_TPM_VERSION_RAW: &[u8] = &der_parser::oid!(raw 2.23.133 .2 .3);
+pub(crate) const TCG_AT_TPM_MANUFACTURER_RAW: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("2.23.133.2.1");
+pub(crate) const TCG_AT_TPM_MODEL_RAW: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("2.23.133.2.2");
+pub(crate) const TCG_AT_TPM_VERSION_RAW: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("2.23.133.2.3");
 
-impl<'a> TryFrom<&'a X509Name<'a>> for TpmSanData<'a> {
+impl<'a> TryFrom<&'a SubjectAltName> for TpmSanData<'a> {
     type Error = WebauthnError;
 
-    fn try_from(x509_name: &'a X509Name<'a>) -> Result<Self, Self::Error> {
+    fn try_from(x509_name: &'a SubjectAltName) -> Result<Self, Self::Error> {
         x509_name
-            .iter_attributes()
-            .try_fold(TpmSanDataBuilder::new(), |builder, attribute| {
-                Ok(match attribute.attr_type().as_bytes() {
-                    TCG_AT_TPM_MANUFACTURER_RAW => {
-                        builder.manufacturer(attribute.attr_value().as_str()?)
+            .0
+            .iter()
+            .try_fold(TpmSanDataBuilder::new(), |builder, general_name| {
+                let next = match general_name {
+                    GeneralName::OtherName(OtherName { type_id, value }) => {
+                        if *type_id == TCG_AT_TPM_MANUFACTURER_RAW {
+                            let attr_value = str::from_utf8(value.value())?;
+                            builder.manufacturer(attr_value)
+                        } else if *type_id == TCG_AT_TPM_MODEL_RAW {
+                            let attr_value = str::from_utf8(value.value())?;
+                            builder.model(attr_value)
+                        } else if *type_id == TCG_AT_TPM_VERSION_RAW {
+                            let attr_value = str::from_utf8(value.value())?;
+                            builder.version(attr_value)
+                        } else {
+                            builder
+                        }
                     }
-                    TCG_AT_TPM_MODEL_RAW => builder.model(attribute.attr_value().as_str()?),
-                    TCG_AT_TPM_VERSION_RAW => builder.version(attribute.attr_value().as_str()?),
                     _ => builder,
-                })
+                };
+                Ok(next)
             })
-            .map_err(|_: der_parser::error::Error| WebauthnError::ParseNOMFailure)
+            .map_err(|_: std::str::Utf8Error| WebauthnError::ParseNOMFailure)
             .and_then(TpmSanDataBuilder::build)
     }
 }
@@ -408,6 +395,15 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             debug!(?key_type, ?type_, "WebauthnError::COSEKeyInvalidType");
             Err(WebauthnError::COSEKeyInvalidType)
         }
+    }
+}
+
+impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
+    type Error = WebauthnError;
+    fn try_from((alg, pubk): (COSEAlgorithm, &Certificate)) -> Result<COSEKey, Self::Error> {
+        let pubk = x509::X509::from_der(&pubk.to_der().unwrap()).unwrap();
+
+        COSEKey::try_from((alg, &pubk))
     }
 }
 
