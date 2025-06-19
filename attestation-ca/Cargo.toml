@@ -17,8 +17,10 @@ repository = { workspace = true }
 base64urlsafedata.workspace = true
 serde.workspace = true
 tracing.workspace = true
-openssl.workspace = true
 uuid = { workspace = true, features = ["serde"] }
+crypto-glue.workspace = true
+
+openssl.workspace = true
 
 [build-dependencies]
 openssl.workspace = true

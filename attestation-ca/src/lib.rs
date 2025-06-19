@@ -1,8 +1,17 @@
 use base64urlsafedata::Base64UrlSafeData;
 use openssl::error::ErrorStack as OpenSSLErrorStack;
-use openssl::{hash, x509};
+use openssl::{hash, x509 as ox509};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+use crypto_glue::{
+    x509::self,
+    traits::{
+        DecodePem,
+        EncodeDer,
+        DecodeDer,
+    },
+};
 
 use uuid::Uuid;
 
@@ -45,7 +54,8 @@ pub struct SerialisableAttestationCa {
 )]
 pub struct AttestationCa {
     /// The x509 root CA of the attestation chain that a security key will be attested to.
-    ca: x509::X509,
+    ca_openssl: ox509::X509,
+    ca: x509::Certificate,
     /// If not empty, the set of acceptable AAGUIDS (Device Ids) that are allowed to be
     /// attested as trusted by this CA. AAGUIDS that are not in this set, but signed by
     /// this CA will NOT be trusted.
@@ -57,7 +67,9 @@ pub struct AttestationCa {
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {
-            ca: Base64UrlSafeData::from(self.ca.to_der().expect("Invalid DER")),
+            ca: Base64UrlSafeData::from(
+                self.ca.to_der().expect("Invalid DER")
+            ),
             aaguids: self.aaguids,
             blanket_allow: self.blanket_allow,
         }
@@ -69,7 +81,8 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
 
     fn try_from(data: SerialisableAttestationCa) -> Result<Self, Self::Error> {
         Ok(AttestationCa {
-            ca: x509::X509::from_der(data.ca.as_slice())?,
+            ca_openssl: ox509::X509::from_der(data.ca.as_slice())?,
+            ca: x509::Certificate::from_der(data.ca.as_slice()).unwrap(),
             aaguids: data.aaguids,
             blanket_allow: data.blanket_allow,
         })
@@ -77,8 +90,12 @@ impl TryFrom<SerialisableAttestationCa> for AttestationCa {
 }
 
 impl AttestationCa {
-    pub fn ca(&self) -> &x509::X509 {
+    pub fn ca(&self) -> &x509::Certificate {
         &self.ca
+    }
+
+    pub fn ca_openssl(&self) -> &ox509::X509 {
+        &self.ca_openssl
     }
 
     pub fn aaguids(&self) -> &BTreeMap<Uuid, DeviceDescription> {
@@ -91,7 +108,7 @@ impl AttestationCa {
 
     /// Retrieve the Key Identifier for this Attestation Ca
     pub fn get_kid(&self) -> Result<Vec<u8>, OpenSSLErrorStack> {
-        self.ca
+        self.ca_openssl
             .digest(hash::MessageDigest::sha256())
             .map(|bytes| bytes.to_vec())
     }
@@ -114,7 +131,8 @@ impl AttestationCa {
 
     fn new_from_pem(data: &[u8]) -> Result<Self, OpenSSLErrorStack> {
         Ok(AttestationCa {
-            ca: x509::X509::from_pem(data)?,
+            ca_openssl: ox509::X509::from_pem(data)?,
+            ca: x509::Certificate::from_pem(data).unwrap(),
             aaguids: BTreeMap::default(),
             blanket_allow: true,
         })
@@ -249,12 +267,15 @@ impl AttestationCaListBuilder {
 
     pub fn insert_device_x509(
         &mut self,
-        ca: x509::X509,
+        ca_openssl: ox509::X509,
         aaguid: Uuid,
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
     ) -> Result<(), OpenSSLErrorStack> {
-        let kid = ca
+        let ca = x509::Certificate::from_der(&ca_openssl.to_der().unwrap())
+            .unwrap();
+
+        let kid = ca_openssl
             .digest(hash::MessageDigest::sha256())
             .map(|bytes| bytes.to_vec())?;
 
@@ -262,6 +283,7 @@ impl AttestationCaListBuilder {
             att_ca
         } else {
             AttestationCa {
+                ca_openssl,
                 ca,
                 aaguids: BTreeMap::default(),
                 blanket_allow: false,
@@ -282,7 +304,7 @@ impl AttestationCaListBuilder {
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
     ) -> Result<(), OpenSSLErrorStack> {
-        let ca = x509::X509::from_der(ca_der)?;
+        let ca = ox509::X509::from_der(ca_der)?;
         self.insert_device_x509(ca, aaguid, desc_english, desc_localised)
     }
 
@@ -293,7 +315,7 @@ impl AttestationCaListBuilder {
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
     ) -> Result<(), OpenSSLErrorStack> {
-        let ca = x509::X509::from_pem(ca_pem)?;
+        let ca = ox509::X509::from_pem(ca_pem)?;
         self.insert_device_x509(ca, aaguid, desc_english, desc_localised)
     }
 

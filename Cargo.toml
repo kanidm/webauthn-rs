@@ -74,10 +74,8 @@ anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
 
-crypto-glue = { path = "../crypto-glue" }
-# crypto-glue = "^0.1.5"
-compact_jwt = { path = "../compact-jwt" }
-# compact_jwt = "0.4.2"
+crypto-glue = "^0.1.8"
+compact_jwt = "0.5.1-dev"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
