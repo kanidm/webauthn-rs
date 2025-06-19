@@ -526,24 +526,26 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             exclude_list: vec![],
             options: None,
             pin_uv_auth_param: Some(vec![]),
-            pin_uv_auth_proto: None,
+            // https://github.com/kanidm/webauthn-rs/issues/485
+            // According to CTAP 2.0 and 2.1 spec setting `pin_uv_auth_proto`
+            // should not be needed. But when unset, Titan v2 and Token2 respond
+            // with MissingParameter, and Titan v2 doesn't even wait for touch.
+            // Windows 10 and Safari 18.4 both always set this.
+            pin_uv_auth_proto: Some(1),
             enterprise_attest: None,
         };
 
         let ret = self.token.transmit(mc, self.ui_callback).await;
 
         if let Err(WebauthnCError::Ctap(e)) = ret {
+            // https://github.com/kanidm/webauthn-rs/issues/485#issuecomment-2798457327
+            // CTAP 2.0 spec says to expect PinNotSet or PinInvalid. Many
+            // authenticators send PinAuthInvalid.
             if e == CtapError::Ctap2PinAuthInvalid
                 || e == CtapError::Ctap2PinNotSet
                 || e == CtapError::Ctap2PinInvalid
             {
                 // User pressed the button
-                return Ok(());
-            }
-
-            if e == CtapError::Ctap2MissingParameter {
-                // Token2 seems to fall through to step 2 of the algorithm, but
-                // it still means the button was pressed.
                 return Ok(());
             }
 
