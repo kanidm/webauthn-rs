@@ -24,7 +24,9 @@ use fido_hid_rs::{
 };
 
 use crate::error::WebauthnCError;
-use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT};
+use crate::transport::types::{
+    KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT, U2FHID_WINK,
+};
 use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
@@ -205,6 +207,42 @@ impl USBToken {
             f += n;
         }
         Response::try_from(&f)
+    }
+
+    /// Return whether the token supports the wink function.
+    pub fn supports_wink(&self) -> bool {
+        self.supports_wink
+    }
+
+    /// Wink the device.
+    ///
+    /// This performs a vendor-defined action that provides some visual or audible
+    /// identification of the device.
+    pub async fn wink(&mut self) -> Result<(), WebauthnCError> {
+        if !self.initialised {
+            error!("Attempted to transmit to uninitialised token");
+            return Err(WebauthnCError::Internal);
+        }
+        if !self.supports_wink {
+            error!("Token does not support the wink function");
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        self.send(&U2FHIDFrame {
+            cid: self.cid,
+            cmd: U2FHID_WINK,
+            len: 0,
+            data: vec![],
+        })
+        .await?;
+
+        match self.recv().await? {
+            Response::Wink => Ok(()),
+            e => {
+                error!("Unhandled response type: {:?}", e);
+                Err(WebauthnCError::Internal)
+            }
+        }
     }
 }
 

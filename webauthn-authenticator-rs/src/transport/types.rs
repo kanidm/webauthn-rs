@@ -11,6 +11,8 @@ pub const U2FHID_MSG: u8 = TYPE_INIT | 0x03;
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_INIT: u8 = TYPE_INIT | 0x06;
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
+pub const U2FHID_WINK: u8 = TYPE_INIT | 0x08;
+#[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_CBOR: u8 = TYPE_INIT | 0x10;
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub const U2FHID_CANCEL: u8 = TYPE_INIT | 0x11;
@@ -28,6 +30,8 @@ pub enum Response {
     Ping(Vec<u8>),
     #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
     Msg(ISO7816ResponseAPDU),
+    #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
+    Wink,
     Cbor(CBORResponse),
     Error(U2FError),
     KeepAlive(KeepAliveStatus),
