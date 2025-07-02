@@ -85,6 +85,7 @@ nom = "7.1"
 num-derive = { version = "0.4.2" }
 peg = "0.8.1"
 openssl = "^0.10.56"
+openssl-sys = "^0.9.109"
 
 rand = "0.8"
 rand_chacha = "0.3.1"

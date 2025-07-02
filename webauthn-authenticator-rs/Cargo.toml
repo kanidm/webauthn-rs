@@ -20,7 +20,7 @@ ui-cli = ["dep:rpassword"]
 # Add QR code support for `UiCallback`, useful with `cable` feature
 qrcode = ["dep:qrcode", "ui-cli"]
 
-crypto = ["dep:openssl", "dep:webauthn-rs-core"]
+crypto = ["dep:openssl", "dep:openssl-sys", "dep:webauthn-rs-core"]
 
 # Authenticator transports
 mozilla = ["dep:authenticator", "dep:rpassword"]
@@ -83,6 +83,7 @@ nom.workspace = true
 serde_cbor_2.workspace = true
 serde_bytes = { version = "0.11", optional = true }
 openssl = { workspace = true, optional = true }
+openssl-sys = { workspace = true, optional = true }
 rpassword = { version = "5.0", optional = true }
 fido-hid-rs = { workspace = true, optional = true }
 
@@ -136,9 +137,6 @@ bluetooth-hci = { git = "https://github.com/micolous/bluetooth-hci.git", rev = "
 # https://github.com/piderman314/bardecoder/blame/master/Cargo.toml
 bardecoder = "=0.4.0"
 image = ">= 0.23.14, < 0.24"
-
-[build-dependencies]
-openssl = { workspace = true, optional = true }
 
 [[example]]
 name = "authenticate"
