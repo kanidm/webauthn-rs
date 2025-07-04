@@ -4,7 +4,7 @@ authors = [
     "William Brown <william@blackhats.net.au>",
     "Michael Farrell <micolous+git@gmail.com>",
 ]
-rust-version = "1.81"
+rust-version = "1.85"
 edition = "2021"
 repository = "https://github.com/kanidm/webauthn-rs"
 homepage = "https://github.com/kanidm/webauthn-rs"
