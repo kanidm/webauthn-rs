@@ -10,7 +10,7 @@ use crypto_glue::{
     traits::DecodeDer,
     x509::{
         self, oiddb::rfc4519, BasicConstraints, ExtendedKeyUsage, ObjectIdentifier, SubjectAltName,
-        X509Display
+        X509Display,
     },
 };
 use std::time::SystemTime;

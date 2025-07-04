@@ -5,12 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crypto_glue::{
-    x509::self,
-    traits::{
-        DecodePem,
-        EncodeDer,
-        DecodeDer,
-    },
+    traits::{DecodeDer, DecodePem, EncodeDer},
+    x509,
 };
 
 use uuid::Uuid;
@@ -67,9 +63,7 @@ pub struct AttestationCa {
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {
-            ca: Base64UrlSafeData::from(
-                self.ca.to_der().expect("Invalid DER")
-            ),
+            ca: Base64UrlSafeData::from(self.ca.to_der().expect("Invalid DER")),
             aaguids: self.aaguids,
             blanket_allow: self.blanket_allow,
         }
@@ -272,8 +266,7 @@ impl AttestationCaListBuilder {
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
     ) -> Result<(), OpenSSLErrorStack> {
-        let ca = x509::Certificate::from_der(&ca_openssl.to_der().unwrap())
-            .unwrap();
+        let ca = x509::Certificate::from_der(&ca_openssl.to_der().unwrap()).unwrap();
 
         let kid = ca_openssl
             .digest(hash::MessageDigest::sha256())
