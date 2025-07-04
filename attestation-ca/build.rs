@@ -5,8 +5,9 @@ const OPENSSL_DOC: &str = "https://github.com/kanidm/webauthn-rs/blob/master/Ope
 fn main() {
     println!();
     if let Ok(v) = env::var("DEP_OPENSSL_VERSION_NUMBER") {
-            let version = u64::from_str_radix(&v, 16).expect("Failed to parse OpenSSL version in build.rs");
-
+        let version =
+            u64::from_str_radix(&v, 16).expect("Failed to parse OpenSSL version in build.rs");
+        #[allow(clippy::unusual_byte_groupings)]
         if version >= 0x3_00_00_00_0 {
             return;
         } else {
