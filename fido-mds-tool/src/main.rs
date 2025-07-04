@@ -133,7 +133,7 @@ fn main() {
     let filter_layer = match filter_result {
         Ok(fr) => fr,
         Err(e) => {
-            eprintln!("Failed to setup tracing filter layer {:?}", e);
+            eprintln!("Failed to setup tracing filter layer {e:?}");
             return;
         }
     };
@@ -294,9 +294,9 @@ fn main() {
 fn display_cert_roots(fds: &[Rc<FIDO2>]) {
     match FidoMds::fido2_to_attestation_ca_list(fds) {
         Some(att_ca_list) => match serde_json::to_string(&att_ca_list) {
-            Ok(list) => println!("{}", list),
+            Ok(list) => println!("{list}"),
             Err(e) => {
-                eprintln!("Failed to serialise CA list - {:?}", e);
+                eprintln!("Failed to serialise CA list - {e:?}");
             }
         },
         None => {
@@ -353,33 +353,33 @@ fn display_query_results(fds: &[Rc<FIDO2>], extra_details: bool) {
                 println!("  authenticator_get_info:");
                 println!("    versions:");
                 for ver in &authenticator_info.versions {
-                    println!("      - {}", ver);
+                    println!("      - {ver}");
                 }
                 println!("    extensions:");
                 for extn in &authenticator_info.extensions {
-                    println!("      - {}", extn);
+                    println!("      - {extn}");
                 }
 
                 // options?
 
                 println!("    transports:");
                 for tran in &authenticator_info.transports {
-                    println!("      - {}", tran);
+                    println!("      - {tran}");
                 }
 
                 if let Some(mpl) = authenticator_info.min_pin_length {
-                    println!("    minimum pin length: {}", mpl);
+                    println!("    minimum pin length: {mpl}");
                 }
 
                 if !authenticator_info.certifications.is_empty() {
                     println!("    certifications:");
                     for (cert, cert_ver) in &authenticator_info.certifications {
-                        println!("      - {} - {}", cert, cert_ver);
+                        println!("      - {cert} - {cert_ver}");
                     }
                 }
 
                 if let Some(mrk) = authenticator_info.remaining_discoverable_credentials {
-                    println!("    resident key slots: {}", mrk);
+                    println!("    resident key slots: {mrk}");
                 }
             } else {
                 println!("  authenticator_get_info: not present")

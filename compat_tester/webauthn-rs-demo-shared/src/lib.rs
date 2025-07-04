@@ -193,7 +193,7 @@ impl CTestAttestState {
     pub fn save_ccr(&mut self, n_ccr: &CreationChallengeResponse) {
         match self {
             CTestAttestState::Failed { ccr, .. } => {
-                std::mem::swap(ccr, &mut Some(n_ccr.clone()));
+                *ccr = Some(n_ccr.clone());
             }
             _ => panic!("Invalid State"),
         }
@@ -202,7 +202,7 @@ impl CTestAttestState {
     pub fn save_rpkc(&mut self, n_rpkc: &RegisterPublicKeyCredential) {
         match self {
             CTestAttestState::Failed { rpkc, .. } => {
-                std::mem::swap(rpkc, &mut Some(n_rpkc.clone()));
+                *rpkc = Some(n_rpkc.clone());
             }
             _ => panic!("Invalid State"),
         }
@@ -291,7 +291,7 @@ impl CTestAuthState {
     pub fn save_rcr(&mut self, n_rcr: &RequestChallengeResponse) {
         match self {
             CTestAuthState::Failed { rcr, .. } => {
-                std::mem::swap(rcr, &mut Some(n_rcr.clone()));
+                *rcr = Some(n_rcr.clone());
             }
             _ => panic!("Invalid State"),
         }
@@ -300,7 +300,7 @@ impl CTestAuthState {
     pub fn save_pkc(&mut self, n_pkc: &PublicKeyCredential) {
         match self {
             CTestAuthState::Failed { pkc, .. } => {
-                std::mem::swap(pkc, &mut Some(n_pkc.clone()));
+                *pkc = Some(n_pkc.clone());
             }
             _ => panic!("Invalid State"),
         }

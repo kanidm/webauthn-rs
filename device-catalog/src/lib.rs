@@ -130,7 +130,7 @@ mod test {
 
         println!("{data}");
         for i in data.iter() {
-            println!("{0:?}", i);
+            println!("{i:?}");
         }
     }
 }
