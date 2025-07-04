@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 authors = [
     "William Brown <william@blackhats.net.au>",
     "Michael Farrell <micolous+git@gmail.com>",
@@ -56,14 +56,14 @@ exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [workspace.dependencies]
 # These are in release/dependency order.
-base64urlsafedata = { path = "./base64urlsafedata", version = "=0.5.1" }
-fido-hid-rs = { path = "./fido-hid-rs", version = "=0.5.1" }
-webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.5.1" }
-webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.5.1" }
-fido-mds = { path = "./fido-mds", version = "=0.5.1" }
-webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.5.1" }
-webauthn-rs = { path = "./webauthn-rs", version = "=0.5.1" }
-webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.5.1" }
+base64urlsafedata = { path = "./base64urlsafedata", version = "=0.5.2" }
+fido-hid-rs = { path = "./fido-hid-rs", version = "=0.5.2" }
+webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.5.2" }
+webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.5.2" }
+fido-mds = { path = "./fido-mds", version = "=0.5.2" }
+webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.5.2" }
+webauthn-rs = { path = "./webauthn-rs", version = "=0.5.2" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.5.2" }
 
 # Currently un-released
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
