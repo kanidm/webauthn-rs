@@ -151,7 +151,7 @@ pub struct PublicKeyCredential {
     /// The authenticator response.
     pub response: AuthenticatorAssertionResponseRaw,
     /// Unsigned Client processed extensions.
-    #[serde(default)]
+    #[serde(default, alias = "clientExtensionResults")]
     pub extensions: AuthenticationExtensionsClientOutputs,
     /// The authenticator type.
     #[serde(rename = "type")]
