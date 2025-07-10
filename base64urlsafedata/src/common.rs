@@ -115,7 +115,7 @@ macro_rules! common_impls {
             }
         }
 
-        paste! {
+        pastey::paste! {
             #[doc(hidden)]
             struct [<$type Visitor>];
 

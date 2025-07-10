@@ -516,6 +516,9 @@ pub enum AuthenticatorTransport {
     /// internal
     #[serde(rename = "internal")]
     Internal,
+    /// wireless
+    #[serde(rename = "wireless")]
+    Wireless,
 }
 
 impl fmt::Display for AuthenticatorTransport {
@@ -526,6 +529,7 @@ impl fmt::Display for AuthenticatorTransport {
             AuthenticatorTransport::Lightning => write!(f, "lightning"),
             AuthenticatorTransport::Ble => write!(f, "ble"),
             AuthenticatorTransport::Internal => write!(f, "internal"),
+            AuthenticatorTransport::Wireless => write!(f, "wireless"),
         }
     }
 }
@@ -540,6 +544,7 @@ impl FromStr for AuthenticatorTransport {
             "lightning" => Ok(AuthenticatorTransport::Lightning),
             "ble" => Ok(AuthenticatorTransport::Ble),
             "internal" => Ok(AuthenticatorTransport::Internal),
+            "wireless" => Ok(AuthenticatorTransport::Wireless),
             _ => Err(()),
         }
     }

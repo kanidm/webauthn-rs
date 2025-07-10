@@ -24,7 +24,9 @@ use fido_hid_rs::{
 };
 
 use crate::error::WebauthnCError;
-use crate::transport::types::{KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT};
+use crate::transport::types::{
+    KeepAliveStatus, Response, U2FHID_CANCEL, U2FHID_CBOR, U2FHID_INIT, U2FHID_WINK,
+};
 use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
@@ -54,6 +56,7 @@ pub struct USBToken {
     cid: u32,
     supports_ctap1: bool,
     supports_ctap2: bool,
+    supports_wink: bool,
     initialised: bool,
 }
 
@@ -69,6 +72,7 @@ impl fmt::Debug for USBToken {
             .field("cid", &self.cid)
             .field("supports_ctap1", &self.supports_ctap1)
             .field("supports_ctap2", &self.supports_ctap2)
+            .field("supports_wink", &self.supports_wink)
             .field("initialised", &self.initialised)
             .finish()
     }
@@ -152,6 +156,7 @@ impl USBToken {
             cid: 0,
             supports_ctap1: false,
             supports_ctap2: false,
+            supports_wink: false,
             initialised: false,
         }
     }
@@ -202,6 +207,42 @@ impl USBToken {
             f += n;
         }
         Response::try_from(&f)
+    }
+
+    /// Return whether the token supports the wink function.
+    pub fn supports_wink(&self) -> bool {
+        self.supports_wink
+    }
+
+    /// Wink the device.
+    ///
+    /// This performs a vendor-defined action that provides some visual or audible
+    /// identification of the device.
+    pub async fn wink(&mut self) -> Result<(), WebauthnCError> {
+        if !self.initialised {
+            error!("Attempted to transmit to uninitialised token");
+            return Err(WebauthnCError::Internal);
+        }
+        if !self.supports_wink {
+            error!("Token does not support the wink function");
+            return Err(WebauthnCError::NotSupported);
+        }
+
+        self.send(&U2FHIDFrame {
+            cid: self.cid,
+            cmd: U2FHID_WINK,
+            len: 0,
+            data: vec![],
+        })
+        .await?;
+
+        match self.recv().await? {
+            Response::Wink => Ok(()),
+            e => {
+                error!("Unhandled response type: {:?}", e);
+                Err(WebauthnCError::Internal)
+            }
+        }
     }
 }
 
@@ -288,6 +329,7 @@ impl Token for USBToken {
                 self.cid = i.cid;
                 self.supports_ctap1 = i.supports_ctap1();
                 self.supports_ctap2 = i.supports_ctap2();
+                self.supports_wink = i.supports_wink();
 
                 if self.supports_ctap2 {
                     self.initialised = true;

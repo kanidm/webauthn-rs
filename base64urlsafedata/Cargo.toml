@@ -18,7 +18,7 @@ repository = { workspace = true }
 [dependencies]
 serde.workspace = true
 base64.workspace = true
-paste = "1.0.14"
+pastey = "0.1.0"
 
 [dev-dependencies]
 serde_cbor_2.workspace = true

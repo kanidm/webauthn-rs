@@ -32,19 +32,16 @@ nom.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 openssl.workspace = true
+openssl-sys.workspace = true
 # We could consider replacing this with openssl rand.
 rand.workspace = true
 rand_chacha.workspace = true
 url = { workspace = true, features = ["serde"] }
 x509-parser = "0.16"
 der-parser = "9.0"
-compact_jwt.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 hex-literal = "0.4"
 tracing-subscriber.workspace = true
 webauthn-rs-device-catalog.workspace = true
-
-[build-dependencies]
-openssl.workspace = true

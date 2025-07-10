@@ -163,7 +163,7 @@ impl fmt::Display for GetInfoResponse {
         }
 
         if let Some(v) = &self.algorithms {
-            writeln!(f, "algorithms: {:?}", v)?;
+            writeln!(f, "algorithms: {v:?}")?;
         }
 
         if let Some(v) = self.max_serialized_large_blob_array {

@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable, 1.81.0 ]
+        rust_version: [ stable, 1.85.0 ]
         os:
           - ubuntu-latest
           - windows-latest
@@ -41,9 +41,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: v0.4.2
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - if: runner.os != 'windows'
         run: |
@@ -64,6 +62,12 @@ jobs:
       - if: runner.os != 'windows'
         run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets
 
+      - name: javascript feature clippy
+        if: runner.os != 'windows'
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets --features javascript,bluetooth,nfc,usb
+      - name: WASM feature clippy
+        if: runner.os != 'windows'
+        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets --features wasm,bluetooth,nfc,usb --no-default-features
       - run: cargo test --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Some clap errors manifest as panics at runtime. Running tools with
@@ -85,7 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable, 1.81.0 ]
+        rust_version: [ stable, 1.85.0 ]
         features:
           - bluetooth
           - cable
@@ -116,9 +120,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: v0.4.2
+      - uses: mozilla-actions/sccache-action@v0.0.9
 
       - if: runner.os != 'windows'
         run: |
@@ -193,9 +195,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
-      - uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: v0.4.2
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
@@ -205,7 +205,8 @@ jobs:
       # This tests that all the stubs work properly for optional dependencies,
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
-      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
+      - name: generate docs
+        run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v4
@@ -251,9 +252,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: v0.4.2
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - if: runner.os == 'windows'
         uses: johnwason/vcpkg-action@v4
         with:

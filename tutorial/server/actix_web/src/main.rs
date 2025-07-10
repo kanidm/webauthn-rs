@@ -35,7 +35,7 @@ async fn main() {
     let (webauthn, webauthn_users) = startup();
 
     if !Path::new(WASM_DIR).exists() {
-        panic!("{} does not exist, can't serve WASM files.", WASM_DIR);
+        panic!("{WASM_DIR} does not exist, can't serve WASM files.");
     } else {
         info!("Found WASM files OK");
     }

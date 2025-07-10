@@ -157,6 +157,15 @@ pub struct UpdateCredentialUserOpt {
     pub display_name: Option<String>,
 }
 
+#[cfg(feature = "usb")]
+#[derive(Debug, Args)]
+pub struct WinkOpt {
+    /// Continue watching for connected devices until the program is explicitly
+    /// terminated (Ctrl + C).
+    #[clap(long)]
+    pub watch: bool,
+}
+
 #[derive(Debug, Subcommand)]
 #[clap(about = "authenticator key manager")]
 pub enum Opt {
@@ -209,6 +218,9 @@ pub enum Opt {
     SoloKeyRandom,
     #[cfg(feature = "yubikey")]
     YubikeyGetConfig,
+    #[cfg(feature = "usb")]
+    /// Wink a connected USB device.
+    Wink(WinkOpt),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -516,7 +528,7 @@ async fn main() {
                         rp.id.unwrap_or_default()
                     );
                     if let Some(name) = &rp.name {
-                        println!(" {:?}", name);
+                        println!(" {name:?}");
                     } else {
                         println!();
                     }
@@ -571,10 +583,10 @@ async fn main() {
                     }
 
                     if let Some(name) = &user.name {
-                        println!("    Name: {:?}", name);
+                        println!("    Name: {name:?}");
                     }
                     if let Some(display_name) = &user.display_name {
-                        println!("    Display name: {:?}", display_name);
+                        println!("    Display name: {display_name:?}");
                     }
                 }
 
@@ -597,7 +609,7 @@ async fn main() {
                     }
                 }
                 if let Some(policy) = &cred.cred_protect {
-                    println!("  Credential protection policy: {:?}", policy);
+                    println!("  Credential protection policy: {policy:?}");
                 }
 
                 if let Some(key) = &cred.large_blob_key {
@@ -773,6 +785,39 @@ async fn main() {
 
             println!("YubiKey config:");
             println!("{cfg}")
+        }
+
+        #[cfg(feature = "usb")]
+        Opt::Wink(o) => {
+            use webauthn_authenticator_rs::usb::USBTransport;
+
+            println!("Insert a USB device...");
+            let transport = USBTransport::new().await.unwrap();
+            let mut stream = transport.watch().await.unwrap();
+            while let Some(event) = stream.next().await {
+                match event {
+                    TokenEvent::Added(mut token) => {
+                        if !token.supports_wink() {
+                            println!("Token does not support the wink function.");
+                        } else {
+                            token.wink().await.expect("Failed to wink USB device");
+                        }
+
+                        if !o.watch {
+                            break;
+                        }
+                    }
+                    TokenEvent::EnumerationComplete => {
+                        if o.watch {
+                            println!("Initial enumeration completed, watching for more devices...");
+                            println!("Press Ctrl + C to stop watching.");
+                        } else {
+                            break;
+                        }
+                    }
+                    _ => (),
+                }
+            }
         }
     }
 }

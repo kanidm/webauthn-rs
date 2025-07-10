@@ -11,6 +11,7 @@ use crate::transport::{
 use crate::usb::framing::U2FHIDFrame;
 use crate::usb::*;
 
+const CAPABILITY_WINK: u8 = 0x01;
 const CAPABILITY_CBOR: u8 = 0x04;
 const CAPABILITY_NMSG: u8 = 0x08;
 
@@ -29,14 +30,19 @@ pub struct InitResponse {
 }
 
 impl InitResponse {
-    /// `true` if the device suports CTAPv1 / U2F protocol
+    /// `true` if the device supports CTAPv1 / U2F protocol.
     pub fn supports_ctap1(&self) -> bool {
         self.capabilities & CAPABILITY_NMSG == 0
     }
 
-    /// `true` if the device suports CTAPv2 / CBOR protocol
+    /// `true` if the device supports CTAPv2 / CBOR protocol.
     pub fn supports_ctap2(&self) -> bool {
         self.capabilities & CAPABILITY_CBOR > 0
+    }
+
+    /// `true` if the device supports wink function.
+    pub fn supports_wink(&self) -> bool {
+        self.capabilities & CAPABILITY_WINK > 0
     }
 }
 
@@ -84,6 +90,7 @@ impl TryFrom<&U2FHIDFrame> for Response {
             U2FHID_INIT => InitResponse::try_from(b).map(Response::Init)?,
             U2FHID_PING => Response::Ping(b.to_vec()),
             U2FHID_MSG => ISO7816ResponseAPDU::try_from(b).map(Response::Msg)?,
+            U2FHID_WINK => Response::Wink,
             U2FHID_CBOR => CBORResponse::try_from(b).map(Response::Cbor)?,
             U2FHID_KEEPALIVE => Response::KeepAlive(KeepAliveStatus::from(b)),
             U2FHID_ERROR => Response::Error(U2FError::from(b)),
@@ -169,6 +176,7 @@ mod tests {
         if let Response::Init(r) = r {
             assert!(r.supports_ctap1());
             assert!(r.supports_ctap2());
+            assert!(r.supports_wink());
         } else {
             panic!("bad response");
         }
@@ -201,6 +209,7 @@ mod tests {
         if let Response::Init(r) = r {
             assert!(!r.supports_ctap1());
             assert!(r.supports_ctap2());
+            assert!(r.supports_wink());
         } else {
             panic!("bad response");
         }
@@ -227,6 +236,7 @@ mod tests {
         if let Response::Init(r) = r {
             assert!(r.supports_ctap1());
             assert!(!r.supports_ctap2());
+            assert!(!r.supports_wink());
         } else {
             panic!("bad response");
         }

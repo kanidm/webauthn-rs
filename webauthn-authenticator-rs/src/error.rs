@@ -1,76 +1,104 @@
+//! Authenticator errors.
+
 use std::sync::PoisonError;
 
 pub type Result<T> = std::result::Result<T, WebauthnCError>;
 
-#[derive(Debug, PartialEq, Eq)]
+/// Client error.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum WebauthnCError {
+    #[error("A JSON parsing failure has occurred")]
     Json,
+    #[error("A CBOR parsing failure has occurred")]
     Cbor,
+    #[error("An unknown failure has occurred")]
     Unknown,
+    #[error("A security failure has occurred")]
     Security,
+    #[error("Not supported")]
     NotSupported,
+    #[error("A platform authenticator failure has occurred")]
     PlatformAuthenticator,
+    #[error("An internal failure has occurred")]
     Internal,
+    #[error("A parser (nom) failure has occurred")]
     ParseNOMFailure,
+    #[error("OpenSSL error: {0}")]
     OpenSSL(String),
+    #[error("An APDU construction failure has occurred")]
     ApduConstruction,
+    #[error("An APDU transmission failure has occurred")]
     ApduTransmission,
+    #[error("Invalid algorithm")]
     InvalidAlgorithm,
+    #[error("Invalid assertion")]
     InvalidAssertion,
+    #[error("Invalid registration")]
     InvalidRegistration,
+    #[error("The message was too large")]
     MessageTooLarge,
+    #[error("The message was too short")]
     MessageTooShort,
-    /// Message was an unexpected length
+    #[error("The message had an unexpected length")]
     InvalidMessageLength,
+    #[error("Cancelled")]
     Cancelled,
+    #[error("CTAP error: {0:?}")]
     Ctap(CtapError),
-    /// The PIN was too short.
+    #[error("The PIN was too short")]
     PinTooShort,
-    /// The PIN was too long.
+    #[error("The PIN was too long")]
     PinTooLong,
-    /// The PIN contained a null byte (`\0`).
+    #[error("The PIN contained a null byte (`\0`)")]
     PinContainsNull,
+    #[error("No token was selected")]
     NoSelectedToken,
-    /// The authenticator did not provide a required field. This may indicate a bug in this library, or the
-    /// authenticator.
+    #[error("The authenticator did not provide a required field; this may indicate a bug in this library, or in the authenticator")]
     MissingRequiredField,
-    /// The provided `friendly_name` was too long.
+    #[error("The provided friendly name was too long")]
     FriendlyNameTooLong,
     #[cfg(feature = "usb")]
+    #[error("HID error: {0}")]
     HidError(fido_hid_rs::HidError),
     #[cfg(feature = "nfc")]
+    #[error("PC/SC error: {0}")]
     PcscError(pcsc::Error),
-    /// No HID devices were detected **at all**. This may indicate a permissions
-    /// issue.
+    #[error("No HID devices were detected; this may indicate a permissions issue")]
     NoHidDevices,
     /// See [PoisonError]; generally indicates that a method holding a prior lock on the mutex failed.
+    #[error("Poisoned mutex")]
     PoisonedMutex,
-    /// The checksum of the value was incorrect.
+    #[error("The checksum of the value was incorrect")]
     Checksum,
-    /// The card reported as a PC/SC storage card, rather than a smart card.
+    #[error("The card reported as a PC/SC storage card, rather than a smart card")]
     StorageCard,
+    #[error("I/O error: {0}")]
     IoError(String),
+    #[error("Invalid caBLE URL")]
     InvalidCableUrl,
     #[cfg(feature = "cable")]
+    #[error("Base10 decoding error: {0:?}")]
     Base10(crate::cable::DecodeError),
+    #[error("Bluetooth error: {0}")]
     BluetoothError(String),
+    #[error("No Bluetooth adapter")]
     NoBluetoothAdapter,
-    /// Attempt to communicate with an authenticator for which the connection
-    /// has been closed.
+    #[error(
+        "Attempt to communicate with an authenticator for which the connection has been closed"
+    )]
     Closed,
+    #[error("Websocket error: {0}")]
     WebsocketError(String),
-    /// The value of the nonce for this object has exceeded the limit.
+    #[error("The value of the nonce for this object has exceeded the limit")]
     NonceOverflow,
+    #[error("Permission denied")]
     PermissionDenied,
-    /// User verification was required, but is not available for this
-    /// authenticator. You may need to set a PIN, or use a different
-    /// authenticator.
+    #[error("User verification was required, but is not available for this authenticator; you may need to set a PIN, or use a different authenticator")]
     UserVerificationRequired,
-    /// The library is in an unexpected state. This could indicate that
-    /// something has not been initialised correctly, or that the authenticator
-    /// is sending unexpected messages.
+    #[error("The library is in an unexpected state; this could indicate that something has not been initialised correctly, or that the authenticator is sending unexpected messages")]
     UnexpectedState,
     #[cfg(feature = "usb")]
+    #[error("U2F error: {0:?}")]
     U2F(crate::transport::types::U2FError),
 }
 
@@ -151,7 +179,9 @@ impl From<crate::transport::types::U2FError> for WebauthnCError {
     }
 }
 
-/// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#error-responses>
+/// FIDO CTAP-2.x error.
+///
+/// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#error-responses>
 #[derive(Debug, PartialEq, Eq)]
 pub enum CtapError {
     /// Indicates successful response.
