@@ -335,8 +335,6 @@ impl Credential {
         &'_ self,
         ca_list: &'a AttestationCaList,
     ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
-        // Formerly we disabled this due to apple, but they no longer provide
-        // meaningful attestation so we can re-enable it.
         let current_time = SystemTime::now();
         verify_attestation_ca_chain(&self.attestation.data, ca_list, current_time)
     }

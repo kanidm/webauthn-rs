@@ -26,8 +26,7 @@ use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
 use rand::prelude::*;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use url::Url;
 
 /// The Core Webauthn handler.
