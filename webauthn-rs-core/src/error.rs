@@ -1,6 +1,7 @@
 //! Possible errors that may occur during Webauthn Operation processing
 
 use base64::DecodeError as b64DecodeError;
+use crypto_glue::x509::X509VerificationError;
 use openssl::error::ErrorStack as OpenSSLErrorStack;
 use serde_cbor_2::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
@@ -154,7 +155,7 @@ pub enum WebauthnError {
     #[error(
         "The attestation was parsed, but is not trusted by one of the selected CA certificates"
     )]
-    AttestationChainNotTrusted(String),
+    AttestationChainNotTrusted(X509VerificationError),
 
     #[error("The X5C trust root is not a valid algorithm for signing")]
     CertificatePublicKeyInvalid,
@@ -289,6 +290,9 @@ pub enum WebauthnError {
 
     #[error("The attestation requst indicates cred protect was required, but user verification was not performed")]
     SshPublicKeyInconsistentUserVerification,
+
+    #[error("Malformed X509 DER was encountered")]
+    X509DerInvalid,
 }
 
 impl PartialEq for WebauthnError {
