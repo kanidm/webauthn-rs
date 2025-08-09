@@ -243,8 +243,8 @@ pub enum WebauthnError {
     #[error("The provided call back failed to allow reporting the credential failure")]
     CredentialCompromiseReportFailure,
 
-    #[error("The backup (passkey) elligibility of this device has changed, meaning it must be re-enrolled for security validation")]
-    CredentialBackupElligibilityInconsistent,
+    #[error("The backup (passkey) eligibility of this device has changed, meaning it must be re-enrolled for security validation")]
+    CredentialBackupEligibilityInconsistent,
 
     #[error("The trust path could not be established")]
     TrustFailure,
