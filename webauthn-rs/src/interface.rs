@@ -272,7 +272,7 @@ impl Eq for AttestedPasskey {}
 #[cfg(any(all(doc, not(doctest)), feature = "attestation"))]
 impl PartialOrd for AttestedPasskey {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cred.cred_id.cmp(&other.cred.cred_id))
+        Some(self.cmp(other))
     }
 }
 

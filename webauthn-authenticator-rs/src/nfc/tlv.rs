@@ -7,7 +7,7 @@ pub(crate) struct CompactTlv<'a> {
 
 impl CompactTlv<'_> {
     /// Parses a Compact-TLV structure in the given slice.
-    pub fn new(tlv: &[u8]) -> CompactTlv {
+    pub fn new(tlv: &[u8]) -> CompactTlv<'_> {
         // Skip null bytes at the start
         let mut i = 0;
         loop {
