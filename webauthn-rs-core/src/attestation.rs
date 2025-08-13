@@ -28,7 +28,7 @@ pub trait AttestationX509Extension {
     const OID: ObjectIdentifier;
 
     /// how to parse the value out of the certificate extension
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)>;
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Self::Output, AttestationMetadata)>;
 
     /// if `true`, then validating this certificate fails if this extension is
     /// missing
@@ -52,7 +52,7 @@ impl AttestationX509Extension for FidoGenCeAaguid {
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = Aaguid;
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Self::Output, AttestationMetadata)> {
         let (rem, aaguid) = der_parser::der::parse_der_octetstring(i)?;
         let aaguid: Aaguid = aaguid
             .as_slice()
@@ -113,7 +113,7 @@ pub(crate) mod android_key_attestation {
     }
 
     impl AuthorizationList {
-        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<Self> {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, Self> {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
@@ -165,7 +165,7 @@ pub(crate) mod android_key_attestation {
     }
 
     impl Data {
-        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<(Vec<u8>, AttestationMetadata)> {
+        pub fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Vec<u8>, AttestationMetadata)> {
             use der_parser::{der::*, error::BerError};
             parse_der_container(|i: &[u8], hdr: Header| {
                 if hdr.tag() != Tag::Sequence {
@@ -264,7 +264,7 @@ impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = Vec<u8>;
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Self::Output, AttestationMetadata)> {
         android_key_attestation::Data::parse(i)
     }
 
@@ -279,7 +279,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
     const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113635.100.8.2");
 
-    fn parse(i: &[u8]) -> der_parser::error::BerResult<(Self::Output, AttestationMetadata)> {
+    fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Self::Output, AttestationMetadata)> {
         use der_parser::{der::*, error::BerError};
         parse_der_container(|i: &[u8], hdr: Header| {
             if hdr.tag() != Tag::Sequence {

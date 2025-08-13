@@ -732,7 +732,7 @@ impl WebauthnCore {
         // OUT OF SPEC - It is invalid for a credential to indicate it is backed up
         // but not that it is elligible for backup
         if credential.backup_state && !credential.backup_eligible {
-            error!("Credential indicates it is backed up, but has not declared valid backup elligibility");
+            error!("Credential indicates it is backed up, but has not declared valid backup eligibility");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
 
@@ -868,7 +868,7 @@ impl WebauthnCore {
             _ => {}
         }
 
-        // OUT OF SPEC - if the backup elligibility of this device has changed, this may represent
+        // OUT OF SPEC - if the backup eligibility of this device has changed, this may represent
         // a compromise of the credential, tampering with the device, or some other change to its
         // risk profile from when it was originally enrolled. Reject the authentication if this
         // situation occurs.
@@ -878,17 +878,17 @@ impl WebauthnCore {
                 && !cred.backup_eligible
                 && data.authenticator_data.backup_eligible
             {
-                debug!("Credential backup elligibility has changed!");
+                debug!("Credential backup eligibility has changed!");
             } else {
-                error!("Credential backup elligibility has changed!");
-                return Err(WebauthnError::CredentialBackupElligibilityInconsistent);
+                error!("Credential backup eligibility has changed!");
+                return Err(WebauthnError::CredentialBackupEligibilityInconsistent);
             }
         }
 
         // OUT OF SPEC - It is invalid for a credential to indicate it is backed up
         // but not that it is elligible for backup
         if data.authenticator_data.backup_state && !cred.backup_eligible {
-            error!("Credential indicates it is backed up, but has not declared valid backup elligibility");
+            error!("Credential indicates it is backed up, but has not declared valid backup eligibility");
             return Err(WebauthnError::CredentialMayNotBeHardwareBound);
         }
 
