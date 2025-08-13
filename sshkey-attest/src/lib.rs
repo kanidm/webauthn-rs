@@ -275,7 +275,7 @@ impl TryFrom<&[u8]> for SshSkAttestation {
     }
 }
 
-fn parse_ssh_sk_attestation(i: &[u8]) -> nom::IResult<&[u8], SshSkAttestationRaw> {
+fn parse_ssh_sk_attestation(i: &[u8]) -> nom::IResult<&[u8], SshSkAttestationRaw<'_>> {
     // Starts with a 4 byte u32 for the len of the header.
 
     let (i, _tag_len) = tag([0, 0, 0, 17])(i)?;

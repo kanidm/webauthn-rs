@@ -162,7 +162,7 @@ impl From<tungstenite::Error> for CableError {
 }
 
 impl CableError {
-    fn close_reason(&self) -> Option<CloseFrame> {
+    fn close_reason(&self) -> Option<CloseFrame<'_>> {
         use CableError::*;
         let code = match self {
             RemotePeerErrorFrame => CloseCode::Policy,
