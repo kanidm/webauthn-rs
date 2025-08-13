@@ -84,7 +84,7 @@ impl WinCoseCredentialParameters {
             let l = &mut Pin::get_unchecked_mut(mut_ref)._l;
             let l_ptr = l.as_mut_ptr();
             for i in 0..len {
-                *l_ptr.add(i) = (*p_ptr.add(i)).native;
+                *l_ptr.add(i) = (&(*p_ptr.add(i))).native;
             }
 
             l.set_len(len);
