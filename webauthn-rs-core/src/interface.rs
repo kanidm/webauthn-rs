@@ -326,14 +326,14 @@ impl From<CredentialV3> for Credential {
             registration_policy,
         } = other;
 
-        // prior to 20220520 no multi-device credentials existed to migrate from.
         Credential {
             cred_id: HumanBinaryData::from(cred_id),
             cred,
             counter,
             transports: None,
             user_verified: verified,
-            backup_eligible: false,
+            // Assume that when we migrate a very old credential that it may have been backup eligible.
+            backup_eligible: true,
             backup_state: false,
             registration_policy,
             extensions: RegisteredExtensions::none(),
