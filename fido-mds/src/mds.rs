@@ -519,6 +519,9 @@ pub enum AuthenticatorTransport {
     /// wireless
     #[serde(rename = "wireless")]
     Wireless,
+    /// hybrid (formerly caBLE)
+    #[serde(rename = "hybrid")]
+    Hybrid,
 }
 
 impl fmt::Display for AuthenticatorTransport {
@@ -530,6 +533,7 @@ impl fmt::Display for AuthenticatorTransport {
             AuthenticatorTransport::Ble => write!(f, "ble"),
             AuthenticatorTransport::Internal => write!(f, "internal"),
             AuthenticatorTransport::Wireless => write!(f, "wireless"),
+            AuthenticatorTransport::Hybrid => write!(f, "hybrid (caBLE)"),
         }
     }
 }
@@ -549,6 +553,33 @@ impl FromStr for AuthenticatorTransport {
         }
     }
 }
+
+/// Describes this device's capability to allow credentials to be
+/// accessible to a single device, or multiple devices.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum MultiDeviceCredentialSupport {
+    /// Multiple devices are not supported, this credential is bound to one
+    /// device.
+    #[default]
+    Unsupported,
+    /// The authenticator will provide its multiple device support during
+    /// registration through setting the flag "backup eligible".
+    Explicit,
+    /// This authenticator always is multi device
+    Implicit,
+}
+
+impl fmt::Display for MultiDeviceCredentialSupport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unsupported => write!(f, "unsupported (no)"),
+            Self::Explicit => write!(f, "explicit (see backup_eligible flag)"),
+            Self::Implicit => write!(f, "implicit (yes)"),
+        }
+    }
+}
+
 
 /// The output of authenticatorGetInfo. Some fields are hidden as they are duplicated
 /// in the metadata statement.
@@ -809,6 +840,12 @@ pub struct MetadataStatement {
     /// The information is the same reported by an authenticator when invoking the 'authenticatorGetInfo'
     /// method, see FIDOCTAP.
     pub authenticator_get_info: Option<AuthenticatorGetInfo>,
+
+    #[serde(default)]
+    /// Defines if credentials in this authenticator can be accessed on multiple
+    /// devices. If set to `unsupported` this means that it is a single device
+    /// credential.
+    pub multi_device_credential_support: MultiDeviceCredentialSupport,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
