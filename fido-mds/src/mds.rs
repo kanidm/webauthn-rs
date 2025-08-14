@@ -554,7 +554,7 @@ impl FromStr for AuthenticatorTransport {
     }
 }
 
-/// Describes this devices capability to allow credentials to be
+/// Describes this device's capability to allow credentials to be
 /// accessible to a single device, or multiple devices.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
@@ -563,7 +563,7 @@ pub enum MultiDeviceCredentialSupport {
     /// device.
     #[default]
     Unsupported,
-    /// The authenticator will provide it's multiple device support during
+    /// The authenticator will provide its multiple device support during
     /// registration through setting the flag "backup eligible".
     Explicit,
     /// This authenticator always is multi device
