@@ -996,7 +996,7 @@ pub struct FIDO2 {
     /// are provided by FIDO. These patches are created by the project observing the device and
     /// providing this.
     pub patched_data: bool,
-    /// If the device supportl multiple credentials
+    /// If the device supports multiple credentials
     pub multi_device_credential_support: MultiDeviceCredentialSupport,
 }
 
