@@ -32,7 +32,7 @@ use crate::mds::MetadataStatement as RawMetadataStatement;
 use crate::mds::StatusReport as RawStatusReport;
 use crate::mds::UserVerificationMethod as RawUserVerificationMethod;
 use crate::mds::VerificationMethodAndCombinations;
-
+use crate::mds::MultiDeviceCredentialSupport;
 use crate::mds::{
     AttestationType, AuthenticationAlgorithm, AuthenticatorGetInfo, BiometricAccuracyDescriptor,
     CodeAccuracyDescriptor, EcdaaAnchor, ExtensionDescriptor, KeyProtection,
@@ -996,6 +996,8 @@ pub struct FIDO2 {
     /// are provided by FIDO. These patches are created by the project observing the device and
     /// providing this.
     pub patched_data: bool,
+    /// If the device supports multiple credentials
+    pub multi_device_credential_support: MultiDeviceCredentialSupport,
 }
 
 impl fmt::Display for FIDO2 {
@@ -1092,6 +1094,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
 
         let mut invalid_metadata = false;
         let mut inconsistent_data = false;
+        let mut patched_data = false;
 
         // We deconstruct the MDS because there are a bunch of duplicate
         // types / values that we want to expose.
@@ -1124,6 +1127,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             icon: _,
             supported_extensions,
             mut authenticator_get_info,
+            multi_device_credential_support,
         } = metadata_statement;
 
         let mut status_reports: BTreeSet<_> = status_reports
@@ -1180,6 +1184,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                 aaid, aaguid, attestation_certificate_key_identifiers
             );
             inconsistent_data = true;
+            patched_data = true;
         }
 
         if patch::mds_user_verification_method_invalid_all_present(&mut user_verification_details) {
@@ -1188,6 +1193,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                 aaid, aaguid, attestation_certificate_key_identifiers
             );
             inconsistent_data = true;
+            patched_data = true;
         }
 
         // debug!("{:#?}", user_verification_details);
@@ -1219,6 +1225,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             Ok(Some(mut uvm_patch)) => {
                 // Patch provided
                 inconsistent_data = true;
+                patched_data = true;
                 std::mem::swap(&mut uvm_patch, &mut user_verification_details)
             }
             Err(_e) => {
@@ -1234,7 +1241,6 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                     "Illogical user verification method located in - None may not exist with other UVM: {:?}, {:?}, {:?}",
                     aaid, aaguid, attestation_certificate_key_identifiers
                 );
-                assert!(aaguid.is_none());
                 invalid_metadata = true;
             }
         }
@@ -1258,6 +1264,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                 "Device was patched for invalid authenticator get info that was not collected from a real device: {:?}, {:?}, {:?}",
                 aaid, aaguid, attestation_certificate_key_identifiers
             );
+            patched_data = true;
             inconsistent_data = true;
         }
 
@@ -1341,7 +1348,8 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
                 status_reports,
                 time_of_last_status_change,
                 inconsistent_data,
-                patched_data: false,
+                patched_data,
+                multi_device_credential_support,
             })),
             (ProtocolFamily::U2f, None, None, Some(aki)) => Ok(FidoDevice::U2F(U2F {
                 attestation_certificate_key_identifiers: aki,
