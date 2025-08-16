@@ -568,6 +568,7 @@ impl Webauthn {
             .authenticator_attachment(None)
             .user_verification_policy(UserVerificationPolicy::Required)
             .reject_synchronised_authenticators(false)
+            .allow_backup_eligible_upgrade(true)
             .exclude_credentials(exclude_credentials)
             .hints(None)
             .extensions(extensions);
