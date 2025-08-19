@@ -90,7 +90,7 @@ impl From<X509Def> for X509 {
     }
 }
 
-fn build_ca() -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
+fn build_ca(unique_id: Uuid) -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
     let ecgroup = get_group()?;
     let eckey = ec::EcKey::generate(&ecgroup)?;
     let ca_key = pkey::PKey::from_ec_key(eckey)?;
@@ -99,7 +99,9 @@ fn build_ca() -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
     x509_name.append_entry_by_text("C", "AU")?;
     x509_name.append_entry_by_text("ST", "QLD")?;
     x509_name.append_entry_by_text("O", "Webauthn Authenticator RS")?;
-    x509_name.append_entry_by_text("CN", "Dynamic Softtoken CA")?;
+    // we have to insert a unique ID here so that the subject name is unique to allow verification
+    // with a ca-store to work correctly.
+    x509_name.append_entry_by_text("CN", format!("Dynamic Softtoken CA {}", unique_id).as_str())?;
     let x509_name = x509_name.build();
 
     let mut cert_builder = X509::builder()?;
@@ -217,7 +219,9 @@ fn build_intermediate(
 
 impl SoftToken {
     pub fn new(falsify_uv: bool) -> Result<(Self, X509), WebauthnCError> {
-        let (ca_key, ca_cert) = build_ca()?;
+        let ca_uuid = Uuid::new_v4();
+
+        let (ca_key, ca_cert) = build_ca(ca_uuid)?;
 
         let ca = ca_cert.clone();
         /*
