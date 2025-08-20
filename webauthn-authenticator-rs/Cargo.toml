@@ -77,7 +77,7 @@ webauthn-rs-core = { workspace = true, optional = true }
 
 tracing.workspace = true
 url.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, features = ["v4"] }
 serde_json.workspace = true
 nom.workspace = true
 serde_cbor_2.workspace = true
