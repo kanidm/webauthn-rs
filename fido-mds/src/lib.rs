@@ -29,10 +29,10 @@ use crate::mds::AuthenticatorTransport;
 use crate::mds::FidoDevice as RawFidoDevice;
 use crate::mds::FidoMds as RawFidoMds;
 use crate::mds::MetadataStatement as RawMetadataStatement;
+use crate::mds::MultiDeviceCredentialSupport;
 use crate::mds::StatusReport as RawStatusReport;
 use crate::mds::UserVerificationMethod as RawUserVerificationMethod;
 use crate::mds::VerificationMethodAndCombinations;
-use crate::mds::MultiDeviceCredentialSupport;
 use crate::mds::{
     AttestationType, AuthenticationAlgorithm, AuthenticatorGetInfo, BiometricAccuracyDescriptor,
     CodeAccuracyDescriptor, EcdaaAnchor, ExtensionDescriptor, KeyProtection,

@@ -582,7 +582,6 @@ impl fmt::Display for MultiDeviceCredentialSupport {
     }
 }
 
-
 /// The output of authenticatorGetInfo. Some fields are hidden as they are duplicated
 /// in the metadata statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
