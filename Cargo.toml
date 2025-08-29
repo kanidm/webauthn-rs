@@ -54,6 +54,9 @@ members = [
 # Due to --cfg=web_sys_unstable_apis
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
+[patch.crates-io]
+crypto-glue = { path = "../crypto-glue" }
+
 [workspace.dependencies]
 # These are in release/dependency order.
 base64urlsafedata = { path = "./base64urlsafedata", version = "=0.6.0-dev" }
