@@ -61,7 +61,6 @@ impl PinUvPlatformInterface {
         let public_key = COSEKey::try_from(&private_key.public_key())
             .map_err(|_| WebauthnCError::CryptographyCose)?;
 
-        // let public_key = get_public_key(&private_key)?;
         Ok(Self {
             protocol: Box::<T>::default(),
             public_key,
