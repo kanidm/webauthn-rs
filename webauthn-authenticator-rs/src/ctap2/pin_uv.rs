@@ -1,9 +1,8 @@
+use super::commands::{ClientPinRequest, ClientPinSubCommand, Permissions};
 #[cfg(doc)]
 use crate::stubs::*;
-
-use super::commands::{ClientPinRequest, ClientPinSubCommand, Permissions};
 use crate::{
-    crypto::{compute_sha256, decrypt, encrypt, get_group, hkdf_sha_256},
+    crypto::{compute_sha256, decrypt, encrypt, hkdf_sha_256},
     error::WebauthnCError,
 };
 use crypto_glue::{
@@ -13,10 +12,9 @@ use crypto_glue::{
         self, EcdsaP256AffinePoint, EcdsaP256NonZeroScalar, EcdsaP256PrivateKey, EcdsaP256PublicKey,
     },
 };
-use openssl::{bn, hash, pkey::PKey, rand::rand_bytes, sign};
+use openssl::{hash, pkey::PKey, rand::rand_bytes, sign};
 use std::{fmt::Debug, ops::Deref};
-use webauthn_rs_core::proto::{COSEEC2Key, COSEKey, COSEKeyType, ECDSACurve};
-use webauthn_rs_proto::COSEAlgorithm;
+use webauthn_rs_core::proto::{COSEKey, COSEKeyType};
 
 pub struct PinUvPlatformInterface {
     protocol: Box<dyn PinUvPlatformInterfaceProtocol>,
@@ -420,13 +418,10 @@ fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, WebauthnCE
 mod tests {
     use super::*;
     use crypto_glue::{
-        ecdsa_p256::{
-            EcdsaP256AffinePoint, EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint,
-            EcdsaP256ScalarPrimitive,
-        },
+        ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint, EcdsaP256ScalarPrimitive},
         traits::FromEncodedPoint,
     };
-    use openssl::ec;
+    use webauthn_rs_core::proto::{COSEAlgorithm, COSEEC2Key, ECDSACurve};
 
     #[test]
     fn pin_encryption_and_hashing() {
@@ -470,7 +465,7 @@ mod tests {
 
     // https://github.com/Yubico/python-fido2/blob/8c00d0494501028135fd13adbe8c56a8d8b7e437/tests/test_ctap2.py#L274
     #[test]
-    fn shared_secret() {
+    fn shared_secret_pin_protocol_one() {
         let expected_secret = vec![
             0xc4, 0x2a, 0x3, 0x9d, 0x54, 0x81, 0x0, 0xdf, 0xba, 0x52, 0x1e, 0x48, 0x7d, 0xeb, 0xcb,
             0xbb, 0x8b, 0x66, 0xbb, 0x74, 0x96, 0xf8, 0xb1, 0x86, 0x2a, 0x7a, 0x39, 0x5e, 0xd8,
@@ -686,7 +681,7 @@ mod tests {
         assert_eq!(ec_priv.public_key(), ec_pub);
 
         let t =
-            PinUvPlatformInterface::__new_with_private_key::<PinUvPlatformInterfaceProtocolOne>(
+            PinUvPlatformInterface::__new_with_private_key::<PinUvPlatformInterfaceProtocolTwo>(
                 ec_priv,
             )
             .unwrap();
