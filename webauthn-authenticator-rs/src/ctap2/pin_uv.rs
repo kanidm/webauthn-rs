@@ -96,6 +96,8 @@ impl PinUvPlatformInterface {
         // 2. Calculate xY, the shared point. (I.e. the scalar-multiplication of the peer’s point, Y,
         //    with the local private key agreement key.)
         // 3. Let Z be the 32-byte, big-endian encoding of the x-coordinate of the shared point.
+        // - Z is the cryptographic reference to the derived shared secret. For clarity, we refer
+        //   to it as the shared secret.
         let COSEKeyType::EC_EC2(ec) = peer_cose_key.key else {
             error!("Unexpected peer key type: {:?}", peer_cose_key);
             return Err(WebauthnCError::Internal);
@@ -103,7 +105,6 @@ impl PinUvPlatformInterface {
 
         let peer_public_key =
             EcdsaP256PublicKey::try_from(&ec).map_err(|_| WebauthnCError::CryptographyCose)?;
-        // This is "z".
         let non_zero_scalar = EcdsaP256NonZeroScalar::from(&self.private_key);
         let affine_point = EcdsaP256AffinePoint::from(&peer_public_key);
         let shared_secret = ecdh::diffie_hellman(non_zero_scalar, affine_point);
@@ -241,7 +242,7 @@ impl PinUvPlatformInterface {
 }
 
 pub trait PinUvPlatformInterfaceProtocol: Sync + Send {
-    fn kdf(&self, z: &EcdhP256SharedSecret) -> Result<Vec<u8>, WebauthnCError>;
+    fn kdf(&self, shared_secret: &EcdhP256SharedSecret) -> Result<Vec<u8>, WebauthnCError>;
 
     /// Encrypts a `plaintext` to produce a ciphertext, which may be longer than
     /// the `plaintext`. The `plaintext` is restricted to being a multiple of
@@ -266,9 +267,10 @@ pub trait PinUvPlatformInterfaceProtocol: Sync + Send {
 pub struct PinUvPlatformInterfaceProtocolOne {}
 
 impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
-    fn kdf(&self, z: &EcdhP256SharedSecret) -> Result<Vec<u8>, WebauthnCError> {
+    fn kdf(&self, shared_secret: &EcdhP256SharedSecret) -> Result<Vec<u8>, WebauthnCError> {
         // Return SHA-256(Z)
-        Ok(compute_sha256(z.raw_secret_bytes()).to_vec())
+        // - Z is the cryptographic name of the derived shared secret
+        Ok(compute_sha256(shared_secret.raw_secret_bytes()).to_vec())
     }
 
     fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
@@ -307,7 +309,7 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
 pub struct PinUvPlatformInterfaceProtocolTwo {}
 
 impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
-    fn kdf(&self, z: &EcdhP256SharedSecret) -> Result<Vec<u8>, WebauthnCError> {
+    fn kdf(&self, shared_secret: &EcdhP256SharedSecret) -> Result<Vec<u8>, WebauthnCError> {
         // Return
         // HKDF-SHA-256(salt = 32 zero bytes, IKM = Z, L = 32, info = "CTAP2 HMAC key") ||
         // HKDF-SHA-256(salt = 32 zero bytes, IKM = Z, L = 32, info = "CTAP2 AES key")
@@ -316,13 +318,13 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         let zero: [u8; 32] = [0; 32];
         hkdf_sha_256(
             &zero,
-            z.raw_secret_bytes(),
+            shared_secret.raw_secret_bytes(),
             Some(b"CTAP2 HMAC key"),
             &mut o[0..32],
         )?;
         hkdf_sha_256(
             &zero,
-            z.raw_secret_bytes(),
+            shared_secret.raw_secret_bytes(),
             Some(b"CTAP2 AES key"),
             &mut o[32..64],
         )?;
@@ -389,30 +391,6 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         2
     }
 }
-
-/*
-/// Gets the public key for a private key as [COSEKey] for PinUvProtocol.
-fn get_public_key(private_key: &EcKeyRef<Private>) -> Result<COSEKey, WebauthnCError> {
-    let ecgroup = get_group()?;
-    // Extract the public x and y coords.
-    let ecpub_points = private_key.public_key();
-
-    let mut bnctx = bn::BigNumContext::new()?;
-    let mut xbn = bn::BigNum::new()?;
-    let mut ybn = bn::BigNum::new()?;
-
-    ecpub_points.affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
-
-    Ok(COSEKey {
-        type_: COSEAlgorithm::PinUvProtocol,
-        key: COSEKeyType::EC_EC2(COSEEC2Key {
-            curve: ECDSACurve::SECP256R1,
-            x: xbn.to_vec().into(),
-            y: ybn.to_vec().into(),
-        }),
-    })
-}
-*/
 
 #[cfg(test)]
 mod tests {
