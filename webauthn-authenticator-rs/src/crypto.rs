@@ -11,7 +11,7 @@ use openssl::{
     ec::{EcGroup, EcKey},
     md::Md,
     nid::Nid,
-    pkey::{Id, PKey, Private, Public},
+    pkey::{Id, Private},
     pkey_ctx::PkeyCtx,
     sha::Sha256,
     symm::{Cipher, Crypter, Mode},
@@ -103,20 +103,6 @@ pub fn regenerate() -> Result<EcKey<Private>, WebauthnCError> {
     let ecgroup = get_group()?;
     let eckey = EcKey::generate(&ecgroup)?;
     Ok(eckey)
-}
-
-pub fn ecdh(
-    private_key: EcKey<Private>,
-    peer_key: EcKey<Public>,
-    output: &mut [u8],
-) -> Result<(), WebauthnCError> {
-    let peer_key = PKey::from_ec_key(peer_key)?;
-    let pkey = PKey::from_ec_key(private_key)?;
-    let mut ctx = PkeyCtx::new(&pkey)?;
-    ctx.derive_init()?;
-    ctx.derive_set_peer(&peer_key)?;
-    ctx.derive(Some(output))?;
-    Ok(())
 }
 
 #[cfg(any(doc, feature = "cable"))]

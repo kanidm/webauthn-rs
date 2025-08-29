@@ -583,7 +583,6 @@ pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), Webauthn
             WebauthnError::AttestationCertificateRequirementsNotMet
         })?
         .and_then(|(_crit, extn)| Some(extn))
-
         .ok_or_else(|| {
             trace!("missing basic constraints");
             WebauthnError::AttestationCertificateRequirementsNotMet
