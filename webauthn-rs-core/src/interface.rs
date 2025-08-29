@@ -153,6 +153,30 @@ pub struct COSEEC2Key {
     pub y: HumanBinaryData,
 }
 
+impl TryFrom<&EcdsaP256PublicKey> for COSEEC2Key {
+    type Error = WebauthnError;
+
+    fn try_from(k: &EcdsaP256PublicKey) -> Result<Self, Self::Error> {
+        let encoded_point = EcdsaP256PublicEncodedPoint::from(k);
+
+        let public_key_x = encoded_point
+            .x()
+            .map(|bytes| bytes.to_vec())
+            .unwrap_or_default();
+
+        let public_key_y = encoded_point
+            .y()
+            .map(|bytes| bytes.to_vec())
+            .unwrap_or_default();
+
+        Ok(COSEEC2Key {
+            curve: ECDSACurve::SECP256R1,
+            x: public_key_x.into(),
+            y: public_key_y.into(),
+        })
+    }
+}
+
 impl TryFrom<&COSEEC2Key> for EcdsaP256PublicKey {
     type Error = WebauthnError;
 
@@ -268,6 +292,19 @@ pub struct COSEKey {
     pub type_: COSEAlgorithm,
     /// The public key
     pub key: COSEKeyType,
+}
+
+impl TryFrom<&EcdsaP256PublicKey> for COSEKey {
+    type Error = WebauthnError;
+
+    fn try_from(k: &EcdsaP256PublicKey) -> Result<Self, Self::Error> {
+        let ec = COSEEC2Key::try_from(k)?;
+
+        Ok(COSEKey {
+            type_: COSEAlgorithm::ES256,
+            key: COSEKeyType::EC_EC2(ec),
+        })
+    }
 }
 
 /// The ID of this Credential

@@ -100,6 +100,12 @@ pub enum WebauthnCError {
     #[cfg(feature = "usb")]
     #[error("U2F error: {0:?}")]
     U2F(crate::transport::types::U2FError),
+
+    #[error("Unable to perform ECDH exchange")]
+    CryptographyEcdh,
+
+    #[error("Unable to perform COSE key operation or transformation")]
+    CryptographyCose,
 }
 
 #[cfg(feature = "nfc")]
