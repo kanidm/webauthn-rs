@@ -21,6 +21,7 @@ repository = { workspace = true }
 [dependencies]
 base64.workspace = true
 base64urlsafedata.workspace = true
+crypto-glue.workspace = true
 nom.workspace = true
 openssl.workspace = true
 serde.workspace = true
