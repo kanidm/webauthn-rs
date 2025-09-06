@@ -11,7 +11,6 @@ use openssl::{
     md::Md,
     pkey::Id,
     pkey_ctx::PkeyCtx,
-    sha::Sha256,
     symm::{Cipher, Crypter, Mode},
 };
 
@@ -21,23 +20,26 @@ use openssl::{
     pkey::{Private, Public},
 };
 
+use crypto_glue::{
+    s256::{Sha256, Sha256Output},
+    traits::Digest,
+};
+
 use crate::error::WebauthnCError;
 
-pub type SHA256Hash = [u8; 32];
-
-pub fn compute_sha256(data: &[u8]) -> SHA256Hash {
+pub fn compute_sha256(data: &[u8]) -> Sha256Output {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    hasher.finish()
+    hasher.finalize()
 }
 
 #[cfg(feature = "cable")]
 /// Computes the SHA256 of `a || b`.
-pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> SHA256Hash {
+pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> Sha256Output {
     let mut hasher = Sha256::new();
     hasher.update(a);
     hasher.update(b);
-    hasher.finish()
+    hasher.finalize()
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.

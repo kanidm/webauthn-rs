@@ -181,9 +181,6 @@ pub use crate::authenticator_hashed::{
     perform_auth_with_request, perform_register_with_request, AuthenticatorBackendHashedClientData,
 };
 
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
-pub use crate::crypto::SHA256Hash;
-
 pub struct WebauthnAuthenticator<T>
 where
     T: AuthenticatorBackend,
