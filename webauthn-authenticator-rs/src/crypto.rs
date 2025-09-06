@@ -8,13 +8,17 @@ use openssl::{
     ec::{EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
 };
 use openssl::{
-    ec::{EcGroup, EcKey},
     md::Md,
-    nid::Nid,
-    pkey::{Id, PKey, Private, Public},
+    pkey::Id,
     pkey_ctx::PkeyCtx,
     sha::Sha256,
     symm::{Cipher, Crypter, Mode},
+};
+
+#[cfg(any(doc, feature = "cable"))]
+use openssl::{
+    ec::{EcGroup, EcKey},
+    pkey::{Private, Public},
 };
 
 use crate::error::WebauthnCError;
@@ -34,11 +38,6 @@ pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> SHA256Hash {
     hasher.update(a);
     hasher.update(b);
     hasher.finish()
-}
-
-/// Gets an [EcGroup] for P-256
-pub fn get_group() -> Result<EcGroup, WebauthnCError> {
-    Ok(EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?)
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.
@@ -94,27 +93,6 @@ pub fn hkdf_sha_256(
     if let Some(info) = info {
         ctx.add_hkdf_info(info)?;
     }
-    ctx.derive(Some(output))?;
-    Ok(())
-}
-
-/// Generate a fresh, random P-256 private key
-pub fn regenerate() -> Result<EcKey<Private>, WebauthnCError> {
-    let ecgroup = get_group()?;
-    let eckey = EcKey::generate(&ecgroup)?;
-    Ok(eckey)
-}
-
-pub fn ecdh(
-    private_key: EcKey<Private>,
-    peer_key: EcKey<Public>,
-    output: &mut [u8],
-) -> Result<(), WebauthnCError> {
-    let peer_key = PKey::from_ec_key(peer_key)?;
-    let pkey = PKey::from_ec_key(private_key)?;
-    let mut ctx = PkeyCtx::new(&pkey)?;
-    ctx.derive_init()?;
-    ctx.derive_set_peer(&peer_key)?;
     ctx.derive(Some(output))?;
     Ok(())
 }

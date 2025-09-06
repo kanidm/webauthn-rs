@@ -492,7 +492,7 @@ pub(crate) fn verify_packed_attestation(
 /// [§ 8.2.1 Packed Attestation Statement Certificate Requirements][0]
 ///
 /// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
-fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), WebauthnError> {
+pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
     let x509_cert = &pubk.tbs_certificate;
 
@@ -571,17 +571,25 @@ fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), WebauthnErro
     });
 
     if fido_gen_ce_aaguid_critical == Some(true) {
+        trace!("fido ce aaguid critical");
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
     // The Basic Constraints extension MUST have the CA component set to false.
     let basic_constraints = x509_cert
         .get::<BasicConstraints>()
-        .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
-        .and_then(|(critical, extn)| critical.then_some(extn))
-        .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
+        .map_err(|_| {
+            trace!("error reading extensions");
+            WebauthnError::AttestationCertificateRequirementsNotMet
+        })?
+        .and_then(|(_crit, extn)| Some(extn))
+        .ok_or_else(|| {
+            trace!("missing basic constraints");
+            WebauthnError::AttestationCertificateRequirementsNotMet
+        })?;
 
     if basic_constraints.ca {
+        trace!("attestation cert must not be a ca!!!");
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
