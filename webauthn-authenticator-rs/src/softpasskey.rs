@@ -311,7 +311,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         // Do the signature
         let signature = signer
             .try_sign(&verification_data)
-            .map(|sig: EcdsaP256Signature| sig.to_vec())
+            .map(|sig: EcdsaP256Signature| sig.to_der().to_bytes().into())
             .map_err(|_| WebauthnCError::CryptographyEcdsaSignature)?;
 
         let mut attest_map = BTreeMap::new();
@@ -498,7 +498,7 @@ impl U2FToken for SoftPasskey {
 
         let signature = signer
             .try_sign(&verification_data)
-            .map(|sig: EcdsaP256Signature| sig.to_vec())
+            .map(|sig: EcdsaP256Signature| sig.to_der().to_bytes().into())
             .map_err(|_| WebauthnCError::CryptographyEcdsaSignature)?;
 
         Ok(U2FSignData {

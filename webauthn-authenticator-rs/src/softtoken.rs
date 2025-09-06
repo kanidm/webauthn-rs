@@ -740,7 +740,7 @@ impl U2FToken for SoftToken {
         trace!("Signing: {:?}", verification_data.as_slice());
         let signature = signer
             .try_sign(&verification_data)
-            .map(|sig: EcdsaP256Signature| sig.to_vec())
+            .map(|sig: EcdsaP256Signature| sig.to_der().to_bytes().into())
             .map_err(|_| WebauthnCError::CryptographyEcdsaSignature)?;
 
         Ok(U2FSignData {
