@@ -146,7 +146,7 @@ impl From<crate::transport::iso7816::Error> for WebauthnCError {
     }
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(feature = "crypto_openssl")]
 impl From<openssl::error::ErrorStack> for WebauthnCError {
     fn from(v: openssl::error::ErrorStack) -> Self {
         Self::OpenSSL(v.to_string())

@@ -20,7 +20,8 @@ ui-cli = ["dep:rpassword"]
 # Add QR code support for `UiCallback`, useful with `cable` feature
 qrcode = ["dep:qrcode", "ui-cli"]
 
-crypto = ["dep:openssl", "dep:openssl-sys", "dep:webauthn-rs-core"]
+crypto_openssl = ["dep:openssl", "dep:openssl-sys", "dep:webauthn-rs-core"]
+crypto = ["dep:webauthn-rs-core"]
 
 # Authenticator transports
 mozilla = ["dep:authenticator", "dep:rpassword"]
