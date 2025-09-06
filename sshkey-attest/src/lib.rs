@@ -22,12 +22,11 @@ extern crate tracing;
 pub mod proto;
 
 use crate::proto::AttestedPublicKey;
-use crypto_glue::{traits::DecodeDer, x509};
+use crypto_glue::{ecdsa_p256::EcdsaP256PublicKey, traits::DecodeDer, x509};
 use nom::{
     bytes::complete::{tag, take},
     number::complete::be_u32,
 };
-use openssl::{bn, ec, nid};
 use sshkeys::{Curve, EcdsaPublicKey, KeyType, KeyTypeKind, PublicKey, PublicKeyKind};
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -299,22 +298,9 @@ fn parse_ssh_sk_attestation(i: &[u8]) -> nom::IResult<&[u8], SshSkAttestationRaw
 
 fn to_ssh_pubkey(cose: &COSEKey) -> Result<PublicKey, WebauthnError> {
     match &cose.key {
-        COSEKeyType::EC_EC2(_ec2k) => {
-            let pubkey = cose.get_openssl_pkey()?;
-            let key = pubkey
-                .ec_key()
-                .and_then(|ec| {
-                    let mut ctx = bn::BigNumContext::new()?;
-                    let c_nid = nid::Nid::X9_62_PRIME256V1; // NIST P-256 curve
-                    let group = ec::EcGroup::from_curve_name(c_nid)?;
-
-                    ec.public_key().to_bytes(
-                        &group,
-                        ec::PointConversionForm::UNCOMPRESSED,
-                        &mut ctx,
-                    )
-                })
-                .map_err(WebauthnError::OpenSSLError)?;
+        COSEKeyType::EC_EC2(ec2k) => {
+            let pubkey = EcdsaP256PublicKey::try_from(ec2k)?;
+            let key = pubkey.to_sec1_bytes().into();
 
             let kind = PublicKeyKind::Ecdsa(EcdsaPublicKey {
                 curve: Curve::from_identifier("nistp256").map_err(|_| {
