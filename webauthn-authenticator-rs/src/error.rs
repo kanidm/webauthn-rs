@@ -106,6 +106,12 @@ pub enum WebauthnCError {
 
     #[error("Unable to perform COSE key operation or transformation")]
     CryptographyCose,
+
+    #[error("An ecdsa private key contained invalid sec1 bytes")]
+    CryptographyEcdsaSec1Invalid,
+
+    #[error("Unable to perform ecdsa signature")]
+    CryptographyEcdsaSignature,
 }
 
 #[cfg(feature = "nfc")]
