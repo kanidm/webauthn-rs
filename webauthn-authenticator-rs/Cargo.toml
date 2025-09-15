@@ -33,6 +33,7 @@ bluetooth = ["dep:btleplug", "ctap2"]
 cable = [
     "dep:btleplug",
     "crypto",
+    "crypto_openssl",
     "ctap2",
     "dep:hex",
     "dep:tokio",
@@ -130,6 +131,9 @@ clap.workspace = true
 tokio.workspace = true
 tempfile = { version = "3.3.0" }
 hex = { workspace = true }
+
+# For doc tests
+openssl = { workspace = true }
 
 # cable_tunnel - used for connecting to Bluetooth HCI controller over serial
 serialport = { version = "4.2.0" }

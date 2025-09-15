@@ -293,6 +293,7 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
         // Return the first 16 bytes of the result of computing HMAC-SHA-256
         // with the given key and message.
         let key = hmac_s256::key_from_slice(key).expect("Invaid Key");
+
         let mut hmac = HmacSha256::new(&key);
         hmac.update(message);
         let mut output = hmac.finalize().into_bytes().to_vec();
