@@ -6,13 +6,14 @@ use crate::{
     error::WebauthnCError,
 };
 use crypto_glue::{
-    ecdh,
+    aes256cbc, ecdh,
     ecdh_p256::EcdhP256SharedSecret,
     ecdsa_p256::{
         self, EcdsaP256AffinePoint, EcdsaP256NonZeroScalar, EcdsaP256PrivateKey, EcdsaP256PublicKey,
     },
+    hmac_s256::{self, HmacSha256},
+    traits::Mac,
 };
-use openssl::{hash, pkey::PKey, rand::rand_bytes, sign};
 use std::{fmt::Debug, ops::Deref};
 use webauthn_rs_core::proto::{COSEKey, COSEKeyType};
 
@@ -291,12 +292,12 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return the first 16 bytes of the result of computing HMAC-SHA-256
         // with the given key and message.
-        let key = PKey::hmac(key)?;
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key)?;
-        signer.update(message)?;
-        let mut o = signer.sign_to_vec()?;
-        o.truncate(16);
-        Ok(o)
+        let key = hmac_s256::key_from_slice(key).expect("Invaid Key");
+        let mut hmac = HmacSha256::new(&key);
+        hmac.update(message);
+        let mut output = hmac.finalize().into_bytes().to_vec();
+        output.truncate(16);
+        Ok(output)
     }
 
     fn get_pin_uv_protocol(&self) -> u32 {
@@ -337,8 +338,7 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         let key = &key[32..];
 
         // 2. Let iv be a 16-byte, random bytestring.
-        let mut iv: [u8; 16] = [0; 16];
-        rand_bytes(&mut iv)?;
+        let iv = aes256cbc::new_iv();
 
         // 3. Let ct be the AES-256-CBC encryption of demPlaintext using key and
         //    iv. (No padding is performed as the size of demPlaintext is
@@ -378,12 +378,12 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         // 1. If key is longer than 32 bytes, discard the excess.
         //    (This selects the HMAC-key portion of the shared secret. When key is the
         //    pinUvAuthToken, it is exactly 32 bytes long and thus this step has no effect.)
-        let key = PKey::hmac(&key[..32])?;
+        let key = hmac_s256::key_from_slice(&key[..32]).expect("Invaid Key");
 
         // 2. Return the result of computing HMAC-SHA-256 on key and message.
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key)?;
-        signer.update(message)?;
-        Ok(signer.sign_to_vec()?)
+        let mut hmac = HmacSha256::new(&key);
+        hmac.update(message);
+        Ok(hmac.finalize().into_bytes().to_vec())
     }
 
     fn get_pin_uv_protocol(&self) -> u32 {
