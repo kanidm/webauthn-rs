@@ -110,7 +110,7 @@ pub enum WebauthnCError {
     #[error("An ECDSA private key contained invalid SEC1 bytes")]
     CryptographyEcdsaSec1Invalid,
 
-    #[error("Unable to perform ecdsa signature")]
+    #[error("Unable to perform ECDSA signature")]
     CryptographyEcdsaSignature,
 }
 
