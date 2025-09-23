@@ -107,7 +107,7 @@ pub enum WebauthnCError {
     #[error("Unable to perform COSE key operation or transformation")]
     CryptographyCose,
 
-    #[error("An ecdsa private key contained invalid sec1 bytes")]
+    #[error("An ECDSA private key contained invalid SEC1 bytes")]
     CryptographyEcdsaSec1Invalid,
 
     #[error("Unable to perform ecdsa signature")]
