@@ -112,6 +112,15 @@ pub enum WebauthnCError {
 
     #[error("Unable to perform ECDSA signature")]
     CryptographyEcdsaSignature,
+
+    #[error("Invalid HMAC Key")]
+    CryptographyHmacKey,
+
+    #[error("Unable to decrypt cipher text")]
+    CryptographyAes256CbcDecrypt,
+
+    #[error("Unable to expand hkdf key")]
+    CryptographyHkdfExpand,
 }
 
 #[cfg(feature = "nfc")]

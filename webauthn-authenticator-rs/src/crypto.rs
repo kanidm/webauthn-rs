@@ -10,7 +10,7 @@ use openssl::{
 };
 
 use crypto_glue::{
-    aes256,
+    aes256::Aes256Key,
     aes256cbc::{
         Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
     },
@@ -40,15 +40,11 @@ pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> Sha256Output {
 /// Encrypts some data using AES-256-CBC, with no padding.
 ///
 /// `plaintext.len()` must be a multiple of the cipher's blocksize.
-pub fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-    let iv = if let Some(iv) = iv {
-        Aes256CbcIv::clone_from_slice(iv)
-    } else {
-        // Zero IV.
-        Aes256CbcIv::default()
-    };
-
-    let key = aes256::key_from_slice(key).expect("Invalid Key");
+pub fn encrypt(
+    key: &Aes256Key,
+    iv: &Aes256CbcIv,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, WebauthnCError> {
     let enc = Aes256CbcEnc::new(&key, &iv);
 
     let ciphertext = enc.encrypt_padded_vec_mut::<NoPadding>(plaintext);
@@ -58,25 +54,14 @@ pub fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8
 
 /// Decrypts some data using AES-256-CBC, with no padding.
 pub fn decrypt(
-    key: &[u8],
-    iv: Option<&[u8]>,
+    key: &Aes256Key,
+    iv: &Aes256CbcIv,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, WebauthnCError> {
-    let iv = if let Some(iv) = iv {
-        Aes256CbcIv::clone_from_slice(iv)
-    } else {
-        // Zero IV.
-        Aes256CbcIv::default()
-    };
-
-    let key = aes256::key_from_slice(key).expect("Invalid Key");
     let enc = Aes256CbcDec::new(&key, &iv);
 
-    let plaintext = enc
-        .decrypt_padded_vec_mut::<NoPadding>(ciphertext)
-        .expect("decrypt failure");
-
-    Ok(plaintext)
+    enc.decrypt_padded_vec_mut::<NoPadding>(ciphertext)
+        .map_err(|_| WebauthnCError::CryptographyAes256CbcDecrypt)
 }
 
 pub fn hkdf_sha_256(
@@ -91,7 +76,8 @@ pub fn hkdf_sha_256(
 
     let info = info.unwrap_or(empty);
 
-    hk.expand(info, output).expect("Invalid key output");
+    hk.expand(info, output)
+        .map_err(|_| WebauthnCError::CryptographyHkdfExpand)?;
     Ok(())
 }
 
