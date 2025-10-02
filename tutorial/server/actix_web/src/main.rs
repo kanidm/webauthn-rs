@@ -6,12 +6,12 @@ use actix_web::middleware::Logger;
 use actix_web::web::JsonConfig;
 use actix_web::web::{get, post};
 use actix_web::{App, HttpServer};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::handler::auth::{
     finish_authentication, finish_register, start_authentication, start_register,
 };
-use crate::handler::index::index;
+use crate::handler::index::{index, WASM_BG_FILE, WASM_JS_FILE};
 use crate::handler::serve_wasm::{serve_wasm, WASM_DIR};
 use crate::session::MemorySession;
 use crate::startup::startup;
@@ -37,11 +37,25 @@ async fn main() {
     if !Path::new(WASM_DIR).exists() {
         panic!("{WASM_DIR} does not exist, can't serve WASM files.");
     } else {
-        info!("Found WASM files OK");
+        info!("Found WASM dir OK");
+    }
+
+    let mut missing_file = false;
+    for file in [WASM_BG_FILE, WASM_JS_FILE] {
+        if !Path::new(WASM_DIR).join(file).exists() {
+            error!("{} does not exist, can't serve WASM files.", file);
+            missing_file = true;
+        } else {
+            info!("Found {} OK", file);
+        }
+    }
+    if missing_file {
+        error!("Missing WASM files, can't continue.");
+        return;
     }
 
     // Build the webserver and run it
-    info!("Listening on: http://0.0.0.0:8080");
+    info!("Listening on: http://0.0.0.0:8080 / http://127.0.0.1:8080");
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())

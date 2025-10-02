@@ -1,7 +1,10 @@
 use actix_web::HttpResponse;
 
+pub const WASM_JS_FILE: &str = "wasm_tutorial.js";
+pub const WASM_BG_FILE: &str = "wasm_tutorial_bg.wasm";
+
 pub(crate) async fn index() -> HttpResponse {
-    HttpResponse::Ok().body(
+    HttpResponse::Ok().body(format!(
         r#"
 <!DOCTYPE html>
 <html>
@@ -11,11 +14,11 @@ pub(crate) async fn index() -> HttpResponse {
     <title>WebAuthn-rs Tutorial</title>
 
     <script type="module">
-        import init, { run_app } from './pkg/wasm.js';
-        async function main() {
-           await init('./pkg/wasm_bg.wasm');
+        import init, {{ run_app }} from './pkg/{WASM_JS_FILE}';
+        async function main() {{
+           await init('./pkg/{WASM_BG_FILE}');
            run_app();
-        }
+        }}
         main()
     </script>
   </head>
@@ -23,5 +26,5 @@ pub(crate) async fn index() -> HttpResponse {
   <p>Welcome to the WebAuthn Server!</p>
   </body>
 </html>"#,
-    )
+    ))
 }
