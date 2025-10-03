@@ -69,6 +69,7 @@ webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
 webauthn-rs-device-catalog = { path = "./device-catalog" }
 
+async-trait = "~0.1"
 async-std = { version = "1.6", features = ["attributes"] }
 anyhow = "1.0"
 base64 = "0.21"

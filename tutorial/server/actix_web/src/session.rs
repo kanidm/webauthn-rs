@@ -1,19 +1,18 @@
-use std::collections::HashMap;
 use std::ops::Add;
 use std::sync::Mutex;
+use std::{collections::HashMap, sync::LazyLock};
 
 use actix_session::storage::{LoadError, SaveError, SessionKey, SessionStore, UpdateError};
 use actix_web::cookie::time::Duration;
 use anyhow::anyhow;
 use chrono::Utc;
-use once_cell::sync::Lazy;
 use rand::distributions::{Alphanumeric, DistString};
 
 /**
 Static map where session states are stored
 */
-static SESSION_STATES: Lazy<Mutex<HashMap<String, State>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static SESSION_STATES: LazyLock<Mutex<HashMap<String, State>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub(crate) struct State {
     session_state: HashMap<String, String>,

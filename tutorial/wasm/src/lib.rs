@@ -207,7 +207,8 @@ impl App {
                 } ) }
                 action="javascript:void(0);"
               >
-                <input id="username" type="text" value={ last_username }/>
+                <span>{"Username: "}</span><input id="username" type="text" value={ last_username }/>
+                <br />
                 <button type="submit">
                     { "Start Authentication" }
                 </button>

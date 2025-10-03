@@ -8,11 +8,13 @@ license = "MPL-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-webauthn-rs = { workspace = true, features = ["danger-allow-state-serialisation"] }
+webauthn-rs = { workspace = true, features = [
+    "danger-allow-state-serialisation",
+] }
 tide = "0.16"
-async-std.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-serde.workspace = true
-rand.workspace = true
-anyhow = "1.0"
+async-std = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+rand = { workspace = true }
+anyhow = { workspace = true }
