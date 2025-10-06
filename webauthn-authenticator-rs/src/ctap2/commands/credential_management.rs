@@ -12,7 +12,8 @@ use std::fmt::Debug;
 use webauthn_rs_core::proto::COSEKey;
 use webauthn_rs_proto::CredentialProtectionPolicy;
 
-use crate::crypto::{compute_sha256, SHA256Hash};
+use crate::crypto::compute_sha256;
+use crypto_glue::s256::Sha256Output;
 
 use super::*;
 
@@ -173,7 +174,7 @@ pub enum CredSubCommand {
     ///
     /// [0]: CredSubCommand::enumerate_credentials_by_rpid
     /// [1]: CredentialManagementRequestTrait::ENUMERATE_CREDENTIALS_GET_NEXT
-    EnumerateCredentialsBegin(/* rpIdHash */ SHA256Hash),
+    EnumerateCredentialsBegin(/* rpIdHash */ Sha256Output),
 
     /// Deletes a discoverable credential from the authenticator.
     DeleteCredential(PublicKeyCredentialDescriptorCM),
@@ -296,7 +297,7 @@ pub struct RelyingPartyCM {
     ///
     /// [0]: https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#rpid-truncation
     #[serde(skip)]
-    pub hash: Option<SHA256Hash>,
+    pub hash: Option<Sha256Output>,
 }
 
 /// User entity
@@ -378,7 +379,10 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
         if let Some(rp_id_hash) = raw
             .remove(&0x04)
             .and_then(|v| value_to_vec_u8(v, "0x04"))
-            .and_then(|v| v.try_into().ok())
+            .and_then(|v| {
+                // Returns None if not exactly sized.
+                Sha256Output::from_exact_iter(v)
+            })
         {
             if let Some(rp) = &mut rp {
                 // Add the hash to the existing RelyingPartyCM
@@ -510,6 +514,7 @@ cred_struct! {
 
 #[cfg(test)]
 mod test {
+    use crypto_glue::s256::Sha256Output;
     use webauthn_rs_core::proto::{COSEEC2Key, COSEKeyType, ECDSACurve};
     use webauthn_rs_proto::COSEAlgorithm;
 
@@ -620,11 +625,11 @@ mod test {
                 rp: Some(RelyingPartyCM {
                     name: None,
                     id: Some("webauthn.firstyear.id.au".to_string()),
-                    hash: Some([
+                    hash: Some(Sha256Output::from([
                         0x6a, 0xb9, 0xbb, 0xf0, 0xdf, 0x9a, 0x16, 0xf9, 0x1d, 0xbb, 0x33, 0xbb,
                         0xb1, 0x32, 0xfa, 0xf9, 0xd1, 0x7c, 0x78, 0x2c, 0x48, 0x26, 0xc6, 0xec,
                         0x70, 0xec, 0xee, 0x58, 0xd9, 0x7e, 0xf5, 0x2a
-                    ]),
+                    ])),
                 }),
                 total_rps: Some(2),
                 ..Default::default()
@@ -653,11 +658,11 @@ mod test {
                 rp: Some(RelyingPartyCM {
                     name: Some("WebAuthn Test Server".to_string()),
                     id: Some("webauthntest.azurewebsites.net".to_string()),
-                    hash: Some([
+                    hash: Some(Sha256Output::from([
                         0xe4, 0x53, 0x29, 0xd0, 0x3a, 0x20, 0x68, 0xd1, 0xca, 0xf7, 0xf7, 0xbb,
                         0x0a, 0xe9, 0x54, 0xe6, 0xb0, 0xe6, 0x25, 0x97, 0x45, 0xf3, 0x2f, 0x48,
                         0x29, 0xf7, 0x50, 0xf0, 0x50, 0x11, 0xf9, 0xc2
-                    ]),
+                    ])),
                 }),
                 total_rps: Some(3),
                 ..Default::default()
@@ -725,11 +730,11 @@ mod test {
                 rp: Some(RelyingPartyCM {
                     name: None,
                     id: Some("webauthntest.identitystandards.io".to_string()),
-                    hash: Some([
+                    hash: Some(Sha256Output::from([
                         0x0b, 0x99, 0x7c, 0xcc, 0xeb, 0x3a, 0xeb, 0x29, 0xc5, 0x5c, 0x94, 0xa8,
                         0x94, 0xb1, 0x1c, 0xf0, 0x1a, 0x24, 0xb4, 0xc8, 0xae, 0x70, 0x6f, 0x32,
                         0x8c, 0xc2, 0xea, 0x8c, 0xeb, 0xc4, 0xad, 0x5c
-                    ]),
+                    ])),
                 }),
                 ..Default::default()
             },
@@ -740,11 +745,12 @@ mod test {
     #[test]
     fn enumerate_credentials_begin() {
         let _ = tracing_subscriber::fmt::try_init();
-        const SUBCOMMAND: CredSubCommand = CredSubCommand::EnumerateCredentialsBegin([
-            0x0b, 0x99, 0x7c, 0xcc, 0xeb, 0x3a, 0xeb, 0x29, 0xc5, 0x5c, 0x94, 0xa8, 0x94, 0xb1,
-            0x1c, 0xf0, 0x1a, 0x24, 0xb4, 0xc8, 0xae, 0x70, 0x6f, 0x32, 0x8c, 0xc2, 0xea, 0x8c,
-            0xeb, 0xc4, 0xad, 0x5c,
-        ]);
+        let subcommand: CredSubCommand =
+            CredSubCommand::EnumerateCredentialsBegin(Sha256Output::from([
+                0x0b, 0x99, 0x7c, 0xcc, 0xeb, 0x3a, 0xeb, 0x29, 0xc5, 0x5c, 0x94, 0xa8, 0x94, 0xb1,
+                0x1c, 0xf0, 0x1a, 0x24, 0xb4, 0xc8, 0xae, 0x70, 0x6f, 0x32, 0x8c, 0xc2, 0xea, 0x8c,
+                0xeb, 0xc4, 0xad, 0x5c,
+            ]));
 
         assert_eq!(
             vec![
@@ -752,16 +758,19 @@ mod test {
                 0x5c, 0x94, 0xa8, 0x94, 0xb1, 0x1c, 0xf0, 0x1a, 0x24, 0xb4, 0xc8, 0xae, 0x70, 0x6f,
                 0x32, 0x8c, 0xc2, 0xea, 0x8c, 0xeb, 0xc4, 0xad, 0x5c
             ],
-            SUBCOMMAND.prf()
+            subcommand.prf()
         );
 
         assert_eq!(
             CredSubCommand::enumerate_credentials_by_rpid("webauthntest.identitystandards.io"),
-            SUBCOMMAND
+            subcommand
         );
 
-        let c =
-            CredentialManagementRequest::new(SUBCOMMAND, Some(2), Some(PIN_UV_AUTH_PARAM.to_vec()));
+        let c = CredentialManagementRequest::new(
+            subcommand.clone(),
+            Some(2),
+            Some(PIN_UV_AUTH_PARAM.to_vec()),
+        );
 
         assert_eq!(
             vec![
@@ -776,7 +785,7 @@ mod test {
         );
 
         let c = PrototypeCredentialManagementRequest::new(
-            SUBCOMMAND,
+            subcommand,
             Some(1),
             Some(PIN_UV_AUTH_PARAM.to_vec()),
         );

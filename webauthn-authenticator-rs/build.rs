@@ -1,4 +1,4 @@
-#[cfg(feature = "crypto")]
+#[cfg(feature = "crypto_openssl")]
 mod crypto {
     pub fn test_openssl() {
         use std::env;
@@ -33,6 +33,6 @@ OpenSSL version string: {version}
 }
 
 fn main() {
-    #[cfg(feature = "crypto")]
+    #[cfg(feature = "crypto_openssl")]
     crypto::test_openssl();
 }

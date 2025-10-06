@@ -23,7 +23,6 @@ base64.workspace = true
 base64urlsafedata.workspace = true
 crypto-glue.workspace = true
 nom.workspace = true
-openssl.workspace = true
 serde.workspace = true
 serde_cbor_2.workspace = true
 sshkeys = { version = "0.3.3", features = ["serde"] }

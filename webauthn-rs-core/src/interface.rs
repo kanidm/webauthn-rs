@@ -202,23 +202,6 @@ impl TryFrom<&COSEEC2Key> for EcdsaP256PublicKey {
     }
 }
 
-/*
-impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
-    type Error = openssl::error::ErrorStack;
-
-    fn try_from(k: &COSEEC2Key) -> Result<Self, Self::Error> {
-        let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
-        let mut ctx = bn::BigNumContext::new()?;
-        let mut point = ec::EcPoint::new(&group)?;
-        let x = bn::BigNum::from_slice(k.x.as_slice())?;
-        let y = bn::BigNum::from_slice(k.y.as_slice())?;
-        point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
-
-        ec::EcKey::from_public_key(&group, &point)
-    }
-}
-*/
-
 /// A COSE Elliptic Curve Public Key. This is generally the provided credential
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
