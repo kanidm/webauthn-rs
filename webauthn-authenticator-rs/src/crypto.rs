@@ -5,78 +5,63 @@ use crate::stubs::*;
 #[cfg(any(doc, feature = "cable"))]
 use openssl::{
     bn::BigNumContext,
-    ec::{EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
-};
-use openssl::{
-    md::Md,
-    pkey::Id,
-    pkey_ctx::PkeyCtx,
-    sha::Sha256,
-    symm::{Cipher, Crypter, Mode},
+    ec::{EcGroup, EcKey, EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
+    pkey::{Private, Public},
 };
 
-#[cfg(any(doc, feature = "cable"))]
-use openssl::{
-    ec::{EcGroup, EcKey},
-    pkey::{Private, Public},
+use crypto_glue::{
+    aes256::Aes256Key,
+    aes256cbc::{
+        Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
+    },
+    block_padding::NoPadding,
+    hkdf_s256::HkdfSha256,
+    s256::{Sha256, Sha256Output},
+    traits::Digest,
 };
 
 use crate::error::WebauthnCError;
 
-pub type SHA256Hash = [u8; 32];
-
-pub fn compute_sha256(data: &[u8]) -> SHA256Hash {
+pub fn compute_sha256(data: &[u8]) -> Sha256Output {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    hasher.finish()
+    hasher.finalize()
 }
 
 #[cfg(feature = "cable")]
 /// Computes the SHA256 of `a || b`.
-pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> SHA256Hash {
+pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> Sha256Output {
     let mut hasher = Sha256::new();
     hasher.update(a);
     hasher.update(b);
-    hasher.finish()
+    hasher.finalize()
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.
 ///
 /// `plaintext.len()` must be a multiple of the cipher's blocksize.
-pub fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-    let cipher = Cipher::aes_256_cbc();
-    let mut ct = vec![0; plaintext.len() + cipher.block_size()];
-    let mut c = Crypter::new(cipher, Mode::Encrypt, key, iv)?;
-    c.pad(false);
-    let l = c.update(plaintext, &mut ct)?;
-    let l = l + c.finalize(&mut ct[l..])?;
-    ct.truncate(l);
-    Ok(ct)
+pub fn encrypt(
+    key: &Aes256Key,
+    iv: &Aes256CbcIv,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, WebauthnCError> {
+    let enc = Aes256CbcEnc::new(&key, &iv);
+
+    let ciphertext = enc.encrypt_padded_vec_mut::<NoPadding>(plaintext);
+
+    Ok(ciphertext)
 }
 
 /// Decrypts some data using AES-256-CBC, with no padding.
 pub fn decrypt(
-    key: &[u8],
-    iv: Option<&[u8]>,
+    key: &Aes256Key,
+    iv: &Aes256CbcIv,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, WebauthnCError> {
-    let cipher = Cipher::aes_256_cbc();
-    if ciphertext.len() % cipher.block_size() != 0 {
-        error!(
-            "ciphertext length {} is not a multiple of {} bytes",
-            ciphertext.len(),
-            cipher.block_size()
-        );
-        return Err(WebauthnCError::Internal);
-    }
+    let enc = Aes256CbcDec::new(&key, &iv);
 
-    let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
-    let mut c = Crypter::new(cipher, Mode::Decrypt, key, iv)?;
-    c.pad(false);
-    let l = c.update(ciphertext, &mut pt)?;
-    let l = l + c.finalize(&mut pt[l..])?;
-    pt.truncate(l);
-    Ok(pt)
+    enc.decrypt_padded_vec_mut::<NoPadding>(ciphertext)
+        .map_err(|_| WebauthnCError::CryptographyAes256CbcDecrypt)
 }
 
 pub fn hkdf_sha_256(
@@ -85,15 +70,14 @@ pub fn hkdf_sha_256(
     info: Option<&[u8]>,
     output: &mut [u8],
 ) -> Result<(), WebauthnCError> {
-    let mut ctx = PkeyCtx::new_id(Id::HKDF)?;
-    ctx.derive_init()?;
-    ctx.set_hkdf_md(Md::sha256())?;
-    ctx.set_hkdf_salt(salt)?;
-    ctx.set_hkdf_key(ikm)?;
-    if let Some(info) = info {
-        ctx.add_hkdf_info(info)?;
-    }
-    ctx.derive(Some(output))?;
+    let hk = HkdfSha256::new(Some(salt), ikm);
+
+    let empty: &[u8] = &[];
+
+    let info = info.unwrap_or(empty);
+
+    hk.expand(info, output)
+        .map_err(|_| WebauthnCError::CryptographyHkdfExpand)?;
     Ok(())
 }
 

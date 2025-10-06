@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, fmt::Debug, mem::size_of};
 
+use super::internal::CtapAuthenticatorVersion;
 #[cfg(feature = "ctap2-management")]
 use crate::util::check_pin;
 use crate::{
@@ -8,13 +9,11 @@ use crate::{
     error::{CtapError, WebauthnCError},
     transport::Token,
     ui::UiCallback,
-    SHA256Hash, BASE64_ENGINE,
+    BASE64_ENGINE,
 };
-
 use base64::Engine;
 use base64urlsafedata::Base64UrlSafeData;
 use futures::executor::block_on;
-
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
     AuthenticatorAttestationResponseRaw, PubKeyCredParams, PublicKeyCredential,
@@ -22,7 +21,7 @@ use webauthn_rs_proto::{
     UserVerificationPolicy,
 };
 
-use super::internal::CtapAuthenticatorVersion;
+use crypto_glue::s256::Sha256Output;
 
 #[derive(Debug, Clone)]
 pub(super) enum AuthToken {
@@ -499,7 +498,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         }
 
         let mc = MakeCredentialRequest {
-            client_data_hash: vec![0; size_of::<SHA256Hash>()],
+            client_data_hash: vec![0; size_of::<Sha256Output>()],
             rp: RelyingParty {
                 id: "SELECTION".to_string(),
                 name: "SELECTION".to_string(),

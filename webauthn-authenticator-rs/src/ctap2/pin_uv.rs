@@ -6,13 +6,16 @@ use crate::{
     error::WebauthnCError,
 };
 use crypto_glue::{
+    aes256::Aes256Key,
+    aes256cbc::{self, Aes256CbcIv},
     ecdh,
     ecdh_p256::EcdhP256SharedSecret,
     ecdsa_p256::{
         self, EcdsaP256AffinePoint, EcdsaP256NonZeroScalar, EcdsaP256PrivateKey, EcdsaP256PublicKey,
     },
+    hmac_s256::{self, HmacSha256},
+    traits::Mac,
 };
-use openssl::{hash, pkey::PKey, rand::rand_bytes, sign};
 use std::{fmt::Debug, ops::Deref};
 use webauthn_rs_core::proto::{COSEKey, COSEKeyType};
 
@@ -275,7 +278,14 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
     fn encrypt(&self, key: &[u8], dem_plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return the AES-256-CBC encryption of demPlaintext using an all-zero IV.
         // (No padding is performed as the size of demPlaintext is required to be a multiple of the AES block length.)
-        encrypt(key, None, dem_plaintext)
+        let mut aes_key = Aes256Key::default();
+        debug_assert!(key.len() == aes_key.len());
+        let key_ref = aes_key.as_mut_slice();
+        key_ref.copy_from_slice(key);
+
+        let iv = Aes256CbcIv::default();
+
+        encrypt(&aes_key, &iv, dem_plaintext)
     }
 
     fn decrypt(
@@ -285,18 +295,26 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolOne {
     ) -> Result</* plaintext */ Vec<u8>, WebauthnCError> {
         // If the size of demCiphertext is not a multiple of the AES block length, return error.
         // Otherwise return the AES-256-CBC decryption of demCiphertext using an all-zero IV.
-        decrypt(key, None, ciphertext)
+        let mut aes_key = Aes256Key::default();
+        debug_assert!(key.len() == aes_key.len());
+        let key_ref = aes_key.as_mut_slice();
+        key_ref.copy_from_slice(key);
+
+        let iv = Aes256CbcIv::default();
+
+        decrypt(&aes_key, &iv, ciphertext)
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // Return the first 16 bytes of the result of computing HMAC-SHA-256
         // with the given key and message.
-        let key = PKey::hmac(key)?;
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key)?;
-        signer.update(message)?;
-        let mut o = signer.sign_to_vec()?;
-        o.truncate(16);
-        Ok(o)
+        let key = hmac_s256::key_from_slice(key).ok_or(WebauthnCError::CryptographyHmacKey)?;
+
+        let mut hmac = HmacSha256::new(&key);
+        hmac.update(message);
+        let mut output = hmac.finalize().into_bytes().to_vec();
+        output.truncate(16);
+        Ok(output)
     }
 
     fn get_pin_uv_protocol(&self) -> u32 {
@@ -336,14 +354,18 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         //    portion of the shared secret.)
         let key = &key[32..];
 
+        let mut aes_key = Aes256Key::default();
+        debug_assert!(key.len() == aes_key.len());
+        let key_ref = aes_key.as_mut_slice();
+        key_ref.copy_from_slice(key);
+
         // 2. Let iv be a 16-byte, random bytestring.
-        let mut iv: [u8; 16] = [0; 16];
-        rand_bytes(&mut iv)?;
+        let iv = aes256cbc::new_iv();
 
         // 3. Let ct be the AES-256-CBC encryption of demPlaintext using key and
         //    iv. (No padding is performed as the size of demPlaintext is
         //    required to be a multiple of the AES block length.)
-        let ct = encrypt(key, Some(iv.as_slice()), dem_plaintext)?;
+        let ct = encrypt(&aes_key, &iv, dem_plaintext)?;
 
         // 4. Return iv || ct.
         let mut o = iv.to_vec();
@@ -360,6 +382,12 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         // 1. Discard the first 32 bytes of key. (This selects the AES-key portion of the shared secret.)
         let key = &key[32..];
 
+        let mut aes_key = Aes256Key::default();
+        debug_assert!(key.len() == aes_key.len());
+
+        let key_ref = aes_key.as_mut_slice();
+        key_ref.copy_from_slice(key);
+
         // 2. If demPlaintext is less than 16 bytes in length, return an error
         // THIS IS AN ERROR, should be demCiphertext
         if ciphertext.len() < 16 {
@@ -370,20 +398,23 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         // ALSO AN ERROR, as above
         let (iv, ct) = ciphertext.split_at(16);
 
+        let aes_iv = Aes256CbcIv::from_slice(iv);
+
         // 4. Return the AES-256-CBC decryption of ct using key and iv.
-        decrypt(key, Some(iv), ct)
+        decrypt(&aes_key, &aes_iv, ct)
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         // 1. If key is longer than 32 bytes, discard the excess.
         //    (This selects the HMAC-key portion of the shared secret. When key is the
         //    pinUvAuthToken, it is exactly 32 bytes long and thus this step has no effect.)
-        let key = PKey::hmac(&key[..32])?;
+        let key =
+            hmac_s256::key_from_slice(&key[..32]).ok_or(WebauthnCError::CryptographyHmacKey)?;
 
         // 2. Return the result of computing HMAC-SHA-256 on key and message.
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &key)?;
-        signer.update(message)?;
-        Ok(signer.sign_to_vec()?)
+        let mut hmac = HmacSha256::new(&key);
+        hmac.update(message);
+        Ok(hmac.finalize().into_bytes().to_vec())
     }
 
     fn get_pin_uv_protocol(&self) -> u32 {
