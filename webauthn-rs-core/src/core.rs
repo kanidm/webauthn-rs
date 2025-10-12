@@ -3805,7 +3805,6 @@ mod tests {
 
     #[test]
     fn test_macos_openssl_key_segfault() {
-
         let chal: HumanBinaryData =
             serde_json::from_str("\"1L_qrRoR5OaxUbbBEJwBQxKI-aYXkwJVgusq4xOA9nM\"").unwrap();
 
