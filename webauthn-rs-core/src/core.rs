@@ -3802,4 +3802,72 @@ mod tests {
             Err(WebauthnError::COSEKeyInvalidCBORValue)
         ))
     }
+
+    #[test]
+    fn test_macos_openssl_key_segfault() {
+        let chal: HumanBinaryData =
+            serde_json::from_str("\"1L_qrRoR5OaxUbbBEJwBQxKI-aYXkwJVgusq4xOA9nM\"").unwrap();
+
+        let response = r#"{
+    "id": "SdnLJ3MQEUY7NR3lJbMc9cLyVBU",
+    "rawId": "SdnLJ3MQEUY7NR3lJbMc9cLyVBU",
+    "response": {
+      "attestationObject": "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YViYSZYN5YgOjGh0NBcPZHZgW4_krrmihjLHmVzzuoMdl2NdAAAAAPv8MAcVTk7MjAtuAgVX170AFEnZyydzEBFGOzUd5SWzHPXC8lQVpQECAyYgASFYIDiIJ80DjQhQuDLArW-zqUxmjuDc0O6Se1FmEPmbVz8aIlgg0EQYr2a-wBEi-7ZzwHC6j-m4I3kLA86jSYFAjW0OMcA",
+      "clientDataJSON": "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiMUxfcXJSb1I1T2F4VWJiQkVKd0JReEtJLWFZWGt3SlZndXNxNHhPQTluTSIsIm9yaWdpbiI6Imh0dHA6Ly9sb2NhbGhvc3Q6ODEwMCIsImNyb3NzT3JpZ2luIjpmYWxzZSwib3RoZXJfa2V5c19jYW5fYmVfYWRkZWRfaGVyZSI6ImRvIG5vdCBjb21wYXJlIGNsaWVudERhdGFKU09OIGFnYWluc3QgYSB0ZW1wbGF0ZS4gU2VlIGh0dHBzOi8vZ29vLmdsL3lhYlBleCJ9",
+      "transports": [
+        "hybrid",
+        "internal"
+      ]
+    },
+    "type": "public-key",
+    "extensions": {
+      "cred_props": {
+        "rk": true
+      }
+    }
+        }"#;
+
+        let _ = tracing_subscriber::fmt::try_init();
+        let wan = Webauthn::new_unsafe_experts_only(
+            "localhost",
+            "localhost",
+            vec![Url::parse("http://localhost:8100/").unwrap()],
+            AUTHENTICATOR_TIMEOUT,
+            None,
+            None,
+        );
+
+        let chal = Challenge::from(chal);
+
+        let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(response).unwrap();
+
+        debug!(?rsp_d);
+
+        let reg_extn = RequestRegistrationExtensions {
+            cred_protect: Some(CredProtect {
+                credential_protection_policy: CredentialProtectionPolicy::UserVerificationRequired,
+                enforce_credential_protection_policy: Some(false),
+            }),
+            uvm: Some(true),
+            cred_props: Some(true),
+            min_pin_length: None,
+            hmac_create_secret: None,
+        };
+
+        let result = wan.register_credential_internal(
+            &rsp_d,
+            UserVerificationPolicy::Required,
+            &chal,
+            &[],
+            &[COSEAlgorithm::ES256, COSEAlgorithm::RS256],
+            None,
+            true,
+            &reg_extn,
+            true,
+        );
+
+        debug!(?result);
+
+        assert!(result.is_ok())
+    }
 }
