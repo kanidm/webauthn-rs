@@ -100,6 +100,27 @@ pub enum WebauthnCError {
     #[cfg(feature = "usb")]
     #[error("U2F error: {0:?}")]
     U2F(crate::transport::types::U2FError),
+
+    #[error("Unable to perform ECDH exchange")]
+    CryptographyEcdh,
+
+    #[error("Unable to perform COSE key operation or transformation")]
+    CryptographyCose,
+
+    #[error("An ECDSA private key contained invalid SEC1 bytes")]
+    CryptographyEcdsaSec1Invalid,
+
+    #[error("Unable to perform ECDSA signature")]
+    CryptographyEcdsaSignature,
+
+    #[error("Invalid HMAC Key")]
+    CryptographyHmacKey,
+
+    #[error("Unable to decrypt cipher text")]
+    CryptographyAes256CbcDecrypt,
+
+    #[error("Unable to expand hkdf key")]
+    CryptographyHkdfExpand,
 }
 
 #[cfg(feature = "nfc")]
@@ -134,7 +155,7 @@ impl From<crate::transport::iso7816::Error> for WebauthnCError {
     }
 }
 
-#[cfg(feature = "crypto")]
+#[cfg(feature = "crypto_openssl")]
 impl From<openssl::error::ErrorStack> for WebauthnCError {
     fn from(v: openssl::error::ErrorStack) -> Self {
         Self::OpenSSL(v.to_string())

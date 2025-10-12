@@ -2,21 +2,21 @@
 //! This contains a transparent type allowing callbacks to
 //! make attestation decisions.
 
-use crate::crypto::{
-    check_extension, compute_sha256, only_hash_from_type, verify_signature, TpmSanData,
-};
+use crate::crypto::{compute_sha256, only_hash_from_type, verify_signature, TpmSanData};
 use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
-use openssl::hash::MessageDigest;
-use openssl::stack;
-use openssl::x509;
-use openssl::x509::store;
-use openssl::x509::verify;
+use crypto_glue::{
+    traits::DecodeDer,
+    x509::{
+        self, oiddb::rfc4519, BasicConstraints, ExtendedKeyUsage, ObjectIdentifier, SubjectAltName,
+        X509Display,
+    },
+};
+use std::time::SystemTime;
 use uuid::Uuid;
-use x509_parser::oid_registry::Oid;
-use x509_parser::prelude::GeneralName;
-use x509_parser::x509::X509Version;
+
+const OID_JOINT_ISO_ITU_T: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.23.133.8.3");
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
 /// that the value of the extension is equal to some other value
@@ -25,7 +25,7 @@ pub trait AttestationX509Extension {
     type Output: Eq;
 
     /// the oid of the extension
-    const OID: Oid<'static>;
+    const OID: ObjectIdentifier;
 
     /// how to parse the value out of the certificate extension
     fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Self::Output, AttestationMetadata)>;
@@ -47,7 +47,7 @@ pub(crate) struct AndroidKeyAttestationExtensionData;
 
 impl AttestationX509Extension for FidoGenCeAaguid {
     // If cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
-    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .45724 .1 .1 .4);
+    const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.4.1.45724.1.1.4");
 
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = Aaguid;
@@ -259,7 +259,7 @@ pub(crate) mod android_key_attestation {
 
 impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
     // If cert contains an extension with OID 1.3.6.1.4.1.11129.2.1.17 (android key attestation)
-    const OID: Oid<'static> = der_parser::oid!(1.3.6 .1 .4 .1 .11129 .2 .1 .17);
+    const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.4.1.11129.2.1.17");
 
     // verify that the value of this extension matches the aaguid in authenticatorData.
     type Output = Vec<u8>;
@@ -277,7 +277,7 @@ impl AttestationX509Extension for AppleAnonymousNonce {
     type Output = [u8; 32];
 
     // 4. Verify that nonce equals the value of the extension with OID ( 1.2.840.113635.100.8.2 ) in credCert. The nonce here is used to prove that the attestation is live and to protect the integrity of the authenticatorData and the client data.
-    const OID: Oid<'static> = der_parser::oid!(1.2.840 .113635 .100 .8 .2);
+    const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113635.100.8.2");
 
     fn parse(i: &[u8]) -> der_parser::error::BerResult<'_, (Self::Output, AttestationMetadata)> {
         use der_parser::{der::*, error::BerError};
@@ -305,29 +305,28 @@ impl AttestationX509Extension for AppleAnonymousNonce {
 
 /// Validate an x509 extension is present in an x509 certificate
 pub fn validate_extension<T>(
-    x509: &x509::X509,
+    x509: &x509::Certificate,
     data: &<T as AttestationX509Extension>::Output,
 ) -> Result<AttestationMetadata, WebauthnError>
 where
     T: AttestationX509Extension,
 {
-    let der_bytes = x509.to_der()?;
-    x509_parser::parse_x509_certificate(&der_bytes)
-        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
-        .1
-        .extensions()
-        .iter()
-        .find_map(|extension| {
-            (extension.oid == T::OID).then(|| {
-                T::parse(extension.value)
-                    .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                    .and_then(|(_, (output, metadata))| {
-                        if &output == data {
-                            Ok(metadata)
-                        } else {
-                            Err(T::VALIDATION_ERROR)
-                        }
-                    })
+    x509.tbs_certificate
+        .extensions
+        .as_ref()
+        .and_then(|extensions| {
+            extensions.iter().find_map(|extension| {
+                (extension.extn_id == T::OID).then(|| {
+                    T::parse(extension.extn_value.as_bytes())
+                        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
+                        .and_then(|(_, (output, metadata))| {
+                            if &output == data {
+                                Ok(metadata)
+                            } else {
+                                Err(T::VALIDATION_ERROR)
+                            }
+                        })
+                })
             })
         })
         .unwrap_or({
@@ -388,7 +387,10 @@ pub(crate) fn verify_packed_attestation(
                 .map(|values| {
                     cbor_try_bytes!(values)
                         .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                        .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                        .and_then(|b| {
+                            x509::Certificate::from_der(b)
+                                .map_err(|_| WebauthnError::X509DerInvalid)
+                        })
                 })
                 .collect();
 
@@ -490,16 +492,13 @@ pub(crate) fn verify_packed_attestation(
 /// [§ 8.2.1 Packed Attestation Statement Certificate Requirements][0]
 ///
 /// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
-pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> {
+pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
-    let der_bytes = pubk.to_der()?;
-    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
-        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
-        .1;
+    let x509_cert = &pubk.tbs_certificate;
 
     // The attestation certificate MUST have the following fields/extensions:
     // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
-    if x509_cert.version != X509Version::V3 {
+    if x509_cert.version != x509::Version::V3 {
         trace!("X509 Version != v3");
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
@@ -516,33 +515,44 @@ pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> 
     //  A UTF8String of the vendor’s choosing
     let subject = &x509_cert.subject;
 
-    let subject_c = subject.iter_country().take(1).next();
-    let subject_o = subject.iter_organization().take(1).next();
-    let subject_ou = subject.iter_organizational_unit().take(1).next();
-    let subject_cn = subject.iter_common_name().take(1).next();
+    let mut subject_c_present = false;
+    let mut subject_o_present = false;
+    let mut subject_cn_present = false;
+    let mut subject_ou_valid = false;
 
-    if subject_c.is_none() || subject_o.is_none() || subject_cn.is_none() {
-        trace!("Invalid subject details");
-        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
-    }
+    for rdn in subject.0.iter() {
+        if rdn.0.len() != 1 {
+            // We don't want to deal with empty or multivalue rdns.
+            continue;
+        }
 
-    match subject_ou {
-        Some(ou) => match ou.attr_value().as_str() {
-            Ok(ou_d) => {
-                if ou_d != "Authenticator Attestation" {
-                    trace!("ou != Authenticator Attestation");
-                    return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
-                }
-            }
-            Err(_) => {
+        let ava = &rdn.0.as_slice()[0];
+
+        if ava.oid == rfc4519::C {
+            subject_c_present = true
+        } else if ava.oid == rfc4519::O {
+            subject_o_present = true
+        } else if ava.oid == rfc4519::CN {
+            subject_cn_present = true
+        } else if ava.oid == rfc4519::OU {
+            let Ok(ava_value_str) = str::from_utf8(ava.value.value()) else {
+                // Invalid data.
                 trace!("ou invalid");
                 return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+            };
+
+            if ava_value_str == "Authenticator Attestation" {
+                subject_ou_valid = true
+            } else {
+                trace!("ou != Authenticator Attestation");
+                return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
             }
-        },
-        None => {
-            trace!("ou not found");
-            return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
         }
+    }
+
+    if !(subject_c_present && subject_o_present && subject_cn_present && subject_ou_valid) {
+        trace!("Invalid subject details");
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
     // If the related attestation root certificate is used for multiple authenticator models,
@@ -554,16 +564,34 @@ pub fn assert_packed_attest_req(pubk: &x509::X509) -> Result<(), WebauthnError> 
     //
     // The problem with this check, is that it's not actually required that this
     // oid be present at all ...
-    check_extension(
-        &x509_cert.get_extension_unique(&FidoGenCeAaguid::OID),
-        false,
-        |fido_gen_ce_aaguid| !fido_gen_ce_aaguid.critical,
-    )?;
+    let fido_gen_ce_aaguid_critical = x509_cert.extensions.as_ref().and_then(|extensions| {
+        extensions.iter().find_map(|extension| {
+            (extension.extn_id == FidoGenCeAaguid::OID).then_some(extension.critical)
+        })
+    });
+
+    if fido_gen_ce_aaguid_critical == Some(true) {
+        trace!("fido ce aaguid critical");
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
 
     // The Basic Constraints extension MUST have the CA component set to false.
-    check_extension(&x509_cert.basic_constraints(), true, |basic_constraints| {
-        !basic_constraints.value.ca
-    })?;
+    let basic_constraints = x509_cert
+        .get::<BasicConstraints>()
+        .map_err(|_| {
+            trace!("error reading extensions");
+            WebauthnError::AttestationCertificateRequirementsNotMet
+        })?
+        .and_then(|(_crit, extn)| Some(extn))
+        .ok_or_else(|| {
+            trace!("missing basic constraints");
+            WebauthnError::AttestationCertificateRequirementsNotMet
+        })?;
+
+    if basic_constraints.ca {
+        trace!("attestation cert must not be a ca!!!");
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
 
     // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL
     // Distribution Point extension [RFC5280] are both OPTIONAL as the status of many
@@ -618,7 +646,8 @@ pub(crate) fn verify_fidou2f_attestation(
         .iter()
         .map(|att_cert_bytes| {
             cbor_try_bytes!(att_cert_bytes).and_then(|att_cert| {
-                x509::X509::from_der(att_cert.as_slice()).map_err(WebauthnError::OpenSSLError)
+                x509::Certificate::from_der(att_cert.as_slice())
+                    .map_err(|_| WebauthnError::X509DerInvalid)
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -765,7 +794,9 @@ pub(crate) fn verify_tpm_attestation(
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                .and_then(|b| {
+                    x509::Certificate::from_der(b).map_err(|_| WebauthnError::X509DerInvalid)
+                })
         })
         .collect();
 
@@ -937,82 +968,72 @@ pub(crate) fn verify_tpm_attestation(
     ))
 }
 
-pub(crate) fn assert_tpm_attest_req(x509: &x509::X509) -> Result<(), WebauthnError> {
-    let der_bytes = x509.to_der()?;
-    let x509_cert = x509_parser::parse_x509_certificate(&der_bytes)
-        .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)?
-        .1;
+pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), WebauthnError> {
+    let x509_cert = &x509.tbs_certificate;
 
     // TPM attestation certificate MUST have the following fields/extensions:
 
     // Version MUST be set to 3.
-    if x509_cert.version != X509Version::V3 {
+    if x509_cert.version != x509::Version::V3 {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
     // Subject field MUST be set to empty.
-    let subject_name_ref = x509.subject_name();
-    if subject_name_ref.entries().count() != 0 {
+    if !x509_cert.subject.is_empty() {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
     // The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
     // https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
-    check_extension(
-        &x509_cert.subject_alternative_name(),
-        true,
-        |subject_alternative_name| {
-            // From [TPMv2-EK-Profile]:
-            // In accordance with RFC 5280[11], this extension MUST be critical if
-            // subject is empty and SHOULD be non-critical if subject is non-empty.
-            //
-            // We've already returned if the subject is non-empty, so we can just
-            // check that the extension is critical.
-            if !subject_alternative_name.critical {
-                return false;
-            };
 
-            // The issuer MUST include TPM manufacturer, TPM part number and TPM
-            // firmware version, using the directoryName form within the GeneralName
-            // structure.
-            subject_alternative_name
-                .value
-                .general_names
-                .iter()
-                .any(|general_name| {
-                    if let GeneralName::DirectoryName(x509_name) = general_name {
-                        TpmSanData::try_from(x509_name)
-                            .and_then(|san_data| {
-                                tpm_device_attribute_parser(san_data.manufacturer.as_bytes())
-                                    .map_err(|_| WebauthnError::ParseNOMFailure)
-                            })
-                            .and_then(|(_, manufacturer_bytes)| {
-                                TpmVendor::try_from(manufacturer_bytes)
-                            })
-                            .is_ok()
-                    } else {
-                        false
-                    }
-                })
-        },
-    )?;
+    // From [TPMv2-EK-Profile]:
+    // In accordance with RFC 5280[11], this extension MUST be critical if
+    // subject is empty and SHOULD be non-critical if subject is non-empty.
+    //
+    // We've already returned if the subject is non-empty, so we can just
+    // check that the extension is critical.
+    //
+    // The issuer MUST include TPM manufacturer, TPM part number and TPM
+    // firmware version, using the directoryName form within the GeneralName
+    // structure.
+    let subject_alt_name = x509_cert
+        .get::<SubjectAltName>()
+        .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
+        .and_then(|(critical, extn)| critical.then_some(extn))
+        .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
+
+    let _tpm_san_data = TpmSanData::try_from(&subject_alt_name)
+        .and_then(|san_data| {
+            tpm_device_attribute_parser(san_data.manufacturer.as_bytes())
+                .map_err(|_| WebauthnError::ParseNOMFailure)
+        })
+        .and_then(|(_, manufacturer_bytes)| TpmVendor::try_from(manufacturer_bytes))?;
 
     // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
-    check_extension(
-        &x509_cert.extended_key_usage(),
-        true,
-        |extended_key_usage| {
-            extended_key_usage
-                .value
-                .other
-                .contains(&der_parser::oid!(2.23.133 .8 .3))
-        },
-    )?;
+    let extended_key_usage = x509_cert
+        .get::<ExtendedKeyUsage>()
+        .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
+        .and_then(|(critical, extn)| critical.then_some(extn))
+        .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
+
+    if !extended_key_usage
+        .0
+        .iter()
+        .any(|oid| *oid == OID_JOINT_ISO_ITU_T)
+    {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
 
     // The Basic Constraints extension MUST have the CA component set to false.
-    check_extension(&x509_cert.basic_constraints(), true, |basic_constraints| {
-        !basic_constraints.value.ca
-    })?;
+    let basic_constraints = x509_cert
+        .get::<BasicConstraints>()
+        .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
+        .and_then(|(critical, extn)| critical.then_some(extn))
+        .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
+
+    if basic_constraints.ca {
+        return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
+    }
 
     // An Authority Information Access (AIA) extension with entry id-ad-ocsp and a CRL Distribution
     // Point extension [RFC5280] are both OPTIONAL as the status of many attestation certificates is
@@ -1050,7 +1071,9 @@ pub(crate) fn verify_apple_anonymous_attestation(
         .map(|values| {
             cbor_try_bytes!(values)
                 .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                .and_then(|b| {
+                    x509::Certificate::from_der(b).map_err(|_| WebauthnError::X509DerInvalid)
+                })
         })
         .collect();
 
@@ -1137,7 +1160,9 @@ pub(crate) fn verify_android_key_attestation(
             .map(|values| {
                 cbor_try_bytes!(values)
                     .map_err(|_| WebauthnError::AttestationStatementX5CInvalid)
-                    .and_then(|b| x509::X509::from_der(b).map_err(WebauthnError::OpenSSLError))
+                    .and_then(|b| {
+                        x509::Certificate::from_der(b).map_err(|_| WebauthnError::X509DerInvalid)
+                    })
             })
             .collect();
 
@@ -1198,7 +1223,7 @@ pub(crate) fn verify_android_key_attestation(
 pub fn verify_attestation_ca_chain<'a>(
     att_data: &'_ ParsedAttestationData,
     ca_list: &'a AttestationCaList,
-    danger_disable_certificate_time_checks: bool,
+    current_time: SystemTime,
 ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
     // If the ca_list is empty, Immediately fail since no valid attestation can be created.
     if ca_list.cas().is_empty() {
@@ -1222,94 +1247,35 @@ pub fn verify_attestation_ca_chain<'a>(
     };
 
     for crt in fullchain {
-        debug!(?crt);
+        debug!(cert = %X509Display::from(crt));
     }
-    debug!(?ca_list);
 
     let (leaf, chain) = fullchain
         .split_first()
         .ok_or(WebauthnError::AttestationLeafCertMissing)?;
 
-    // Convert the chain to a stackref so that openssl can use it.
-    let mut chain_stack = stack::Stack::new().map_err(WebauthnError::OpenSSLError)?;
+    // Convert to a crypto-clue x509 cert.
+    let cg_ca_list = ca_list
+        .cas()
+        .values()
+        .map(|att_ca| att_ca.ca().clone())
+        .collect::<Vec<_>>();
 
-    for crt in chain.iter() {
-        chain_stack
-            .push(crt.clone())
-            .map_err(WebauthnError::OpenSSLError)?;
+    for ca in cg_ca_list.iter() {
+        debug!(ca = %X509Display::from(ca));
     }
 
-    // Create the x509 store that we will validate against.
-    let mut ca_store = store::X509StoreBuilder::new().map_err(WebauthnError::OpenSSLError)?;
+    let mut store = x509::X509Store::new(&cg_ca_list);
+    // Google does not put basic contrants on their leaf certs
+    store.leaf_basic_constraints_required(false);
 
-    // In tests we may need to allow disabling time window validity.
-    if danger_disable_certificate_time_checks {
-        ca_store
-            .set_flags(verify::X509VerifyFlags::NO_CHECK_TIME)
-            .map_err(WebauthnError::OpenSSLError)?;
-    }
-
-    for ca_crt in ca_list.cas().values() {
-        ca_store
-            .add_cert(ca_crt.ca().clone())
-            .map_err(WebauthnError::OpenSSLError)?;
-    }
-
-    let ca_store = ca_store.build();
-
-    let mut ca_ctx = x509::X509StoreContext::new().map_err(WebauthnError::OpenSSLError)?;
-
-    // Providing the cert and chain, validate we have a ref to our store.
-    // Note this is a result<result ... because the inner .init must return an errorstack
-    // for openssl.
-    let res: Result<_, _> = ca_ctx
-        .init(&ca_store, leaf, &chain_stack, |ca_ctx_ref| {
-            ca_ctx_ref.verify_cert().map(|_| {
-                // The value as passed in is a boolean that we ignore in favour of the richer error type.
-                let res = ca_ctx_ref.error();
-                debug!("{:?}", res);
-                if res == x509::X509VerifyResult::OK {
-                    ca_ctx_ref
-                        .chain()
-                        .and_then(|chain| {
-                            // If there is a chain here, we get the root.
-                            let idx = chain.len() - 1;
-                            chain.get(idx)
-                        })
-                        .and_then(|ca_cert| {
-                            // If we got it from the stack, we can now digest it.
-                            ca_cert.digest(MessageDigest::sha256()).ok()
-                            // We let the digest bubble out now, we've done too much here
-                            // already!
-                        })
-                        .ok_or(WebauthnError::AttestationTrustFailure)
-                } else {
-                    debug!(
-                        "ca_ctx_ref verify cert - error depth={}, sn={:?}",
-                        ca_ctx_ref.error_depth(),
-                        ca_ctx_ref.current_cert().map(|crt| crt.subject_name())
-                    );
-                    Err(WebauthnError::AttestationChainNotTrusted(res.to_string()))
-                }
-            })
+    store
+        .verify(leaf, chain, current_time)
+        .map_err(WebauthnError::AttestationChainNotTrusted)
+        .map(|valid_ca| {
+            ca_list
+                .cas()
+                .values()
+                .find(|att_ca| att_ca.ca() == valid_ca)
         })
-        .map_err(|e| {
-            // If an openssl error occured, dump it here.
-            error!(?e);
-            e
-        })?;
-
-    // Now we have a result<DigestOfCaUsed, Error> and we want to attach our related
-    // attestation CA.
-    res.and_then(|dgst| {
-        ca_list
-            .cas()
-            .get(dgst.as_ref())
-            .ok_or_else(|| {
-                WebauthnError::AttestationChainNotTrusted("Invalid CA digest maps".to_string())
-            })
-            // We need to wrap in an extra Some here to indicate to the caller that we
-            // did use a CA compare to the Ok(None) case.
-            .map(Some)
-    })
 }

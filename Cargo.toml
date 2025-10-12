@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.5.2"
+version = "0.6.0-dev"
 authors = [
     "William Brown <william@blackhats.net.au>",
     "Michael Farrell <micolous+git@gmail.com>",
@@ -54,16 +54,20 @@ members = [
 # Due to --cfg=web_sys_unstable_apis
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
+[patch.crates-io]
+# crypto-glue = { path = "../crypto-glue" }
+crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
+
 [workspace.dependencies]
 # These are in release/dependency order.
-base64urlsafedata = { path = "./base64urlsafedata", version = "=0.5.2" }
-fido-hid-rs = { path = "./fido-hid-rs", version = "=0.5.2" }
-webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.5.2" }
-webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.5.2" }
-fido-mds = { path = "./fido-mds", version = "=0.5.2" }
-webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.5.2" }
-webauthn-rs = { path = "./webauthn-rs", version = "=0.5.2" }
-webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.5.2" }
+base64urlsafedata = { path = "./base64urlsafedata", version = "=0.6.0-dev" }
+fido-hid-rs = { path = "./fido-hid-rs", version = "=0.6.0-dev" }
+webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.6.0-dev" }
+webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.6.0-dev" }
+fido-mds = { path = "./fido-mds", version = "=0.6.0-dev" }
+webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.6.0-dev" }
+webauthn-rs = { path = "./webauthn-rs", version = "=0.6.0-dev" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.6.0-dev" }
 
 # Currently un-released
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
@@ -74,7 +78,9 @@ async-std = { version = "1.6", features = ["attributes"] }
 anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
-compact_jwt = "0.4.2"
+
+crypto-glue = "^0.1.8"
+compact_jwt = "0.5.1-dev"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
