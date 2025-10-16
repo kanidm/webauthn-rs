@@ -92,7 +92,7 @@ pub struct User {
 }
 
 /// Public key cryptographic parameters
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct PubKeyCredParams {
     /// The type of public-key credential.
     #[serde(rename = "type")]
@@ -102,7 +102,7 @@ pub struct PubKeyCredParams {
 }
 
 /// <https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference>
-#[derive(Debug, Serialize, Clone, Deserialize, Default)]
+#[derive(Debug, Serialize, Clone, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AttestationConveyancePreference {
     /// Do not request attestation.
@@ -297,7 +297,7 @@ pub enum ResidentKeyRequirement {
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-authenticatorselectioncriteria>
-#[derive(Debug, Default, Serialize, Clone, Deserialize)]
+#[derive(Debug, Default, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatorSelectionCriteria {
     /// How the authenticator should be attached to the client machine.

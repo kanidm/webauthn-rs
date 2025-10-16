@@ -11,7 +11,7 @@ use crate::options::*;
 use crate::BASE64_ENGINE;
 
 /// <https://w3c.github.io/webauthn/#dictionary-makecredentialoptions>
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialCreationOptions {
     /// The relying party
@@ -56,7 +56,7 @@ pub struct PublicKeyCredentialCreationOptions {
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CreationChallengeResponse {
     /// The options.
