@@ -325,7 +325,7 @@ pub struct AuthenticatorSelectionCriteria {
 }
 
 /// A descriptor of a credential that can be used.
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct AllowCredentials {
     #[serde(rename = "type")]
     /// The type of credential.

@@ -165,7 +165,7 @@ pub struct HmacGetSecretInput {
 /// Extension option inputs for PublicKeyCredentialRequestOptions
 ///
 /// Implements \[AuthenticatorExtensionsClientInputs\] from the spec
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestAuthenticationExtensions {
     /// The `appid` extension options

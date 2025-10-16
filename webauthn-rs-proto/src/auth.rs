@@ -11,7 +11,7 @@ use crate::options::*;
 use crate::BASE64_ENGINE;
 
 /// The requested options for the authentication
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialRequestOptions {
     /// The challenge that should be signed by the authenticator.
@@ -37,7 +37,7 @@ pub struct PublicKeyCredentialRequestOptions {
 
 /// Request in residentkey workflows that conditional mediation should be used
 /// in the UI, or not.
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum Mediation {
     // /// No mediation is provided - This is represented by "None" on the Option
@@ -59,7 +59,7 @@ pub enum Mediation {
 /// for handling. This is meant to be opaque, that is, you should not need
 /// to inspect or alter the content of the struct - you should serialise it
 /// and transmit it to the client only.
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestChallengeResponse {
     /// The options.
