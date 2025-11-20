@@ -289,7 +289,7 @@ pub struct CredProps {
     /// signal.
     ///
     /// Note that this extension is UNSIGNED and may have been altered by page javascript.
-    pub rk: bool,
+    pub rk: Option<bool>,
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
@@ -335,7 +335,7 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs> for RegistrationExtens
                 js_sys::Reflect::get(&cred_props_struct, &"rk".into())
                     .ok()
                     .and_then(|jv| jv.as_bool())
-                    .map(|rk| CredProps { rk })
+                    .map(|rk| CredProps { rk: Some(rk) })
             });
 
         let hmac_secret = js_sys::Reflect::get(&ext, &"hmac-secret".into())
