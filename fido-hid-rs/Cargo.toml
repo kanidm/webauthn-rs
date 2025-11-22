@@ -24,7 +24,7 @@ tracing.workspace = true
 [build-dependencies]
 # Actually only required when targeting Linux, but Cargo doesn't support
 # build-dependencies for a single target, and you might be cross-compiling.
-bindgen = "0.65.1"
+bindgen = "0.72.1"
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
@@ -36,7 +36,7 @@ num-traits = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 lazy_static = "1.4.0"
-windows = { version = "0.41.0", features = [
+windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_Devices_HumanInterfaceDevice",
     "Devices_Enumeration",
@@ -48,12 +48,12 @@ windows = { version = "0.41.0", features = [
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.9"
+core-foundation = "0.10.1"
 libc = "0.2"
-mach2 = "0.4"
+mach2 = "0.6"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.26.2", features = ["ioctl", "poll"] }
+nix = { version = "0.30.1", features = ["ioctl", "poll"] }
 num-derive = { workspace = true }
 num-traits = "0.2"
-udev = "0.7.0"
+udev = "0.9.3"

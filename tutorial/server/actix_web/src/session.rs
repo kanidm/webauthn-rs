@@ -6,7 +6,7 @@ use actix_session::storage::{LoadError, SaveError, SessionKey, SessionStore, Upd
 use actix_web::cookie::time::Duration;
 use anyhow::anyhow;
 use chrono::Utc;
-use rand::distributions::{Alphanumeric, DistString};
+use rand::distr::{Alphanumeric, SampleString};
 
 /**
 Static map where session states are stored
@@ -48,7 +48,7 @@ impl SessionStore for MemorySession {
         let mut session_key;
 
         loop {
-            session_key = Alphanumeric.sample_string(&mut rand::thread_rng(), 512);
+            session_key = Alphanumeric.sample_string(&mut rand::rng(), 512);
 
             if !SESSION_STATES
                 .lock()
