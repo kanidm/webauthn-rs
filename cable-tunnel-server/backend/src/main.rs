@@ -1,6 +1,6 @@
 use std::{
-    borrow::Cow, collections::HashMap, convert::Infallible, error::Error as StdError,
-    net::SocketAddr, sync::Arc, time::Duration,
+    collections::HashMap, convert::Infallible, error::Error as StdError, net::SocketAddr,
+    sync::Arc, time::Duration,
 };
 
 use clap::{ArgAction, Parser, ValueHint};
@@ -26,6 +26,7 @@ use tokio_tungstenite::WebSocketStream;
 use tungstenite::{
     error::CapacityError,
     protocol::{frame::coding::CloseCode, CloseFrame, Message, Role, WebSocketConfig},
+    Utf8Bytes,
 };
 
 use cable_tunnel_server_common::*;
@@ -127,7 +128,7 @@ impl Tunnel {
 
 const PEER_DISCONNECTED_FRAME: CloseFrame = CloseFrame {
     code: CloseCode::Normal,
-    reason: Cow::Borrowed("remote peer cleanly disconnected"),
+    reason: Utf8Bytes::from_static("remote peer cleanly disconnected"),
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -162,7 +163,7 @@ impl From<tungstenite::Error> for CableError {
 }
 
 impl CableError {
-    fn close_reason(&self) -> Option<CloseFrame<'_>> {
+    fn close_reason(&self) -> Option<CloseFrame> {
         use CableError::*;
         let code = match self {
             RemotePeerErrorFrame => CloseCode::Policy,
@@ -376,11 +377,11 @@ async fn handle_request(
 
     tokio::task::spawn(async move {
         let ss = state.clone();
-        let config = Some(WebSocketConfig {
-            max_message_size: Some(ss.max_length),
-            max_frame_size: Some(ss.max_length),
-            ..Default::default()
-        });
+        let config = Some(
+            WebSocketConfig::default()
+                .max_message_size(Some(ss.max_length))
+                .max_frame_size(Some(ss.max_length)),
+        );
 
         match hyper::upgrade::on(&mut req).await {
             Ok(upgraded) => {
