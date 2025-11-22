@@ -226,8 +226,8 @@ impl WebauthnCore {
     }
 
     fn generate_challenge(&self) -> Challenge {
-        let mut rng = rand::thread_rng();
-        Challenge::new(rng.gen::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
+        let mut rng = rand::rng();
+        Challenge::new(rng.random::<[u8; CHALLENGE_SIZE_BYTES]>().to_vec())
     }
 
     /// Generate a new challenge builder for client registration. This is the first step in

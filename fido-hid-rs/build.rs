@@ -6,7 +6,7 @@ fn linux_headers() {
     println!("cargo:rerun-if-changed={LINUX_WRAPPER_H}");
     let bindings = bindgen::builder()
         .header(LINUX_WRAPPER_H)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .derive_debug(false)
         .derive_default(true)
         .allowlist_type("hidraw_report_descriptor")
