@@ -182,7 +182,9 @@ impl Tunnel {
             CableNoise::build_initiator(Some(local_identity), psk, None)?;
         trace!("Sending initial handshake...");
         trace!(">!> {}", hex::encode(&handshake_message));
-        stream.send(Message::Binary(handshake_message)).await?;
+        stream
+            .send(Message::Binary(handshake_message.into()))
+            .await?;
 
         // Handshake sent, get response
         ui.cable_status_update(CableState::WaitingForAuthenticatorResponse);
@@ -292,7 +294,7 @@ impl Tunnel {
             CableNoise::build_responder(None, psk, Some(peer_identity), &resp)?;
         trace!("Sending response to initiator challenge");
         trace!(">!> {}", hex::encode(&response));
-        stream.send(Message::Binary(response)).await?;
+        stream.send(Message::Binary(response.into())).await?;
 
         // Send post-handshake message
         let phm = CablePostHandshake {
@@ -336,7 +338,7 @@ impl Tunnel {
         trace!(">>> {}", hex::encode(cmd));
         let encrypted = self.crypter.encrypt(cmd)?;
         trace!(">!> {}", hex::encode(&encrypted));
-        self.stream.send(Message::Binary(encrypted)).await?;
+        self.stream.send(Message::Binary(encrypted.into())).await?;
         Ok(())
     }
 
