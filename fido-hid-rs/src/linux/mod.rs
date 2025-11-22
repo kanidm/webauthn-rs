@@ -89,7 +89,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
                 return;
             }
 
-            let pollfd = PollFd::new(monitor.as_raw_fd(), PollFlags::POLLIN | PollFlags::POLLPRI);
+            let pollfd = PollFd::new(monitor.as_fd(), PollFlags::POLLIN | PollFlags::POLLPRI);
 
             loop {
                 // trace!("ppoll'ing for event");
