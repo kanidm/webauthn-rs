@@ -135,8 +135,8 @@ bluetooth-hci = { git = "https://github.com/micolous/bluetooth-hci.git", rev = "
 
 # image version needs to match bardecoder's version:
 # https://github.com/piderman314/bardecoder/blame/master/Cargo.toml
-bardecoder = "=0.4.0"
-image = ">= 0.23.14, < 0.24"
+bardecoder = "=0.5.0"
+image = "0.24.9"
 
 [[example]]
 name = "authenticate"
