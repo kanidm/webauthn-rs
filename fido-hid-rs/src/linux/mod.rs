@@ -89,12 +89,15 @@ impl USBDeviceManager for USBDeviceManagerImpl {
                 return;
             }
 
-            let pollfd = PollFd::new(monitor.as_fd(), PollFlags::POLLIN | PollFlags::POLLPRI);
+            let mut pollfds = [PollFd::new(
+                monitor.as_fd(),
+                PollFlags::POLLIN | PollFlags::POLLPRI,
+            )];
 
             loop {
                 // trace!("ppoll'ing for event");
                 if let Err(e) = ppoll(
-                    &mut [pollfd],
+                    &mut pollfds,
                     Some(Duration::from_secs(1).into()),
                     Some(SigSet::all()),
                 ) {
@@ -171,6 +174,7 @@ impl USBDeviceManager for USBDeviceManagerImpl {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)] // because vendor/product are not used yet
 pub struct USBDeviceInfoImpl {
     path: Box<Path>,
     vendor: u16,
