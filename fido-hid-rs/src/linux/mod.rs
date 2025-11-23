@@ -8,7 +8,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     mem::size_of,
-    os::fd::AsRawFd,
+    os::fd::{AsFd, AsRawFd},
     path::Path,
     time::Duration,
 };
