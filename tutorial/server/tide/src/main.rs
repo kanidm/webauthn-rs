@@ -387,7 +387,7 @@ async fn main() -> tide::Result<()> {
     // Allow cookies so that we can bind some data to sessions.
     // In production, you should NOT use the memory store, since
     // it does not have cleanup.
-    let cookie_sig = StdRng::from_entropy().gen::<[u8; 32]>();
+    let cookie_sig = StdRng::from_os_rng().random::<[u8; 32]>();
     let memory_store = tide::sessions::MemoryStore::new();
 
     let sessions = tide::sessions::SessionMiddleware::new(memory_store.clone(), &cookie_sig)
