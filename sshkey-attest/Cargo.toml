@@ -25,7 +25,7 @@ nom.workspace = true
 openssl.workspace = true
 serde.workspace = true
 serde_cbor_2.workspace = true
-sshkeys = { version = "0.3.3", features = ["serde"] }
+sshkeys = { version = "0.3.4", features = ["serde"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde"] }
 webauthn-rs-core.workspace = true
