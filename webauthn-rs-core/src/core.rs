@@ -877,11 +877,11 @@ impl WebauthnCore {
         // situation occurs.
 
         if cred.backup_eligible != data.authenticator_data.backup_eligible {
-            if allow_backup_eligible_upgrade
-                && !cred.backup_eligible
-                && data.authenticator_data.backup_eligible
-            {
-                debug!("Credential backup eligibility has changed!");
+            if allow_backup_eligible_upgrade {
+                debug!(
+                    "Credential backup eligibility has changed! {} -> {}",
+                    cred.backup_eligible, data.authenticator_data.backup_eligible
+                );
             } else {
                 error!("Credential backup eligibility has changed!");
                 return Err(WebauthnError::CredentialBackupEligibilityInconsistent);
