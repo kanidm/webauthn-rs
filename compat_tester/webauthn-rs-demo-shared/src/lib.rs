@@ -456,8 +456,6 @@ pub enum ResponseError {
     ParseJSONFailure,
     ParseNOMFailure,
     ParseInsufficientBytesAvailable,
-    OpenSSLError,
-    OpenSSLErrorNoCurveName,
     COSEKeyInvalidCBORValue,
     COSEKeyInvalidType,
     COSEKeyEDUnsupported,
@@ -557,7 +555,6 @@ impl From<WebauthnError> for ResponseError {
             WebauthnError::ParseJSONFailure(_) => Self::ParseJSONFailure,
             WebauthnError::ParseNOMFailure => Self::ParseNOMFailure,
             WebauthnError::ParseInsufficientBytesAvailable => Self::ParseInsufficientBytesAvailable,
-            WebauthnError::OpenSSLErrorNoCurveName => Self::OpenSSLErrorNoCurveName,
             WebauthnError::COSEKeyInvalidCBORValue => Self::COSEKeyInvalidCBORValue,
             WebauthnError::COSEKeyInvalidType => Self::COSEKeyInvalidType,
             WebauthnError::COSEKeyEDUnsupported => Self::COSEKeyEDUnsupported,
@@ -593,7 +590,6 @@ impl From<WebauthnError> for ResponseError {
             WebauthnError::CredentialCrossOrigin => Self::CredentialCrossOrigin,
             #[allow(unreachable_patterns)]
             _ => Self::UnknownError(format!("{value:?}")),
-            // WebauthnError::OpenSSLError(_)                                                                                =>      Self::OpenSSLError,
         }
     }
 }

@@ -37,9 +37,9 @@ use webauthn_rs_core::{
     crypto::{compute_sha256, verify_signature},
     internals::AuthenticatorData,
     proto::{
-        AttestationCaList, AttestationFormat, AttestationMetadata, COSEAlgorithm, COSEKey,
-        COSEKeyType, CredentialProtectionPolicy, ExtnState, ParsedAttestation,
-        ParsedAttestationData, RegisteredExtensions, Registration,
+        AttestationCaList, AttestationFormat, AttestationMetadata, COSEKey, COSEKeyType,
+        CredentialProtectionPolicy, ExtnState, ParsedAttestation, ParsedAttestationData,
+        RegisteredExtensions, Registration,
     },
 };
 
@@ -66,8 +66,6 @@ pub fn verify_fido_sk_ssh_attestation(
         return Err(WebauthnError::MissingAttestationCaList);
     }
 
-    let alg = COSEAlgorithm::ES256;
-
     let ssh_sk_attest = SshSkAttestation::try_from(attestation)?;
 
     let acd = ssh_sk_attest
@@ -91,7 +89,6 @@ pub fn verify_fido_sk_ssh_attestation(
         .collect();
 
     let is_valid_signature = verify_signature(
-        alg,
         &ssh_sk_attest.att_cert,
         &ssh_sk_attest.sig,
         &verification_data,
