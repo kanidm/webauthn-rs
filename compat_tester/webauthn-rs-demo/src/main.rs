@@ -12,7 +12,7 @@ use structopt::StructOpt;
 
 use rand::prelude::*;
 
-use tide_openssl::TlsListener;
+use tide_rustls::TlsListener;
 use tokio::task;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
