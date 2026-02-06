@@ -55,8 +55,8 @@ members = [
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [patch.crates-io]
-# crypto-glue = { path = "../crypto-glue" }
-crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
+crypto-glue = { path = "../crypto-glue" }
+# crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
 
 [workspace.dependencies]
 # These are in release/dependency order.
@@ -119,6 +119,7 @@ uuid = "^1.19.0"
 serde = { version = "^1.0.228", features = ["derive"] }
 serde_cbor_2 = { version = "0.13.0" }
 serde_json = "^1.0.145"
+serde_with = { version = "3.16.1", features = ["base64"] }
 rand = "0.9.2"
 rand_chacha = "0.9.0"
 reqwest = { version = "0.12.25", default-features = false, features = [

@@ -1,15 +1,33 @@
-use base64urlsafedata::Base64UrlSafeData;
-use openssl::error::ErrorStack as OpenSSLErrorStack;
-use openssl::{hash, x509 as ox509};
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-
 use crypto_glue::{
+    der::Error as DerError,
+    s256::Sha256Output,
     traits::{DecodeDer, DecodePem, EncodeDer},
     x509,
 };
-
+use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
+use std::collections::BTreeMap;
+use std::fmt;
+use tracing::error;
 use uuid::Uuid;
+
+#[derive(Debug)]
+pub enum Error {
+    DerDecode(DerError),
+    DerEncode(DerError),
+    PemDecode(DerError),
+    PemEncode(DerError),
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeviceDescription {
@@ -32,9 +50,11 @@ impl DeviceDescription {
 }
 
 /// A serialised Attestation CA.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerialisableAttestationCa {
-    pub(crate) ca: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub(crate) ca: Vec<u8>,
     pub(crate) aaguids: BTreeMap<Uuid, DeviceDescription>,
     pub(crate) blanket_allow: bool,
 }
@@ -50,7 +70,6 @@ pub struct SerialisableAttestationCa {
 )]
 pub struct AttestationCa {
     /// The x509 root CA of the attestation chain that a security key will be attested to.
-    ca_openssl: ox509::X509,
     ca: x509::Certificate,
     /// If not empty, the set of acceptable AAGUIDS (Device Ids) that are allowed to be
     /// attested as trusted by this CA. AAGUIDS that are not in this set, but signed by
@@ -63,7 +82,7 @@ pub struct AttestationCa {
 impl Into<SerialisableAttestationCa> for AttestationCa {
     fn into(self) -> SerialisableAttestationCa {
         SerialisableAttestationCa {
-            ca: Base64UrlSafeData::from(self.ca.to_der().expect("Invalid DER")),
+            ca: self.ca.to_der().expect("Invalid DER"),
             aaguids: self.aaguids,
             blanket_allow: self.blanket_allow,
         }
@@ -71,12 +90,14 @@ impl Into<SerialisableAttestationCa> for AttestationCa {
 }
 
 impl TryFrom<SerialisableAttestationCa> for AttestationCa {
-    type Error = OpenSSLErrorStack;
+    type Error = crate::Error;
 
     fn try_from(data: SerialisableAttestationCa) -> Result<Self, Self::Error> {
         Ok(AttestationCa {
-            ca_openssl: ox509::X509::from_der(data.ca.as_slice())?,
-            ca: x509::Certificate::from_der(data.ca.as_slice()).unwrap(),
+            ca: x509::Certificate::from_der(&data.ca).map_err(|err| {
+                error!(?err, "Unable to decode certificate DER");
+                Error::DerDecode(err)
+            })?,
             aaguids: data.aaguids,
             blanket_allow: data.blanket_allow,
         })
@@ -88,10 +109,6 @@ impl AttestationCa {
         &self.ca
     }
 
-    pub fn ca_openssl(&self) -> &ox509::X509 {
-        &self.ca_openssl
-    }
-
     pub fn aaguids(&self) -> &BTreeMap<Uuid, DeviceDescription> {
         &self.aaguids
     }
@@ -101,10 +118,11 @@ impl AttestationCa {
     }
 
     /// Retrieve the Key Identifier for this Attestation Ca
-    pub fn get_kid(&self) -> Result<Vec<u8>, OpenSSLErrorStack> {
-        self.ca_openssl
-            .digest(hash::MessageDigest::sha256())
-            .map(|bytes| bytes.to_vec())
+    pub fn get_kid(&self) -> Result<Sha256Output, Error> {
+        x509::x509_digest_sha256(&self.ca).map_err(|err| {
+            error!(?err, "Unable to encode certificate for digest");
+            Error::DerEncode(err)
+        })
     }
 
     fn insert_device(
@@ -123,10 +141,12 @@ impl AttestationCa {
         );
     }
 
-    fn new_from_pem(data: &[u8]) -> Result<Self, OpenSSLErrorStack> {
+    fn new_from_pem(data: &[u8]) -> Result<Self, Error> {
         Ok(AttestationCa {
-            ca_openssl: ox509::X509::from_pem(data)?,
-            ca: x509::Certificate::from_pem(data).unwrap(),
+            ca: x509::Certificate::from_pem(data).map_err(|err| {
+                error!(?err, "Unable to decode certificate PEM");
+                Error::PemDecode(err)
+            })?,
             aaguids: BTreeMap::default(),
             blanket_allow: true,
         })
@@ -170,15 +190,57 @@ impl AttestationCa {
     }
 }
 
+#[serde_as]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SerialisableAttestationCaList {
+    /// The set of CA's that we trust in this Operation
+    #[serde_as(as = "IfIsHumanReadable< BTreeMap<Base64<UrlSafe, Unpadded>, _> >")]
+    cas: BTreeMap<[u8; 32], AttestationCa>,
+}
+
+impl From<AttestationCaList> for SerialisableAttestationCaList {
+    fn from(acl: AttestationCaList) -> Self {
+        Self {
+            cas: acl
+                .cas
+                .into_iter()
+                .map(|(key, value)| {
+                    let key: [u8; 32] = *key.as_ref();
+                    (key, value)
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<SerialisableAttestationCaList> for AttestationCaList {
+    fn from(acl: SerialisableAttestationCaList) -> Self {
+        Self {
+            cas: acl
+                .cas
+                .into_iter()
+                .map(|(key, value)| {
+                    let key = Sha256Output::from(key);
+                    (key, value)
+                })
+                .collect(),
+        }
+    }
+}
+
 /// A list of AttestationCas and associated options.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    from = "SerialisableAttestationCaList",
+    into = "SerialisableAttestationCaList"
+)]
 pub struct AttestationCaList {
     /// The set of CA's that we trust in this Operation
-    cas: BTreeMap<Base64UrlSafeData, AttestationCa>,
+    cas: BTreeMap<Sha256Output, AttestationCa>,
 }
 
 impl TryFrom<&[u8]> for AttestationCaList {
-    type Error = OpenSSLErrorStack;
+    type Error = crate::Error;
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         let mut new = Self::default();
@@ -189,7 +251,7 @@ impl TryFrom<&[u8]> for AttestationCaList {
 }
 
 impl AttestationCaList {
-    pub fn cas(&self) -> &BTreeMap<Base64UrlSafeData, AttestationCa> {
+    pub fn cas(&self) -> &BTreeMap<Sha256Output, AttestationCa> {
         &self.cas
     }
 
@@ -207,10 +269,7 @@ impl AttestationCaList {
     }
 
     /// Insert a new att_ca into this Attestation Ca List
-    pub fn insert(
-        &mut self,
-        att_ca: AttestationCa,
-    ) -> Result<Option<AttestationCa>, OpenSSLErrorStack> {
+    pub fn insert(&mut self, att_ca: AttestationCa) -> Result<Option<AttestationCa>, Error> {
         // Get the key id (kid, digest).
         let att_ca_dgst = att_ca.get_kid()?;
         Ok(self.cas.insert(att_ca_dgst.into(), att_ca))
@@ -251,7 +310,7 @@ impl AttestationCaList {
 
 #[derive(Default)]
 pub struct AttestationCaListBuilder {
-    cas: BTreeMap<Vec<u8>, AttestationCa>,
+    cas: BTreeMap<Sha256Output, AttestationCa>,
 }
 
 impl AttestationCaListBuilder {
@@ -261,22 +320,20 @@ impl AttestationCaListBuilder {
 
     pub fn insert_device_x509(
         &mut self,
-        ca_openssl: ox509::X509,
+        ca: x509::Certificate,
         aaguid: Uuid,
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
-    ) -> Result<(), OpenSSLErrorStack> {
-        let ca = x509::Certificate::from_der(&ca_openssl.to_der().unwrap()).unwrap();
-
-        let kid = ca_openssl
-            .digest(hash::MessageDigest::sha256())
-            .map(|bytes| bytes.to_vec())?;
+    ) -> Result<(), Error> {
+        let kid = x509::x509_digest_sha256(&ca).map_err(|err| {
+            error!(?err, "Unable to encode certificate for digest");
+            Error::DerEncode(err)
+        })?;
 
         let mut att_ca = if let Some(att_ca) = self.cas.remove(&kid) {
             att_ca
         } else {
             AttestationCa {
-                ca_openssl,
                 ca,
                 aaguids: BTreeMap::default(),
                 blanket_allow: false,
@@ -296,8 +353,11 @@ impl AttestationCaListBuilder {
         aaguid: Uuid,
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
-    ) -> Result<(), OpenSSLErrorStack> {
-        let ca = ox509::X509::from_der(ca_der)?;
+    ) -> Result<(), Error> {
+        let ca = x509::Certificate::from_der(ca_der).map_err(|err| {
+            error!(?err, "Unable to encode certificate for digest");
+            Error::DerDecode(err)
+        })?;
         self.insert_device_x509(ca, aaguid, desc_english, desc_localised)
     }
 
@@ -307,8 +367,11 @@ impl AttestationCaListBuilder {
         aaguid: Uuid,
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
-    ) -> Result<(), OpenSSLErrorStack> {
-        let ca = ox509::X509::from_pem(ca_pem)?;
+    ) -> Result<(), Error> {
+        let ca = x509::Certificate::from_pem(ca_pem).map_err(|err| {
+            error!(?err, "Unable to encode certificate for digest");
+            Error::PemDecode(err)
+        })?;
         self.insert_device_x509(ca, aaguid, desc_english, desc_localised)
     }
 
