@@ -3588,7 +3588,10 @@ mod tests {
             Some(&(ANDROID_SOFTWARE_ROOT_CA.try_into().unwrap())),
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            // Must manually set to prior to the cert expiration.
+            // Expiry is 2026-01-08T00:46:09Z
+            // Set to: 2025-02-06
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1738810009),
         );
         debug!(?result);
         assert!(result.is_ok());
@@ -3859,9 +3862,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256, COSEAlgorithm::RS256],
             None,
-            true,
             &reg_extn,
             true,
+            SystemTime::now(),
         );
 
         debug!(?result);
