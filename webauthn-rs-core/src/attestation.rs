@@ -16,7 +16,7 @@ use crypto_glue::{
 use std::time::SystemTime;
 use uuid::Uuid;
 
-const OID_JOINT_ISO_ITU_T: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.23.133.8.3");
+static OID_JOINT_ISO_ITU_T: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.23.133.8.3");
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
 /// that the value of the extension is equal to some other value
@@ -582,7 +582,7 @@ pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), Webauthn
             trace!("error reading extensions");
             WebauthnError::AttestationCertificateRequirementsNotMet
         })?
-        .and_then(|(_crit, extn)| Some(extn))
+        .map(|(_crit, extn)| extn)
         .ok_or_else(|| {
             trace!("missing basic constraints");
             WebauthnError::AttestationCertificateRequirementsNotMet
@@ -1024,11 +1024,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), Weba
         .and_then(|(critical, extn)| critical.then_some(extn))
         .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
 
-    if !extended_key_usage
-        .0
-        .iter()
-        .any(|oid| *oid == OID_JOINT_ISO_ITU_T)
-    {
+    if !extended_key_usage.0.contains(&OID_JOINT_ISO_ITU_T) {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 

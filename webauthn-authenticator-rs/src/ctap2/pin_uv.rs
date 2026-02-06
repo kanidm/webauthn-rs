@@ -401,7 +401,7 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         let aes_iv = Aes256CbcIv::from_slice(iv);
 
         // 4. Return the AES-256-CBC decryption of ct using key and iv.
-        decrypt(&aes_key, &aes_iv, ct)
+        decrypt(&aes_key, aes_iv, ct)
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {

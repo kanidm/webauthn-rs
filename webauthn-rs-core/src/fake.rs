@@ -228,8 +228,7 @@ where
     /// external party to determine if `CredentialID`s are genuine or faked. Rotation of this key
     /// may also allow detection of genuine or fake credentials.
     pub fn new(hmac_key: &[u8]) -> Result<Self, WebauthnError> {
-        let hmac_key =
-            hmac_s256::key_from_slice(hmac_key).ok_or_else(|| WebauthnError::HmacKeyInvalid)?;
+        let hmac_key = hmac_s256::key_from_slice(hmac_key).ok_or(WebauthnError::HmacKeyInvalid)?;
 
         Ok(WebauthnFakeCredentialGenerator {
             hmac_key,

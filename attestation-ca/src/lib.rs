@@ -272,7 +272,7 @@ impl AttestationCaList {
     pub fn insert(&mut self, att_ca: AttestationCa) -> Result<Option<AttestationCa>, Error> {
         // Get the key id (kid, digest).
         let att_ca_dgst = att_ca.get_kid()?;
-        Ok(self.cas.insert(att_ca_dgst.into(), att_ca))
+        Ok(self.cas.insert(att_ca_dgst, att_ca))
     }
 
     /// Join two CA lists into one, taking all elements from both.
@@ -281,7 +281,7 @@ impl AttestationCaList {
             if let Some(s_att_ca) = self.cas.get_mut(o_kid) {
                 s_att_ca.union(o_att_ca)
             } else {
-                self.cas.insert(o_kid.clone(), o_att_ca.clone());
+                self.cas.insert(*o_kid, o_att_ca.clone());
             }
         }
     }
@@ -376,12 +376,6 @@ impl AttestationCaListBuilder {
     }
 
     pub fn build(self) -> AttestationCaList {
-        let cas = self
-            .cas
-            .into_iter()
-            .map(|(kid, att_ca)| (kid.into(), att_ca))
-            .collect();
-
-        AttestationCaList { cas }
+        AttestationCaList { cas: self.cas }
     }
 }

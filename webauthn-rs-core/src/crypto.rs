@@ -478,17 +478,17 @@ impl COSEKey {
                 ECDSACurve::SECP256R1 => {
                     ecdsa_p256::from_coords_raw(ec2k.x.as_ref(), ec2k.y.as_ref())
                         .map(COSEKeyPublic::EcdsaP256)
-                        .ok_or_else(|| WebauthnError::EcdsaPointInvalid)
+                        .ok_or(WebauthnError::EcdsaPointInvalid)
                 }
                 ECDSACurve::SECP384R1 => {
                     ecdsa_p384::from_coords_raw(ec2k.x.as_ref(), ec2k.y.as_ref())
                         .map(COSEKeyPublic::EcdsaP384)
-                        .ok_or_else(|| WebauthnError::EcdsaPointInvalid)
+                        .ok_or(WebauthnError::EcdsaPointInvalid)
                 }
                 ECDSACurve::SECP521R1 => {
                     ecdsa_p521::from_coords_raw(ec2k.x.as_ref(), ec2k.y.as_ref())
                         .map(COSEKeyPublic::EcdsaP521)
-                        .ok_or_else(|| WebauthnError::EcdsaPointInvalid)
+                        .ok_or(WebauthnError::EcdsaPointInvalid)
                 }
             },
             COSEKeyType::RSA(rsak) => {

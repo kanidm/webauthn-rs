@@ -4,7 +4,7 @@ authors = [
     "William Brown <william@blackhats.net.au>",
     "Michael Farrell <micolous+git@gmail.com>",
 ]
-rust-version = "1.85"
+rust-version = "1.87"
 edition = "2021"
 repository = "https://github.com/kanidm/webauthn-rs"
 homepage = "https://github.com/kanidm/webauthn-rs"
@@ -55,8 +55,8 @@ members = [
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [patch.crates-io]
-crypto-glue = { path = "../crypto-glue" }
-# crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
+# crypto-glue = { path = "../crypto-glue" }
+crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
 
 [workspace.dependencies]
 # These are in release/dependency order.
