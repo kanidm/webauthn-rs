@@ -55,8 +55,8 @@ members = [
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [patch.crates-io]
-# crypto-glue = { path = "../crypto-glue" }
-crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
+crypto-glue = { path = "../crypto-glue" }
+# crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
 
 [workspace.dependencies]
 # These are in release/dependency order.
@@ -74,6 +74,7 @@ cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = 
 webauthn-rs-device-catalog = { path = "./device-catalog" }
 
 async-std = { version = "1.6", features = ["attributes"] }
+async-trait = "~0.1"
 anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
@@ -106,24 +107,7 @@ tokio = { version = "1.47.2", features = [
     "rt-multi-thread",
     "time",
 ] }
-async-trait = "~0.1"
-async-std = { version = "1.13", features = ["attributes"] }
-anyhow = "1.0"
-base64 = "0.21"
-clap = { version = "^4.5", features = ["derive", "env"] }
-compact_jwt = "0.4.3"
-futures = "^0.3.31"
-hex = "0.4.3"
-http = "1.4.0"
-http-body = "1.0.1"
-http-body-util = "0.1.3"
-hyper = { version = "1.8.1", default-features = false, features = ["http1"] }
-hyper-util = { version = "0.1.19", features = ["tokio"] }
-nom = "7.1.3"
-num-derive = { version = "0.4.2" }
-peg = "0.8.5"
-openssl = "^0.10.75"
-openssl-sys = "^0.9.111"
+
 tokio-tungstenite = { version = "^0.28.0", features = ["native-tls"] }
 tracing = "^0.1.43"
 tracing-log = { version = "0.2.0" }
