@@ -293,6 +293,9 @@ pub enum WebauthnError {
 
     #[error("Malformed X509 DER was encountered")]
     X509DerInvalid,
+
+    #[error("An invalid HMAC Key was found")]
+    HmacKeyInvalid,
 }
 
 impl PartialEq for WebauthnError {
