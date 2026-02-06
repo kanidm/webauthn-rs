@@ -2,18 +2,23 @@
 use crate::stubs::*;
 
 use crate::authenticator_hashed::AuthenticatorBackendHashedClientData;
-use crate::crypto::{compute_sha256, get_group};
+use crate::crypto::compute_sha256;
 use crate::error::WebauthnCError;
 use crate::BASE64_ENGINE;
 use base64::Engine;
-use openssl::{bn, ec, hash, pkey, rand, sign};
+use base64urlsafedata::Base64UrlSafeData;
+use crypto_glue::{
+    ecdsa_p256::{
+        self, EcdsaP256PrivateKey, EcdsaP256PublicEncodedPoint, EcdsaP256Signature,
+        EcdsaP256SigningKey,
+    },
+    rand::{self, RngCore},
+    traits::{Signer, Zeroizing},
+};
 use serde_cbor_2::value::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
-
-use base64urlsafedata::Base64UrlSafeData;
-
 use webauthn_rs_proto::{
     AllowCredentials, AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
     AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, PublicKeyCredential,
@@ -22,7 +27,7 @@ use webauthn_rs_proto::{
 };
 
 pub struct SoftPasskey {
-    tokens: HashMap<Vec<u8>, Vec<u8>>,
+    tokens: HashMap<Vec<u8>, Zeroizing<Vec<u8>>>,
     counter: u32,
     falsify_uv: bool,
 }
@@ -203,48 +208,35 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         }
 
         // Generate a random credential id
-        let mut key_handle: Vec<u8> = Vec::with_capacity(32);
-        key_handle.resize_with(32, Default::default);
-        rand::rand_bytes(key_handle.as_mut_slice())?;
+        let mut key_handle: Vec<u8> = vec![0; 32];
+        let mut rng = rand::thread_rng();
+        rng.fill_bytes(&mut key_handle);
 
         // Create a new key.
-        let ecgroup = get_group()?;
-
-        let eckey = ec::EcKey::generate(&ecgroup)?;
+        let eckey = ecdsa_p256::new_key();
 
         // Extract the public x and y coords.
-        let ecpub_points = eckey.public_key();
+        let ecpublic = eckey.public_key();
 
-        let mut bnctx = bn::BigNumContext::new()?;
+        let encoded_point = EcdsaP256PublicEncodedPoint::from(ecpublic);
 
-        let mut xbn = bn::BigNum::new()?;
+        let public_key_x = encoded_point
+            .x()
+            .map(|bytes| bytes.to_vec())
+            .unwrap_or_default();
 
-        let mut ybn = bn::BigNum::new()?;
-
-        ecpub_points.affine_coordinates_gfp(&ecgroup, &mut xbn, &mut ybn, &mut bnctx)?;
-
-        let mut public_key_x = Vec::with_capacity(32);
-        let mut public_key_y = Vec::with_capacity(32);
-
-        public_key_x.resize(32, 0);
-        public_key_y.resize(32, 0);
-
-        let xbnv = xbn.to_vec();
-        let ybnv = ybn.to_vec();
-
-        let (_pad, x_fill) = public_key_x.split_at_mut(32 - xbnv.len());
-        x_fill.copy_from_slice(&xbnv);
-
-        let (_pad, y_fill) = public_key_y.split_at_mut(32 - ybnv.len());
-        y_fill.copy_from_slice(&ybnv);
+        let public_key_y = encoded_point
+            .y()
+            .map(|bytes| bytes.to_vec())
+            .unwrap_or_default();
 
         // Extract the DER cert for later
-        let ecpriv_der = eckey.private_key_to_der()?;
+        let ecpriv_der = eckey
+            .to_sec1_der()
+            .map_err(|_| WebauthnCError::CryptographyEcdsaSec1Invalid)?;
 
         // Now setup to sign.
-        let pkey = pkey::PKey::from_ec_key(eckey)?;
-
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey)?;
+        let signer = EcdsaP256SigningKey::from(&eckey);
 
         // =====
 
@@ -318,8 +310,9 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
 
         // Do the signature
         let signature = signer
-            .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())?;
+            .try_sign(&verification_data)
+            .map(|sig: EcdsaP256Signature| sig.to_der().to_bytes().into())
+            .map_err(|_| WebauthnCError::CryptographyEcdsaSignature)?;
 
         let mut attest_map = BTreeMap::new();
 
@@ -480,11 +473,10 @@ impl U2FToken for SoftPasskey {
 
         debug!("Using -> {:?}", key_handle);
 
-        let eckey = ec::EcKey::private_key_from_der(pkder.as_slice())?;
+        let eckey = EcdsaP256PrivateKey::from_sec1_der(pkder.as_slice())
+            .map_err(|_| WebauthnCError::CryptographyEcdsaSec1Invalid)?;
 
-        let pkey = pkey::PKey::from_ec_key(eckey)?;
-
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &pkey)?;
+        let signer = EcdsaP256SigningKey::from(&eckey);
 
         // Increment the counter.
         self.counter += 1;
@@ -505,8 +497,9 @@ impl U2FToken for SoftPasskey {
             .collect();
 
         let signature = signer
-            .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())?;
+            .try_sign(&verification_data)
+            .map(|sig: EcdsaP256Signature| sig.to_der().to_bytes().into())
+            .map_err(|_| WebauthnCError::CryptographyEcdsaSignature)?;
 
         Ok(U2FSignData {
             key_handle,

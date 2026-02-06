@@ -91,7 +91,7 @@
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::unwrap_used)]
-// #![deny(clippy::expect_used)]
+#![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![deny(clippy::unreachable)]
 #![deny(clippy::await_holding_lock)]
@@ -179,9 +179,6 @@ mod stubs;
 pub use crate::authenticator_hashed::{
     perform_auth_with_request, perform_register_with_request, AuthenticatorBackendHashedClientData,
 };
-
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
-pub use crate::crypto::SHA256Hash;
 
 pub struct WebauthnAuthenticator<T>
 where

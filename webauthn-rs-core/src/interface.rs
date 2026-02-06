@@ -3,22 +3,25 @@
 
 use crate::attestation::verify_attestation_ca_chain;
 use crate::error::*;
-pub use crate::internals::AttestationObject;
+use base64urlsafedata::HumanBinaryData;
+use crypto_glue::{
+    ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint, EcdsaP256PublicKey},
+    traits::{DecodeDer, EncodeDer, FromEncodedPoint},
+    x509,
+};
+use openssl::nid;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
+use std::time::SystemTime;
+use uuid::Uuid;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
 
+pub use crate::internals::AttestationObject;
 pub use webauthn_attestation_ca::*;
-
-use base64urlsafedata::HumanBinaryData;
-
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-
-use openssl::{bn, ec, nid, pkey, x509};
-use uuid::Uuid;
 
 /// Representation of an AAGUID
 /// <https://www.w3.org/TR/webauthn/#aaguid>
@@ -150,18 +153,52 @@ pub struct COSEEC2Key {
     pub y: HumanBinaryData,
 }
 
-impl TryFrom<&COSEEC2Key> for ec::EcKey<pkey::Public> {
-    type Error = openssl::error::ErrorStack;
+impl TryFrom<&EcdsaP256PublicKey> for COSEEC2Key {
+    type Error = WebauthnError;
+
+    fn try_from(k: &EcdsaP256PublicKey) -> Result<Self, Self::Error> {
+        let encoded_point = EcdsaP256PublicEncodedPoint::from(k);
+
+        let public_key_x = encoded_point
+            .x()
+            .map(|bytes| bytes.to_vec())
+            .unwrap_or_default();
+
+        let public_key_y = encoded_point
+            .y()
+            .map(|bytes| bytes.to_vec())
+            .unwrap_or_default();
+
+        Ok(COSEEC2Key {
+            curve: ECDSACurve::SECP256R1,
+            x: public_key_x.into(),
+            y: public_key_y.into(),
+        })
+    }
+}
+
+impl TryFrom<&COSEEC2Key> for EcdsaP256PublicKey {
+    type Error = WebauthnError;
 
     fn try_from(k: &COSEEC2Key) -> Result<Self, Self::Error> {
-        let group = ec::EcGroup::from_curve_name((&k.curve).into())?;
-        let mut ctx = bn::BigNumContext::new()?;
-        let mut point = ec::EcPoint::new(&group)?;
-        let x = bn::BigNum::from_slice(k.x.as_slice())?;
-        let y = bn::BigNum::from_slice(k.y.as_slice())?;
-        point.set_affine_coordinates_gfp(&group, &x, &y, &mut ctx)?;
+        let mut field_x = EcdsaP256FieldBytes::default();
+        if k.x.len() != field_x.len() {
+            return Err(WebauthnError::COSEKeyECDSAXYInvalid);
+        }
 
-        ec::EcKey::from_public_key(&group, &point)
+        let mut field_y = EcdsaP256FieldBytes::default();
+        if k.y.len() != field_y.len() {
+            return Err(WebauthnError::COSEKeyECDSAXYInvalid);
+        }
+
+        field_x.copy_from_slice(&k.x);
+        field_y.copy_from_slice(&k.y);
+
+        let ep = EcdsaP256PublicEncodedPoint::from_affine_coordinates(&field_x, &field_y, false);
+
+        EcdsaP256PublicKey::from_encoded_point(&ep)
+            .into_option()
+            .ok_or(WebauthnError::COSEKeyECDSAXYInvalid)
     }
 }
 
@@ -240,6 +277,19 @@ pub struct COSEKey {
     pub key: COSEKeyType,
 }
 
+impl TryFrom<&EcdsaP256PublicKey> for COSEKey {
+    type Error = WebauthnError;
+
+    fn try_from(k: &EcdsaP256PublicKey) -> Result<Self, Self::Error> {
+        let ec = COSEEC2Key::try_from(k)?;
+
+        Ok(COSEKey {
+            type_: COSEAlgorithm::ES256,
+            key: COSEKeyType::EC_EC2(ec),
+        })
+    }
+}
+
 /// The ID of this Credential
 pub type CredentialID = HumanBinaryData;
 
@@ -305,14 +355,8 @@ impl Credential {
         &'_ self,
         ca_list: &'a AttestationCaList,
     ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
-        // Formerly we disabled this due to apple, but they no longer provide
-        // meaningful attestation so we can re-enable it.
-        let danger_disable_certificate_time_checks = false;
-        verify_attestation_ca_chain(
-            &self.attestation.data,
-            ca_list,
-            danger_disable_certificate_time_checks,
-        )
+        let current_time = SystemTime::now();
+        verify_attestation_ca_chain(&self.attestation.data, ca_list, current_time)
     }
 }
 
@@ -486,16 +530,16 @@ pub enum AttestationMetadata {
 pub enum ParsedAttestationData {
     /// The credential is authenticated by a signing X509 Certificate
     /// from a vendor or provider.
-    Basic(Vec<x509::X509>),
+    Basic(Vec<x509::Certificate>),
     /// The credential is authenticated using surrogate basic attestation
     /// it uses the credential private key to create the attestation signature
     Self_,
     /// The credential is authenticated using a CA, and may provide a
     /// ca chain to validate to its root.
-    AttCa(Vec<x509::X509>),
+    AttCa(Vec<x509::Certificate>),
     /// The credential is authenticated using an anonymization CA, and may provide a ca chain to
     /// validate to its root.
-    AnonCa(Vec<x509::X509>),
+    AnonCa(Vec<x509::Certificate>),
     /// Unimplemented
     ECDAA,
     /// No Attestation type was provided with this Credential. If in doubt
@@ -547,7 +591,8 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 chain
                     .into_iter()
                     .map(|c| {
-                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                        x509::Certificate::from_der(c.as_slice())
+                            .map_err(|_| WebauthnError::X509DerInvalid)
                     })
                     .collect::<WebauthnResult<_>>()?,
             ),
@@ -557,7 +602,8 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 chain
                     .into_iter()
                     .map(|c| {
-                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                        x509::Certificate::from_der(c.as_slice())
+                            .map_err(|_| WebauthnError::X509DerInvalid)
                     })
                     .collect::<WebauthnResult<_>>()?,
             ),
@@ -566,7 +612,8 @@ impl TryFrom<SerialisableAttestationData> for ParsedAttestationData {
                 chain
                     .into_iter()
                     .map(|c| {
-                        x509::X509::from_der(c.as_slice()).map_err(WebauthnError::OpenSSLError)
+                        x509::Certificate::from_der(c.as_slice())
+                            .map_err(|_| WebauthnError::X509DerInvalid)
                     })
                     .collect::<WebauthnResult<_>>()?,
             ),

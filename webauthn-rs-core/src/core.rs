@@ -15,10 +15,6 @@
 
 #![warn(missing_docs)]
 
-use rand::prelude::*;
-use std::time::Duration;
-use url::Url;
-
 use crate::attestation::{
     verify_android_key_attestation, verify_apple_anonymous_attestation,
     verify_attestation_ca_chain, verify_fidou2f_attestation, verify_packed_attestation,
@@ -29,6 +25,9 @@ use crate::crypto::compute_sha256;
 use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::*;
+use rand::prelude::*;
+use std::time::{Duration, SystemTime};
+use url::Url;
 
 /// The Core Webauthn handler.
 ///
@@ -397,6 +396,7 @@ impl WebauthnCore {
             allow_synchronised_authenticators,
         } = state;
         let chal: &ChallengeRef = challenge.into();
+        let current_time = SystemTime::now();
 
         // send to register_credential_internal
         let credential = self.register_credential_internal(
@@ -406,9 +406,9 @@ impl WebauthnCore {
             exclude_credentials,
             credential_algorithms,
             attestation_cas,
-            false,
             extensions,
             *allow_synchronised_authenticators,
+            current_time,
         )?;
 
         // Check that the credentialId is not yet registered to any other user. If registration is
@@ -437,9 +437,9 @@ impl WebauthnCore {
         exclude_credentials: &[CredentialID],
         credential_algorithms: &[COSEAlgorithm],
         attestation_cas: Option<&AttestationCaList>,
-        danger_disable_certificate_time_checks: bool,
         req_extn: &RequestRegistrationExtensions,
         allow_synchronised_authenticators: bool,
+        current_time: SystemTime,
     ) -> Result<Credential, WebauthnError> {
         // Internal management - if the attestation ca list is some, but is empty, we need to fail!
         if attestation_cas
@@ -670,11 +670,8 @@ impl WebauthnCore {
 
         let attested_ca_crt = if let Some(ca_list) = attestation_cas {
             // If given a set of ca's assert that our attestation actually matched one.
-            let ca_crt = verify_attestation_ca_chain(
-                &credential.attestation.data,
-                ca_list,
-                danger_disable_certificate_time_checks,
-            )?;
+            let ca_crt =
+                verify_attestation_ca_chain(&credential.attestation.data, ca_list, current_time)?;
 
             // It may seem odd to unwrap the option and make this not verified at this point,
             // but in this case because we have the ca_list and none was the result (which happens)
@@ -1252,7 +1249,6 @@ impl WebauthnCore {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::panic)]
-
     use crate::constants::CHALLENGE_SIZE_BYTES;
     use crate::core::{CreationChallengeResponse, RegistrationState, WebauthnError};
     use crate::internals::*;
@@ -1260,9 +1256,8 @@ mod tests {
     use crate::WebauthnCore as Webauthn;
     use base64::{engine::general_purpose::STANDARD, Engine};
     use base64urlsafedata::{Base64UrlSafeData, HumanBinaryData};
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime};
     use url::Url;
-
     use webauthn_rs_device_catalog::data::{
         android::ANDROID_SOFTWARE_ROOT_CA, apple::APPLE_WEBAUTHN_ROOT_CA_PEM,
         google::GOOGLE_SAFETYNET_CA_OLD,
@@ -1316,9 +1311,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap()),
-            false,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1362,9 +1357,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1408,9 +1403,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         assert!(result.is_ok());
     }
@@ -1452,9 +1447,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1497,9 +1492,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1542,9 +1537,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1843,9 +1838,9 @@ mod tests {
             &[COSEAlgorithm::ES256],
             // This is what introduces the failure!
             Some(&AttestationCaList::default()),
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1861,9 +1856,9 @@ mod tests {
             &[COSEAlgorithm::ES256],
             // Exclude the matching CA!
             Some(&(APPLE_WEBAUTHN_ROOT_CA_PEM.try_into().unwrap())),
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1891,9 +1886,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&att_ca_list),
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1919,9 +1914,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&att_ca_list),
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -2010,9 +2005,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::RS256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -2383,9 +2378,9 @@ mod tests {
                     .try_into()
                     .unwrap()),
             ),
-            false,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -2444,6 +2439,8 @@ mod tests {
 
     #[test]
     fn test_touchid_attest_apple_anonymous() {
+        // 20201208, 02:27:15 + 1 hour
+        const DATE: u64 = 1607394435 + 3600;
         let _ = tracing_subscriber::fmt::try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "https://spectral.local:8443/auth",
@@ -2586,11 +2583,11 @@ mod tests {
                 COSEAlgorithm::EDDSA,
             ],
             Some(&att_ca_list),
-            // Must disable time checks because the submission is limited to 5 days.
-            true,
             &RequestRegistrationExtensions::default(),
             // Don't allow passkeys
             false,
+            // Must manually set the clock as submission is limited to 5 days.
+            SystemTime::UNIX_EPOCH + Duration::from_secs(DATE),
         );
         debug!("{:?}", result);
         assert!(matches!(
@@ -2616,11 +2613,11 @@ mod tests {
                 COSEAlgorithm::EDDSA,
             ],
             Some(&(APPLE_WEBAUTHN_ROOT_CA_PEM.try_into().unwrap())),
-            // Must disable time checks because the submission is limited to 5 days.
-            true,
             &RequestRegistrationExtensions::default(),
             // Don't allow passkeys
             false,
+            // Must manually set the clock as submission is limited to 5 days.
+            SystemTime::UNIX_EPOCH + Duration::from_secs(DATE),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -2643,11 +2640,11 @@ mod tests {
                 COSEAlgorithm::EDDSA,
             ],
             Some(&(APPLE_WEBAUTHN_ROOT_CA_PEM.try_into().unwrap())),
-            // Must disable time checks because the submission is limited to 5 days.
-            true,
             &RequestRegistrationExtensions::default(),
             // Allow them.
             true,
+            // Must manually set the clock as submission is limited to 5 days.
+            SystemTime::UNIX_EPOCH + Duration::from_secs(DATE),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -2784,10 +2781,10 @@ mod tests {
                 COSEAlgorithm::EDDSA,
             ],
             Some(&(APPLE_WEBAUTHN_ROOT_CA_PEM.try_into().unwrap())),
-            // Must disable time checks because the submission is limited to 5 days.
-            true,
             &RequestRegistrationExtensions::default(),
             false,
+            // Must manually set the clock as submission is limited to 5 days.
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1),
         );
         debug!("{:?}", result);
         assert!(matches!(
@@ -3069,9 +3066,9 @@ mod tests {
                 &[],
                 &[COSEAlgorithm::ES256],
                 None,
-                false,
                 &RequestRegistrationExtensions::default(),
                 true,
+                SystemTime::now(),
             )
             .expect("Failed to register credential");
 
@@ -3163,9 +3160,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::EDDSA],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -3206,9 +3203,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::EDDSA],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -3249,9 +3246,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -3293,9 +3290,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -3340,9 +3337,9 @@ mod tests {
                 COSEAlgorithm::INSECURE_RS1,
             ],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         debug!("{:?}", result);
         assert!(result.is_err());
@@ -3388,9 +3385,9 @@ mod tests {
                 COSEAlgorithm::INSECURE_RS1,
             ],
             None,
-            false,
             &RequestRegistrationExtensions::default(),
             false,
+            SystemTime::now(),
         );
         debug!("{:?}", result);
         assert!(matches!(result, Err(WebauthnError::ParseNOMFailure)));
@@ -3469,9 +3466,10 @@ mod tests {
             // Some(&AttestationCaList {
             //    cas: vec![AttestationCa::apple_webauthn_root_ca()],
             // }),
-            true,
             &RequestRegistrationExtensions::default(),
             true,
+            // Must manually set the clock as submission is limited to 5 days.
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1),
         );
         debug!("{:?}", result);
         let cred = result.unwrap();
@@ -3543,9 +3541,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&(GOOGLE_SAFETYNET_CA_OLD.try_into().unwrap())),
-            true,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
         dbg!(&result);
         assert_eq!(result, Err(WebauthnError::AttestationNotSupported));
@@ -3588,11 +3586,14 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             Some(&(ANDROID_SOFTWARE_ROOT_CA.try_into().unwrap())),
-            true,
             &RequestRegistrationExtensions::default(),
             true,
+            // Must manually set to prior to the cert expiration.
+            // Expiry is 2026-01-08T00:46:09Z
+            // Set to: 2025-02-06
+            SystemTime::UNIX_EPOCH + Duration::from_secs(1738810009),
         );
-        dbg!(&result);
+        debug!(?result);
         assert!(result.is_ok());
 
         match result.unwrap().attestation.metadata {
@@ -3657,9 +3658,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256],
             None,
-            true,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
 
         assert!(matches!(
@@ -3724,9 +3725,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::EDDSA],
             None,
-            true,
             &RequestRegistrationExtensions::default(),
             true,
+            SystemTime::now(),
         );
 
         debug!(?result);
@@ -3790,9 +3791,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::EDDSA],
             None,
-            true,
             &reg_extn,
             true,
+            SystemTime::now(),
         );
 
         debug!(?result);
@@ -3861,9 +3862,9 @@ mod tests {
             &[],
             &[COSEAlgorithm::ES256, COSEAlgorithm::RS256],
             None,
-            true,
             &reg_extn,
             true,
+            SystemTime::now(),
         );
 
         debug!(?result);

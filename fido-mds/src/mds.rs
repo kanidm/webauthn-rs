@@ -4,14 +4,16 @@
 //! This allows parsing the fido metadata blob and consuming it's content. See `FidoMds`
 //! for more.
 
-use compact_jwt::{crypto::JwsX509VerifierBuilder, JwsCompact, JwsVerifier, JwtError};
-use openssl::x509;
+use compact_jwt::{
+    crypto::{Certificate, DecodePem, JwsX509VerifierBuilder},
+    JwsCompact, JwsVerifier, JwtError,
+};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
-
 use std::collections::BTreeMap;
+use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
+use std::time::SystemTime;
 use uuid::Uuid;
 
 static GLOBAL_SIGN_ROOT_CA_R3: &str = r#"
@@ -1129,20 +1131,21 @@ impl FromStr for FidoMds {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Setup the trusted CA store so that we can validate the authenticity of the MDS blob.
-        let root_ca = x509::X509::from_pem(GLOBAL_SIGN_ROOT_CA_R3.as_bytes())
-            .map_err(|_| JwtError::OpenSSLError)?;
+        let root_ca = Certificate::from_pem(GLOBAL_SIGN_ROOT_CA_R3.as_bytes())
+            .map_err(|_| JwtError::CryptoError)?;
 
         let jws = JwsCompact::from_str(s)?;
 
-        let fullchain = jws
+        let (leaf, chain) = jws
             .get_x5c_chain()
             .and_then(|chain| chain.ok_or(JwtError::InvalidHeaderFormat))?;
 
-        let verifier = JwsX509VerifierBuilder::new()
-            .add_fullchain(fullchain)
+        let now = SystemTime::now();
+
+        let verifier = JwsX509VerifierBuilder::new(&leaf, &chain)
             .add_trust_root(root_ca)
-            .build()
-            .map_err(|_| JwtError::OpenSSLError)?;
+            .build(now)
+            .map_err(|_| JwtError::CryptoError)?;
 
         // Now we can release the embedded cert, since we have asserted the trust in the chain
         // that has signed this metadata.

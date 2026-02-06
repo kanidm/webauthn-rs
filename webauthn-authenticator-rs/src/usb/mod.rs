@@ -31,13 +31,13 @@ use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use async_trait::async_trait;
+use crypto_glue::rand::{self, RngCore};
 use futures::stream::BoxStream;
 use futures::StreamExt as _;
 
 #[cfg(doc)]
 use crate::stubs::*;
 
-use openssl::rand::rand_bytes;
 use std::fmt;
 use std::time::Duration;
 use webauthn_rs_proto::AuthenticatorTransport;
@@ -312,7 +312,11 @@ impl Token for USBToken {
 
         // Setup a channel to communicate with the device (CTAPHID_INIT).
         let mut nonce: [u8; 8] = [0; 8];
-        rand_bytes(&mut nonce)?;
+        {
+            // Scoped to drop rng after usage.
+            let mut rng = rand::thread_rng();
+            rng.fill_bytes(&mut nonce);
+        }
 
         self.send(&U2FHIDFrame {
             cid: CID_BROADCAST,
