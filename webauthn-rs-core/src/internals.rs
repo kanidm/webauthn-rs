@@ -4,12 +4,9 @@
 use crate::error::WebauthnError;
 use crate::proto::*;
 use serde::Deserialize;
-
 use base64urlsafedata::{Base64UrlSafeData, HumanBinaryData};
-
 use std::borrow::Borrow;
 use std::ops::Deref;
-
 use nom::bytes::complete::{tag, take};
 use nom::combinator::cond;
 use nom::combinator::{map_opt, verify};
