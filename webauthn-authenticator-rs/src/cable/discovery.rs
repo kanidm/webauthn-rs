@@ -2,12 +2,21 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
+use crypto_glue::{
+    block_padding::generic_array::{
+        sequence::Split,
+        typenum::{U32, U64},
+        GenericArray,
+    },
+    hmac_s256::{self, HmacSha256Key},
+    rand::{rngs::ThreadRng, RngCore},
+    traits::Zeroizing,
+};
 use num_traits::ToPrimitive;
 use openssl::{
     ec::EcKey,
     hash::MessageDigest,
     pkey::{PKey, Private},
-    rand::rand_bytes,
     sign::Signer,
 };
 use std::mem::size_of;
@@ -23,9 +32,20 @@ type BleAdvert = [u8; size_of::<CableEid>() + 4];
 type RoutingId = [u8; 3];
 type BleNonce = [u8; 10];
 type QrSecret = [u8; 16];
-type EidKey = [u8; 32 + 32];
+
+/// Two concatenated [`Aes256Key`s][crypto_glue::aes256::Aes256Key], the encryption key and signing
+/// key.
+type EidKey = Zeroizing<GenericArray<u8, U64>>;
+
+/// Alias for a non-[`Zeroizing`][] form of [`Aes256Key`][crypto_glue::aes256::Aes256Key], used to
+/// reassure Rust's type checker.
+type NonZeroingAes256Key = GenericArray<u8, U32>;
+
 type CableEid = [u8; 16];
 type TunnelId = [u8; 16];
+
+/// An all-zero AES256 CBC IV.
+const ZERO_IV: [u8; 16] = [0; 16];
 
 // const BASE64URL: base64::Config = base64::Config::new(base64::CharacterSet::UrlSafe, false);
 
@@ -63,7 +83,8 @@ impl Discovery {
     pub fn new(request_type: CableRequestType) -> Result<Self, WebauthnCError> {
         // chrome_authenticator_request_delegate.cc  ChromeAuthenticatorRequestDelegate::ConfigureCable
         let mut qr_secret: QrSecret = [0; size_of::<QrSecret>()];
-        rand_bytes(&mut qr_secret)?;
+        let mut rng = ThreadRng::default();
+        rng.try_fill_bytes(&mut qr_secret)?;
         Self::new_with_qr_secret(request_type, qr_secret)
     }
 
@@ -87,7 +108,7 @@ impl Discovery {
         // Trying to EC_KEY_derive_from_secret is only in BoringSSL, and doesn't have openssl-rs bindings
         // Opted to just take in an EcKey here.
 
-        let mut eid_key: EidKey = [0; size_of::<EidKey>()];
+        let mut eid_key: EidKey = EidKey::default();
         DerivedValueType::EIDKey.derive(&qr_secret, &[], &mut eid_key)?;
 
         Ok(Self {
@@ -210,8 +231,9 @@ pub struct Eid {
 impl Eid {
     /// Creates a new [Eid] using a random nonce.
     pub fn new(tunnel_server_id: u16, routing_id: RoutingId) -> Result<Self, WebauthnCError> {
+        let mut rng = ThreadRng::default();
         let mut nonce: BleNonce = [0; size_of::<BleNonce>()];
-        rand_bytes(&mut nonce)?;
+        rng.try_fill_bytes(&mut nonce)?;
 
         Ok(Self {
             tunnel_server_id,
@@ -312,7 +334,8 @@ impl Eid {
         }
 
         // HMAC checks out, try to decrypt
-        let plaintext = decrypt(&key[..32], None, &advert[..16])?;
+        let (k0, _): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
+        let plaintext = decrypt(&k0.into(), &ZERO_IV.into(), &advert[..16])?;
         Ok(Eid::from_bytes(plaintext.as_slice()))
     }
 
@@ -321,15 +344,16 @@ impl Eid {
     /// See [Discovery::encrypt_advert] for a public API.
     fn encrypt_advert(&self, key: &EidKey) -> Result<BleAdvert, WebauthnCError> {
         let eid = self.as_bytes();
-        let c = encrypt(&key[..32], None, &eid)?;
+        let (k0, k1): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
+        let c = encrypt(&k0.into(), &ZERO_IV.into(), &eid)?;
 
         let mut crypted: BleAdvert = [0; size_of::<BleAdvert>()];
         crypted[..size_of::<CableEid>()].copy_from_slice(&c);
 
         // Sign the advertisement with HMAC-SHA-256
-        let signing_key = PKey::hmac(&key[32..64])?;
-        let mut signer = Signer::new(MessageDigest::sha256(), &signing_key)?;
-        let calculated_hmac = signer.sign_oneshot_to_vec(&crypted[..16])?;
+        let signing_key: HmacSha256Key =
+            hmac_s256::key_from_slice(&k1).ok_or(WebauthnCError::Internal)?;
+        let calculated_hmac = hmac_s256::oneshot(&signing_key, &crypted[..16]).into_bytes();
 
         // Take the first 4 bytes of the signature
         crypted[size_of::<CableEid>()..].copy_from_slice(&calculated_hmac[..4]);

@@ -121,6 +121,9 @@ pub enum WebauthnCError {
 
     #[error("Unable to expand hkdf key")]
     CryptographyHkdfExpand,
+
+    #[error("Random generator error: {0}")]
+    Rand(String),
 }
 
 #[cfg(feature = "nfc")]
@@ -197,6 +200,12 @@ impl From<btleplug::Error> for WebauthnCError {
 impl From<crate::transport::types::U2FError> for WebauthnCError {
     fn from(value: crate::transport::types::U2FError) -> Self {
         Self::U2F(value)
+    }
+}
+
+impl From<crypto_glue::rand::Error> for WebauthnCError {
+    fn from(value: crypto_glue::rand::Error) -> Self {
+        Self::Rand(value.to_string())
     }
 }
 

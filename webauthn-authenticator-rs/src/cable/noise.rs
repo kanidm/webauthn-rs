@@ -8,13 +8,13 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use std::mem::size_of;
-
+use crypto_glue::s256::Sha256Output;
 use openssl::{
     ec::{EcKey, EcKeyRef, EcPointRef},
     pkey::{Private, Public},
     symm::{decrypt_aead, encrypt_aead, Cipher},
 };
+use std::mem::size_of;
 
 use crate::{cable::Psk, prelude::WebauthnCError};
 
@@ -198,7 +198,7 @@ impl CipherState {
 /// [SymmetricState]: https://noiseprotocol.org/noise.html#the-symmetricstate-object
 pub struct CableNoise {
     ck: [u8; 32],
-    h: [u8; 32],
+    h: Sha256Output,
 
     cipher_state: CipherState,
 
@@ -219,7 +219,7 @@ impl CableNoise {
 
         Ok(Self {
             ck: protocol_name,
-            h: protocol_name,
+            h: protocol_name.into(),
             cipher_state: CipherState::new(NonceType::Handshake, false),
             ephemeral_key,
             local_identity: None,
