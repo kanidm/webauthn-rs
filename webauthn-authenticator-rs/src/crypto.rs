@@ -6,8 +6,10 @@ use crate::stubs::*;
 use openssl::{
     bn::BigNumContext,
     ec::{EcGroup, EcKey, EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
+    nid::Nid,
     pkey::{Private, Public},
 };
+use openssl::{pkey::PKey, pkey_ctx::PkeyCtx};
 
 use crypto_glue::{
     aes256::Aes256Key,
@@ -35,6 +37,12 @@ pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> Sha256Output {
     hasher.update(a);
     hasher.update(b);
     hasher.finalize()
+}
+
+#[cfg(feature = "cable")]
+/// Gets an [EcGroup] for P-256
+pub fn get_group() -> Result<EcGroup, WebauthnCError> {
+    Ok(EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?)
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.
@@ -81,6 +89,26 @@ pub fn hkdf_sha_256(
     Ok(())
 }
 
+/// Generate a fresh, random P-256 private key
+pub fn regenerate() -> Result<EcKey<Private>, WebauthnCError> {
+    let ecgroup = get_group()?;
+    let eckey = EcKey::generate(&ecgroup)?;
+    Ok(eckey)
+}
+
+pub fn ecdh(
+    private_key: EcKey<Private>,
+    peer_key: EcKey<Public>,
+    output: &mut [u8],
+) -> Result<(), WebauthnCError> {
+    let peer_key = PKey::from_ec_key(peer_key)?;
+    let pkey = PKey::from_ec_key(private_key)?;
+    let mut ctx = PkeyCtx::new(&pkey)?;
+    ctx.derive_init()?;
+    ctx.derive_set_peer(&peer_key)?;
+    ctx.derive(Some(output))?;
+    Ok(())
+}
 #[cfg(any(doc, feature = "cable"))]
 /// Reads `buf` as a compressed or uncompressed P-256 key.
 pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcKey<Public>, WebauthnCError> {
