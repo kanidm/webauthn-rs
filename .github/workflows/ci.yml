@@ -1,4 +1,7 @@
-on: [ push, pull_request ]
+---
+on:
+  push:
+  pull_request:
 
 name: CI
 
@@ -29,7 +32,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable, 1.85.0 ]
+        # Single source of truth for minimum Rust in CI.
+        # Update this anchor value when bumping MSRV checks.
+        rust_version:
+          - stable
+          - &rust_oldest_version "1.88.0"
         os:
           - ubuntu-latest
           - windows-latest
@@ -60,15 +67,43 @@ jobs:
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
-        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets
+        run: cargo clippy \
+          --no-deps \
+          --workspace \
+          --exclude webauthn-authenticator-rs  \
+          --exclude actix_web \
+          --exclude web_authn \
+          --exclude tide-server \
+          --all-targets
 
       - name: javascript feature clippy
         if: runner.os != 'windows'
-        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets --features javascript,bluetooth,nfc,usb
+        run: cargo clippy --no-deps \
+          --workspace \
+          --exclude webauthn-authenticator-rs  \
+          --exclude actix_web \
+          --exclude web_authn \
+          --exclude tide-server \
+          --all-targets \
+          --features javascript,bluetooth,nfc,usb
       - name: WASM feature clippy
         if: runner.os != 'windows'
-        run: cargo clippy --no-deps --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server --all-targets --features wasm,bluetooth,nfc,usb --no-default-features
-      - run: cargo test --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server
+        run: cargo clippy \
+          --no-deps \
+          --workspace \
+          --exclude webauthn-authenticator-rs  \
+          --exclude actix_web \
+          --exclude web_authn \
+          --exclude tide-server \
+          --all-targets \
+          --features wasm,bluetooth,nfc,usb \
+          --no-default-features
+      - run: cargo test \
+          --workspace \
+          --exclude webauthn-authenticator-rs  \
+          --exclude actix_web \
+          --exclude web_authn \
+          --exclude tide-server
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
@@ -89,7 +124,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable, 1.85.0 ]
+        rust_version:
+          - stable
+          - *rust_oldest_version
         features:
           - bluetooth
           - cable
@@ -111,7 +148,7 @@ jobs:
             rust_version: stable
         exclude:
           - os: windows-latest
-            rust_version: 1.79.0
+            rust_version: *rust_oldest_version
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -147,18 +184,28 @@ jobs:
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
+          --all-targets \
+          --features ${{ matrix.features }}
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
+          --all-targets \
+          --features ${{ matrix.features }},ui-cli
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
+          --all-targets \
+          --features ${{ matrix.features }},qrcode,ui-cli
 
       # "ctap2-management" requires OpenSSL, which we won't have if built with
       # only "win10" feature on Windows.
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
+          --all-targets \
+          --features ${{ matrix.features }},ctap2-management
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
+        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
+          --all-targets \
+          --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
@@ -168,27 +215,32 @@ jobs:
       # authenticate example requires OpenSSL (via webauthn-rs-core), so don't
       # run if features == 'win10'.
       - if: runner.os != 'windows' || matrix.features != 'win10'
-        run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
+        run: cargo run -p webauthn-authenticator-rs --example authenticate \
+          --features ${{ matrix.features }},ui-cli -- --help
 
       # caBLE-specific examples. The "cable" feature requires OpenSSL, so this
       # always OK to run on Windows.
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
+        run: cargo run -p webauthn-authenticator-rs --example authenticate \
+          --features ${{ matrix.features }},qrcode,ui-cli -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_domain --features ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example cable_domain \
+          --features ${{ matrix.features }} -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
+        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel \
+          --features ${{ matrix.features }},ui-cli -- --help
 
       # SoftToken-specific examples.
       - if: contains(matrix.features, 'softtoken')
-        run: cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
+        run: cargo run -p webauthn-authenticator-rs --example softtoken \
+          --features ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable, nightly ]
+        rust_version: [stable, nightly]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -206,7 +258,10 @@ jobs:
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
       - name: generate docs
-        run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --exclude fido-key-manager --no-deps --document-private-items
+        run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all \
+          --exclude fido-key-manager \
+          --no-deps \
+          --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v4
@@ -222,7 +277,11 @@ jobs:
       # Build with all features
       - run: |
           sudo apt-get -y install libpcsclite-dev libusb-1.0-0-dev libdbus-1-dev
-      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all --no-deps --document-private-items --all-features
+      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
+          --all \
+          --no-deps \
+          --document-private-items \
+          --all-features
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v4
@@ -240,7 +299,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable ]
+        rust_version: [stable]
         os:
           - ubuntu-latest
           - windows-latest
