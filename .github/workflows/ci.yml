@@ -184,28 +184,33 @@ jobs:
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
-          --all-targets \
-          --features ${{ matrix.features }}
+        run: |
+          cargo clippy --no-deps -p webauthn-authenticator-rs \
+            --all-targets \
+            --features ${{ matrix.features }}
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
-          --all-targets \
-          --features ${{ matrix.features }},ui-cli
+        run: |
+          cargo clippy --no-deps -p webauthn-authenticator-rs \
+            --all-targets \
+            --features ${{ matrix.features }},ui-cli
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
-          --all-targets \
-          --features ${{ matrix.features }},qrcode,ui-cli
+        run: |
+          cargo clippy --no-deps -p webauthn-authenticator-rs \
+            --all-targets \
+            --features ${{ matrix.features }},qrcode,ui-cli
 
       # "ctap2-management" requires OpenSSL, which we won't have if built with
       # only "win10" feature on Windows.
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
-          --all-targets \
-          --features ${{ matrix.features }},ctap2-management
+        run: |
+          cargo clippy --no-deps -p webauthn-authenticator-rs \
+            --all-targets \
+            --features ${{ matrix.features }},ctap2-management
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
-        run: cargo clippy --no-deps -p webauthn-authenticator-rs \
-          --all-targets \
-          --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
+        run: |
+          cargo clippy --no-deps -p webauthn-authenticator-rs \
+            --all-targets \
+            --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
@@ -215,25 +220,30 @@ jobs:
       # authenticate example requires OpenSSL (via webauthn-rs-core), so don't
       # run if features == 'win10'.
       - if: runner.os != 'windows' || matrix.features != 'win10'
-        run: cargo run -p webauthn-authenticator-rs --example authenticate \
-          --features ${{ matrix.features }},ui-cli -- --help
+        run: |
+          cargo run -p webauthn-authenticator-rs --example authenticate \
+            --features ${{ matrix.features }},ui-cli -- --help
 
       # caBLE-specific examples. The "cable" feature requires OpenSSL, so this
       # always OK to run on Windows.
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example authenticate \
-          --features ${{ matrix.features }},qrcode,ui-cli -- --help
+        run: |
+          cargo run -p webauthn-authenticator-rs --example authenticate \
+            --features ${{ matrix.features }},qrcode,ui-cli -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_domain \
-          --features ${{ matrix.features }} -- --help
+        run: |
+          cargo run -p webauthn-authenticator-rs --example cable_domain \
+            --features ${{ matrix.features }} -- --help
       - if: contains(matrix.features, 'cable')
-        run: cargo run -p webauthn-authenticator-rs --example cable_tunnel \
-          --features ${{ matrix.features }},ui-cli -- --help
+        run: |
+          cargo run -p webauthn-authenticator-rs --example cable_tunnel \
+            --features ${{ matrix.features }},ui-cli -- --help
 
       # SoftToken-specific examples.
       - if: contains(matrix.features, 'softtoken')
-        run: cargo run -p webauthn-authenticator-rs --example softtoken \
-          --features ${{ matrix.features }} -- --help
+        run: |
+          cargo run -p webauthn-authenticator-rs --example softtoken \
+            --features ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
@@ -258,10 +268,11 @@ jobs:
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
       - name: generate docs
-        run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all \
-          --exclude fido-key-manager \
-          --no-deps \
-          --document-private-items
+        run: |
+          cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all \
+            --exclude fido-key-manager \
+            --no-deps \
+            --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v4
@@ -277,7 +288,8 @@ jobs:
       # Build with all features
       - run: |
           sudo apt-get -y install libpcsclite-dev libusb-1.0-0-dev libdbus-1-dev
-      - run: cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
+      - run: |
+          cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
           --all \
           --no-deps \
           --document-private-items \

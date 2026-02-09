@@ -9,7 +9,7 @@ pub(crate) mod index;
 pub(crate) mod serve_wasm;
 
 /**
-Type alias for Errors that implement [actix_web::ResponseError] through [Error]
+Type alias for Errors that implement [actix_web::ResponseError] through `Error`
 */
 type WebResult<T> = Result<T, Error>;
 
