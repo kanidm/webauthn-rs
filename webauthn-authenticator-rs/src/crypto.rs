@@ -45,7 +45,7 @@ pub fn encrypt(
     iv: &Aes256CbcIv,
     plaintext: &[u8],
 ) -> Result<Vec<u8>, WebauthnCError> {
-    let enc = Aes256CbcEnc::new(&key, &iv);
+    let enc = Aes256CbcEnc::new(key, iv);
 
     let ciphertext = enc.encrypt_padded_vec_mut::<NoPadding>(plaintext);
 
@@ -58,7 +58,7 @@ pub fn decrypt(
     iv: &Aes256CbcIv,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, WebauthnCError> {
-    let enc = Aes256CbcDec::new(&key, &iv);
+    let enc = Aes256CbcDec::new(key, iv);
 
     enc.decrypt_padded_vec_mut::<NoPadding>(ciphertext)
         .map_err(|_| WebauthnCError::CryptographyAes256CbcDecrypt)

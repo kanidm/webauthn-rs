@@ -16,7 +16,7 @@ pub enum COSEAlgorithm {
     ES384 = -35, // recommends curve SECP384R1
     /// Identifies this key as ECDSA (recommended SECP521R1) with SHA512 hashing
     #[serde(alias = "ECDSA_SHA512")]
-    ES512 = -36, // recommends curve SECP521R1
+    ES521 = -36, // recommends curve SECP521R1
     /// Identifies this key as RS256 aka RSASSA-PKCS1-v1_5 w/ SHA-256
     RS256 = -257,
     /// Identifies this key as RS384 aka RSASSA-PKCS1-v1_5 w/ SHA-384
@@ -45,7 +45,7 @@ impl COSEAlgorithm {
     pub fn secure_algs() -> Vec<Self> {
         vec![
             COSEAlgorithm::ES256,
-            // COSEAlgorithm::ES384,
+            COSEAlgorithm::ES384,
             // COSEAlgorithm::ES512,
             COSEAlgorithm::RS256,
             // COSEAlgorithm::RS384,
@@ -60,7 +60,7 @@ impl COSEAlgorithm {
         vec![
             COSEAlgorithm::ES256,
             COSEAlgorithm::ES384,
-            COSEAlgorithm::ES512,
+            COSEAlgorithm::ES521,
             COSEAlgorithm::RS256,
             COSEAlgorithm::RS384,
             COSEAlgorithm::RS512,
@@ -80,7 +80,7 @@ impl TryFrom<i128> for COSEAlgorithm {
         match i {
             -7 => Ok(COSEAlgorithm::ES256),
             -35 => Ok(COSEAlgorithm::ES384),
-            -36 => Ok(COSEAlgorithm::ES512),
+            -36 => Ok(COSEAlgorithm::ES521),
             -257 => Ok(COSEAlgorithm::RS256),
             -258 => Ok(COSEAlgorithm::RS384),
             -259 => Ok(COSEAlgorithm::RS512),

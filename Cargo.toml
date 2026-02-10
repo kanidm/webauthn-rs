@@ -4,7 +4,7 @@ authors = [
     "William Brown <william@blackhats.net.au>",
     "Michael Farrell <micolous+git@gmail.com>",
 ]
-rust-version = "1.85"
+rust-version = "1.87"
 edition = "2021"
 repository = "https://github.com/kanidm/webauthn-rs"
 homepage = "https://github.com/kanidm/webauthn-rs"
@@ -79,7 +79,7 @@ anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
 
-crypto-glue = "^0.1.8"
+crypto-glue = "^0.1.12"
 compact_jwt = "0.5.1-dev"
 futures = "^0.3.25"
 hex = "0.4.3"
@@ -119,6 +119,7 @@ uuid = "^1.19.0"
 serde = { version = "^1.0.228", features = ["derive"] }
 serde_cbor_2 = { version = "0.13.0" }
 serde_json = "^1.0.145"
+serde_with = { version = "3.16.1", features = ["base64"] }
 rand = "0.9.2"
 rand_chacha = "0.9.0"
 reqwest = { version = "0.12.25", default-features = false, features = [

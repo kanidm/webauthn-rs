@@ -7,6 +7,7 @@ compile_error!(
 extern crate tracing;
 
 use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand};
+use crypto_glue::s256::Sha256Output;
 use hex::{FromHex, FromHexError};
 use std::io::{stdin, stdout, Write};
 use std::time::Duration;
@@ -22,9 +23,18 @@ use webauthn_authenticator_rs::{
     },
     transport::*,
     ui::Cli,
-    SHA256Hash,
 };
 use webauthn_rs_core::proto::COSEKeyType;
+
+/// Parse a Sha256Hash from a Base-16 encoded string.
+///
+/// This function is intended for use as a `clap` `value_parser`.
+pub fn parse_hex_sha256(i: &str) -> Result<Sha256Output, FromHexError> {
+    // This exists because of https://doc.rust-lang.org/reference/items/implementations.html#orphan-rules
+    // Since we are not the owner of either the Sha256Output type or the FromHex trait, we can't
+    // impl FromHex for Sha256Output. This prevents us using the much nicer trait approach.
+    parse_hex::<[u8; 32]>(i).map(Sha256Output::from)
+}
 
 /// Parses a Base-16 encoded string.
 ///
@@ -115,8 +125,8 @@ pub struct ListCredentialsOpt {
 
     /// List credentials for the SHA-256 hash of a relying party ID
     /// (eg: "a379a6f6eeafb9a55e378c118034e2751e682fab9f2d30ab13d2125586ce1947")
-    #[clap(long, value_parser = parse_hex::<SHA256Hash>, value_name = "HASH")]
-    pub hash: Option<SHA256Hash>,
+    #[clap(long, value_parser = parse_hex_sha256, value_name = "HASH")]
+    pub hash: Option<Sha256Output>,
 }
 
 #[derive(Debug, Args)]

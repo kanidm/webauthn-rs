@@ -16,7 +16,7 @@ use crypto_glue::{
 use std::time::SystemTime;
 use uuid::Uuid;
 
-const OID_JOINT_ISO_ITU_T: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.23.133.8.3");
+static OID_JOINT_ISO_ITU_T: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.23.133.8.3");
 
 /// x509 certificate extensions are validated in the webauthn spec by checking
 /// that the value of the extension is equal to some other value
@@ -417,7 +417,7 @@ pub(crate) fn verify_packed_attestation(
                 .get(&serde_cbor_2::Value::Text("sig".to_string()))
                 .ok_or(WebauthnError::AttestationStatementSigMissing)
                 .and_then(|s| cbor_try_bytes!(s))
-                .and_then(|sig| verify_signature(alg, attestn_cert, sig, &verification_data))?;
+                .and_then(|sig| verify_signature(attestn_cert, sig, &verification_data))?;
 
             if !is_valid_signature {
                 trace!("packed x509 signature invalid");
@@ -582,7 +582,7 @@ pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), Webauthn
             trace!("error reading extensions");
             WebauthnError::AttestationCertificateRequirementsNotMet
         })?
-        .and_then(|(_crit, extn)| Some(extn))
+        .map(|(_crit, extn)| extn)
         .ok_or_else(|| {
             trace!("missing basic constraints");
             WebauthnError::AttestationCertificateRequirementsNotMet
@@ -658,17 +658,25 @@ pub(crate) fn verify_fidou2f_attestation(
         .ok_or(WebauthnError::AttestationStatementX5CInvalid)?;
 
     // If certificate public key is not an Elliptic Curve (EC) public key over the P-256 curve, terminate this algorithm and return an appropriate error.
-    //
-    // // try from asserts this condition given the alg.
-    let alg = COSEAlgorithm::ES256;
+    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
+
+    match &credential_public_key {
+        COSEKey {
+            type_: COSEAlgorithm::ES256,
+            ..
+        } => {
+            // Valid;
+        }
+        _ => {
+            return Err(WebauthnError::AttestationStatementX5CInvalid);
+        }
+    };
 
     // Extract the claimed rpIdHash from authenticatorData, and the claimed credentialId and credentialPublicKey from authenticatorData.attestedCredentialData.
     //
     // Already extracted, and provided as args to this function.
 
     // Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to Raw ANSI X9.62 public key format (see ALG_KEY_ECC_X962_RAW in Section 3.6.2 Public Key Representation Formats of [FIDO-Registry]).
-
-    let credential_public_key = COSEKey::try_from(&acd.credential_pk)?;
 
     let public_key_u2f = credential_public_key.get_alg_key_ecc_x962_raw()?;
 
@@ -684,7 +692,7 @@ pub(crate) fn verify_fidou2f_attestation(
         .collect();
 
     // Verify the sig using verificationData and certificate public key per [SEC1].
-    let verified = verify_signature(alg, cerificate_public_key, sig, &verification_data)?;
+    let verified = verify_signature(cerificate_public_key, sig, &verification_data)?;
 
     if !verified {
         error!("signature verification failed!");
@@ -938,7 +946,7 @@ pub(crate) fn verify_tpm_attestation(
         TpmtSignature::RawSignature(dsig) => {
             // Alg was pre-loaded into the x509 struct during parsing
             // so we should just be able to verify
-            verify_signature(alg, aik_cert, &dsig, certinfo_bytes)?
+            verify_signature(aik_cert, &dsig, certinfo_bytes)?
         }
     };
 
@@ -1016,11 +1024,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), Weba
         .and_then(|(critical, extn)| critical.then_some(extn))
         .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
 
-    if !extended_key_usage
-        .0
-        .iter()
-        .any(|oid| *oid == OID_JOINT_ISO_ITU_T)
-    {
+    if !extended_key_usage.0.contains(&OID_JOINT_ISO_ITU_T) {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
@@ -1183,7 +1187,7 @@ pub(crate) fn verify_android_key_attestation(
 
     // 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash using the public key in the first certificate in x5c with the algorithm specified in alg.
 
-    let verified = verify_signature(alg, attestn_cert, sig, &data_to_verify)?;
+    let verified = verify_signature(attestn_cert, sig, &data_to_verify)?;
 
     if !verified {
         error!("signature verification failed!");
@@ -1196,6 +1200,11 @@ pub(crate) fn verify_android_key_attestation(
 
     if credential_public_key != subject_public_key {
         return Err(WebauthnError::AttestationCredentialSubjectKeyMismatch);
+    }
+
+    if alg != credential_public_key.type_ {
+        error!("Public key algorthim mismatch!");
+        return Err(WebauthnError::AttestationStatementSigInvalid);
     }
 
     // 4. Verify that the attestationChallenge field in the attestation certificate extension data is identical to clientDataHash.

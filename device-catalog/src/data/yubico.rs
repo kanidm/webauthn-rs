@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use crypto_glue::{traits::DecodePem, x509};
 
 // Yubico root cert.
 // https://developers.yubico.com/U2F/yubico-u2f-ca-certs.txt
@@ -30,7 +31,8 @@ impl DataBuilder {
 
         // https://developers.yubico.com/U2F/yubico-u2f-ca-certs.txt
         let yk_ca = Rc::new(Authority {
-            ca: x509::X509::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM).expect("Invalid DER"),
+            ca: x509::Certificate::from_pem(YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM)
+                .expect("Invalid PEM"),
         });
 
         // YK 5 FIPS
