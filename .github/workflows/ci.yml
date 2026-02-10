@@ -215,8 +215,7 @@ jobs:
       # run if features == 'win10'.
       - if: runner.os != 'windows' || matrix.features != 'win10'
         run: |
-          cargo run -p webauthn-authenticator-rs --example authenticate \
-            --features ${{ matrix.features }},ui-cli -- --help
+          cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
 
       # caBLE-specific examples. The "cable" feature requires OpenSSL, so this
       # always OK to run on Windows.
