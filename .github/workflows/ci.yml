@@ -86,8 +86,7 @@ jobs:
             --exclude actix_web \
             --exclude web_authn \
             --exclude tide-server \
-            --all-targets \
-            --features javascript,bluetooth,nfc,usb
+            --all-targets --features javascript,bluetooth,nfc,usb
       - name: WASM feature clippy
         if: runner.os != 'windows'
         run: |
@@ -98,8 +97,7 @@ jobs:
             --exclude actix_web \
             --exclude web_authn \
             --exclude tide-server \
-            --all-targets \
-            --features wasm,bluetooth,nfc,usb \
+            --all-targets --features wasm,bluetooth,nfc,usb \
             --no-default-features
       - run: |
           cargo test \
@@ -190,18 +188,15 @@ jobs:
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets \
-            --features ${{ matrix.features }}
+            --all-targets --features ${{ matrix.features }}
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets \
-            --features ${{ matrix.features }},ui-cli
+            --all-targets --features ${{ matrix.features }},ui-cli
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets \
-            --features ${{ matrix.features }},qrcode,ui-cli
+            --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
       # "ctap2-management" requires OpenSSL, which we won't have if built with
       # only "win10" feature on Windows.
@@ -232,22 +227,18 @@ jobs:
       # always OK to run on Windows.
       - if: contains(matrix.features, 'cable')
         run: |
-          cargo run -p webauthn-authenticator-rs --example authenticate \
-            --features ${{ matrix.features }},qrcode,ui-cli -- --help
+          cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
       - if: contains(matrix.features, 'cable')
         run: |
-          cargo run -p webauthn-authenticator-rs --example cable_domain \
-            --features ${{ matrix.features }} -- --help
+          cargo run -p webauthn-authenticator-rs --example cable_domain --features ${{ matrix.features }} -- --help
       - if: contains(matrix.features, 'cable')
         run: |
-          cargo run -p webauthn-authenticator-rs --example cable_tunnel \
-            --features ${{ matrix.features }},ui-cli -- --help
+          cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
 
       # SoftToken-specific examples.
       - if: contains(matrix.features, 'softtoken')
         run: |
-          cargo run -p webauthn-authenticator-rs --example softtoken \
-            --features ${{ matrix.features }} -- --help
+          cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
 
   docs:
     name: Documentation
