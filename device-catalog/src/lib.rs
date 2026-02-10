@@ -9,13 +9,11 @@ pub mod query;
 
 pub mod data;
 
-use std::fmt;
-
 use crate::device::*;
 use crate::query::Query;
+use std::fmt;
 use std::rc::Rc;
-
-use webauthn_attestation_ca::{AttestationCaList, AttestationCaListBuilder};
+use webauthn_attestation_ca::{AttestationCaList, AttestationCaListBuilder, Error};
 
 pub mod prelude {
     pub use crate::aaguid::Aaguid;
@@ -24,9 +22,6 @@ pub mod prelude {
     pub use crate::manufacturer::Manufacturer;
     pub use crate::query::Query;
     pub use crate::{Data, DataBuilder};
-
-    pub(crate) use openssl::error::ErrorStack as OpenSSLErrorStack;
-    pub(crate) use openssl::x509;
     pub(crate) use std::collections::BTreeSet;
     pub(crate) use std::rc::Rc;
 }
@@ -98,7 +93,7 @@ impl Data {
 // Allowed as AttestationCaList is foreign.
 #[allow(clippy::from_over_into)]
 impl TryInto<AttestationCaList> for &Data {
-    type Error = crate::prelude::OpenSSLErrorStack;
+    type Error = Error;
 
     fn try_into(self) -> Result<AttestationCaList, Self::Error> {
         let mut att_ca_builder = AttestationCaListBuilder::new();

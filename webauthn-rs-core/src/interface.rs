@@ -9,7 +9,6 @@ use crypto_glue::{
     traits::{DecodeDer, EncodeDer, FromEncodedPoint},
     x509,
 };
-use openssl::nid;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -124,17 +123,6 @@ impl ECDSACurve {
             Self::SECP256R1 => 32,
             Self::SECP384R1 => 48,
             Self::SECP521R1 => 66,
-        }
-    }
-}
-
-impl From<&ECDSACurve> for nid::Nid {
-    fn from(c: &ECDSACurve) -> Self {
-        use ECDSACurve::*;
-        match c {
-            SECP256R1 => nid::Nid::X9_62_PRIME256V1,
-            SECP384R1 => nid::Nid::SECP384R1,
-            SECP521R1 => nid::Nid::SECP521R1,
         }
     }
 }
