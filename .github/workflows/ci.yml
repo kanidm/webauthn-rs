@@ -182,29 +182,22 @@ jobs:
       # feature which wasn't checked on Linux.
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
-          cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets --features ${{ matrix.features }}
+          cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
-          cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets --features ${{ matrix.features }},ui-cli
+          cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
-          cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets --features ${{ matrix.features }},qrcode,ui-cli
+          cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
       # "ctap2-management" requires OpenSSL, which we won't have if built with
       # only "win10" feature on Windows.
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
         run: |
-          cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets \
-            --features ${{ matrix.features }},ctap2-management
+          cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
       - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
         run: |
-          cargo clippy --no-deps -p webauthn-authenticator-rs \
-            --all-targets \
-            --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
+          cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
