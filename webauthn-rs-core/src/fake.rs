@@ -1,11 +1,10 @@
 //! Fake `CredentialID` generator. See [WebauthnFakeCredentialGenerator] for more details.
 
-use openssl::{hash, pkey, sign};
-use rand::prelude::*;
-use rand_chacha::ChaCha8Rng;
-
 use crate::error::WebauthnError;
 use crate::proto::CredentialID;
+use crypto_glue::hmac_s256::{self, HmacSha256Key};
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 
 /// A trait for implementing custom `CredentialID` distributions. You *must* use the provided
 /// rng for generating `CredentialID`s to ensure that the outputs are deterministic.
@@ -205,8 +204,7 @@ pub struct WebauthnFakeCredentialGenerator<D>
 where
     D: FakeCredentialIDDistribution,
 {
-    // hmac key
-    hmac_key: pkey::PKey<pkey::Private>,
+    hmac_key: HmacSha256Key,
     distribution: std::marker::PhantomData<D>,
 }
 
@@ -216,12 +214,8 @@ where
 {
     /// Generate a new random HMAC key for the credential generator. You MUST persist this key for
     /// future use.
-    pub fn new_hmac_key() -> Result<Vec<u8>, WebauthnError> {
-        let mut key = vec![0; 16];
-
-        openssl::rand::rand_bytes(&mut key)
-            .map_err(WebauthnError::OpenSSLError)
-            .map(|_| key)
+    pub fn new_hmac_key() -> Result<HmacSha256Key, WebauthnError> {
+        Ok(hmac_s256::new_key())
     }
 }
 
@@ -234,7 +228,7 @@ where
     /// external party to determine if `CredentialID`s are genuine or faked. Rotation of this key
     /// may also allow detection of genuine or fake credentials.
     pub fn new(hmac_key: &[u8]) -> Result<Self, WebauthnError> {
-        let hmac_key = pkey::PKey::hmac(hmac_key).map_err(WebauthnError::OpenSSLError)?;
+        let hmac_key = hmac_s256::key_from_slice(hmac_key).ok_or(WebauthnError::HmacKeyInvalid)?;
 
         Ok(WebauthnFakeCredentialGenerator {
             hmac_key,
@@ -245,15 +239,11 @@ where
     /// Given a username as a byte slice, generate a set of deterministic `CredentialID`s.
     pub fn generate(&self, username: &[u8]) -> Result<Vec<CredentialID>, WebauthnError> {
         // hmac the username
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &self.hmac_key)
-            .map_err(WebauthnError::OpenSSLError)?;
+
+        let hmac_out = hmac_s256::oneshot(&self.hmac_key, username);
 
         let mut seed = [0; 32];
-        let buf = signer
-            .sign_oneshot_to_vec(username)
-            .map_err(WebauthnError::OpenSSLError)?;
-
-        seed.copy_from_slice(&buf);
+        seed.copy_from_slice(&hmac_out.into_bytes());
 
         // Seed the rng
         let mut seeded_rng = ChaCha8Rng::from_seed(seed);
@@ -274,7 +264,11 @@ mod tests {
         let _ = tracing_subscriber::fmt::try_init();
 
         let cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
-            WebauthnFakeCredentialGenerator::new(&[0, 1, 2, 3]).unwrap();
+            WebauthnFakeCredentialGenerator::new(&[
+                0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+            .unwrap();
 
         let cred_a = cred_gen.generate(b"a").unwrap();
         assert!(cred_a.is_empty());
@@ -323,7 +317,11 @@ mod tests {
 
         // Demonstrate that re-keying the generator yields different generated credential results.
         let alt_cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
-            WebauthnFakeCredentialGenerator::new(&[3, 2, 1, 0]).unwrap();
+            WebauthnFakeCredentialGenerator::new(&[
+                3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+            .unwrap();
 
         let alt_cred_a = alt_cred_gen.generate(b"a").unwrap();
         assert_ne!(alt_cred_a, cred_a);

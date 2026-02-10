@@ -13,8 +13,8 @@ license = "MPL-2.0"
 [dependencies]
 webauthn-attestation-ca.workspace = true
 base64urlsafedata = { workspace = true }
-openssl = { workspace = true }
 peg = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tracing.workspace = true
 uuid = { workspace = true, features = ["serde"] }
+crypto-glue = { workspace = true }
