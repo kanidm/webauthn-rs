@@ -353,7 +353,7 @@ impl MacUSBDeviceWorker {
         )
     }
 
-    /// Registers event handlers for the [IODevice] and starts the [CFRunLoop].
+    /// Registers event handlers and starts the [CFRunLoop].
     ///
     /// This method blocks until completion.
     fn start(&self) -> Result<()> {

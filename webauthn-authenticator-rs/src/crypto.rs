@@ -62,7 +62,7 @@ pub fn decrypt(
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, WebauthnCError> {
     let cipher = Cipher::aes_256_cbc();
-    if ciphertext.len() % cipher.block_size() != 0 {
+    if !ciphertext.len().is_multiple_of(cipher.block_size()) {
         error!(
             "ciphertext length {} is not a multiple of {} bytes",
             ciphertext.len(),

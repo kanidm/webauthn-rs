@@ -580,6 +580,12 @@ impl fmt::Display for MultiDeviceCredentialSupport {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AttestationFormat {
+    Packed,
+}
+
 /// The output of authenticatorGetInfo. Some fields are hidden as they are duplicated
 /// in the metadata statement.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -632,6 +638,10 @@ pub struct AuthenticatorGetInfo {
     /// Vendor specific details
     #[serde(default)]
     pub vendor_prototype_config_commands: Vec<u32>,
+
+    /// Supported attestation formats
+    #[serde(default)]
+    pub attestation_formats: Vec<AttestationFormat>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -660,6 +670,10 @@ pub struct MetadataStatement {
     /// A list of human-readable short descriptions of the authenticator in different languages.
     #[serde(default)]
     pub alternative_descriptions: BTreeMap<String, String>,
+
+    /// A list of friendly names describing the device.
+    pub friendly_names: BTreeMap<String, String>,
+
     /// Earliest (i.e. lowest) trustworthy authenticatorVersion meeting the requirements specified
     /// in this metadata statement.
     ///
