@@ -290,16 +290,16 @@ pub enum WebauthnError {
     #[error("An invalid HMAC Key was found")]
     HmacKeyInvalid,
 
-    #[error("A signature was not valid for the algorthim, and can not be validated.")]
+    #[error("A signature was not valid for the algorthim, and can not be validated")]
     SignatureInvalid,
 
-    #[error("The SEC1 Affine Points of the provided ECDSA Public Key are invalid or compressed.")]
+    #[error("The SEC1 Affine Points of the provided ECDSA Public Key are invalid or compressed")]
     EcdsaPointInvalid,
 
-    #[error("The public key of this certificate does not match the provided COSE Algorithm.")]
+    #[error("The public key of this certificate does not match the provided COSE Algorithm")]
     CertificatePublicKeyAlgorthimMismatch,
 
-    #[error("The RSA parameters provided are invalid.")]
+    #[error("The RSA parameters provided are invalid")]
     RsaParametersInvalid,
 }
 
