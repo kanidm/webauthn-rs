@@ -329,7 +329,6 @@ impl WebauthnCore {
                 exclude_credentials: exclude_credentials.as_ref().map(|creds| {
                     creds
                         .iter()
-                        .cloned()
                         .map(|id| PublicKeyCredentialDescriptor {
                             type_: "public-key".to_string(),
                             id: id.as_ref().into(),
