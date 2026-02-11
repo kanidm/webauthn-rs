@@ -121,7 +121,7 @@ pub enum WebauthnCError {
 
     #[error("Unable to expand hkdf key")]
     CryptographyHkdfExpand,
-    
+
     #[error("AEAD error")]
     CryptographyAeadError,
 
