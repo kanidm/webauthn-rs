@@ -11,7 +11,7 @@ use bluetooth_hci::{
     BdAddr, BdAddrType,
 };
 use clap::{ArgGroup, Parser};
-use crypto_glue::rand::{rngs::ThreadRng, Rng};
+use crypto_glue::rand::{RngCore as _, rngs::ThreadRng};
 use futures::StreamExt;
 use serialport::FlowControl;
 use serialport_hci::{
@@ -170,7 +170,7 @@ impl Advertiser for SerialHciAdvertiser {
         let mut addr = [0u8; 6];
         addr[5] = 0xc0;
         let mut rng = ThreadRng::default();
-        rng.fill_bytes(&mut addr[..5])?;
+        rng.try_fill_bytes(&mut addr[..5])?;
 
         self.hci.le_set_random_address(BdAddr(addr)).unwrap();
         let _ = self.read();
