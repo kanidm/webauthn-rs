@@ -6,12 +6,11 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 use async_trait::async_trait;
-use crypto_glue::traits::Zeroizing;
-use futures::{SinkExt, StreamExt};
-use openssl::{
-    ec::EcKeyRef,
-    pkey::{Private, Public},
+use crypto_glue::{
+    ecdh_p256::{EcdhP256EphemeralSecret, EcdhP256PublicKey},
+    traits::Zeroizing,
 };
+use futures::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_cbor_2::{ser::to_vec_packed, Value};
 use tokio::net::TcpStream;
@@ -170,7 +169,7 @@ impl Tunnel {
     pub async fn connect_initiator(
         uri: &Uri,
         psk: Psk,
-        local_identity: &EcKeyRef<Private>,
+        local_identity: EcdhP256EphemeralSecret,
         ui: &impl UiCallback,
     ) -> Result<Tunnel, WebauthnCError> {
         ui.cable_status_update(CableState::ConnectingToTunnelServer);
@@ -251,7 +250,7 @@ impl Tunnel {
         uri: &Uri,
         discovery: &Discovery,
         tunnel_server_id: u16,
-        peer_identity: &EcKeyRef<Public>,
+        peer_identity: &EcdhP256PublicKey,
         info: GetInfoResponse,
         advertiser: &mut impl Advertiser,
         ui: &impl UiCallback,

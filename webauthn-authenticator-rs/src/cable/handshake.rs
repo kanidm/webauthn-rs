@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use openssl::{ec::EcKey, pkey::Public};
+use crypto_glue::{ecdh_p256::EcdhP256PublicKey, traits::ToEncodedPoint as _};
 use serde::Serialize;
 use serde_cbor_2::Value;
 use std::{
@@ -11,7 +11,7 @@ use std::{
 
 use crate::{
     cable::{base10, discovery::Discovery, tunnel::ASSIGNED_DOMAINS_COUNT, CableRequestType},
-    crypto::{point_to_bytes, public_key_from_bytes},
+    crypto::public_key_from_bytes,
     ctap2::commands::{
         value_to_bool, value_to_string, value_to_u32, value_to_u64, value_to_vec_u8,
     },
@@ -23,7 +23,7 @@ const URL_PREFIX: &str = "FIDO:/";
 #[derive(Serialize, Debug, Clone)]
 #[serde(into = "BTreeMap<u32, Value>", try_from = "BTreeMap<u32, Value>")]
 pub struct HandshakeV2 {
-    pub(super) peer_identity: EcKey<Public>,
+    pub(super) peer_identity: EcdhP256PublicKey,
     secret: [u8; 16],
     known_domains_count: u32,
     timestamp: SystemTime,
@@ -45,6 +45,10 @@ impl From<HandshakeV2> for BTreeMap<u32, Value> {
         } = value;
 
         let mut o = BTreeMap::from([
+            (
+                0,
+                Value::Bytes(peer_identity.to_encoded_point(true).to_bytes().to_vec()),
+            ),
             (1, Value::Bytes(secret.to_vec())),
             (2, Value::Integer(known_domains_count.into())),
             (
@@ -62,10 +66,6 @@ impl From<HandshakeV2> for BTreeMap<u32, Value> {
             (4, Value::Bool(supports_linking_info)),
             (5, Value::Text(request_type.to_cable_string())),
         ]);
-
-        if let Ok(v) = point_to_bytes(peer_identity.public_key(), true) {
-            o.insert(0, Value::Bytes(v));
-        }
 
         if supports_non_discoverable_make_credential
             && request_type == CableRequestType::MakeCredential
@@ -143,7 +143,7 @@ impl TryFrom<BTreeMap<u32, Value>> for HandshakeV2 {
 impl HandshakeV2 {
     pub fn new(
         request_type: CableRequestType,
-        public_key: EcKey<Public>,
+        public_key: EcdhP256PublicKey,
         qr_key: [u8; 16],
     ) -> Result<Self, WebauthnCError> {
         Ok(Self {
