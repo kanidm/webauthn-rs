@@ -11,14 +11,17 @@ use crate::stubs::*;
 use crypto_glue::{
     aes256::Aes256Key,
     aes256gcm::{Aes256Gcm, Aes256GcmNonce},
+    block_padding::generic_array::{
+        sequence::Split,
+        typenum::{U16, U32, U64, U96},
+        GenericArray,
+    },
     s256::Sha256Output,
     traits::{AeadInPlace, KeyInit, Zeroizing},
-    block_padding::generic_array::sequence::Split,
 };
 use openssl::{
     ec::{EcKey, EcKeyRef, EcPointRef},
     pkey::{Private, Public},
-    symm::{decrypt_aead, encrypt_aead, Cipher},
 };
 use std::mem::size_of;
 
@@ -92,7 +95,7 @@ impl CipherState {
         self.n = 0;
     }
 
-    pub fn encrypt(&mut self, pt: &[u8], aad: Option<&[u8]>) -> Result<Zeroizing<Vec<u8>>, WebauthnCError> {
+    pub fn encrypt(&mut self, pt: &[u8], aad: Option<&[u8]>) -> Result<Vec<u8>, WebauthnCError> {
         if let Some(key) = self.k.as_ref() {
             if self.n == u32::MAX {
                 return Err(WebauthnCError::NonceOverflow);
@@ -109,7 +112,7 @@ impl CipherState {
             let len = pt.len();
             let padded_len = if self.padding { padding_len(len) } else { len };
 
-            let mut buf = Zeroizing::new(Vec::with_capacity(16 + padded_len));
+            let mut buf = vec![0; 16 + padded_len];
             buf[..len].copy_from_slice(pt);
 
             if self.padding {
@@ -122,17 +125,18 @@ impl CipherState {
 
             let cipher = Aes256Gcm::new(key);
             let tag = cipher
-                .encrypt_in_place_detached(&nonce, aad, &mut buf)
+                .encrypt_in_place_detached(&nonce, aad, &mut buf[..padded_len])
                 .map_err(|_| WebauthnCError::CryptographyAeadError)?;
 
             buf[padded_len..].copy_from_slice(&tag);
 
             Ok(buf)
         } else {
-            Ok(pt.to_vec().into())
+            Ok(pt.to_vec())
         }
     }
 
+    /// Decrypt `buf` in place, and return the message length.
     pub fn decrypt(&mut self, buf: &mut [u8], aad: Option<&[u8]>) -> Result<usize, WebauthnCError> {
         if let Some(key) = self.k.as_ref() {
             if self.n == u32::MAX {
@@ -148,42 +152,48 @@ impl CipherState {
             });
 
             let msg_len = buf.len() - 16;
-            let (buf, tag) = buf.split(m);
-            assert_eq!(tag.len(), 16);
+            let (ct, tag) = buf.split_at_mut(msg_len);
+            let tag: &mut GenericArray<u8, U16> = tag.into();
 
             let nonce = self.construct_nonce();
 
-            // let cipher = Cipher::aes_256_gcm();
             let cipher = Aes256Gcm::new(key);
-            cipher.decrypt_in_place_detached(&nonce, aad, buf, tag.)?;
 
-            let decrypted =
-                decrypt_aead(cipher, key, Some(&nonce), aad, &ct[..msg_len], &ct[msg_len..]);
-
-            let mut decrypted = match decrypted {
-                Err(e) => {
-                    if self.nonce_type == NonceType::Old && self.n == 0 {
-                        // Switch to new construction mode
-                        trace!("trying new construction");
-                        self.nonce_type = NonceType::New;
-                        return self.decrypt(ct, None);
-                    } else {
-                        // throw original error
-                        return Err(e.into());
-                    }
+            if cipher
+                .decrypt_in_place_detached(&nonce, aad, ct, tag)
+                .is_err()
+            {
+                error!("failure decrypting: {}, tag: {}, nonce: {}", hex::encode(&ct), hex::encode(&tag), hex::encode(nonce));
+                if self.nonce_type == NonceType::Old && self.n == 0 {
+                    // Switch to new construction mode
+                    trace!("trying new construction");
+                    self.nonce_type = NonceType::New;
+                    return self.decrypt(buf, None);
+                } else {
+                    // throw original error
+                    return Err(WebauthnCError::CryptographyAeadError);
                 }
-                Ok(d) => d,
-            };
+            }
 
             self.n += 1;
 
             if self.padding {
-                unpad(&mut decrypted)?;
-            }
+                let padding_len = (ct.last().copied().unwrap_or_default() as usize) + 1;
+                if padding_len > ct.len() || padding_len > PADDING_MUL {
+                    error!(
+                        "Invalid caBLE message (padding length {} > message length {} or {PADDING_MUL})",
+                        padding_len,
+                        ct.len()
+                    );
+                    return Err(WebauthnCError::Internal);
+                }
 
-            Ok(decrypted)
+                Ok(ct.len() - padding_len)
+            } else {
+                Ok(ct.len())
+            }
         } else {
-            Ok(Zeroizing::new(ct.to_vec()))
+            Ok(buf.len())
         }
     }
 
@@ -210,7 +220,7 @@ impl CipherState {
 ///
 /// [SymmetricState]: https://noiseprotocol.org/noise.html#the-symmetricstate-object
 pub struct CableNoise {
-    ck: [u8; 32],
+    ck: Zeroizing<GenericArray<u8, U32>>,
     h: Sha256Output,
 
     cipher_state: CipherState,
@@ -231,7 +241,7 @@ impl CableNoise {
         let ephemeral_key = regenerate()?;
 
         Ok(Self {
-            ck: protocol_name,
+            ck: Zeroizing::new(protocol_name.into()),
             h: protocol_name.into(),
             cipher_state: CipherState::new(NonceType::Handshake, false),
             ephemeral_key,
@@ -254,27 +264,25 @@ impl CableNoise {
 
     /// `SymmetricState.MixKey(input_key_material)`
     fn mix_key(&mut self, ikm: &[u8]) -> Result<(), WebauthnCError> {
-        let mut o = [0; 64];
+        let mut o: Zeroizing<GenericArray<u8, U64>> = Default::default();
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
-        let (ck, temp_k) = o.split();
-        self.ck.copy_from_slice(ck);
-        self.cipher_state
-            .init_key(temp_k.into());
+        let (ck, temp_k): (GenericArray<u8, U32>, _) = o.split();
+        self.ck.copy_from_slice(&ck);
+        self.cipher_state.init_key(temp_k.into());
         Ok(())
     }
 
     /// `SymmetricState.MixKeyAndHash(input_key_material)`
     fn mix_key_and_hash(&mut self, ikm: &[u8]) -> Result<(), WebauthnCError> {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/noise.cc;l=90;drc=38321ee39cd73ac2d9d4400c56b90613dee5fe29
-        let mut o = [0; 32 * 3];
+        let mut o: Zeroizing<GenericArray<u8, U96>> = Default::default();
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
-        let (ck, temp) = o.split_at(32);
-        let (temp_h, temp_k) = temp.split_at(32);
+        let (ck, temp): (GenericArray<u8, U32>, _) = o.split();
+        let (temp_h, temp_k): (GenericArray<u8, U32>, GenericArray<u8, U32>) = temp.split();
 
-        self.ck.copy_from_slice(ck);
-        self.mix_hash(temp_h);
-        self.cipher_state
-            .init_key(temp_k.try_into().expect("incorrect temp_k length"));
+        self.ck.copy_from_slice(&ck);
+        self.mix_hash(&temp_h);
+        self.cipher_state.init_key(temp_k.into());
         Ok(())
     }
 
@@ -286,10 +294,10 @@ impl CableNoise {
     }
 
     /// `SymmetricState.DecryptAndHash(ciphertext)`
-    fn decrypt_and_hash(&mut self, ct: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-        let pt = self.cipher_state.decrypt(ct, Some(&self.h))?;
-        self.mix_hash(ct);
-        Ok(pt)
+    fn decrypt_and_hash(&mut self, buf: &mut [u8]) -> Result<usize, WebauthnCError> {
+        let len = self.cipher_state.decrypt(buf, Some(&self.h))?;
+        self.mix_hash(&buf[..len]);
+        Ok(len)
     }
 
     /// `SymmetricState.Split()`
@@ -298,14 +306,11 @@ impl CableNoise {
     /// further transport messages. `write_key` is for messages sent by the
     /// initiator, `read_key` is for messages sent by the authenticator.
     fn traffic_keys(&self) -> Result<(EncryptionKey, EncryptionKey), WebauthnCError> {
-        let mut o = [0; size_of::<EncryptionKey>() * 2];
+        let mut o: Zeroizing<GenericArray<u8, U64>> = Default::default();
         hkdf_sha_256(&self.ck, &[], None, &mut o)?;
 
-        let mut a = [0; size_of::<EncryptionKey>()];
-        let mut b = [0; size_of::<EncryptionKey>()];
-        a.copy_from_slice(&o[..size_of::<EncryptionKey>()]);
-        b.copy_from_slice(&o[size_of::<EncryptionKey>()..]);
-        Ok((a, b))
+        let (a, b) = o.split();
+        Ok((a.into(), b.into()))
     }
 
     fn get_ephemeral_key_public_bytes(&self) -> Result<[u8; 65], WebauthnCError> {
@@ -396,9 +401,10 @@ impl CableNoise {
 
         // ProcessResponse
         let (peer_point_bytes, ct) = response.split_at(65);
+        let mut ct = Zeroizing::new(ct.to_vec());
 
         let peer_key = public_key_from_bytes(peer_point_bytes)?;
-        let mut shared_key_ee = [0; 32];
+        let mut shared_key_ee = EncryptionKey::default();
         ecdh(
             self.ephemeral_key.to_owned(),
             peer_key.to_owned(),
@@ -409,17 +415,16 @@ impl CableNoise {
         self.mix_key(&shared_key_ee)?;
 
         if let Some(local_identity) = &self.local_identity {
-            let mut shared_key_se = [0; 32];
+            let mut shared_key_se = EncryptionKey::default();
             ecdh(local_identity.to_owned(), peer_key, &mut shared_key_se)?;
             self.mix_key(&shared_key_se)?;
         }
 
-        let pt = self.decrypt_and_hash(ct)?;
-        if !pt.is_empty() {
+        let len = self.decrypt_and_hash(&mut ct)?;
+        if len != 0 {
             error!(
-                "expected handshake to be empty, got {} bytes: {:02x?}",
-                pt.len(),
-                &pt
+                "expected handshake to be empty, got {len} bytes: {:02x?}",
+                &ct[..len]
             );
             return Err(WebauthnCError::MessageTooLarge);
         }
@@ -451,6 +456,7 @@ impl CableNoise {
         // RespondToHandshake
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=987;drc=38321ee39cd73ac2d9d4400c56b90613dee5fe29
         let (peer_point_bytes, ct) = message.split_at(65);
+        let mut ct = Zeroizing::new(ct.to_vec());
 
         let mut noise = if let Some(local_identity) = local_identity {
             let mut noise = Self::new(HandshakeType::NKpsk0)?;
@@ -478,7 +484,7 @@ impl CableNoise {
         let peer_point = public_key_from_bytes(peer_point_bytes)?;
 
         if let Some(local_identity) = local_identity {
-            let mut es_key = [0; 32];
+            let mut es_key = EncryptionKey::default();
             ecdh(
                 local_identity.to_owned(),
                 peer_point.to_owned(),
@@ -487,12 +493,11 @@ impl CableNoise {
             noise.mix_key(&es_key)?;
         }
 
-        let pt = noise.decrypt_and_hash(ct)?;
-        if !pt.is_empty() {
+        let len = noise.decrypt_and_hash(&mut ct)?;
+        if len != 0 {
             error!(
-                "expected handshake to be empty, got {} bytes: {:02x?}",
-                pt.len(),
-                &pt
+                "expected handshake to be empty, got {len} bytes: {:02x?}",
+                &ct[..len]
             );
             return Err(WebauthnCError::MessageTooLarge);
         }
@@ -501,7 +506,7 @@ impl CableNoise {
         noise.mix_hash(&ephemeral_key_public_bytes);
         noise.mix_key(&ephemeral_key_public_bytes)?;
 
-        let mut shared_key_ee = [0; 32];
+        let mut shared_key_ee = EncryptionKey::default();
         ecdh(
             noise.ephemeral_key.to_owned(),
             peer_point,
@@ -510,7 +515,7 @@ impl CableNoise {
         noise.mix_key(&shared_key_ee)?;
 
         if let Some(peer_identity) = peer_identity {
-            let mut shared_key_se = [0; 32];
+            let mut shared_key_se = EncryptionKey::default();
             ecdh(
                 noise.ephemeral_key.to_owned(),
                 peer_identity.to_owned(),
@@ -571,14 +576,14 @@ impl Crypter {
         self.writer.nonce_type = NonceType::New;
     }
 
-    pub fn encrypt(&mut self, pt: &[u8]) -> Result<Zeroizing<Vec<u8>>, WebauthnCError> {
+    pub fn encrypt(&mut self, pt: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         self.writer.encrypt(pt, None)
     }
 
-    pub fn decrypt(&mut self, ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, WebauthnCError> {
-        let pt = self.reader.decrypt(ct, None)?;
+    pub fn decrypt(&mut self, buf: &mut [u8]) -> Result<usize, WebauthnCError> {
+        let l = self.reader.decrypt(buf, None)?;
         self.writer.nonce_type = self.reader.nonce_type;
-        Ok(pt)
+        Ok(l)
     }
 
     #[cfg(test)]
@@ -591,20 +596,20 @@ impl Crypter {
     }
 }
 
-/// Pads a message to a multiple of [PADDING_MUL] bytes.
-///
-/// See also: [unpad]
-fn pad(msg: &[u8]) -> Vec<u8> {
-    let len = msg.len();
-    let padded_len = padding_len(len);
-    let zeros = padded_len - len - 1;
-    assert!(zeros < 256);
+// /// Pads a message to a multiple of [PADDING_MUL] bytes.
+// ///
+// /// See also: [unpad]
+// fn pad(msg: &[u8]) -> Vec<u8> {
+//     let len = msg.len();
+//     let padded_len = padding_len(len);
+//     let zeros = padded_len - len - 1;
+//     assert!(zeros < 256);
 
-    let mut padded = vec![0; padded_len];
-    padded[..len].copy_from_slice(msg);
-    padded[padded_len - 1] = zeros as u8;
-    padded
-}
+//     let mut padded = vec![0; padded_len];
+//     padded[..len].copy_from_slice(msg);
+//     padded[padded_len - 1] = zeros as u8;
+//     padded
+// }
 
 const fn padding_len(len: usize) -> usize {
     let o = (len + PADDING_MUL) & !(PADDING_MUL - 1);
@@ -612,21 +617,21 @@ const fn padding_len(len: usize) -> usize {
     o
 }
 
-/// Unpads a message padded with [pad].
-fn unpad(msg: &mut Vec<u8>) -> Result<(), WebauthnCError> {
-    let padding_len = (msg.last().copied().unwrap_or_default() as usize) + 1;
-    if padding_len > msg.len() {
-        error!(
-            "Invalid caBLE message (padding length {} > message length {})",
-            padding_len,
-            msg.len()
-        );
-        return Err(WebauthnCError::Internal);
-    }
+// /// Unpads a message padded with [pad].
+// fn unpad(msg: &mut Vec<u8>) -> Result<(), WebauthnCError> {
+//     let padding_len = (msg.last().copied().unwrap_or_default() as usize) + 1;
+//     if padding_len > msg.len() {
+//         error!(
+//             "Invalid caBLE message (padding length {} > message length {})",
+//             padding_len,
+//             msg.len()
+//         );
+//         return Err(WebauthnCError::Internal);
+//     }
 
-    msg.truncate(msg.len() - padding_len);
-    Ok(())
-}
+//     msg.truncate(msg.len() - padding_len);
+//     Ok(())
+// }
 
 #[cfg(test)]
 mod test {
@@ -642,6 +647,24 @@ mod test {
     };
 
     use super::*;
+
+    #[test]
+    fn aead_testing() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let cipher = Aes256Gcm::new(&Default::default());
+        let mut buf = vec![];
+        let tag = cipher
+            .encrypt_in_place_detached(&[0u8; 12].into(), &[0], &mut buf)
+            .unwrap();
+
+        warn!("our empty tag was: {}", hex::encode(tag));
+
+        // now decode
+        let cipher = Aes256Gcm::new(&Default::default());
+        let mut buf = vec![];
+        cipher.decrypt_in_place_detached(&[0u8; 12].into(), &[0], &mut buf, &tag).unwrap();
+
+    }
 
     #[test]
     fn noise() {
@@ -661,51 +684,49 @@ mod test {
         assert!(initiator_crypt.is_counterparty(&responder_crypt));
         responder_crypt.use_new_construction();
 
-        let ct = responder_crypt.encrypt(b"Hello, world!").unwrap();
-        let pt = initiator_crypt.decrypt(&ct).unwrap();
-        assert_eq!(b"Hello, world!", pt.as_slice());
+        let mut ct = responder_crypt.encrypt(b"Hello, world!").unwrap();
+        assert_ne!(b"Hello, world!", ct.as_slice());
+        let len = initiator_crypt.decrypt(&mut ct).unwrap();
+        assert_eq!(b"Hello, world!", &ct[..len]);
         // Decrypting the same ciphertext twice should fail, because of the nonce change
-        assert!(initiator_crypt.decrypt(&ct).is_err());
+        assert!(initiator_crypt.decrypt(&mut ct).is_err());
 
-        let ct2 = initiator_crypt
+        let mut ct2 = initiator_crypt
             .encrypt(b"The quick brown fox jumps over the lazy dog")
             .unwrap();
 
         // Decrypting responder's initial ciphertext should fail because of different keys from Noise
-        assert!(responder_crypt.decrypt(&ct).is_err());
+        assert!(responder_crypt.decrypt(&mut ct).is_err());
 
         // A failure in Crypter shouldn't impact our ability to receive correct ciphertexts, if they're in order
-        let pt2 = responder_crypt.decrypt(&ct2).unwrap();
-        assert_eq!(
-            b"The quick brown fox jumps over the lazy dog",
-            pt2.as_slice()
-        );
-        assert!(responder_crypt.decrypt(&ct).is_err());
+        let len = responder_crypt.decrypt(&mut ct2).unwrap();
+        assert_eq!(b"The quick brown fox jumps over the lazy dog", &ct2[..len]);
+        assert!(responder_crypt.decrypt(&mut ct).is_err());
     }
 
     #[test]
     fn encrypt_decrypt() {
         let _ = tracing_subscriber::fmt::try_init();
 
-        let key0 = [123; 32];
-        let key1 = [231; 32];
+        let key0: EncryptionKey = Zeroizing::new([123; 32].into());
+        let key1: EncryptionKey = Zeroizing::new([231; 32].into());
 
-        let mut alice = Crypter::new(key0, key1);
-        let mut bob = Crypter::new(key1, key0);
+        let mut alice = Crypter::new(key0.clone(), key1.clone());
+        let mut bob = Crypter::new(key1.clone(), key0.clone());
         let mut corrupted = Crypter::new(key1, key0);
 
         for l in 0..530 {
             let msg = vec![0xff; l];
             let mut crypted = alice.encrypt(&msg).unwrap();
-            let decrypted = bob.decrypt(&crypted).unwrap();
+            let len = bob.decrypt(&mut crypted).unwrap();
 
-            assert_eq!(msg, decrypted);
+            assert_eq!(msg.as_slice(), &crypted[..len]);
             assert_eq!(bob.reader.nonce_type, NonceType::Old);
             if l > 0 {
                 crypted[(l * 3) % l] ^= 0x01;
             }
             corrupted.reader.n = bob.reader.n;
-            assert!(corrupted.decrypt(&crypted).is_err());
+            assert!(corrupted.decrypt(&mut crypted).is_err());
         }
     }
 
@@ -713,43 +734,43 @@ mod test {
     fn encrypt_decrypt_new() {
         let _ = tracing_subscriber::fmt::try_init();
 
-        let key0 = [123; 32];
-        let key1 = [231; 32];
+        let key0: EncryptionKey = Zeroizing::new([123; 32].into());
+        let key1: EncryptionKey = Zeroizing::new([231; 32].into());
 
-        let mut alice = Crypter::new(key0, key1);
+        let mut alice = Crypter::new(key0.clone(), key1.clone());
         alice.use_new_construction();
-        let mut bob = Crypter::new(key1, key0);
+        let mut bob = Crypter::new(key1.clone(), key0.clone());
         let mut corrupted = Crypter::new(key1, key0);
 
         for l in 1..5 {
-            let msg = vec![0xff; l];
+            let msg = Zeroizing::new(vec![0xff; l]);
             let mut crypted = alice.encrypt(&msg).unwrap();
-            let decrypted = bob.decrypt(&crypted).unwrap();
+            let len = bob.decrypt(&mut crypted).unwrap();
 
             assert!(bob.writer.nonce_type == NonceType::New);
-            assert_eq!(msg, decrypted);
+            assert_eq!(msg.as_slice(), &crypted[..len]);
             if l > 0 {
                 crypted[(l * 3) % l] ^= 0x01;
             }
             corrupted.reader.nonce_type = bob.reader.nonce_type;
             corrupted.reader.n = bob.reader.n;
-            assert!(corrupted.decrypt(&crypted).is_err());
+            assert!(corrupted.decrypt(&mut crypted).is_err());
         }
     }
 
     #[test]
     fn unencrypted() {
         let mut c = CipherState::new(NonceType::New, true);
-        let pt = b"Hello, world!";
+        let mut buf = b"Hello, world!".to_vec();
 
         // When CipherState has no key, it should pass through as plaintext and
         // not affect the nonce value.
-        let r = c.encrypt(pt, None).unwrap();
-        assert_eq!(pt, r.as_slice());
+        let r = c.encrypt(&buf, None).unwrap();
+        assert_eq!(buf, r.as_slice());
         assert_eq!(0, c.n);
 
-        let r = c.decrypt(pt, None).unwrap();
-        assert_eq!(pt, r.as_slice());
+        let l = c.decrypt(&mut buf, None).unwrap();
+        assert_eq!(&buf[..l], r.as_slice());
         assert_eq!(0, c.n);
     }
 
@@ -757,17 +778,23 @@ mod test {
     fn construction() {
         let _ = tracing_subscriber::fmt::try_init();
         // Patched chromium to leak its key data
-        let write_key: EncryptionKey = Zeroizing::new([
-            0x1f, 0xba, 0x3c, 0xce, 0x17, 0x62, 0x2c, 0x68, 0x26, 0x8d, 0x9f, 0x75, 0xb5, 0xa8,
-            0xa3, 0x35, 0x1b, 0x51, 0x7f, 0x9, 0x6f, 0xb5, 0xe2, 0x94, 0x94, 0x1a, 0xf7, 0xe3,
-            0xa6, 0xa8, 0xd6, 0xe1,
-        ].into());
+        let write_key: EncryptionKey = Zeroizing::new(
+            [
+                0x1f, 0xba, 0x3c, 0xce, 0x17, 0x62, 0x2c, 0x68, 0x26, 0x8d, 0x9f, 0x75, 0xb5, 0xa8,
+                0xa3, 0x35, 0x1b, 0x51, 0x7f, 0x9, 0x6f, 0xb5, 0xe2, 0x94, 0x94, 0x1a, 0xf7, 0xe3,
+                0xa6, 0xa8, 0xd6, 0xe1,
+            ]
+            .into(),
+        );
 
-        let read_key: EncryptionKey = Zeroizing::new([
-            0xe3, 0x4f, 0x1a, 0xa3, 0x74, 0x72, 0x38, 0xc0, 0x4d, 0x3b, 0xd2, 0x5e, 0x7, 0xef,
-            0x1b, 0x35, 0xfe, 0xf3, 0x59, 0x0, 0xd, 0x75, 0x56, 0x15, 0xcd, 0x85, 0xbe, 0x27, 0xcf,
-            0xc8, 0x7, 0xd1,
-        ].into());
+        let read_key: EncryptionKey = Zeroizing::new(
+            [
+                0xe3, 0x4f, 0x1a, 0xa3, 0x74, 0x72, 0x38, 0xc0, 0x4d, 0x3b, 0xd2, 0x5e, 0x7, 0xef,
+                0x1b, 0x35, 0xfe, 0xf3, 0x59, 0x0, 0xd, 0x75, 0x56, 0x15, 0xcd, 0x85, 0xbe, 0x27,
+                0xcf, 0xc8, 0x7, 0xd1,
+            ]
+            .into(),
+        );
 
         let req = MakeCredentialRequest {
             client_data_hash: vec![
@@ -837,30 +864,30 @@ mod test {
 
         assert_eq!(r, expected_req_encoding);
 
-        let expected_req_padded = [
-            0x1, 0x1, 0xa6, 0x1, 0x58, 0x20, 0x38, 0x89, 0x28, 0x5c, 0x8c, 0x63, 0x23, 0x95, 0xc,
-            0xed, 0x7, 0x49, 0x84, 0xf9, 0xf9, 0x46, 0x3b, 0xc1, 0x73, 0x9b, 0xb6, 0x21, 0xa9,
-            0xe5, 0xf1, 0xee, 0x8d, 0xd9, 0x39, 0x3b, 0xa2, 0x80, 0x2, 0xa2, 0x62, 0x69, 0x64,
-            0x78, 0x18, 0x77, 0x65, 0x62, 0x61, 0x75, 0x74, 0x68, 0x6e, 0x2e, 0x66, 0x69, 0x72,
-            0x73, 0x74, 0x79, 0x65, 0x61, 0x72, 0x2e, 0x69, 0x64, 0x2e, 0x61, 0x75, 0x64, 0x6e,
-            0x61, 0x6d, 0x65, 0x78, 0x18, 0x77, 0x65, 0x62, 0x61, 0x75, 0x74, 0x68, 0x6e, 0x2e,
-            0x66, 0x69, 0x72, 0x73, 0x74, 0x79, 0x65, 0x61, 0x72, 0x2e, 0x69, 0x64, 0x2e, 0x61,
-            0x75, 0x3, 0xa3, 0x62, 0x69, 0x64, 0x50, 0xd6, 0xd7, 0xaa, 0x29, 0x8f, 0xe8, 0x4a, 0x6,
-            0xaa, 0xde, 0xd7, 0xe4, 0x9d, 0x90, 0xa, 0x62, 0x64, 0x6e, 0x61, 0x6d, 0x65, 0x61,
-            0x61, 0x6b, 0x64, 0x69, 0x73, 0x70, 0x6c, 0x61, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x61,
-            0x61, 0x4, 0x82, 0xa2, 0x63, 0x61, 0x6c, 0x67, 0x26, 0x64, 0x74, 0x79, 0x70, 0x65,
-            0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x2d, 0x6b, 0x65, 0x79, 0xa2, 0x63, 0x61,
-            0x6c, 0x67, 0x39, 0x1, 0x0, 0x64, 0x74, 0x79, 0x70, 0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c,
-            0x69, 0x63, 0x2d, 0x6b, 0x65, 0x79, 0x5, 0x81, 0xa2, 0x62, 0x69, 0x64, 0x44, 0x0, 0x1,
-            0x2, 0x3, 0x64, 0x74, 0x79, 0x70, 0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x2d,
-            0x6b, 0x65, 0x79, 0x7, 0xa1, 0x62, 0x75, 0x76, 0xf5, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-            0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
-            0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1f,
-        ];
+        // let expected_req_padded = [
+        //     0x1, 0x1, 0xa6, 0x1, 0x58, 0x20, 0x38, 0x89, 0x28, 0x5c, 0x8c, 0x63, 0x23, 0x95, 0xc,
+        //     0xed, 0x7, 0x49, 0x84, 0xf9, 0xf9, 0x46, 0x3b, 0xc1, 0x73, 0x9b, 0xb6, 0x21, 0xa9,
+        //     0xe5, 0xf1, 0xee, 0x8d, 0xd9, 0x39, 0x3b, 0xa2, 0x80, 0x2, 0xa2, 0x62, 0x69, 0x64,
+        //     0x78, 0x18, 0x77, 0x65, 0x62, 0x61, 0x75, 0x74, 0x68, 0x6e, 0x2e, 0x66, 0x69, 0x72,
+        //     0x73, 0x74, 0x79, 0x65, 0x61, 0x72, 0x2e, 0x69, 0x64, 0x2e, 0x61, 0x75, 0x64, 0x6e,
+        //     0x61, 0x6d, 0x65, 0x78, 0x18, 0x77, 0x65, 0x62, 0x61, 0x75, 0x74, 0x68, 0x6e, 0x2e,
+        //     0x66, 0x69, 0x72, 0x73, 0x74, 0x79, 0x65, 0x61, 0x72, 0x2e, 0x69, 0x64, 0x2e, 0x61,
+        //     0x75, 0x3, 0xa3, 0x62, 0x69, 0x64, 0x50, 0xd6, 0xd7, 0xaa, 0x29, 0x8f, 0xe8, 0x4a, 0x6,
+        //     0xaa, 0xde, 0xd7, 0xe4, 0x9d, 0x90, 0xa, 0x62, 0x64, 0x6e, 0x61, 0x6d, 0x65, 0x61,
+        //     0x61, 0x6b, 0x64, 0x69, 0x73, 0x70, 0x6c, 0x61, 0x79, 0x4e, 0x61, 0x6d, 0x65, 0x61,
+        //     0x61, 0x4, 0x82, 0xa2, 0x63, 0x61, 0x6c, 0x67, 0x26, 0x64, 0x74, 0x79, 0x70, 0x65,
+        //     0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x2d, 0x6b, 0x65, 0x79, 0xa2, 0x63, 0x61,
+        //     0x6c, 0x67, 0x39, 0x1, 0x0, 0x64, 0x74, 0x79, 0x70, 0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c,
+        //     0x69, 0x63, 0x2d, 0x6b, 0x65, 0x79, 0x5, 0x81, 0xa2, 0x62, 0x69, 0x64, 0x44, 0x0, 0x1,
+        //     0x2, 0x3, 0x64, 0x74, 0x79, 0x70, 0x65, 0x6a, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x2d,
+        //     0x6b, 0x65, 0x79, 0x7, 0xa1, 0x62, 0x75, 0x76, 0xf5, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+        //     0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
+        //     0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1f,
+        // ];
         // let p = pad(&r);
         // assert_eq!(p, expected_req_padded);
 
-        let expected_req_crypted = [
+        let expected_req_crypted: Vec<u8> = vec![
             0x50, 0x62, 0xcf, 0x34, 0x57, 0x1e, 0x8, 0x27, 0xa7, 0xc0, 0x20, 0x7f, 0x7c, 0x0, 0x18,
             0x45, 0x67, 0xd6, 0x13, 0xea, 0xb0, 0xda, 0x8, 0xa, 0xd0, 0x42, 0xd8, 0x6, 0x64, 0xc5,
             0x9d, 0xf7, 0xb0, 0x1a, 0x13, 0xdb, 0x17, 0xfd, 0x27, 0x75, 0x75, 0xcc, 0xff, 0x53,
@@ -885,15 +912,15 @@ mod test {
         let mut crypter = Crypter::new(read_key.clone(), write_key.clone());
         crypter.use_new_construction();
 
-        let ct = crypter.encrypt(&r).unwrap();
+        let mut ct = crypter.encrypt(&r).unwrap();
 
         assert_eq!(ct.len(), expected_req_crypted.len());
         assert_eq!(&ct, &expected_req_crypted);
 
         let mut peer_crypter = Crypter::new(write_key, read_key);
-        let pt = peer_crypter.decrypt(&ct).unwrap();
-        assert_eq!(pt, r);
-        let msg = CableFrame::from_bytes(1, &pt);
+        let len = peer_crypter.decrypt(&mut ct).unwrap();
+        assert_eq!(&ct[..len], r);
+        let msg = CableFrame::from_bytes(1, &ct);
         assert_eq!(msg.message_type, CableFrameType::Ctap);
     }
 }
