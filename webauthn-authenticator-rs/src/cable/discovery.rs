@@ -8,18 +8,18 @@ use crypto_glue::{
         typenum::{U32, U64},
         GenericArray,
     },
+    ecdh_p256::{self, EcdhP256EphemeralSecret},
     hmac_s256::{self, HmacSha256Key},
     rand::{rngs::ThreadRng, RngCore},
     traits::Zeroizing,
 };
 use num_traits::ToPrimitive;
-use openssl::{ec::EcKey, pkey::Private};
 use std::mem::size_of;
 use tokio_tungstenite::tungstenite::http::{uri::Builder, Uri};
 
 use crate::{
     cable::{btle::*, handshake::*, tunnel::get_domain, CableRequestType, Psk},
-    crypto::{decrypt, encrypt, hkdf_sha_256, public_key_from_private, regenerate},
+    crypto::{decrypt, encrypt, hkdf_sha_256},
     error::WebauthnCError,
 };
 
@@ -62,10 +62,9 @@ impl DerivedValueType {
     }
 }
 
-#[derive(Debug)]
 pub struct Discovery {
     request_type: CableRequestType,
-    pub(super) local_identity: EcKey<Private>,
+    pub(super) local_identity: EcdhP256EphemeralSecret,
     qr_secret: QrSecret,
     eid_key: EidKey,
 }
@@ -91,18 +90,7 @@ impl Discovery {
         request_type: CableRequestType,
         qr_secret: QrSecret,
     ) -> Result<Self, WebauthnCError> {
-        let local_identity = regenerate()?;
-        Self::new_with_qr_secret_and_cert(request_type, qr_secret, local_identity)
-    }
-
-    fn new_with_qr_secret_and_cert(
-        request_type: CableRequestType,
-        qr_secret: QrSecret,
-        local_identity: EcKey<Private>,
-    ) -> Result<Self, WebauthnCError> {
-        // Trying to EC_KEY_derive_from_secret is only in BoringSSL, and doesn't have openssl-rs bindings
-        // Opted to just take in an EcKey here.
-
+        let local_identity = ecdh_p256::new_secret();
         let mut eid_key: EidKey = EidKey::default();
         DerivedValueType::EIDKey.derive(&qr_secret, &[], &mut eid_key)?;
 
@@ -139,7 +127,7 @@ impl Discovery {
     /// This payload includes the `request_type`, public key for the
     /// `local_identity`, and `qr_secret`.
     pub fn make_handshake(&self) -> Result<HandshakeV2, WebauthnCError> {
-        let public_key = public_key_from_private(&self.local_identity)?;
+        let public_key = self.local_identity.public_key();
         HandshakeV2::new(self.request_type, public_key, self.qr_secret)
     }
 
@@ -531,30 +519,13 @@ mod test {
     #[test]
     fn decrypt_known() {
         let _ = tracing_subscriber::fmt::try_init();
-        let test_key = [
-            45, 45, 45, 45, 45, 66, 69, 71, 73, 78, 32, 69, 67, 32, 80, 82, 73, 86, 65, 84, 69, 32,
-            75, 69, 89, 45, 45, 45, 45, 45, 10, 77, 72, 99, 67, 65, 81, 69, 69, 73, 80, 114, 54,
-            76, 105, 83, 120, 81, 73, 82, 55, 69, 51, 72, 81, 90, 98, 78, 114, 57, 80, 78, 66, 114,
-            105, 50, 110, 56, 83, 66, 99, 89, 67, 65, 73, 56, 89, 69, 89, 57, 85, 113, 68, 111, 65,
-            111, 71, 67, 67, 113, 71, 83, 77, 52, 57, 10, 65, 119, 69, 72, 111, 85, 81, 68, 81,
-            103, 65, 69, 90, 68, 103, 112, 55, 66, 76, 82, 82, 47, 79, 100, 116, 89, 104, 118, 83,
-            43, 109, 88, 65, 51, 82, 87, 121, 51, 85, 65, 86, 112, 48, 49, 115, 52, 73, 111, 83,
-            78, 56, 47, 65, 114, 68, 77, 57, 56, 73, 88, 57, 104, 88, 102, 10, 70, 116, 47, 119,
-            65, 109, 68, 79, 119, 78, 78, 55, 66, 100, 84, 57, 84, 48, 86, 109, 110, 70, 73, 99,
-            55, 84, 49, 116, 106, 97, 105, 84, 68, 103, 61, 61, 10, 45, 45, 45, 45, 45, 69, 78, 68,
-            32, 69, 67, 32, 80, 82, 73, 86, 65, 84, 69, 32, 75, 69, 89, 45, 45, 45, 45, 45, 10,
-        ];
         let qr_secret = [
             1, 254, 166, 247, 196, 128, 116, 147, 220, 37, 111, 158, 172, 247, 86, 201,
         ];
-        let local_identity = EcKey::private_key_from_pem(&test_key).unwrap();
 
-        let discovery = Discovery::new_with_qr_secret_and_cert(
-            CableRequestType::DiscoverableMakeCredential,
-            qr_secret,
-            local_identity,
-        )
-        .unwrap();
+        let discovery =
+            Discovery::new_with_qr_secret(CableRequestType::DiscoverableMakeCredential, qr_secret)
+                .unwrap();
 
         assert_eq!(
             "wss://cable.ua5v.com/cable/new/367CBBF5F5085DF4098476AFE4B9B1D2",

@@ -16,21 +16,16 @@ use crypto_glue::{
         typenum::{U16, U32, U64, U96},
         GenericArray,
     },
+    ecdh_p256::{self, EcdhP256EphemeralSecret, EcdhP256PublicKey},
     s256::Sha256Output,
-    traits::{AeadInPlace, KeyInit, Zeroizing},
-};
-use openssl::{
-    ec::{EcKey, EcKeyRef, EcPointRef},
-    pkey::{Private, Public},
+    traits::{AeadInPlace, KeyInit, ToEncodedPoint as _, Zeroizing},
 };
 use std::mem::size_of;
 
 use crate::{cable::Psk, prelude::WebauthnCError};
 
 #[cfg(feature = "cable")]
-use crate::crypto::{
-    compute_sha256_2, ecdh, hkdf_sha_256, point_to_bytes, public_key_from_bytes, regenerate,
-};
+use crate::crypto::{compute_sha256_2, ecdh, hkdf_sha_256, public_key_from_bytes};
 
 const NOISE_KN_PROTOCOL: &[u8; 32] = b"Noise_KNpsk0_P256_AESGCM_SHA256\0";
 const NOISE_NK_PROTOCOL: &[u8; 32] = b"Noise_NKpsk0_P256_AESGCM_SHA256\0";
@@ -234,8 +229,8 @@ pub struct CableNoise {
 
     cipher_state: CipherState,
 
-    ephemeral_key: EcKey<Private>,
-    local_identity: Option<EcKey<Private>>,
+    ephemeral_key: EcdhP256EphemeralSecret,
+    local_identity: Option<EcdhP256EphemeralSecret>,
 }
 
 impl CableNoise {
@@ -247,13 +242,11 @@ impl CableNoise {
             HandshakeType::NKpsk0 => *NOISE_NK_PROTOCOL,
         };
 
-        let ephemeral_key = regenerate()?;
-
         Ok(Self {
             ck: Zeroizing::new(protocol_name.into()),
             h: protocol_name.into(),
             cipher_state: CipherState::new(NonceType::Handshake, false),
-            ephemeral_key,
+            ephemeral_key: ecdh_p256::new_secret(),
             local_identity: None,
         })
     }
@@ -265,9 +258,9 @@ impl CableNoise {
         self.h = compute_sha256_2(&self.h, data);
     }
 
-    fn mix_hash_point(&mut self, point: &EcPointRef) -> Result<(), WebauthnCError> {
-        let point = point_to_bytes(point, false)?;
-        self.mix_hash(&point);
+    fn mix_hash_point(&mut self, point: &EcdhP256PublicKey) -> Result<(), WebauthnCError> {
+        let point = point.to_encoded_point(false);
+        self.mix_hash(point.as_bytes());
         Ok(())
     }
 
@@ -326,12 +319,16 @@ impl CableNoise {
 
     fn get_ephemeral_key_public_bytes(&self) -> Result<[u8; 65], WebauthnCError> {
         let mut o = [0; 65];
-        let v = point_to_bytes(self.ephemeral_key.public_key(), false)?;
-        if v.len() != o.len() {
-            error!("unexpected public key length {} != {}", v.len(), o.len());
+        let point = self.ephemeral_key.public_key().to_encoded_point(false);
+        if point.len() != o.len() {
+            error!(
+                "unexpected public key length {} != {}",
+                point.len(),
+                o.len()
+            );
             return Err(WebauthnCError::Internal);
         }
-        o.copy_from_slice(&v);
+        o.copy_from_slice(point.as_bytes());
         Ok(o)
     }
 
@@ -340,7 +337,7 @@ impl CableNoise {
     /// Returns `(CableNoise, initial_message)`. `initial_message` is to be sent to
     /// the responding party ([CableNoise::build_responder]).
     pub fn build_initiator(
-        local_identity: Option<&EcKeyRef<Private>>,
+        local_identity: Option<EcdhP256EphemeralSecret>,
         psk: Psk,
         peer_identity: Option<[u8; 65]>,
     ) -> Result<(Self, Vec<u8>), WebauthnCError> {
@@ -358,8 +355,8 @@ impl CableNoise {
             let mut noise = Self::new(HandshakeType::KNpsk0)?;
             let prologue = [1];
             noise.mix_hash(&prologue);
-            noise.mix_hash_point(local_identity.public_key())?;
-            noise.local_identity = Some(local_identity.to_owned());
+            noise.mix_hash_point(&local_identity.public_key())?;
+            noise.local_identity = Some(local_identity);
             noise
         } else {
             error!("build_initiator requires local_identity or peer_identity");
@@ -377,11 +374,7 @@ impl CableNoise {
             // TODO: test
             let peer_identity_point = public_key_from_bytes(&peer_identity)?;
             let mut es_key = [0; 32];
-            ecdh(
-                noise.ephemeral_key.to_owned(),
-                peer_identity_point,
-                &mut es_key,
-            )?;
+            ecdh(&noise.ephemeral_key, &peer_identity_point, &mut es_key)?;
             noise.mix_key(&es_key)?;
         }
 
@@ -416,18 +409,14 @@ impl CableNoise {
 
         let peer_key = public_key_from_bytes(peer_point_bytes)?;
         let mut shared_key_ee = EncryptionKey::default();
-        ecdh(
-            self.ephemeral_key.to_owned(),
-            peer_key.to_owned(),
-            &mut shared_key_ee,
-        )?;
+        ecdh(&self.ephemeral_key, &peer_key, &mut shared_key_ee)?;
         self.mix_hash(peer_point_bytes);
         self.mix_key(peer_point_bytes)?;
         self.mix_key(&shared_key_ee)?;
 
         if let Some(local_identity) = &self.local_identity {
             let mut shared_key_se = EncryptionKey::default();
-            ecdh(local_identity.to_owned(), peer_key, &mut shared_key_se)?;
+            ecdh(local_identity, &peer_key, &mut shared_key_se)?;
             self.mix_key(&shared_key_se)?;
         }
 
@@ -454,9 +443,9 @@ impl CableNoise {
     ///
     /// Returns `(crypter, response)`. `response` is sent to the initiating party ([CableNoise::process_response]).
     pub fn build_responder(
-        local_identity: Option<&EcKeyRef<Private>>,
+        local_identity: Option<EcdhP256EphemeralSecret>,
         psk: Psk,
-        peer_identity: Option<&EcKeyRef<Public>>,
+        peer_identity: Option<&EcdhP256PublicKey>,
         message: &[u8],
     ) -> Result<(Crypter, Vec<u8>), WebauthnCError> {
         if message.len() < 65 {
@@ -473,15 +462,15 @@ impl CableNoise {
             let mut noise = Self::new(HandshakeType::NKpsk0)?;
             let prologue = [0];
             noise.mix_hash(&prologue);
-            noise.mix_hash_point(local_identity.public_key())?;
-            noise.local_identity = Some(local_identity.to_owned());
+            noise.mix_hash_point(&local_identity.public_key())?;
+            noise.local_identity = Some(local_identity);
 
             noise
         } else if let Some(peer_identity) = peer_identity {
             let mut noise = Self::new(HandshakeType::KNpsk0)?;
             let prologue = [1];
             noise.mix_hash(&prologue);
-            noise.mix_hash_point(peer_identity.public_key())?;
+            noise.mix_hash_point(peer_identity)?;
             noise
         } else {
             error!("build_initiator requires local_identity or peer_identity");
@@ -494,13 +483,9 @@ impl CableNoise {
 
         let peer_point = public_key_from_bytes(peer_point_bytes)?;
 
-        if let Some(local_identity) = local_identity {
+        if let Some(local_identity) = &noise.local_identity {
             let mut es_key = EncryptionKey::default();
-            ecdh(
-                local_identity.to_owned(),
-                peer_point.to_owned(),
-                &mut es_key,
-            )?;
+            ecdh(local_identity, &peer_point, &mut es_key)?;
             noise.mix_key(&es_key)?;
         }
 
@@ -518,20 +503,12 @@ impl CableNoise {
         noise.mix_key(&ephemeral_key_public_bytes)?;
 
         let mut shared_key_ee = EncryptionKey::default();
-        ecdh(
-            noise.ephemeral_key.to_owned(),
-            peer_point,
-            &mut shared_key_ee,
-        )?;
+        ecdh(&noise.ephemeral_key, &peer_point, &mut shared_key_ee)?;
         noise.mix_key(&shared_key_ee)?;
 
         if let Some(peer_identity) = peer_identity {
             let mut shared_key_se = EncryptionKey::default();
-            ecdh(
-                noise.ephemeral_key.to_owned(),
-                peer_identity.to_owned(),
-                &mut shared_key_se,
-            )?;
+            ecdh(&noise.ephemeral_key, peer_identity, &mut shared_key_se)?;
             noise.mix_key(&shared_key_se)?;
         }
 
@@ -653,7 +630,6 @@ mod test {
 
     use crate::{
         cable::framing::{CableFrame, CableFrameType},
-        crypto::public_key_from_private,
         ctap2::{commands::MakeCredentialRequest, CBORCommand},
     };
 
@@ -681,12 +657,12 @@ mod test {
     #[test]
     fn noise() {
         let _ = tracing_subscriber::fmt::try_init();
-        let identity_key = regenerate().unwrap();
-        let identity_pub = public_key_from_private(&identity_key).unwrap();
+        let identity_key = ecdh_p256::new_secret();
+        let identity_pub = identity_key.public_key();
         let psk = [0; size_of::<Psk>()];
 
         let (initiator_noise, initiator_msg) =
-            CableNoise::build_initiator(Some(&identity_key), psk.to_owned(), None).unwrap();
+            CableNoise::build_initiator(Some(identity_key), psk.to_owned(), None).unwrap();
 
         let (mut responder_crypt, responder_msg) =
             CableNoise::build_responder(None, psk, Some(&identity_pub), &initiator_msg).unwrap();

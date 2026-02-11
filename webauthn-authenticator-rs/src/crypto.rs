@@ -2,21 +2,13 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-#[cfg(any(doc, feature = "cable"))]
-use openssl::{
-    bn::BigNumContext,
-    ec::{EcGroup, EcKey, EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
-    nid::Nid,
-    pkey::{Private, Public},
-};
-use openssl::{pkey::PKey, pkey_ctx::PkeyCtx};
-
 use crypto_glue::{
     aes256::Aes256Key,
     aes256cbc::{
         Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
     },
     block_padding::NoPadding,
+    ecdh_p256::{EcdhP256EphemeralSecret, EcdhP256PublicKey, EcdhP256SharedSecret},
     hkdf_s256::HkdfSha256,
     s256::{Sha256, Sha256Output},
     traits::Digest,
@@ -37,12 +29,6 @@ pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> Sha256Output {
     hasher.update(a);
     hasher.update(b);
     hasher.finalize()
-}
-
-#[cfg(feature = "cable")]
-/// Gets an [EcGroup] for P-256
-pub fn get_group() -> Result<EcGroup, WebauthnCError> {
-    Ok(EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?)
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.
@@ -89,55 +75,31 @@ pub fn hkdf_sha_256(
     Ok(())
 }
 
-/// Generate a fresh, random P-256 private key
-pub fn regenerate() -> Result<EcKey<Private>, WebauthnCError> {
-    let ecgroup = get_group()?;
-    let eckey = EcKey::generate(&ecgroup)?;
-    Ok(eckey)
-}
-
 pub fn ecdh(
-    private_key: EcKey<Private>,
-    peer_key: EcKey<Public>,
+    private_key: &EcdhP256EphemeralSecret,
+    peer_key: &EcdhP256PublicKey,
     output: &mut [u8],
 ) -> Result<(), WebauthnCError> {
-    let peer_key = PKey::from_ec_key(peer_key)?;
-    let pkey = PKey::from_ec_key(private_key)?;
-    let mut ctx = PkeyCtx::new(&pkey)?;
-    ctx.derive_init()?;
-    ctx.derive_set_peer(&peer_key)?;
-    ctx.derive(Some(output))?;
+    let secret: EcdhP256SharedSecret = private_key.diffie_hellman(&peer_key);
+    secret
+        .extract::<Sha256>(None)
+        .expand(b"", output)
+        .map_err(|_| WebauthnCError::CryptographyEcdh)?;
+
     Ok(())
 }
+
 #[cfg(any(doc, feature = "cable"))]
 /// Reads `buf` as a compressed or uncompressed P-256 key.
-pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcKey<Public>, WebauthnCError> {
-    let group = get_group()?;
-    let mut ctx = BigNumContext::new()?;
-    let point = EcPoint::from_bytes(&group, buf, &mut ctx)?;
-    Ok(EcKey::from_public_key(&group, &point)?)
-}
+pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcdhP256PublicKey, WebauthnCError> {
+    use crypto_glue::{ecdh_p256::EcdhP256PublicEncodedPoint, traits::FromEncodedPoint};
 
-#[cfg(any(doc, feature = "cable"))]
-/// Converts a P-256 `point` into compressed or uncompressed bytes.
-pub fn point_to_bytes(point: &EcPointRef, compressed: bool) -> Result<Vec<u8>, WebauthnCError> {
-    let group = get_group()?;
-    let mut ctx = BigNumContext::new()?;
-    Ok(point.to_bytes(
-        &group,
-        if compressed {
-            PointConversionForm::COMPRESSED
-        } else {
-            PointConversionForm::UNCOMPRESSED
-        },
-        &mut ctx,
-    )?)
-}
-
-#[cfg(any(doc, feature = "cable"))]
-/// Gets the public key for a private `key`.
-pub fn public_key_from_private(key: &EcKeyRef<Private>) -> Result<EcKey<Public>, WebauthnCError> {
-    Ok(EcKey::from_public_key(key.group(), key.public_key())?)
+    FromEncodedPoint::from_encoded_point(
+        &EcdhP256PublicEncodedPoint::from_bytes(buf)
+            .map_err(|_| WebauthnCError::CryptographyPublicKey)?,
+    )
+    .into_option()
+    .ok_or(WebauthnCError::CryptographyPublicKey)
 }
 
 #[cfg(test)]
