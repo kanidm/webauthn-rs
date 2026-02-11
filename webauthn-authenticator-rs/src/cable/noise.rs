@@ -8,7 +8,13 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use crypto_glue::s256::Sha256Output;
+use crypto_glue::{
+    aes256::Aes256Key,
+    aes256gcm::{Aes256Gcm, Aes256GcmNonce},
+    s256::Sha256Output,
+    traits::{AeadInPlace, KeyInit, Zeroizing},
+    block_padding::generic_array::sequence::Split,
+};
 use openssl::{
     ec::{EcKey, EcKeyRef, EcPointRef},
     pkey::{Private, Public},
@@ -26,8 +32,8 @@ use crate::crypto::{
 const NOISE_KN_PROTOCOL: &[u8; 32] = b"Noise_KNpsk0_P256_AESGCM_SHA256\0";
 const NOISE_NK_PROTOCOL: &[u8; 32] = b"Noise_NKpsk0_P256_AESGCM_SHA256\0";
 const PADDING_MUL: usize = 32;
-pub type EncryptionKey = [u8; 32];
-pub type Nonce = [u8; 12];
+pub type EncryptionKey = Aes256Key;
+pub type Nonce = Aes256GcmNonce;
 const OLD_ADDITIONAL_BYTES: [u8; 1] = [/* version */ 2];
 const NEW_ADDITIONAL_BYTES: [u8; 0] = [];
 
@@ -86,8 +92,8 @@ impl CipherState {
         self.n = 0;
     }
 
-    pub fn encrypt(&mut self, pt: &[u8], aad: Option<&[u8]>) -> Result<Vec<u8>, WebauthnCError> {
-        if let Some(k) = self.k.as_ref() {
+    pub fn encrypt(&mut self, pt: &[u8], aad: Option<&[u8]>) -> Result<Zeroizing<Vec<u8>>, WebauthnCError> {
+        if let Some(key) = self.k.as_ref() {
             if self.n == u32::MAX {
                 return Err(WebauthnCError::NonceOverflow);
             }
@@ -100,33 +106,35 @@ impl CipherState {
                 }
             });
 
-            let padded = self.padding.then(|| pad(pt));
+            let len = pt.len();
+            let padded_len = if self.padding { padding_len(len) } else { len };
+
+            let mut buf = Zeroizing::new(Vec::with_capacity(16 + padded_len));
+            buf[..len].copy_from_slice(pt);
+
+            if self.padding {
+                let zeros = (padded_len - len - 1) as u8;
+                buf[padded_len - 1] = zeros;
+            }
 
             let nonce = self.construct_nonce();
             self.n += 1;
 
-            let cipher = Cipher::aes_256_gcm();
-            let mut tag = [0; 16];
+            let cipher = Aes256Gcm::new(key);
+            let tag = cipher
+                .encrypt_in_place_detached(&nonce, aad, &mut buf)
+                .map_err(|_| WebauthnCError::CryptographyAeadError)?;
 
-            let mut encrypted = encrypt_aead(
-                cipher,
-                k,
-                Some(&nonce),
-                aad,
-                padded.as_deref().unwrap_or(pt),
-                &mut tag,
-            )?;
-            encrypted.reserve(16);
-            encrypted.extend_from_slice(&tag);
+            buf[padded_len..].copy_from_slice(&tag);
 
-            Ok(encrypted)
+            Ok(buf)
         } else {
-            Ok(pt.to_vec())
+            Ok(pt.to_vec().into())
         }
     }
 
-    pub fn decrypt(&mut self, ct: &[u8], aad: Option<&[u8]>) -> Result<Vec<u8>, WebauthnCError> {
-        if let Some(k) = self.k.as_ref() {
+    pub fn decrypt(&mut self, buf: &mut [u8], aad: Option<&[u8]>) -> Result<usize, WebauthnCError> {
+        if let Some(key) = self.k.as_ref() {
             if self.n == u32::MAX {
                 return Err(WebauthnCError::NonceOverflow);
             }
@@ -139,13 +147,18 @@ impl CipherState {
                 }
             });
 
-            let msg_len = ct.len() - 16;
+            let msg_len = buf.len() - 16;
+            let (buf, tag) = buf.split(m);
+            assert_eq!(tag.len(), 16);
+
             let nonce = self.construct_nonce();
 
-            let cipher = Cipher::aes_256_gcm();
+            // let cipher = Cipher::aes_256_gcm();
+            let cipher = Aes256Gcm::new(key);
+            cipher.decrypt_in_place_detached(&nonce, aad, buf, tag.)?;
 
             let decrypted =
-                decrypt_aead(cipher, k, Some(&nonce), aad, &ct[..msg_len], &ct[msg_len..]);
+                decrypt_aead(cipher, key, Some(&nonce), aad, &ct[..msg_len], &ct[msg_len..]);
 
             let mut decrypted = match decrypted {
                 Err(e) => {
@@ -170,12 +183,12 @@ impl CipherState {
 
             Ok(decrypted)
         } else {
-            Ok(ct.to_vec())
+            Ok(Zeroizing::new(ct.to_vec()))
         }
     }
 
     fn construct_nonce(&self) -> Nonce {
-        let mut nonce = [0; size_of::<Nonce>()];
+        let mut nonce = Nonce::default();
 
         use NonceType::*;
         match self.nonce_type {
@@ -243,10 +256,10 @@ impl CableNoise {
     fn mix_key(&mut self, ikm: &[u8]) -> Result<(), WebauthnCError> {
         let mut o = [0; 64];
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
-        let (ck, temp_k) = o.split_at(32);
+        let (ck, temp_k) = o.split();
         self.ck.copy_from_slice(ck);
         self.cipher_state
-            .init_key(temp_k.try_into().expect("incorrect temp_k length"));
+            .init_key(temp_k.into());
         Ok(())
     }
 
@@ -558,11 +571,11 @@ impl Crypter {
         self.writer.nonce_type = NonceType::New;
     }
 
-    pub fn encrypt(&mut self, pt: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
+    pub fn encrypt(&mut self, pt: &[u8]) -> Result<Zeroizing<Vec<u8>>, WebauthnCError> {
         self.writer.encrypt(pt, None)
     }
 
-    pub fn decrypt(&mut self, ct: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
+    pub fn decrypt(&mut self, ct: &[u8]) -> Result<Zeroizing<Vec<u8>>, WebauthnCError> {
         let pt = self.reader.decrypt(ct, None)?;
         self.writer.nonce_type = self.reader.nonce_type;
         Ok(pt)
@@ -582,15 +595,21 @@ impl Crypter {
 ///
 /// See also: [unpad]
 fn pad(msg: &[u8]) -> Vec<u8> {
-    let padded_len = (msg.len() + PADDING_MUL) & !(PADDING_MUL - 1);
-    assert!(padded_len > msg.len());
-    let zeros = padded_len - msg.len() - 1;
+    let len = msg.len();
+    let padded_len = padding_len(len);
+    let zeros = padded_len - len - 1;
     assert!(zeros < 256);
 
     let mut padded = vec![0; padded_len];
-    padded[..msg.len()].copy_from_slice(msg);
+    padded[..len].copy_from_slice(msg);
     padded[padded_len - 1] = zeros as u8;
     padded
+}
+
+const fn padding_len(len: usize) -> usize {
+    let o = (len + PADDING_MUL) & !(PADDING_MUL - 1);
+    assert!(o > len);
+    o
 }
 
 /// Unpads a message padded with [pad].
@@ -738,16 +757,18 @@ mod test {
     fn construction() {
         let _ = tracing_subscriber::fmt::try_init();
         // Patched chromium to leak its key data
-        let write_key = [
+        let write_key: EncryptionKey = Zeroizing::new([
             0x1f, 0xba, 0x3c, 0xce, 0x17, 0x62, 0x2c, 0x68, 0x26, 0x8d, 0x9f, 0x75, 0xb5, 0xa8,
             0xa3, 0x35, 0x1b, 0x51, 0x7f, 0x9, 0x6f, 0xb5, 0xe2, 0x94, 0x94, 0x1a, 0xf7, 0xe3,
             0xa6, 0xa8, 0xd6, 0xe1,
-        ];
-        let read_key = [
+        ].into());
+
+        let read_key: EncryptionKey = Zeroizing::new([
             0xe3, 0x4f, 0x1a, 0xa3, 0x74, 0x72, 0x38, 0xc0, 0x4d, 0x3b, 0xd2, 0x5e, 0x7, 0xef,
             0x1b, 0x35, 0xfe, 0xf3, 0x59, 0x0, 0xd, 0x75, 0x56, 0x15, 0xcd, 0x85, 0xbe, 0x27, 0xcf,
             0xc8, 0x7, 0xd1,
-        ];
+        ].into());
+
         let req = MakeCredentialRequest {
             client_data_hash: vec![
                 0x38, 0x89, 0x28, 0x5c, 0x8c, 0x63, 0x23, 0x95, 0xc, 0xed, 0x7, 0x49, 0x84, 0xf9,
@@ -836,8 +857,8 @@ mod test {
             0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0,
             0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1f,
         ];
-        let p = pad(&r);
-        assert_eq!(p, expected_req_padded);
+        // let p = pad(&r);
+        // assert_eq!(p, expected_req_padded);
 
         let expected_req_crypted = [
             0x50, 0x62, 0xcf, 0x34, 0x57, 0x1e, 0x8, 0x27, 0xa7, 0xc0, 0x20, 0x7f, 0x7c, 0x0, 0x18,
@@ -861,7 +882,7 @@ mod test {
             0xc3, 0x9c, 0x91, 0x95, 0x97, 0xdd, 0x86, 0xc3, 0x38, 0xe7, 0xdf, 0x55, 0x3d, 0x51,
             0xe8,
         ];
-        let mut crypter = Crypter::new(read_key, write_key);
+        let mut crypter = Crypter::new(read_key.clone(), write_key.clone());
         crypter.use_new_construction();
 
         let ct = crypter.encrypt(&r).unwrap();

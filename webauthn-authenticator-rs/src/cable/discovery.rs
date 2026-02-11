@@ -13,12 +13,12 @@ use crypto_glue::{
     traits::Zeroizing,
 };
 use num_traits::ToPrimitive;
-use openssl::{
-    ec::EcKey,
-    hash::MessageDigest,
-    pkey::{PKey, Private},
-    sign::Signer,
-};
+// use openssl::{
+//     ec::EcKey,
+//     hash::MessageDigest,
+//     pkey::{PKey, Private},
+//     sign::Signer,
+// };
 use std::mem::size_of;
 use tokio_tungstenite::tungstenite::http::{uri::Builder, Uri};
 

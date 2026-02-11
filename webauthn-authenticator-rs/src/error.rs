@@ -121,6 +121,9 @@ pub enum WebauthnCError {
 
     #[error("Unable to expand hkdf key")]
     CryptographyHkdfExpand,
+    
+    #[error("AEAD error")]
+    CryptographyAeadError,
 
     #[error("Random generator error: {0}")]
     Rand(String),
