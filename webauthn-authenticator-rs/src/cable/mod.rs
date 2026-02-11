@@ -443,13 +443,8 @@ async fn connect_cable_authenticator_impl<'a, U: UiCallback + 'a>(
         WebauthnCError::NotSupported
     })?;
 
-    let tun = Tunnel::connect_initiator(
-        &connect_uri,
-        psk,
-        disco.local_identity.as_ref(),
-        ui_callback,
-    )
-    .await?;
+    let tun =
+        Tunnel::connect_initiator(&connect_uri, psk, disco.local_identity, ui_callback).await?;
 
     tun.get_authenticator(ui_callback).ok_or_else(|| {
         error!("no supported protocol versions!");

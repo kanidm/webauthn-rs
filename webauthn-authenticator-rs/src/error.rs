@@ -125,6 +125,9 @@ pub enum WebauthnCError {
     #[error("AEAD error")]
     CryptographyAeadError,
 
+    #[error("Invalid public key")]
+    CryptographyPublicKey,
+
     #[error("Random generator error: {0}")]
     Rand(String),
 }
