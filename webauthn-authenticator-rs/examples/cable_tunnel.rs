@@ -11,7 +11,7 @@ use bluetooth_hci::{
     BdAddr, BdAddrType,
 };
 use clap::{ArgGroup, Parser};
-use crypto_glue::rand::{RngCore as _, rngs::ThreadRng};
+use crypto_glue::rand::{rngs::ThreadRng, RngCore as _};
 use futures::StreamExt;
 use serialport::FlowControl;
 use serialport_hci::{
