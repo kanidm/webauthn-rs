@@ -124,9 +124,18 @@ impl CipherState {
             self.n += 1;
 
             let cipher = Aes256Gcm::new(key);
+            // trace!("encrypting: {:?}", hex::encode(&buf[..padded_len]));
             let tag = cipher
                 .encrypt_in_place_detached(&nonce, aad, &mut buf[..padded_len])
                 .map_err(|_| WebauthnCError::CryptographyAeadError)?;
+            // trace!(
+            //     "encrypted: {:?}, tag: {:?}, nonce: {:?}, aad: {:?}, key: {:?}",
+            //     hex::encode(&buf[..padded_len]),
+            //     hex::encode(&tag),
+            //     hex::encode(nonce),
+            //     hex::encode(aad),
+            //     hex::encode(key)
+            // );
 
             buf[padded_len..].copy_from_slice(&tag);
 
@@ -163,7 +172,7 @@ impl CipherState {
                 .decrypt_in_place_detached(&nonce, aad, ct, tag)
                 .is_err()
             {
-                error!("failure decrypting: {}, tag: {}, nonce: {}", hex::encode(&ct), hex::encode(&tag), hex::encode(nonce));
+                // error!("failure decrypting: {:?}, tag: {:?}, nonce: {:?}, aad: {:?}, key: {:?}", hex::encode(&ct), hex::encode(&tag), hex::encode(nonce), hex::encode(aad), hex::encode(key));
                 if self.nonce_type == NonceType::Old && self.n == 0 {
                     // Switch to new construction mode
                     trace!("trying new construction");
@@ -295,8 +304,10 @@ impl CableNoise {
 
     /// `SymmetricState.DecryptAndHash(ciphertext)`
     fn decrypt_and_hash(&mut self, buf: &mut [u8]) -> Result<usize, WebauthnCError> {
+        // mix_hash(ct), but don't apply the change until after decryption
+        let h = compute_sha256_2(&self.h, buf);
         let len = self.cipher_state.decrypt(buf, Some(&self.h))?;
-        self.mix_hash(&buf[..len]);
+        self.h = h;
         Ok(len)
     }
 
@@ -326,7 +337,7 @@ impl CableNoise {
 
     /// Starts a Noise handshake with a peer as the initiating party (platform).
     ///
-    /// Returns `(CableNoise, initial_message)`. `initial_message` is sent to
+    /// Returns `(CableNoise, initial_message)`. `initial_message` is to be sent to
     /// the responding party ([CableNoise::build_responder]).
     pub fn build_initiator(
         local_identity: Option<&EcKeyRef<Private>>,
@@ -432,8 +443,8 @@ impl CableNoise {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=982;drc=38321ee39cd73ac2d9d4400c56b90613dee5fe29
         let (write_key, read_key) = self.traffic_keys()?;
 
-        trace!(?write_key);
-        trace!(?read_key);
+        // trace!(?write_key);
+        // trace!(?read_key);
         Ok(Crypter::new(read_key, write_key))
     }
 
@@ -530,8 +541,8 @@ impl CableNoise {
         response_message.extend_from_slice(&ct);
 
         let (read_key, write_key) = noise.traffic_keys()?;
-        trace!(?read_key);
-        trace!(?write_key);
+        // trace!(?read_key);
+        // trace!(?write_key);
         Ok((Crypter::new(read_key, write_key), response_message))
     }
 }
@@ -662,8 +673,9 @@ mod test {
         // now decode
         let cipher = Aes256Gcm::new(&Default::default());
         let mut buf = vec![];
-        cipher.decrypt_in_place_detached(&[0u8; 12].into(), &[0], &mut buf, &tag).unwrap();
-
+        cipher
+            .decrypt_in_place_detached(&[0u8; 12].into(), &[0], &mut buf, &tag)
+            .unwrap();
     }
 
     #[test]
