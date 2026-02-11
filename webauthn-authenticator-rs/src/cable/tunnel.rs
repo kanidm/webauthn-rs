@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 use async_trait::async_trait;
+use crypto_glue::traits::Zeroizing;
 use futures::{SinkExt, StreamExt};
 use openssl::{
     ec::EcKeyRef,
@@ -206,16 +207,16 @@ impl Tunnel {
         let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
         ui.cable_status_update(CableState::Handshaking);
 
-        let v = if let Message::Binary(v) = resp {
+        let mut v = if let Message::Binary(v) = resp {
             trace!("<!< {}", hex::encode(&v));
-            v
+            Zeroizing::new(v.to_vec())
         } else {
             error!("Unexpected websocket response type");
             return Err(WebauthnCError::Unknown);
         };
 
-        let decrypted = crypter.decrypt(&v)?;
-        trace!("<<< {}", hex::encode(&decrypted));
+        let len = crypter.decrypt(&mut v)?;
+        trace!("<<< {}", hex::encode(&v[..len]));
 
         // If Chromium on Android uses caBLE v2.0 if the supports_linking field
         // is missing, or v2.1 if it is present (even if false)[0]. When using
@@ -229,7 +230,7 @@ impl Tunnel {
         // [0]: https://source.chromium.org/chromium/chromium/src/+/main:chrome/android/features/cablev2_authenticator/native/cablev2_authenticator_android.cc;l=688-693;drc=9d8024e69625a0c457a4999f4d1aca32c24eb494
         // [1]: https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/fido_tunnel_device.cc;l=368-375;drc=52fa5a7f263b37149bcfbac06da00fec5abcc416
         let v: BTreeMap<u32, Value> =
-            serde_cbor_2::from_slice(&decrypted).map_err(|_| WebauthnCError::Cbor)?;
+            serde_cbor_2::from_slice(&v[..len]).map_err(|_| WebauthnCError::Cbor)?;
 
         let frame = CablePostHandshake::try_from(v)?;
         trace!(?frame);
@@ -348,18 +349,18 @@ impl Tunnel {
             Some(r) => r?,
         };
 
-        let resp = if let Message::Binary(v) = resp {
-            v
+        let mut resp = if let Message::Binary(v) = resp {
+            Zeroizing::new(v.to_vec())
         } else {
             error!("Incorrect message type");
             return Err(WebauthnCError::Unknown);
         };
 
         trace!("<!< {}", hex::encode(&resp));
-        let decrypted = self.crypter.decrypt(&resp)?;
-        trace!("<<< {}", hex::encode(&decrypted));
+        let len = self.crypter.decrypt(&mut resp)?;
+        trace!("<<< {}", hex::encode(&resp[..len]));
         // TODO: protocol version
-        Ok(Some(CableFrame::from_bytes(1, &decrypted)))
+        Ok(Some(CableFrame::from_bytes(1, &resp[..len])))
     }
 }
 
