@@ -13,12 +13,7 @@ use crypto_glue::{
     traits::Zeroizing,
 };
 use num_traits::ToPrimitive;
-use openssl::{
-    ec::EcKey,
-    hash::MessageDigest,
-    pkey::{PKey, Private},
-    sign::Signer,
-};
+use openssl::{ec::EcKey, pkey::Private};
 use std::mem::size_of;
 use tokio_tungstenite::tungstenite::http::{uri::Builder, Uri};
 
@@ -324,11 +319,11 @@ impl Eid {
         };
 
         trace!("Decrypting {:?} with key {:?}", advert, key);
-        let signing_key = PKey::hmac(&key[32..64])?;
-        let mut signer = Signer::new(MessageDigest::sha256(), &signing_key)?;
-        let calculated_hmac = signer.sign_oneshot_to_vec(&advert[..16])?;
+        let signing_key = hmac_s256::key_from_slice(&key[32..64]).unwrap();
+        let calculated_hmac = hmac_s256::oneshot(&signing_key, &advert[..16]).into_bytes();
 
         if calculated_hmac[..4] != advert[16..20] {
+            // We probably saw another nearby caBLE session
             warn!("incorrect HMAC when decrypting caBLE advertisement");
             return Ok(None);
         }
