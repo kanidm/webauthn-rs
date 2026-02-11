@@ -33,7 +33,6 @@ bluetooth = ["dep:btleplug", "ctap2"]
 cable = [
     "dep:btleplug",
     "crypto",
-    "crypto_openssl",
     "ctap2",
     "dep:hex",
     "dep:tokio",
