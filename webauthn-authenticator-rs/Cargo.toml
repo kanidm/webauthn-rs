@@ -60,7 +60,7 @@ vendor-yubikey = []
 nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
 softpasskey = ["crypto", "softtoken"]
-softtoken = ["crypto", "ctap2"]
+softtoken = ["crypto", "ctap2", "crypto_openssl"]
 usb = ["ctap2", "dep:fido-hid-rs"]
 win10 = ["dep:windows"]
 

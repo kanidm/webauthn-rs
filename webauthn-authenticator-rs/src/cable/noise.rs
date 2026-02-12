@@ -86,6 +86,7 @@ impl CipherState {
     }
 
     fn init_key(&mut self, key: EncryptionKey) {
+        // trace!("init_key({:?})", hex::encode(&key));
         self.k = Some(key);
         self.n = 0;
     }
@@ -167,7 +168,15 @@ impl CipherState {
                 .decrypt_in_place_detached(&nonce, aad, ct, tag)
                 .is_err()
             {
-                // error!("failure decrypting: {:?}, tag: {:?}, nonce: {:?}, aad: {:?}, key: {:?}", hex::encode(&ct), hex::encode(&tag), hex::encode(nonce), hex::encode(aad), hex::encode(key));
+                // error!(
+                //     "failure decrypting: {:?}, tag: {:?}, nonce: {:?}, aad: {:?}, key: {:?}",
+                //     hex::encode(&ct),
+                //     hex::encode(&tag),
+                //     hex::encode(nonce),
+                //     hex::encode(aad),
+                //     hex::encode(key)
+                // );
+
                 if self.nonce_type == NonceType::Old && self.n == 0 {
                     // Switch to new construction mode
                     trace!("trying new construction");
@@ -256,10 +265,12 @@ impl CableNoise {
     /// Sets `h = HASH(h || data}`
     fn mix_hash(&mut self, data: &[u8]) {
         self.h = compute_sha256_2(&self.h, data);
+        // trace!("mix_hash(data = {:?}) => {:?}", hex::encode(data), hex::encode(&self.h));
     }
 
     fn mix_hash_point(&mut self, point: &EcdhP256PublicKey) -> Result<(), WebauthnCError> {
         let point = point.to_encoded_point(false);
+        // trace!("mix_hash_point(point={:?})", hex::encode(point.as_bytes()));
         self.mix_hash(point.as_bytes());
         Ok(())
     }
@@ -268,6 +279,12 @@ impl CableNoise {
     fn mix_key(&mut self, ikm: &[u8]) -> Result<(), WebauthnCError> {
         let mut o: Zeroizing<GenericArray<u8, U64>> = Default::default();
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
+        // trace!(
+        //     "mix_key(ikm={:?}) => hkdf(salt={:?}, output={:?})",
+        //     hex::encode(&ikm),
+        //     hex::encode(&self.ck),
+        //     hex::encode(&o),
+        // );
         let (ck, temp_k): (GenericArray<u8, U32>, _) = o.split();
         self.ck.copy_from_slice(&ck);
         self.cipher_state.init_key(temp_k.into());
@@ -279,6 +296,12 @@ impl CableNoise {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/noise.cc;l=90;drc=38321ee39cd73ac2d9d4400c56b90613dee5fe29
         let mut o: Zeroizing<GenericArray<u8, U96>> = Default::default();
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
+        // trace!(
+        //     "mix_key_and_hash(ikm={:?}) => hkdf(salt={:?}, output={:?})",
+        //     hex::encode(&ikm),
+        //     hex::encode(&self.ck),
+        //     hex::encode(&o),
+        // );
         let (ck, temp): (GenericArray<u8, U32>, _) = o.split();
         let (temp_h, temp_k): (GenericArray<u8, U32>, GenericArray<u8, U32>) = temp.split();
 
@@ -329,6 +352,7 @@ impl CableNoise {
             return Err(WebauthnCError::Internal);
         }
         o.copy_from_slice(point.as_bytes());
+        // trace!("we are {:?}", hex::encode(o));
         Ok(o)
     }
 
@@ -405,13 +429,24 @@ impl CableNoise {
 
         // ProcessResponse
         let (peer_point_bytes, ct) = response.split_at(65);
-        let mut ct = Zeroizing::new(ct.to_vec());
+        // trace!(
+        //     "we are {:?}, peer is {:?}",
+        //     hex::encode(self.get_ephemeral_key_public_bytes()?),
+        //     hex::encode(peer_point_bytes)
+        // );
 
         let peer_key = public_key_from_bytes(peer_point_bytes)?;
+        // let peer_encoded = peer_key.to_encoded_point(false);
+        // assert_eq!(peer_encoded.as_bytes(), peer_point_bytes);
+        // trace!("peer(x={:?}, y={:?})", peer_encoded.x(), peer_encoded.y());
+
         let mut shared_key_ee = EncryptionKey::default();
         ecdh(&self.ephemeral_key, &peer_key, &mut shared_key_ee)?;
+        // trace!("mix_hash(peer_point_bytes)");
         self.mix_hash(peer_point_bytes);
+        // trace!("mix_key(peer_point_bytes)");
         self.mix_key(peer_point_bytes)?;
+        // trace!("mix_key(shared_key_ee)");
         self.mix_key(&shared_key_ee)?;
 
         if let Some(local_identity) = &self.local_identity {
@@ -420,6 +455,7 @@ impl CableNoise {
             self.mix_key(&shared_key_se)?;
         }
 
+        let mut ct = Zeroizing::new(ct.to_vec());
         let len = self.decrypt_and_hash(&mut ct)?;
         if len != 0 {
             error!(
@@ -564,10 +600,13 @@ impl Crypter {
         self.writer.nonce_type = NonceType::New;
     }
 
+    /// Encrypts a message with the writer key into a new buffer.
     pub fn encrypt(&mut self, pt: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
         self.writer.encrypt(pt, None)
     }
 
+    /// Decrypts a message with the reader key in-place, returning the length of
+    /// the plaintext.
     pub fn decrypt(&mut self, buf: &mut [u8]) -> Result<usize, WebauthnCError> {
         let l = self.reader.decrypt(buf, None)?;
         self.writer.nonce_type = self.reader.nonce_type;
@@ -584,42 +623,14 @@ impl Crypter {
     }
 }
 
-// /// Pads a message to a multiple of [PADDING_MUL] bytes.
-// ///
-// /// See also: [unpad]
-// fn pad(msg: &[u8]) -> Vec<u8> {
-//     let len = msg.len();
-//     let padded_len = padding_len(len);
-//     let zeros = padded_len - len - 1;
-//     assert!(zeros < 256);
-
-//     let mut padded = vec![0; padded_len];
-//     padded[..len].copy_from_slice(msg);
-//     padded[padded_len - 1] = zeros as u8;
-//     padded
-// }
-
+/// Gets the length of a buffer after padding to a multiple of `PADDING_MUL` bytes.
+///
+/// This always adds at least 1 byte of padding.
 const fn padding_len(len: usize) -> usize {
     let o = (len + PADDING_MUL) & !(PADDING_MUL - 1);
     assert!(o > len);
     o
 }
-
-// /// Unpads a message padded with [pad].
-// fn unpad(msg: &mut Vec<u8>) -> Result<(), WebauthnCError> {
-//     let padding_len = (msg.last().copied().unwrap_or_default() as usize) + 1;
-//     if padding_len > msg.len() {
-//         error!(
-//             "Invalid caBLE message (padding length {} > message length {})",
-//             padding_len,
-//             msg.len()
-//         );
-//         return Err(WebauthnCError::Internal);
-//     }
-
-//     msg.truncate(msg.len() - padding_len);
-//     Ok(())
-// }
 
 #[cfg(test)]
 mod test {
