@@ -273,14 +273,14 @@ impl Tunnel {
 
         let psk = discovery.derive_psk(&eid)?;
         let encrypted_eid = discovery.encrypt_advert(&eid)?;
-        advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid)?;
+        advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid).await?;
 
         // Wait for initial message from initiator
         trace!("Advertising started, waiting for initiator...");
         ui.cable_status_update(CableState::WaitingForInitiatorConnection);
         let resp = stream.next().await.ok_or(WebauthnCError::Closed)??;
 
-        advertiser.stop_advertising()?;
+        advertiser.stop_advertising().await?;
         ui.cable_status_update(CableState::Handshaking);
         let resp = if let Message::Binary(v) = resp {
             trace!("<!< {}", hex::encode(&v));
