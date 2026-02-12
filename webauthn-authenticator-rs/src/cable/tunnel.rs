@@ -273,7 +273,9 @@ impl Tunnel {
 
         let psk = discovery.derive_psk(&eid)?;
         let encrypted_eid = discovery.encrypt_advert(&eid)?;
-        advertiser.start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid).await?;
+        advertiser
+            .start_advertising(FIDO_CABLE_SERVICE_U16, &encrypted_eid)
+            .await?;
 
         // Wait for initial message from initiator
         trace!("Advertising started, waiting for initiator...");
