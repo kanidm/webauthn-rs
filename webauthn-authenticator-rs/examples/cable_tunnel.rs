@@ -2,6 +2,7 @@
 #[macro_use]
 extern crate tracing;
 
+use async_trait::async_trait;
 use bluetooth_hci::{
     host::{
         uart::{CommandHeader, Hci as UartHci, Packet},
@@ -135,8 +136,9 @@ impl SerialHciAdvertiser {
     }
 }
 
+#[async_trait]
 impl Advertiser for SerialHciAdvertiser {
-    fn stop_advertising(&mut self) -> Result<(), WebauthnCError> {
+    async fn stop_advertising(&mut self) -> Result<(), WebauthnCError> {
         trace!("sending reset...");
         self.hci.reset().unwrap();
         let _ = self.read();
@@ -146,12 +148,12 @@ impl Advertiser for SerialHciAdvertiser {
         Ok(())
     }
 
-    fn start_advertising(
+    async fn start_advertising(
         &mut self,
         service_uuid: u16,
         payload: &[u8],
     ) -> Result<(), WebauthnCError> {
-        self.stop_advertising()?;
+        self.stop_advertising().await?;
         let advert = Advertisement::ServiceData16BitUuid(service_uuid, payload);
         let mut service_data = [0; 31];
         let len = advert.copy_into_slice(&mut service_data);
