@@ -397,7 +397,7 @@ impl CableNoise {
         if let Some(peer_identity) = peer_identity {
             // TODO: test
             let peer_identity_point = public_key_from_bytes(&peer_identity)?;
-            let mut es_key = [0; 32];
+            let mut es_key = Default::default();
             ecdh(&noise.ephemeral_key, &peer_identity_point, &mut es_key)?;
             noise.mix_key(&es_key)?;
         }

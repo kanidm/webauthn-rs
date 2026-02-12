@@ -7,11 +7,14 @@ use crypto_glue::{
     aes256cbc::{
         Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
     },
-    block_padding::NoPadding,
+    block_padding::{
+        generic_array::{typenum::U32, GenericArray},
+        NoPadding,
+    },
     ecdh_p256::{EcdhP256EphemeralSecret, EcdhP256PublicKey, EcdhP256SharedSecret},
     hkdf_s256::HkdfSha256,
     s256::{Sha256, Sha256Output},
-    traits::Digest,
+    traits::{Digest, Zeroizing},
 };
 
 use crate::error::WebauthnCError;
@@ -78,7 +81,7 @@ pub fn hkdf_sha_256(
 pub fn ecdh(
     private_key: &EcdhP256EphemeralSecret,
     peer_key: &EcdhP256PublicKey,
-    output: &mut [u8],
+    output: &mut Zeroizing<GenericArray<u8, U32>>,
 ) -> Result<(), WebauthnCError> {
     let secret: EcdhP256SharedSecret = private_key.diffie_hellman(&peer_key);
     output.copy_from_slice(secret.raw_secret_bytes());
@@ -95,7 +98,7 @@ pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcdhP256PublicKey, WebauthnCE
 #[cfg(test)]
 mod test {
     use super::*;
-    // use crypto_glue::{ecdh_p256, traits::ToEncodedPoint};
+    use crypto_glue::ecdh_p256;
 
     #[test]
     fn hkdf() {
@@ -138,26 +141,61 @@ mod test {
         assert_eq!(expected, actual);
     }
 
-    /*
+    /// Test using ECDH with ourselves and fully-random keys.
     #[test]
     fn ecdh_p256_basic() {
         let _ = tracing_subscriber::fmt::try_init();
 
         let alice_secret = ecdh_p256::new_secret();
-        let bob_secret = ecdh_p256::new_secret();
-
         let alice_pub = alice_secret.public_key();
-        let bob_pub = bob_secret.public_key();
 
-        let mut alice_out = [0; 32];
+        let bob_secret = ecdh_p256::new_secret();
+        let bob_pub = bob_secret.public_key();
+        assert_ne!(alice_pub, bob_pub);
+
+        let mut alice_out = Default::default();
         ecdh(&alice_secret, &bob_pub, &mut alice_out).unwrap();
 
-        let mut bob_out = [0; 32];
+        let mut bob_out = Default::default();
         ecdh(&bob_secret, &alice_pub, &mut bob_out).unwrap();
 
         assert_eq!(alice_out, bob_out);
     }
 
+    /// Test using ECDH with static keys.
+    #[test]
+    fn ecdh_expected() {
+        use crypto_glue::{ecdsa_p256::EcdsaP256NonZeroScalar, traits::ToEncodedPoint};
+
+        let alice_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x13\xeaL\xe1\xd1\xff\xb3\xc2\x88\\\x8eb 0[\xe8a\x92\x1d\xee\xdd\x17\xca:\x171\xae\xbf\x8c\xf0\xdc\xb8").into()).unwrap();
+        let bob_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x84\x0ed:\x90\xee\xb9}\xc8\xb4\xb5\x12\x03\x8b\xc5~\xe1\x13\x04\xceZ\x9d,\xfd\xd6F\x13\xea\xb0\x96?q").into()).unwrap();
+
+        // We need our secrets to be constant for testing. EphemeralSecret is a wrapper for
+        // NonZeroScalar, so we can transmute it directly.
+        let alice_secret: EcdhP256EphemeralSecret = unsafe { std::mem::transmute(alice_secret) };
+        let bob_secret: EcdhP256EphemeralSecret = unsafe { std::mem::transmute(bob_secret) };
+
+        // Check that we can get the same pubkey from either side:
+        let alice_pub = alice_secret.public_key();
+        let alice_pub_point = alice_pub.to_encoded_point(false);
+        assert_eq!(alice_pub_point.as_bytes(), b"\x04\xa5\x99\xe0\xdd{\x1a\xa3m0\x98\x80R\x1a\xc2\x8b\xbe\xc3A\x81\x91W$\x055\x16\xe5\xb0\tF\x86\xe8`\xaf\xe6.\x98\xf5:\x99\xf1\xb4\x1cai\x96\xb0e\x83\x8c&\x12*\xfd,~\x14\xb8\xf8q9-\xd1\x18\xed");
+
+        let bob_pub = bob_secret.public_key();
+        let bob_pub_point = bob_pub.to_encoded_point(false);
+        assert_eq!(bob_pub_point.as_bytes(), b"\x04\xe3F/\xe9\xd6\x8e\xb5L\xc9!\x14w\x0cs8z)\xcc)\r\x87]\x829fC \xf7>\xe5\x07b\x8b\xe8\xfd\xdd\0\xd66\x9d\x11\xfe\xec\xe4Z\x0c\xf4\xc3e#\x19\xc5\xa0\x81\x19\xe7\xd8}}\xd3a\xea\x9a\x12");
+
+        // Now lets do ECDH (like caBLE), and check that Alice came up with our expected secret:
+        let mut alice_out = Default::default();
+        ecdh(&alice_secret, &bob_pub, &mut alice_out).unwrap();
+        assert_eq!(alice_out.as_slice(), b"\xeeom\xee\xac\x9a\xbc9\xaf\x97g\x83\x11\x87!\x19\x86\xc0D\xc8\x93\xde\xb8wG\x19\xfe\xecy\xe5\x19z");
+
+        // And repeat the process for Bob:
+        let mut bob_out = Default::default();
+        ecdh(&bob_secret, &alice_pub, &mut bob_out).unwrap();
+        assert_eq!(alice_out.as_slice(), bob_out.as_slice());
+    }
+
+    /*
     #[test]
     fn ecdh_p256_openssl() {
         use openssl::{
