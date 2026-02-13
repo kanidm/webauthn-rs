@@ -307,8 +307,10 @@ impl Eid {
         };
 
         // trace!("Decrypting {:?} with key {:?}", hex::encode(advert), hex::encode(key));
-        let signing_key = hmac_s256::key_from_slice(&key[32..64]).unwrap();
-        let calculated_hmac = hmac_s256::oneshot(&signing_key, &advert[..16]).into_bytes();
+        let (encryption_key, signing_key): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
+        let mut extended_signing_key = HmacSha256Key::default();
+        extended_signing_key[..32].copy_from_slice(&signing_key);
+        let calculated_hmac = hmac_s256::oneshot(&extended_signing_key, &advert[..16]).into_bytes();
 
         if calculated_hmac[..4] != advert[16..20] {
             // We probably saw another nearby caBLE session
@@ -317,8 +319,7 @@ impl Eid {
         }
 
         // HMAC checks out, try to decrypt
-        let (k0, _): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
-        let plaintext = decrypt(&k0.into(), &ZERO_IV.into(), &advert[..16])?;
+        let plaintext = decrypt(&encryption_key.into(), &ZERO_IV.into(), &advert[..16])?;
         Ok(Eid::from_bytes(plaintext.as_slice()))
     }
 
