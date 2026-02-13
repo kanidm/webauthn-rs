@@ -584,6 +584,7 @@ impl From<GetInfoResponse> for BTreeMap<u32, Value> {
 crate::deserialize_cbor!(GetInfoResponse);
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::transport::iso7816::ISO7816LengthForm;

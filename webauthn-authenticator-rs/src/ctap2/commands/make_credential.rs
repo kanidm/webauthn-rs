@@ -288,6 +288,7 @@ crate::deserialize_cbor!(MakeCredentialRequest);
 crate::deserialize_cbor!(MakeCredentialResponse);
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod test {
     use crate::ctap2::CBORResponse;
 
