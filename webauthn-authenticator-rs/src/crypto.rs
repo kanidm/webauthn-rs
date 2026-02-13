@@ -83,7 +83,7 @@ pub fn ecdh(
     peer_key: &EcdhP256PublicKey,
     output: &mut Zeroizing<GenericArray<u8, U32>>,
 ) -> Result<(), WebauthnCError> {
-    let secret: EcdhP256SharedSecret = private_key.diffie_hellman(&peer_key);
+    let secret: EcdhP256SharedSecret = private_key.diffie_hellman(peer_key);
     output.copy_from_slice(secret.raw_secret_bytes());
 
     Ok(())
