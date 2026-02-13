@@ -125,17 +125,15 @@ jobs:
       - if: runner.os != 'windows'
         run: |
           sudo apt-get update && \
-          sudo apt-get -y install libudev-dev
+          sudo apt-get -y install libudev-dev libdbus-1-dev
       - if: contains(matrix.features, 'nfc') && runner.os != 'windows'
         run: sudo apt-get -y install libpcsclite-dev
       - if: contains(matrix.features, 'usb') && runner.os != 'windows'
         run: sudo apt-get -y install libusb-1.0-0-dev
-      - if: (contains(matrix.features, 'bluetooth') || contains(matrix.features, 'cable'))  && runner.os != 'windows'
-        run: sudo apt-get -y install libdbus-1-dev
 
-      # Don't try to install OpenSSL when there's only the "win10" feature
+      # Don't try to install OpenSSL unless the "softtoken" feature is
       # enabled. We should be able to operate without it.
-      - if: runner.os == 'windows' && matrix.features != 'win10'
+      - if: runner.os == 'windows' && contains(matrix.features, 'softtoken')
         uses: johnwason/vcpkg-action@v4
         with:
           pkgs: openssl
@@ -152,12 +150,9 @@ jobs:
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
       - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
-
-      # "ctap2-management" requires OpenSSL, which we won't have if built with
-      # only "win10" feature on Windows.
-      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
-      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
       - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}

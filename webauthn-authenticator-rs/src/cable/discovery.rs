@@ -2,20 +2,24 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use num_traits::ToPrimitive;
-use openssl::{
-    ec::EcKey,
-    hash::MessageDigest,
-    pkey::{PKey, Private},
-    rand::rand_bytes,
-    sign::Signer,
+use crypto_glue::{
+    block_padding::generic_array::{
+        sequence::Split,
+        typenum::{U32, U64},
+        GenericArray,
+    },
+    ecdh_p256::{self, EcdhP256EphemeralSecret},
+    hmac_s256::{self, HmacSha256Key},
+    rand::{rngs::ThreadRng, RngCore},
+    traits::Zeroizing,
 };
+use num_traits::ToPrimitive;
 use std::mem::size_of;
 use tokio_tungstenite::tungstenite::http::{uri::Builder, Uri};
 
 use crate::{
     cable::{btle::*, handshake::*, tunnel::get_domain, CableRequestType, Psk},
-    crypto::{decrypt, encrypt, hkdf_sha_256, public_key_from_private, regenerate},
+    crypto::{decrypt, encrypt, hkdf_sha_256},
     error::WebauthnCError,
 };
 
@@ -23,9 +27,20 @@ type BleAdvert = [u8; size_of::<CableEid>() + 4];
 type RoutingId = [u8; 3];
 type BleNonce = [u8; 10];
 type QrSecret = [u8; 16];
-type EidKey = [u8; 32 + 32];
+
+/// Two concatenated [`Aes256Key`s][crypto_glue::aes256::Aes256Key], the encryption key and signing
+/// key.
+type EidKey = Zeroizing<GenericArray<u8, U64>>;
+
+/// Alias for a non-[`Zeroizing`][] form of [`Aes256Key`][crypto_glue::aes256::Aes256Key], used to
+/// reassure Rust's type checker.
+type NonZeroingAes256Key = GenericArray<u8, U32>;
+
 type CableEid = [u8; 16];
 type TunnelId = [u8; 16];
+
+/// An all-zero AES256 CBC IV.
+const ZERO_IV: [u8; 16] = [0; 16];
 
 // const BASE64URL: base64::Config = base64::Config::new(base64::CharacterSet::UrlSafe, false);
 
@@ -47,10 +62,9 @@ impl DerivedValueType {
     }
 }
 
-#[derive(Debug)]
 pub struct Discovery {
     request_type: CableRequestType,
-    pub(super) local_identity: EcKey<Private>,
+    pub(super) local_identity: EcdhP256EphemeralSecret,
     qr_secret: QrSecret,
     eid_key: EidKey,
 }
@@ -63,7 +77,8 @@ impl Discovery {
     pub fn new(request_type: CableRequestType) -> Result<Self, WebauthnCError> {
         // chrome_authenticator_request_delegate.cc  ChromeAuthenticatorRequestDelegate::ConfigureCable
         let mut qr_secret: QrSecret = [0; size_of::<QrSecret>()];
-        rand_bytes(&mut qr_secret)?;
+        let mut rng = ThreadRng::default();
+        rng.try_fill_bytes(&mut qr_secret)?;
         Self::new_with_qr_secret(request_type, qr_secret)
     }
 
@@ -75,19 +90,8 @@ impl Discovery {
         request_type: CableRequestType,
         qr_secret: QrSecret,
     ) -> Result<Self, WebauthnCError> {
-        let local_identity = regenerate()?;
-        Self::new_with_qr_secret_and_cert(request_type, qr_secret, local_identity)
-    }
-
-    fn new_with_qr_secret_and_cert(
-        request_type: CableRequestType,
-        qr_secret: QrSecret,
-        local_identity: EcKey<Private>,
-    ) -> Result<Self, WebauthnCError> {
-        // Trying to EC_KEY_derive_from_secret is only in BoringSSL, and doesn't have openssl-rs bindings
-        // Opted to just take in an EcKey here.
-
-        let mut eid_key: EidKey = [0; size_of::<EidKey>()];
+        let local_identity = ecdh_p256::new_secret();
+        let mut eid_key: EidKey = EidKey::default();
         DerivedValueType::EIDKey.derive(&qr_secret, &[], &mut eid_key)?;
 
         Ok(Self {
@@ -123,7 +127,7 @@ impl Discovery {
     /// This payload includes the `request_type`, public key for the
     /// `local_identity`, and `qr_secret`.
     pub fn make_handshake(&self) -> Result<HandshakeV2, WebauthnCError> {
-        let public_key = public_key_from_private(&self.local_identity)?;
+        let public_key = self.local_identity.public_key();
         HandshakeV2::new(self.request_type, public_key, self.qr_secret)
     }
 
@@ -210,8 +214,9 @@ pub struct Eid {
 impl Eid {
     /// Creates a new [Eid] using a random nonce.
     pub fn new(tunnel_server_id: u16, routing_id: RoutingId) -> Result<Self, WebauthnCError> {
+        let mut rng = ThreadRng::default();
         let mut nonce: BleNonce = [0; size_of::<BleNonce>()];
-        rand_bytes(&mut nonce)?;
+        rng.try_fill_bytes(&mut nonce)?;
 
         Ok(Self {
             tunnel_server_id,
@@ -301,18 +306,20 @@ impl Eid {
             }
         };
 
-        trace!("Decrypting {:?} with key {:?}", advert, key);
-        let signing_key = PKey::hmac(&key[32..64])?;
-        let mut signer = Signer::new(MessageDigest::sha256(), &signing_key)?;
-        let calculated_hmac = signer.sign_oneshot_to_vec(&advert[..16])?;
+        // trace!("Decrypting {:?} with key {:?}", hex::encode(advert), hex::encode(key));
+        let (encryption_key, signing_key): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
+        let mut extended_signing_key = HmacSha256Key::default();
+        extended_signing_key[..32].copy_from_slice(&signing_key);
+        let calculated_hmac = hmac_s256::oneshot(&extended_signing_key, &advert[..16]).into_bytes();
 
         if calculated_hmac[..4] != advert[16..20] {
+            // We probably saw another nearby caBLE session
             warn!("incorrect HMAC when decrypting caBLE advertisement");
             return Ok(None);
         }
 
         // HMAC checks out, try to decrypt
-        let plaintext = decrypt(&key[..32], None, &advert[..16])?;
+        let plaintext = decrypt(&encryption_key.into(), &ZERO_IV.into(), &advert[..16])?;
         Ok(Eid::from_bytes(plaintext.as_slice()))
     }
 
@@ -321,15 +328,16 @@ impl Eid {
     /// See [Discovery::encrypt_advert] for a public API.
     fn encrypt_advert(&self, key: &EidKey) -> Result<BleAdvert, WebauthnCError> {
         let eid = self.as_bytes();
-        let c = encrypt(&key[..32], None, &eid)?;
+        let (k0, k1): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
+        let c = encrypt(&k0.into(), &ZERO_IV.into(), &eid)?;
 
         let mut crypted: BleAdvert = [0; size_of::<BleAdvert>()];
         crypted[..size_of::<CableEid>()].copy_from_slice(&c);
 
         // Sign the advertisement with HMAC-SHA-256
-        let signing_key = PKey::hmac(&key[32..64])?;
-        let mut signer = Signer::new(MessageDigest::sha256(), &signing_key)?;
-        let calculated_hmac = signer.sign_oneshot_to_vec(&crypted[..16])?;
+        let signing_key: HmacSha256Key =
+            hmac_s256::key_from_slice(&k1).ok_or(WebauthnCError::Internal)?;
+        let calculated_hmac = hmac_s256::oneshot(&signing_key, &crypted[..16]).into_bytes();
 
         // Take the first 4 bytes of the signature
         crypted[size_of::<CableEid>()..].copy_from_slice(&calculated_hmac[..4]);
@@ -512,30 +520,13 @@ mod test {
     #[test]
     fn decrypt_known() {
         let _ = tracing_subscriber::fmt::try_init();
-        let test_key = [
-            45, 45, 45, 45, 45, 66, 69, 71, 73, 78, 32, 69, 67, 32, 80, 82, 73, 86, 65, 84, 69, 32,
-            75, 69, 89, 45, 45, 45, 45, 45, 10, 77, 72, 99, 67, 65, 81, 69, 69, 73, 80, 114, 54,
-            76, 105, 83, 120, 81, 73, 82, 55, 69, 51, 72, 81, 90, 98, 78, 114, 57, 80, 78, 66, 114,
-            105, 50, 110, 56, 83, 66, 99, 89, 67, 65, 73, 56, 89, 69, 89, 57, 85, 113, 68, 111, 65,
-            111, 71, 67, 67, 113, 71, 83, 77, 52, 57, 10, 65, 119, 69, 72, 111, 85, 81, 68, 81,
-            103, 65, 69, 90, 68, 103, 112, 55, 66, 76, 82, 82, 47, 79, 100, 116, 89, 104, 118, 83,
-            43, 109, 88, 65, 51, 82, 87, 121, 51, 85, 65, 86, 112, 48, 49, 115, 52, 73, 111, 83,
-            78, 56, 47, 65, 114, 68, 77, 57, 56, 73, 88, 57, 104, 88, 102, 10, 70, 116, 47, 119,
-            65, 109, 68, 79, 119, 78, 78, 55, 66, 100, 84, 57, 84, 48, 86, 109, 110, 70, 73, 99,
-            55, 84, 49, 116, 106, 97, 105, 84, 68, 103, 61, 61, 10, 45, 45, 45, 45, 45, 69, 78, 68,
-            32, 69, 67, 32, 80, 82, 73, 86, 65, 84, 69, 32, 75, 69, 89, 45, 45, 45, 45, 45, 10,
-        ];
         let qr_secret = [
             1, 254, 166, 247, 196, 128, 116, 147, 220, 37, 111, 158, 172, 247, 86, 201,
         ];
-        let local_identity = EcKey::private_key_from_pem(&test_key).unwrap();
 
-        let discovery = Discovery::new_with_qr_secret_and_cert(
-            CableRequestType::DiscoverableMakeCredential,
-            qr_secret,
-            local_identity,
-        )
-        .unwrap();
+        let discovery =
+            Discovery::new_with_qr_secret(CableRequestType::DiscoverableMakeCredential, qr_secret)
+                .unwrap();
 
         assert_eq!(
             "wss://cable.ua5v.com/cable/new/367CBBF5F5085DF4098476AFE4B9B1D2",

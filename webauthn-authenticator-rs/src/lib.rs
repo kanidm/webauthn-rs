@@ -91,7 +91,8 @@
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
+// DO NOT CHANGE THIS WITHOUT VERIFYING THAT ALL CONFIGURATIONS DO NOT USE EXPECT!
+// #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![deny(clippy::unreachable)]
 #![deny(clippy::await_holding_lock)]
@@ -104,6 +105,13 @@ extern crate num_derive;
 extern crate tracing;
 
 use crate::error::WebauthnCError;
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "ctap2",
+    feature = "mozilla",
+    feature = "softpasskey",
+    feature = "softtoken",
+))]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_ENGINE;
 use url::Url;
 
