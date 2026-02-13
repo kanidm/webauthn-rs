@@ -32,11 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Single source of truth for minimum Rust in CI.
-        # Update this anchor value when bumping MSRV checks.
-        rust_version:
-          - stable
-          - &rust_oldest_version "1.88.0"
+        rust_version: [ stable, 1.88.0 ]
         os:
           - ubuntu-latest
           - windows-latest
@@ -121,9 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version:
-          - stable
-          - *rust_oldest_version
+        rust_version: [ stable, 1.88.0 ]
         features:
           - bluetooth
           - cable
@@ -145,7 +139,7 @@ jobs:
             rust_version: stable
         exclude:
           - os: windows-latest
-            rust_version: *rust_oldest_version
+            rust_version: 1.88.0
 
     runs-on: ${{ matrix.os }}
     steps:
