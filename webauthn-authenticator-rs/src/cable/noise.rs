@@ -25,7 +25,7 @@ use std::mem::size_of;
 use crate::{cable::Psk, prelude::WebauthnCError};
 
 #[cfg(feature = "cable")]
-use crate::crypto::{compute_sha256_2, ecdh, hkdf_sha_256, public_key_from_bytes};
+use crate::crypto::{compute_sha256_2, hkdf_sha_256, public_key_from_bytes};
 
 const NOISE_KN_PROTOCOL: &[u8; 32] = b"Noise_KNpsk0_P256_AESGCM_SHA256\0";
 const NOISE_NK_PROTOCOL: &[u8; 32] = b"Noise_NKpsk0_P256_AESGCM_SHA256\0";
@@ -397,9 +397,8 @@ impl CableNoise {
         if let Some(peer_identity) = peer_identity {
             // TODO: test
             let peer_identity_point = public_key_from_bytes(&peer_identity)?;
-            let mut es_key = Default::default();
-            ecdh(&noise.ephemeral_key, &peer_identity_point, &mut es_key)?;
-            noise.mix_key(&es_key)?;
+            let es_key = noise.ephemeral_key.diffie_hellman(&peer_identity_point);
+            noise.mix_key(es_key.raw_secret_bytes())?;
         }
 
         let ct = noise.encrypt_and_hash(&[])?;
@@ -440,19 +439,17 @@ impl CableNoise {
         // assert_eq!(peer_encoded.as_bytes(), peer_point_bytes);
         // trace!("peer(x={:?}, y={:?})", peer_encoded.x(), peer_encoded.y());
 
-        let mut shared_key_ee = EncryptionKey::default();
-        ecdh(&self.ephemeral_key, &peer_key, &mut shared_key_ee)?;
+        let shared_key_ee = self.ephemeral_key.diffie_hellman(&peer_key);
         // trace!("mix_hash(peer_point_bytes)");
         self.mix_hash(peer_point_bytes);
         // trace!("mix_key(peer_point_bytes)");
         self.mix_key(peer_point_bytes)?;
         // trace!("mix_key(shared_key_ee)");
-        self.mix_key(&shared_key_ee)?;
+        self.mix_key(shared_key_ee.raw_secret_bytes())?;
 
         if let Some(local_identity) = &self.local_identity {
-            let mut shared_key_se = EncryptionKey::default();
-            ecdh(local_identity, &peer_key, &mut shared_key_se)?;
-            self.mix_key(&shared_key_se)?;
+            let shared_key_se = local_identity.diffie_hellman(&peer_key);
+            self.mix_key(shared_key_se.raw_secret_bytes())?;
         }
 
         let mut ct = Zeroizing::new(ct.to_vec());
@@ -520,9 +517,8 @@ impl CableNoise {
         let peer_point = public_key_from_bytes(peer_point_bytes)?;
 
         if let Some(local_identity) = &noise.local_identity {
-            let mut es_key = EncryptionKey::default();
-            ecdh(local_identity, &peer_point, &mut es_key)?;
-            noise.mix_key(&es_key)?;
+            let es_key = local_identity.diffie_hellman(&peer_point);
+            noise.mix_key(es_key.raw_secret_bytes())?;
         }
 
         let len = noise.decrypt_and_hash(&mut ct)?;
@@ -538,14 +534,12 @@ impl CableNoise {
         noise.mix_hash(&ephemeral_key_public_bytes);
         noise.mix_key(&ephemeral_key_public_bytes)?;
 
-        let mut shared_key_ee = EncryptionKey::default();
-        ecdh(&noise.ephemeral_key, &peer_point, &mut shared_key_ee)?;
-        noise.mix_key(&shared_key_ee)?;
+        let shared_key_ee = noise.ephemeral_key.diffie_hellman(&peer_point);
+        noise.mix_key(shared_key_ee.raw_secret_bytes())?;
 
         if let Some(peer_identity) = peer_identity {
-            let mut shared_key_se = EncryptionKey::default();
-            ecdh(&noise.ephemeral_key, peer_identity, &mut shared_key_se)?;
-            noise.mix_key(&shared_key_se)?;
+            let shared_key_se = noise.ephemeral_key.diffie_hellman(peer_identity);
+            noise.mix_key(shared_key_se.raw_secret_bytes())?;
         }
 
         let ct = noise.encrypt_and_hash(&[])?;

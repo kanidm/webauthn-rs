@@ -2,19 +2,17 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
+#[cfg(any(doc, feature = "cable"))]
+use crypto_glue::ecdh_p256::EcdhP256PublicKey;
 use crypto_glue::{
     aes256::Aes256Key,
     aes256cbc::{
         Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
     },
-    block_padding::{
-        generic_array::{typenum::U32, GenericArray},
-        NoPadding,
-    },
-    ecdh_p256::{EcdhP256EphemeralSecret, EcdhP256PublicKey, EcdhP256SharedSecret},
+    block_padding::NoPadding,
     hkdf_s256::HkdfSha256,
     s256::{Sha256, Sha256Output},
-    traits::{Digest, Zeroizing},
+    traits::Digest,
 };
 
 use crate::error::WebauthnCError;
@@ -78,17 +76,6 @@ pub fn hkdf_sha_256(
     Ok(())
 }
 
-pub fn ecdh(
-    private_key: &EcdhP256EphemeralSecret,
-    peer_key: &EcdhP256PublicKey,
-    output: &mut Zeroizing<GenericArray<u8, U32>>,
-) -> Result<(), WebauthnCError> {
-    let secret: EcdhP256SharedSecret = private_key.diffie_hellman(peer_key);
-    output.copy_from_slice(secret.raw_secret_bytes());
-
-    Ok(())
-}
-
 #[cfg(any(doc, feature = "cable"))]
 /// Reads `buf` as a compressed or uncompressed P-256 key.
 pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcdhP256PublicKey, WebauthnCError> {
@@ -96,6 +83,7 @@ pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcdhP256PublicKey, WebauthnCE
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod test {
     use super::*;
     use crypto_glue::ecdh_p256;
@@ -153,19 +141,18 @@ mod test {
         let bob_pub = bob_secret.public_key();
         assert_ne!(alice_pub, bob_pub);
 
-        let mut alice_out = Default::default();
-        ecdh(&alice_secret, &bob_pub, &mut alice_out).unwrap();
-
-        let mut bob_out = Default::default();
-        ecdh(&bob_secret, &alice_pub, &mut bob_out).unwrap();
-
-        assert_eq!(alice_out, bob_out);
+        let alice_out = alice_secret.diffie_hellman(&bob_pub);
+        let bob_out = bob_secret.diffie_hellman(&alice_pub);
+        assert_eq!(alice_out.raw_secret_bytes(), bob_out.raw_secret_bytes());
     }
 
     /// Test using ECDH with static keys.
     #[test]
     fn ecdh_expected() {
-        use crypto_glue::{ecdsa_p256::EcdsaP256NonZeroScalar, traits::ToEncodedPoint};
+        use crypto_glue::{
+            ecdh_p256::EcdhP256EphemeralSecret, ecdsa_p256::EcdsaP256NonZeroScalar,
+            traits::ToEncodedPoint,
+        };
 
         let alice_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x13\xeaL\xe1\xd1\xff\xb3\xc2\x88\\\x8eb 0[\xe8a\x92\x1d\xee\xdd\x17\xca:\x171\xae\xbf\x8c\xf0\xdc\xb8").into()).unwrap();
         let bob_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x84\x0ed:\x90\xee\xb9}\xc8\xb4\xb5\x12\x03\x8b\xc5~\xe1\x13\x04\xceZ\x9d,\xfd\xd6F\x13\xea\xb0\x96?q").into()).unwrap();
@@ -185,14 +172,12 @@ mod test {
         assert_eq!(bob_pub_point.as_bytes(), b"\x04\xe3F/\xe9\xd6\x8e\xb5L\xc9!\x14w\x0cs8z)\xcc)\r\x87]\x829fC \xf7>\xe5\x07b\x8b\xe8\xfd\xdd\0\xd66\x9d\x11\xfe\xec\xe4Z\x0c\xf4\xc3e#\x19\xc5\xa0\x81\x19\xe7\xd8}}\xd3a\xea\x9a\x12");
 
         // Now lets do ECDH (like caBLE), and check that Alice came up with our expected secret:
-        let mut alice_out = Default::default();
-        ecdh(&alice_secret, &bob_pub, &mut alice_out).unwrap();
-        assert_eq!(alice_out.as_slice(), b"\xeeom\xee\xac\x9a\xbc9\xaf\x97g\x83\x11\x87!\x19\x86\xc0D\xc8\x93\xde\xb8wG\x19\xfe\xecy\xe5\x19z");
+        let alice_out = alice_secret.diffie_hellman(&bob_pub);
+        assert_eq!(alice_out.raw_secret_bytes().as_slice(), b"\xeeom\xee\xac\x9a\xbc9\xaf\x97g\x83\x11\x87!\x19\x86\xc0D\xc8\x93\xde\xb8wG\x19\xfe\xecy\xe5\x19z");
 
         // And repeat the process for Bob:
-        let mut bob_out = Default::default();
-        ecdh(&bob_secret, &alice_pub, &mut bob_out).unwrap();
-        assert_eq!(alice_out.as_slice(), bob_out.as_slice());
+        let bob_out = alice_secret.diffie_hellman(&bob_pub);
+        assert_eq!(alice_out.raw_secret_bytes(), bob_out.raw_secret_bytes());
     }
 
     /*
