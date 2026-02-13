@@ -159,7 +159,7 @@ impl Discovery {
     /// Derives the pre-shared key for an [Eid] targetting this [Discovery]
     pub fn derive_psk(&self, eid: &Eid) -> Result<Psk, WebauthnCError> {
         let mut psk: Psk = [0; size_of::<Psk>()];
-        DerivedValueType::Psk.derive(&self.qr_secret, &eid.to_bytes(), &mut psk)?;
+        DerivedValueType::Psk.derive(&self.qr_secret, &eid.as_bytes(), &mut psk)?;
         Ok(psk)
     }
 
@@ -226,7 +226,7 @@ impl Eid {
     }
 
     /// Converts this [Eid] into unencrypted bytes.
-    fn to_bytes(&self) -> CableEid {
+    fn as_bytes(&self) -> CableEid {
         let mut o: CableEid = [0; size_of::<CableEid>()];
         let mut p = 1;
         let mut q = p + size_of::<BleNonce>();
@@ -326,7 +326,7 @@ impl Eid {
     ///
     /// See [Discovery::encrypt_advert] for a public API.
     fn encrypt_advert(&self, key: &EidKey) -> Result<BleAdvert, WebauthnCError> {
-        let eid = self.to_bytes();
+        let eid = self.as_bytes();
         let (k0, k1): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
         let c = encrypt(&k0.into(), &ZERO_IV.into(), &eid)?;
 
