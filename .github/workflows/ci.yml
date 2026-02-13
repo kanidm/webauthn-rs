@@ -125,13 +125,11 @@ jobs:
       - if: runner.os != 'windows'
         run: |
           sudo apt-get update && \
-          sudo apt-get -y install libudev-dev
+          sudo apt-get -y install libudev-dev libdbus-1-dev
       - if: contains(matrix.features, 'nfc') && runner.os != 'windows'
         run: sudo apt-get -y install libpcsclite-dev
       - if: contains(matrix.features, 'usb') && runner.os != 'windows'
         run: sudo apt-get -y install libusb-1.0-0-dev
-      - if: (contains(matrix.features, 'bluetooth') || contains(matrix.features, 'cable'))  && runner.os != 'windows'
-        run: sudo apt-get -y install libdbus-1-dev
 
       # Don't try to install OpenSSL unless the "softtoken" feature is
       # enabled. We should be able to operate without it.
