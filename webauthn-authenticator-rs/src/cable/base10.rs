@@ -114,7 +114,6 @@ pub fn decode(i: &str) -> Result<Vec<u8>, DecodeError> {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod test {
     use super::*;
 

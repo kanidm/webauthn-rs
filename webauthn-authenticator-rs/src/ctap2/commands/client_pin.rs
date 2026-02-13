@@ -217,7 +217,6 @@ impl TryFrom<BTreeMap<u32, Value>> for ClientPinResponse {
 crate::deserialize_cbor!(ClientPinResponse);
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
 

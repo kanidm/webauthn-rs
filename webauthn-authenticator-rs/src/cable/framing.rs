@@ -132,7 +132,7 @@ impl CableFrame {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic, clippy::expect_used, clippy::unwrap_used)]
+#[allow(clippy::panic)]
 mod test {
     use std::collections::BTreeMap;
 
