@@ -30,8 +30,8 @@
 //!     --cable-url FIDO:/...
 //! ```
 //!
-//! You can also a cropped screenshot of a caBLE QR code with `--qr-image`, instead of using
-//! `--cable-url`, but this is not very reliable.
+//! You can also try to parse a cropped screenshot of a caBLE QR code with `--qr-image`, instead of
+//! using `--cable-url`, but this is not very reliable.
 //!
 //! [0]: https://github.com/micolous/serialport-hci/blob/main/README.md
 #[macro_use]
