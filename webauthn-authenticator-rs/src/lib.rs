@@ -111,6 +111,7 @@ use crate::error::WebauthnCError;
     feature = "mozilla",
     feature = "softpasskey",
     feature = "softtoken",
+    feature = "win10",
 ))]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_ENGINE;
 use url::Url;
