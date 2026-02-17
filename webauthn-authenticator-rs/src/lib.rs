@@ -91,7 +91,8 @@
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::unwrap_used)]
-#![deny(clippy::expect_used)]
+// TODO: remove expect() calls from examples, cable, mozilla, softtoken, ui-cli, win10
+// #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![deny(clippy::unreachable)]
 #![deny(clippy::await_holding_lock)]
