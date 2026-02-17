@@ -1,7 +1,43 @@
-//! `cable_tunnel` shares a [Token] over a caBLE connection.
+//! Share a [`Token`][webauthn_authenticator_rs::transport::Token] to a caBLE initiator.
+//!
+//! This program performs the authenticator (ie: mobile device) role of the session. This can tunnel
+//! to a real (physical) device, or share a SoftToken (with `--features softtoken`).
+//!
+//! This requires a BTLE adapter and platform that can send raw advertisement data, either:
+//!
+//! - a Linux machine running Bluez, or
+//! - [a **serial** BTLE HCI adapter][0]
+//!
+//! The BTLE adapter must be in physical proximity of the initiator (ie: the thing that shows the
+//! caBLE QR code), then the rest of the connection happens via a caBLE tunnel server. See the
+//! [webauthn_authenticator_rs::cable][] docs for more information.
+//!
+//! ## Example
+//!
+//! ```sh
+//! # Create a SoftToken file in /tmp
+//! cargo run --example softtoken \
+//!     --features crypto,ui-cli,softtoken \
+//!     -- \
+//!     create /tmp/softtoken.dat
+//!
+//! # Expose it to an initiator via its caBLE URL using Bluez (Linux)
+//! cargo run --example cable_tunnel \
+//!     --features cable,crypto,ui-cli,qrcode,softtoken \
+//!     -- \
+//!     --bluez \
+//!     --softtoken-path /tmp/softtoken.dat \
+//!     --cable-url FIDO:/...
+//! ```
+//!
+//! You can also try to parse a cropped screenshot of a caBLE QR code with `--qr-image`, instead of
+//! using `--cable-url`, but this is not very reliable.
+//!
+//! [0]: https://github.com/micolous/serialport-hci/blob/main/README.md
 #[macro_use]
 extern crate tracing;
 
+use async_trait::async_trait;
 use bluetooth_hci::{
     host::{
         uart::{CommandHeader, Hci as UartHci, Packet},
@@ -11,8 +47,8 @@ use bluetooth_hci::{
     BdAddr, BdAddrType,
 };
 use clap::{ArgGroup, Parser};
+use crypto_glue::rand::{rngs::ThreadRng, RngCore as _};
 use futures::StreamExt;
-use openssl::rand::rand_bytes;
 use serialport::FlowControl;
 use serialport_hci::{
     vendor::none::{Event, Vendor},
@@ -41,6 +77,22 @@ use webauthn_authenticator_rs::softtoken::SoftTokenFile;
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "caBLE tunneler tool")]
+#[cfg_attr(
+    target_os = "linux",
+    clap(group(
+        ArgGroup::new("bluetooth")
+            .required(true)
+            .args(&["serial_port", "bluez"])
+    ))
+)]
+#[cfg_attr(
+    not(target_os = "linux"),
+    clap(group(
+        ArgGroup::new("bluetooth")
+            .required(true)
+            .args(&["serial_port"])
+    ))
+)]
 #[clap(group(
     ArgGroup::new("url")
         .required(true)
@@ -54,7 +106,12 @@ pub struct CliParser {
     ///
     /// [0]: https://mynewt.apache.org/latest/tutorials/ble/blehci_project.html
     #[clap(short, long)]
-    pub serial_port: String,
+    pub serial_port: Option<String>,
+
+    #[cfg(target_os = "linux")]
+    /// Use Bluez to send BTLE advertisements.
+    #[clap(long)]
+    pub bluez: bool,
 
     /// Baud rate for communication with Bluetooth HCI controller.
     ///
@@ -135,8 +192,9 @@ impl SerialHciAdvertiser {
     }
 }
 
+#[async_trait]
 impl Advertiser for SerialHciAdvertiser {
-    fn stop_advertising(&mut self) -> Result<(), WebauthnCError> {
+    async fn stop_advertising(&mut self) -> Result<(), WebauthnCError> {
         trace!("sending reset...");
         self.hci.reset().unwrap();
         let _ = self.read();
@@ -146,12 +204,12 @@ impl Advertiser for SerialHciAdvertiser {
         Ok(())
     }
 
-    fn start_advertising(
+    async fn start_advertising(
         &mut self,
         service_uuid: u16,
         payload: &[u8],
     ) -> Result<(), WebauthnCError> {
-        self.stop_advertising()?;
+        self.stop_advertising().await?;
         let advert = Advertisement::ServiceData16BitUuid(service_uuid, payload);
         let mut service_data = [0; 31];
         let len = advert.copy_into_slice(&mut service_data);
@@ -169,7 +227,8 @@ impl Advertiser for SerialHciAdvertiser {
         };
         let mut addr = [0u8; 6];
         addr[5] = 0xc0;
-        rand_bytes(&mut addr[..5])?;
+        let mut rng = ThreadRng::default();
+        rng.try_fill_bytes(&mut addr[..5])?;
 
         self.hci.le_set_random_address(BdAddr(addr)).unwrap();
         let _ = self.read();
@@ -188,14 +247,106 @@ impl Advertiser for SerialHciAdvertiser {
     }
 }
 
+#[cfg(target_os = "linux")]
+struct BluezAdvertiser {
+    session: bluer::Session,
+    handle: Option<bluer::adv::AdvertisementHandle>,
+}
+
+#[cfg(target_os = "linux")]
+impl BluezAdvertiser {
+    async fn new() -> Self {
+        let session = bluer::Session::new().await.unwrap();
+        Self {
+            session,
+            handle: None,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[async_trait]
+impl Advertiser for BluezAdvertiser {
+    async fn start_advertising(
+        &mut self,
+        service_uuid: u16,
+        payload: &[u8],
+    ) -> Result<(), WebauthnCError> {
+        use bluer::adv::{Advertisement, Type};
+        use btleplug::api::bleuuid::uuid_from_u16;
+        use std::collections::BTreeMap;
+
+        let advert = Advertisement {
+            advertisement_type: Type::Broadcast,
+            service_data: BTreeMap::from([(uuid_from_u16(service_uuid), payload.to_vec())]),
+            min_interval: Some(Duration::from_millis(100)),
+            max_interval: Some(Duration::from_millis(500)),
+            ..Default::default()
+        };
+
+        let adapter = self.session.default_adapter().await.unwrap();
+        adapter.set_powered(true).await.unwrap();
+
+        self.handle = Some(adapter.advertise(advert).await.unwrap());
+        Ok(())
+    }
+
+    async fn stop_advertising(&mut self) -> Result<(), WebauthnCError> {
+        drop(self.handle.take());
+        Ok(())
+    }
+}
+
+enum Advertisers {
+    SerialHci(SerialHciAdvertiser),
+    #[cfg(target_os = "linux")]
+    Bluez(BluezAdvertiser),
+}
+
+impl Advertisers {
+    async fn new(opt: &CliParser) -> Self {
+        #[cfg(target_os = "linux")]
+        if opt.bluez {
+            return Self::Bluez(BluezAdvertiser::new().await);
+        }
+
+        let serial_port = opt.serial_port.as_ref().unwrap();
+
+        Self::SerialHci(SerialHciAdvertiser::new(serial_port, opt.baud_rate))
+    }
+}
+
+#[async_trait]
+impl Advertiser for Advertisers {
+    async fn start_advertising(
+        &mut self,
+        service_uuid: u16,
+        payload: &[u8],
+    ) -> Result<(), WebauthnCError> {
+        match self {
+            Self::SerialHci(a) => a.start_advertising(service_uuid, payload).await,
+            #[cfg(target_os = "linux")]
+            Self::Bluez(a) => a.start_advertising(service_uuid, payload).await,
+        }
+    }
+
+    async fn stop_advertising(&mut self) -> Result<(), WebauthnCError> {
+        match self {
+            Self::SerialHci(a) => a.stop_advertising().await,
+            #[cfg(target_os = "linux")]
+            Self::Bluez(a) => a.stop_advertising().await,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let _ = tracing_subscriber::fmt::try_init();
 
     let opt = CliParser::parse();
-    let cable_url = if let Some(u) = opt.cable_url {
-        u
-    } else if let Some(img) = opt.qr_image {
+    let cable_url = if let Some(ref u) = opt.cable_url {
+        u.clone()
+    } else if let Some(ref img) = opt.qr_image {
         let img = image::open(img).unwrap();
         // Optimised for screenshots from the device.
         let img = img.adjust_contrast(9000.0);
@@ -223,7 +374,7 @@ async fn main() {
         unreachable!();
     };
 
-    let mut advertiser = SerialHciAdvertiser::new(&opt.serial_port, opt.baud_rate);
+    let mut advertiser = Advertisers::new(&opt).await;
     let ui = Cli {};
     let options = ShareCableAuthenticatorOptions::default().tunnel_server_id(opt.tunnel_server_id);
 

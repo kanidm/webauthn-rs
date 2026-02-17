@@ -33,7 +33,6 @@ bluetooth = ["dep:btleplug", "ctap2"]
 cable = [
     "dep:btleplug",
     "crypto",
-    "crypto_openssl",
     "ctap2",
     "dep:hex",
     "dep:tokio",
@@ -61,7 +60,7 @@ vendor-yubikey = []
 nfc = ["ctap2", "dep:pcsc"]
 # TODO: allow running softpasskey without softtoken
 softpasskey = ["crypto", "softtoken"]
-softtoken = ["crypto", "ctap2"]
+softtoken = ["crypto", "ctap2", "crypto_openssl"]
 usb = ["ctap2", "dep:fido-hid-rs"]
 win10 = ["dep:windows"]
 
@@ -132,9 +131,6 @@ tokio.workspace = true
 tempfile = { version = "3.23.0" }
 hex = { workspace = true }
 
-# For doc tests
-openssl = { workspace = true }
-
 # cable_tunnel - used for connecting to Bluetooth HCI controller over serial
 serialport = { version = "4.8.1" }
 serialport-hci = { git = "https://github.com/micolous/serialport-hci.git", rev = "7931ad32510ac162f9c4e1147bdd411e40cffa0e" }
@@ -144,6 +140,9 @@ bluetooth-hci = { git = "https://github.com/micolous/bluetooth-hci.git", rev = "
 # https://github.com/piderman314/bardecoder/blame/master/Cargo.toml
 bardecoder = "=0.5.0"
 image = "0.24.9"
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+bluer = { version = "0.17.4", features = ["bluetoothd"] }
 
 [[example]]
 name = "authenticate"

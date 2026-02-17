@@ -61,25 +61,52 @@ use windows::{
 use std::slice::from_raw_parts;
 
 /// Authenticator backend for Windows 10 WebAuthn API.
-pub struct Win10 {}
+pub struct Win10 {
+    api_version: u32,
+    is_user_verifying_platform_authenticator_available: bool,
+}
 
 impl Default for Win10 {
     fn default() -> Self {
+        let api_version = unsafe { WebAuthNGetApiVersionNumber() };
+        trace!("WebAuthNGetApiVersionNumber(): {api_version}");
+
+        let is_user_verifying_platform_authenticator_available;
         unsafe {
-            trace!(
-                "WebAuthNGetApiVersionNumber(): {}",
-                WebAuthNGetApiVersionNumber()
-            );
             match WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable() {
-                Ok(v) => trace!(
-                    "WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable() = {:?}",
-                    <_ as Into<bool>>::into(v)
-                ),
-                Err(e) => trace!("error requesting platform authenticator: {:?}", e),
+                Ok(v) => {
+                    is_user_verifying_platform_authenticator_available = v.into();
+                    trace!("WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable() = {is_user_verifying_platform_authenticator_available:?}");
+                }
+                Err(e) => {
+                    is_user_verifying_platform_authenticator_available = false;
+                    trace!("error requesting platform authenticator: {:?}", e);
+                }
             }
         }
 
-        Self {}
+        Self {
+            api_version,
+            is_user_verifying_platform_authenticator_available,
+        }
+    }
+}
+
+impl Win10 {
+    /// Returns the Windows WebAuthn API version.
+    pub fn api_version(&self) -> u32 {
+        self.api_version
+    }
+
+    /// Returns `true` if the Windows WebAuthn APIs support caBLE authenticators.
+    pub fn supports_cable(&self) -> bool {
+        // According to Chromium:
+        // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/win/webauthn_api.cc;l=339-341;drc=83434e88fd49da16e9a21957c564299b37a320af
+        self.api_version >= 7
+    }
+
+    pub fn is_user_verifying_platform_authenticator_available(&self) -> bool {
+        self.is_user_verifying_platform_authenticator_available
     }
 }
 
