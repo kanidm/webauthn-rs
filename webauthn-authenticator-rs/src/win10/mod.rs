@@ -1,12 +1,26 @@
-//! Bindings for Windows 10 WebAuthn API.
+//! Bindings for [Windows Hello WebAuthn API][winhello].
 //!
-//! This API is available in Windows 10 bulid 1903 and later.
+//! This API is available in Windows 10 build 1903 and later.
+//!
+//! Its use is **effectively mandatory** on Windows:
+//!
+//! * Windows attempts to block applications from using transport-level APIs (BTLE, PC/SC and USB
+//!   HID) to directly communicate with FIDO authenticators (unless running as Administrator).
+//!
+//! * This API automatically tunnels WebAuthn API calls made in RDP sessions to the client via a
+//!   virtual channel (currently only supported with Microsoft's RDP client on Windows).
+//!
+//! * This API provides access to synchronised credential managers, via a plugin API available in
+//!   Windows 11 24H4 and later.
 //!
 //! ## API docs
 //!
 //! * [MSDN: WebAuthn API](https://learn.microsoft.com/en-us/windows/win32/api/webauthn/)
-//! * [webauthn.h](github.com/microsoft/webauthn) (describes versions)
-//! * [windows-rs API](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WindowsWebServices/index.html)
+//! * [`webauthn.h`](https://github.com/microsoft/webauthn) (describes versions)
+//! * [`windows-rs` API](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Networking/WindowsWebServices/index.html)
+//!
+//! [winhello]: https://learn.microsoft.com/en-us/windows/security/identity-protection/hello-for-business/webauthn-apis
+
 #[cfg(feature = "win10")]
 mod clientdata;
 #[cfg(feature = "win10")]
@@ -60,26 +74,39 @@ use windows::{
 
 use std::slice::from_raw_parts;
 
-/// Authenticator backend for Windows 10 WebAuthn API.
+/// Authenticator backend for Windows Hello WebAuthn API.
 pub struct Win10 {}
 
 impl Default for Win10 {
     fn default() -> Self {
-        unsafe {
-            trace!(
-                "WebAuthNGetApiVersionNumber(): {}",
-                WebAuthNGetApiVersionNumber()
-            );
-            match WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable() {
-                Ok(v) => trace!(
-                    "WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable() = {:?}",
-                    <_ as Into<bool>>::into(v)
-                ),
-                Err(e) => trace!("error requesting platform authenticator: {:?}", e),
-            }
-        }
-
         Self {}
+    }
+}
+
+impl Win10 {
+    /// Returns the Windows WebAuthn API version.
+    ///
+    /// This may change at runtime if connecting to a Windows PC via RDP.
+    ///
+    /// When using RDP, this is the lesser of the host and client's WebAuthn API versions.
+    pub fn api_version() -> u32 {
+        unsafe { WebAuthNGetApiVersionNumber() }
+    }
+
+    /// Returns `true` if the current system's WebAuthn APIs *might* support caBLE authenticators.
+    ///
+    /// This is available in Windows 11, possibly 22H2 and later (but Microsoft doesn't document
+    /// this). Applications should prefer using Windows APIs to support caBLE on systems that
+    /// support it.
+    ///
+    /// This may change at runtime if connecting to a Windows PC via RDP.
+    ///
+    /// This function may return `true` on devices lacks a BTLE radio (needed to complete the caBLE
+    /// handshake).
+    pub fn supports_cable() -> bool {
+        // According to Chromium:
+        // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/win/webauthn_api.cc;l=339-341;drc=83434e88fd49da16e9a21957c564299b37a320af
+        Self::api_version() >= 7
     }
 }
 
