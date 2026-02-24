@@ -246,8 +246,31 @@ pub fn native_to_assertion_extensions(
 ) -> Result<AuthenticationExtensionsClientOutputs, WebauthnCError> {
     let /* mut */ o = AuthenticationExtensionsClientOutputs::default();
 
+    if native.cExtensions == 0 || native.pExtensions.is_null() {
+        return Ok(o);
+    }
+
+    if !native.pExtensions.is_aligned() {
+        // Windows gave us garbage
+        return Err(WebauthnCError::Internal);
+    }
+
+    if native.cExtensions > 0xf {
+        // Too many extensions
+        return Err(WebauthnCError::MessageTooLarge);
+    }
+
     for i in 0..(native.cExtensions as usize) {
-        let extn = unsafe { &*native.pExtensions.add(i) };
+        let extn = unsafe {
+            let p = native.pExtensions.add(i);
+            // This should always be true, unless the start pointer was very high
+            if p.is_null() || !p.is_aligned() {
+                break;
+            }
+
+            &*p
+        };
+
         let win = WinExtensionGetAssertionResponse::try_from(extn)?;
         match win {
             WinExtensionGetAssertionResponse::CredBlob => (),

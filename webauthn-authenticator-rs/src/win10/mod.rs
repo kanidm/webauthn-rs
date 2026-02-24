@@ -209,29 +209,41 @@ impl AuthenticatorBackend for Win10 {
         // trace!("got result from WebAuthNAuthenticatorMakeCredential");
         // trace!("{:?}", (*a));
 
-        unsafe {
-            let cred_id = from_raw_parts(a.pbCredentialId, a.cbCredentialId as usize).to_vec();
-            let attesation_object =
-                from_raw_parts(a.pbAttestationObject, a.cbAttestationObject as usize).to_vec();
-            let type_: String = a
-                .pwszFormatType
-                .to_string()
-                .map_err(|_| WebauthnCError::Internal)?;
+        let cred_id = unsafe {
+            if a.pbCredentialId.is_null() || a.cbCredentialId == 0 || a.cbCredentialId > 0xffff {
+                &[]
+            } else {
+                from_raw_parts(a.pbCredentialId, a.cbCredentialId as usize)
+            }
+        };
 
-            Ok(RegisterPublicKeyCredential {
-                id: BASE64_ENGINE.encode(&cred_id),
-                raw_id: cred_id.into(),
-                type_,
-                extensions: native_to_registration_extensions(&a.Extensions)?,
-                response: AuthenticatorAttestationResponseRaw {
-                    attestation_object: attesation_object.into(),
-                    client_data_json: Base64UrlSafeData::from(
-                        clientdata.client_data_json().as_bytes().to_vec(),
-                    ),
-                    transports: Some(native_to_transports(a.dwUsedTransport)),
-                },
-            })
-        }
+        let attestation_object = unsafe {
+            if a.pbAttestationObject.is_null()
+                || a.cbAttestationObject == 0
+                || a.cbAttestationObject > 0xffff
+            {
+                &[]
+            } else {
+                from_raw_parts(a.pbAttestationObject, a.cbAttestationObject as usize)
+            }
+        };
+
+        let type_: String =
+            unsafe { a.pwszFormatType.to_string() }.map_err(|_| WebauthnCError::Internal)?;
+
+        Ok(RegisterPublicKeyCredential {
+            id: BASE64_ENGINE.encode(&cred_id),
+            raw_id: cred_id.into(),
+            type_,
+            extensions: native_to_registration_extensions(&a.Extensions)?,
+            response: AuthenticatorAttestationResponseRaw {
+                attestation_object: attestation_object.into(),
+                client_data_json: Base64UrlSafeData::from(
+                    clientdata.client_data_json().as_bytes().to_vec(),
+                ),
+                transports: Some(native_to_transports(a.dwUsedTransport)),
+            },
+        })
     }
 
     /// Perform an authentication action using Windows WebAuth API.
@@ -331,42 +343,65 @@ impl AuthenticatorBackend for Win10 {
         drop(hwnd);
         // trace!("got result from WebAuthNAuthenticatorGetAssertion");
 
-        unsafe {
-            let user_id = from_raw_parts(a.pbUserId, a.cbUserId as usize).to_vec();
-            let authenticator_data =
-                from_raw_parts(a.pbAuthenticatorData, a.cbAuthenticatorData as usize).to_vec();
-            let signature = from_raw_parts(a.pbSignature, a.cbSignature as usize).to_vec();
-
-            let credential_id =
-                from_raw_parts(a.Credential.pbId, a.Credential.cbId as usize).to_vec();
-            let type_ = a
-                .Credential
-                .pwszCredentialType
-                .to_string()
-                .map_err(|_| WebauthnCError::Internal)?;
-
-            let mut extensions = if a.dwVersion >= 2 {
-                native_to_assertion_extensions(&a.Extensions)?
+        let user_id = unsafe {
+            if a.pbUserId.is_null() || a.cbUserId == 0 || a.cbUserId > 0xffff {
+                None
             } else {
-                Default::default()
-            };
-            extensions.appid = Some(app_id_used.into());
+                Some(from_raw_parts(a.pbUserId, a.cbUserId as usize))
+            }
+        };
 
-            Ok(PublicKeyCredential {
-                id: BASE64_ENGINE.encode(&credential_id),
-                raw_id: credential_id.into(),
-                response: AuthenticatorAssertionResponseRaw {
-                    authenticator_data: authenticator_data.into(),
-                    client_data_json: Base64UrlSafeData::from(
-                        clientdata.client_data_json().as_bytes().to_vec(),
-                    ),
-                    signature: signature.into(),
-                    user_handle: Some(user_id.into()),
-                },
-                type_,
-                extensions,
-            })
-        }
+        let authenticator_data = unsafe {
+            if a.pbAuthenticatorData.is_null()
+                || a.cbAuthenticatorData == 0
+                || a.cbAuthenticatorData > 0xffff
+            {
+                &[]
+            } else {
+                from_raw_parts(a.pbAuthenticatorData, a.cbAuthenticatorData as usize)
+            }
+        };
+
+        let signature = unsafe {
+            if a.pbSignature.is_null() || a.cbSignature == 0 || a.cbSignature > 0xffff {
+                &[]
+            } else {
+                from_raw_parts(a.pbSignature, a.cbSignature as usize)
+            }
+        };
+
+        let cred_id = unsafe {
+            if a.Credential.pbId.is_null() || a.Credential.cbId == 0 || a.Credential.cbId > 0xffff {
+                &[]
+            } else {
+                from_raw_parts(a.Credential.pbId, a.Credential.cbId as usize)
+            }
+        };
+
+        let type_: String = unsafe { a.Credential.pwszCredentialType.to_string() }
+            .map_err(|_| WebauthnCError::Internal)?;
+
+        let mut extensions = if a.dwVersion >= 2 {
+            native_to_assertion_extensions(&a.Extensions)?
+        } else {
+            Default::default()
+        };
+        extensions.appid = Some(app_id_used.into());
+
+        Ok(PublicKeyCredential {
+            id: BASE64_ENGINE.encode(cred_id),
+            raw_id: cred_id.into(),
+            response: AuthenticatorAssertionResponseRaw {
+                authenticator_data: authenticator_data.into(),
+                client_data_json: Base64UrlSafeData::from(
+                    clientdata.client_data_json().as_bytes().to_vec(),
+                ),
+                signature: signature.into(),
+                user_handle: user_id.map(Into::into),
+            },
+            type_,
+            extensions,
+        })
     }
 }
 
