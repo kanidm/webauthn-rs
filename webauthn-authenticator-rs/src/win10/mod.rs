@@ -101,8 +101,8 @@ impl Win10 {
     ///
     /// This may change at runtime if connecting to a Windows PC via RDP.
     ///
-    /// This function may return `true` on devices lacks a BTLE radio (needed to complete the caBLE
-    /// handshake).
+    /// This function may return `true` on devices without a BTLE radio (needed to complete the
+    /// caBLE handshake).
     pub fn supports_cable() -> bool {
         // According to Chromium:
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/win/webauthn_api.cc;l=339-341;drc=83434e88fd49da16e9a21957c564299b37a320af
