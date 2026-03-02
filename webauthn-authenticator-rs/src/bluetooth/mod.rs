@@ -38,8 +38,7 @@
 //!
 //! Windows' WebAuthn API (on Windows 10 build 1903 and later) blocks
 //! non-Administrator access to BTLE FIDO tokens, and will return "permission
-//! denied" errors when accessed via normal Bluetooth APIs. This does not impact
-//! use of caBLE authenticators.
+//! denied" errors when accessed via normal Bluetooth APIs.
 //!
 //! Use [Win10][crate::win10::Win10] (available with `--features win10`) on
 //! Windows instead.
