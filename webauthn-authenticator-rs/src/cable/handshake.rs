@@ -161,7 +161,7 @@ impl HandshakeV2 {
     pub fn to_qr_url(&self) -> Result<String, WebauthnCError> {
         let payload: Vec<u8> =
             serde_cbor_2::ser::to_vec_packed(self).map_err(|_| WebauthnCError::Cbor)?;
-        Ok(format!("{}{}", URL_PREFIX, base10::encode(&payload)))
+        Ok(format!("{URL_PREFIX}{}", base10::encode(&payload)))
     }
 
     /// Decodes a `FIDO:/` QR code into a [HandshakeV2].

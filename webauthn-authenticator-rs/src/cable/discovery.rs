@@ -184,7 +184,7 @@ impl Discovery {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=170;drc=de9f16dcca1d5057ba55973fa85a5b27423d414f
         let tunnel_id = hex::encode_upper(self.derive_tunnel_id()?);
         builder
-            .path_and_query(format!("/cable/new/{}", tunnel_id))
+            .path_and_query(format!("/cable/new/{tunnel_id}"))
             .build()
             .map_err(|e| {
                 error!("cannot build WebSocket tunnel URI: {e}");
@@ -375,7 +375,7 @@ impl Eid {
         let tunnel_id = hex::encode_upper(tunnel_id);
 
         builder
-            .path_and_query(format!("/cable/connect/{}/{}", routing_id, tunnel_id))
+            .path_and_query(format!("/cable/connect/{routing_id}/{tunnel_id}"))
             .build()
             .ok()
     }
@@ -387,7 +387,7 @@ impl Eid {
     //         Uri::builder()
     //             .scheme("wss")
     //             .authority(domain)
-    //             .path_and_query(format!("/cable/contact/{}", routing_id))
+    //             .path_and_query(format!("/cable/contact/{routing_id}"))
     //             .build()
     //             .ok()
     //     })

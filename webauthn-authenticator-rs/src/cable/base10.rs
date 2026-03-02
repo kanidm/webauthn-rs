@@ -53,7 +53,7 @@ pub fn encode(i: &[u8]) -> String {
         let mut chunk: [u8; 8] = [0; 8];
         chunk[0..chunk_len].copy_from_slice(c);
         let v = u64::from_le_bytes(chunk);
-        let _ = write!(out, "{:0width$}", v, width = w);
+        let _ = write!(out, "{v:0w$}");
         out
     })
 }
