@@ -36,22 +36,23 @@
 //!
 //! ### Transports and backends
 //!
-//! * `bluetooth`: [Bluetooth][] [^openssl]
-//! * `cable`: [caBLE / Hybrid Authenticator][cable] [^openssl]
+//! * `bluetooth`: [Bluetooth][] [^rustcrypto]
+//! * `cable`: [caBLE / Hybrid Authenticator][cable] [^rustcrypto]
 //!   * `cable-override-tunnel`: [Override caBLE tunnel server URLs][cable-url]
 //! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
-//! * `nfc`: [NFC][] via PC/SC API [^openssl]
-//! * `softpasskey`: [SoftPasskey][] (for testing) [^openssl]
+//! * `nfc`: [NFC][] via PC/SC API  [^rustcrypto]
+//! * `softpasskey`: [SoftPasskey][] (for testing) [^rustcrypto]
 //! * `softtoken`: [SoftToken][] (for testing) [^openssl]
-//! * `usb`: [USB HID][] [^openssl]
+//! * `usb`: [USB HID][] [^rustcrypto]
 //! * `win10`: [Windows 10][] WebAuthn API
 //!
 //! [^openssl]: Feature requires OpenSSL.
+//! [^rustcrypto]: Feature requires RustCrypto.
 //!
 //! ### Miscellaneous features
 //!
 //! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2]
-//!   [^openssl].
+//!   [^rustcrypto].
 //!
 //!   Automatically enabled by the `bluetooth`, `cable`, `ctap2-management`,
 //!   `nfc`, `softtoken` and `usb` features.
@@ -59,12 +60,16 @@
 //!   * `ctap2-management`: Adds support for configuring and managing CTAP 2.x
 //!     hardware authenticators to the [CTAP 2.x implementation][crate::ctap2].
 //!
-//! * `crypto`: Enables OpenSSL support [^openssl]. This allows the library to
-//!   avoid a hard dependency on OpenSSL on Windows, if only the `win10` backend
-//!   is enabled.
+//! * `crypto`: Enables a dependency on RustCrypto [^rustcrypto].
 //!
-//!   Automatically enabled by the `ctap2`, `softpasskey` and `softtoken`
-//!   features.
+//!   [This will eventually replace all usages of OpenSSL][no-openssl].
+//!
+//!   Automatically enabled by the `ctap2` and `softpasskey` features.
+//!
+//! * `crypto_openssl`: Enables a depenency on OpenSSL [^openssl].
+//!
+//!   Automatically enabled by the `softtoken` feature, but this
+//!   [will be replaced by RustCrypto][no-openssl].
 //!
 //! * `qrcode`: QR code display for the [Cli][] UI, recommended for use if the
 //!   `cable` and `ui-cli` features are both enabled
@@ -79,6 +84,7 @@
 //! [Cli]: crate::ui::Cli
 //! [Mozilla Authenticator]: crate::mozilla
 //! [NFC]: crate::nfc
+//! [no-openssl]: https://github.com/kanidm/webauthn-rs/issues/499
 //! [SoftPasskey]: crate::softpasskey
 //! [SoftToken]: crate::softtoken
 //! [USB HID]: crate::usb
@@ -105,6 +111,14 @@ extern crate num_derive;
 extern crate tracing;
 
 use crate::error::WebauthnCError;
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "ctap2",
+    feature = "mozilla",
+    feature = "softpasskey",
+    feature = "softtoken",
+    feature = "win10",
+))]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_ENGINE;
 use url::Url;
 
