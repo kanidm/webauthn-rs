@@ -54,9 +54,9 @@ members = [
 # Due to --cfg=web_sys_unstable_apis
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
-[patch.crates-io]
+# [patch.crates-io]
 # crypto-glue = { path = "../crypto-glue" }
-crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
+# crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
 
 [workspace.dependencies]
 # These are in release/dependency order.
@@ -79,7 +79,7 @@ anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
 
-crypto-glue = "^0.1.12"
+crypto-glue = "^0.1.13"
 compact_jwt = "0.5.1-dev"
 futures = "^0.3.25"
 hex = "0.4.3"
