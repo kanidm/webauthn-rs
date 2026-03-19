@@ -2,39 +2,38 @@
 use crate::stubs::*;
 
 use crate::{
-    authenticator_hashed::AuthenticatorBackendHashedClientData,
-    crypto::compute_sha256,
-    ctap2::commands::{value_to_vec_u8, GetInfoResponse},
-    error::WebauthnCError,
-    BASE64_ENGINE,
+    authenticator_hashed::AuthenticatorBackendHashedClientData, crypto::compute_sha256,
+    ctap2::commands::GetInfoResponse, error::WebauthnCError, BASE64_ENGINE,
 };
 use base64::Engine;
+use base64urlsafedata::Base64UrlSafeData;
 use crypto_glue::{
+    der::SecretDocument,
     ecdsa_p256::{
         self, EcdsaP256PrivateKey, EcdsaP256PublicEncodedPoint, EcdsaP256Signature,
-        EcdsaP256SigningKey,
+        EcdsaP256SigningKey, EcdsaP256VerifyingKey,
     },
+    ecdsa_p384::{EcdsaP384DerSignature, EcdsaP384SigningKey, EcdsaP384VerifyingKey},
+    pkcs8::PrivateKeyInfo,
     rand::{self, RngCore},
-    traits::{Signer, Zeroizing},
+    traits::{EncodeDer, Pkcs8EncodePrivateKey, Signer, Zeroizing},
+    x509::{
+        pkeyb64, uuid_to_serial, x509b64, Builder, Certificate, CertificateBuilder, Name, Profile,
+        SubjectPublicKeyInfoOwned, Time, Validity,
+    },
 };
-use openssl::x509::{
-    extension::{AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier},
-    X509NameBuilder, X509Ref, X509ReqBuilder, X509,
-};
-use openssl::{asn1, bn, ec, hash, nid, pkey, sign};
 use serde::{Deserialize, Serialize};
 use serde_cbor_2::value::Value;
 use std::collections::HashMap;
 use std::iter;
+use std::str::FromStr;
+use std::time::{Duration, SystemTime};
 use std::{collections::BTreeMap, fs::File, io::Read};
 use std::{
     collections::BTreeSet,
     io::{Seek, Write},
 };
 use uuid::Uuid;
-
-use base64urlsafedata::Base64UrlSafeData;
-
 use webauthn_rs_proto::{
     AllowCredentials, AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
     AuthenticatorAttachment, AuthenticatorAttestationResponseRaw, AuthenticatorTransport,
@@ -44,222 +43,173 @@ use webauthn_rs_proto::{
 
 pub const AAGUID: Uuid = uuid::uuid!("0fb9bcbc-a0d4-4042-bbb0-559bc1631e28");
 
+const CA_VALID_DAYS: u64 = 30;
+const CERT_VALID_DAYS: u64 = 5;
+
 #[derive(Serialize, Deserialize)]
 pub struct SoftToken {
-    #[serde(with = "PKeyPrivateDef")]
-    _ca_key: pkey::PKey<pkey::Private>,
-    #[serde(with = "X509Def")]
-    ca_cert: X509,
-    #[serde(with = "PKeyPrivateDef")]
-    intermediate_key: pkey::PKey<pkey::Private>,
-    #[serde(with = "X509Def")]
-    intermediate_cert: X509,
+    #[serde(with = "x509b64")]
+    ca_cert: Certificate,
+    #[serde(with = "pkeyb64")]
+    intermediate_key: SecretDocument,
+    #[serde(with = "x509b64")]
+    intermediate_cert: Certificate,
     tokens: HashMap<Vec<u8>, Zeroizing<Vec<u8>>>,
     counter: u32,
     falsify_uv: bool,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "pkey::PKey<pkey::Private>")]
-struct PKeyPrivateDef {
-    #[serde(getter = "private_key_to_der")]
-    der: Value,
-}
+fn build_ca(unique_id: Uuid) -> Result<(EcdsaP384SigningKey, Certificate), WebauthnCError> {
+    let mut rng = rand::thread_rng();
+    let serial_number = uuid_to_serial(unique_id);
 
-fn private_key_to_der(k: &pkey::PKeyRef<pkey::Private>) -> Value {
-    Value::Bytes(
-        k.private_key_to_der()
-            .expect("Cannot convert private key to DER"),
+    let now = SystemTime::now();
+    let not_before = Time::try_from(now).map_err(|err| {
+        error!(?err, "Unable to convert system time");
+        WebauthnCError::CryptographyX509Builder
+    })?;
+    let not_after =
+        Time::try_from(now + Duration::from_secs(CA_VALID_DAYS * 86400)).map_err(|err| {
+            error!(?err, "Unable to convert system time");
+            WebauthnCError::CryptographyX509Builder
+        })?;
+
+    let validity = Validity {
+        not_before,
+        not_after,
+    };
+
+    let profile = Profile::Root;
+
+    let dn_str = format!(
+        "C=AU,ST=QLD,O=Webauthn Authenticator RS,CN=Dynamic Softtoken CA {}",
+        unique_id
+    );
+    let root_subject = Name::from_str(&dn_str).map_err(|err| {
+        error!(?err, "Invalid root subject DN - THIS IS A BUG.");
+        WebauthnCError::CryptographyX509Builder
+    })?;
+
+    let signing_key = EcdsaP384SigningKey::random(&mut rng);
+    let verifying_key = EcdsaP384VerifyingKey::from(&signing_key);
+    let pub_key = SubjectPublicKeyInfoOwned::from_key(verifying_key).map_err(|err| {
+        error!(?err, "Unable to access subject public key information");
+        WebauthnCError::CryptographyX509Builder
+    })?;
+
+    let builder = CertificateBuilder::new(
+        profile,
+        serial_number,
+        validity,
+        root_subject.clone(),
+        pub_key.clone(),
+        &signing_key,
     )
-}
+    .map_err(|err| {
+        error!(?err, "Unable to create certificate builder");
+        WebauthnCError::CryptographyX509Builder
+    })?;
 
-impl From<PKeyPrivateDef> for pkey::PKey<pkey::Private> {
-    fn from(def: PKeyPrivateDef) -> Self {
-        let b = value_to_vec_u8(def.der, "der").expect("Cannot deserialise private key");
-        Self::private_key_from_der(&b).expect("Cannot read private key as DER")
-    }
-}
+    let cert = builder
+        .build_with_rng::<EcdsaP384DerSignature>(&mut rng)
+        .map_err(|err| {
+            error!(?err, "Unable to sign certificate request");
+            WebauthnCError::CryptographyX509Builder
+        })?;
 
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "X509")]
-struct X509Def {
-    #[serde(getter = "x509_to_der")]
-    der: Value,
-}
-
-fn x509_to_der(k: &X509Ref) -> Value {
-    Value::Bytes(k.to_der().expect("Cannot convert certificate to DER"))
-}
-
-impl From<X509Def> for X509 {
-    fn from(def: X509Def) -> Self {
-        let b = value_to_vec_u8(def.der, "der").expect("Cannot deserialise certificate");
-        Self::from_der(&b).expect("Cannot read certificate as DER")
-    }
-}
-
-fn build_ca(unique_id: Uuid) -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
-    let eckey = ec::EcKey::generate(&ecgroup)?;
-    let ca_key = pkey::PKey::from_ec_key(eckey)?;
-    let mut x509_name = X509NameBuilder::new()?;
-
-    x509_name.append_entry_by_text("C", "AU")?;
-    x509_name.append_entry_by_text("ST", "QLD")?;
-    x509_name.append_entry_by_text("O", "Webauthn Authenticator RS")?;
-    // we have to insert a unique ID here so that the subject name is unique to allow verification
-    // with a ca-store to work correctly.
-    x509_name.append_entry_by_text("CN", format!("Dynamic Softtoken CA {}", unique_id).as_str())?;
-    let x509_name = x509_name.build();
-
-    let mut cert_builder = X509::builder()?;
-    // Yes, 2 actually means 3 here ...
-    cert_builder.set_version(2)?;
-
-    let serial_number = bn::BigNum::from_u32(1).and_then(|serial| serial.to_asn1_integer())?;
-
-    cert_builder.set_serial_number(&serial_number)?;
-    cert_builder.set_subject_name(&x509_name)?;
-    cert_builder.set_issuer_name(&x509_name)?;
-
-    let not_before = asn1::Asn1Time::days_from_now(0)?;
-    cert_builder.set_not_before(&not_before)?;
-    let not_after = asn1::Asn1Time::days_from_now(1)?;
-    cert_builder.set_not_after(&not_after)?;
-
-    cert_builder.append_extension(BasicConstraints::new().critical().ca().build()?)?;
-    cert_builder.append_extension(
-        KeyUsage::new()
-            .critical()
-            .key_cert_sign()
-            .crl_sign()
-            .build()?,
-    )?;
-
-    let subject_key_identifier =
-        SubjectKeyIdentifier::new().build(&cert_builder.x509v3_context(None, None))?;
-    cert_builder.append_extension(subject_key_identifier)?;
-
-    cert_builder.set_pubkey(&ca_key)?;
-
-    cert_builder.sign(&ca_key, hash::MessageDigest::sha256())?;
-    let ca_cert = cert_builder.build();
-
-    Ok((ca_key, ca_cert))
+    Ok((signing_key, cert))
 }
 
 fn build_intermediate(
-    ca_key: &pkey::PKeyRef<pkey::Private>,
-    ca_cert: &X509Ref,
-) -> Result<(pkey::PKey<pkey::Private>, X509), WebauthnCError> {
-    let ecgroup = ec::EcGroup::from_curve_name(nid::Nid::X9_62_PRIME256V1)?;
-    let eckey = ec::EcKey::generate(&ecgroup)?;
-    let int_key = pkey::PKey::from_ec_key(eckey)?;
+    ca_key: &EcdsaP384SigningKey,
+    ca_cert: &Certificate,
+    unique_id: Uuid,
+) -> Result<(EcdsaP256SigningKey, Certificate), WebauthnCError> {
+    let mut rng = rand::thread_rng();
 
-    //
-    let mut req_builder = X509ReqBuilder::new()?;
-    req_builder.set_pubkey(&int_key)?;
+    let root_serial_uuid = Uuid::new_v4();
+    let serial_number = uuid_to_serial(root_serial_uuid);
 
-    let mut x509_name = X509NameBuilder::new()?;
-    x509_name.append_entry_by_text("C", "AU")?;
-    x509_name.append_entry_by_text("ST", "QLD")?;
-    x509_name.append_entry_by_text("O", "Webauthn Authenticator RS")?;
-    x509_name.append_entry_by_text("CN", "Dynamic Softtoken Leaf Certificate")?;
-    // Requirement of packed attestation.
-    x509_name.append_entry_by_text("OU", "Authenticator Attestation")?;
-    let x509_name = x509_name.build();
+    let now = SystemTime::now();
+    let not_before = Time::try_from(now).map_err(|err| {
+        error!(?err, "Unable to convert system time");
+        WebauthnCError::CryptographyX509Builder
+    })?;
+    let not_after =
+        Time::try_from(now + Duration::from_secs(CERT_VALID_DAYS * 86400)).map_err(|err| {
+            error!(?err, "Unable to convert system time");
+            WebauthnCError::CryptographyX509Builder
+        })?;
 
-    req_builder.set_subject_name(&x509_name)?;
-    req_builder.sign(&int_key, hash::MessageDigest::sha256())?;
-    let req = req_builder.build();
-    // ==
+    let validity = Validity {
+        not_before,
+        not_after,
+    };
 
-    let mut cert_builder = X509::builder()?;
-    // Yes, 2 actually means 3 here ...
-    cert_builder.set_version(2)?;
-    let serial_number = bn::BigNum::from_u32(2).and_then(|serial| serial.to_asn1_integer())?;
+    let profile = Profile::Leaf {
+        issuer: ca_cert.tbs_certificate.subject.clone(),
+        enable_key_agreement: true,
+        enable_key_encipherment: true,
+        include_subject_key_identifier: true,
+    };
 
-    cert_builder.set_pubkey(&int_key)?;
+    // NOTE: OU=Authenticator Attestation is a requirement of "Packed" attestation.
+    let dn_str = format!(
+        "C=AU,ST=QLD,O=Webauthn Authenticator RS,CN=Token {},OU=Authenticator Attestation",
+        unique_id
+    );
+    let root_subject = Name::from_str(&dn_str).map_err(|err| {
+        error!(?err, "Invalid cert subject DN - THIS IS A BUG.");
+        WebauthnCError::CryptographyX509Builder
+    })?;
 
-    cert_builder.set_serial_number(&serial_number)?;
-    cert_builder.set_subject_name(req.subject_name())?;
-    cert_builder.set_issuer_name(ca_cert.subject_name())?;
+    let signing_key = EcdsaP256SigningKey::random(&mut rng);
+    let verifying_key = EcdsaP256VerifyingKey::from(&signing_key);
+    let pub_key = SubjectPublicKeyInfoOwned::from_key(verifying_key).map_err(|err| {
+        error!(?err, "Unable to access subject public key information");
+        WebauthnCError::CryptographyX509Builder
+    })?;
 
-    let not_before = asn1::Asn1Time::days_from_now(0)?;
-    cert_builder.set_not_before(&not_before)?;
-    let not_after = asn1::Asn1Time::days_from_now(1)?;
-    cert_builder.set_not_after(&not_after)?;
+    let builder = CertificateBuilder::new(
+        profile,
+        serial_number,
+        validity,
+        root_subject.clone(),
+        pub_key.clone(),
+        ca_key,
+    )
+    .map_err(|err| {
+        error!(?err, "Unable to create certificate builder");
+        WebauthnCError::CryptographyX509Builder
+    })?;
 
-    cert_builder.append_extension(BasicConstraints::new().build()?)?;
+    let cert = builder
+        .build_with_rng::<EcdsaP384DerSignature>(&mut rng)
+        .map_err(|err| {
+            error!(?err, "Unable to sign certificate request");
+            WebauthnCError::CryptographyX509Builder
+        })?;
 
-    cert_builder.append_extension(
-        KeyUsage::new()
-            .critical()
-            .non_repudiation()
-            .digital_signature()
-            .key_encipherment()
-            .build()?,
-    )?;
-
-    let subject_key_identifier =
-        SubjectKeyIdentifier::new().build(&cert_builder.x509v3_context(Some(ca_cert), None))?;
-    cert_builder.append_extension(subject_key_identifier)?;
-
-    let auth_key_identifier = AuthorityKeyIdentifier::new()
-        .keyid(false)
-        .issuer(false)
-        .build(&cert_builder.x509v3_context(Some(ca_cert), None))?;
-    cert_builder.append_extension(auth_key_identifier)?;
-
-    /*
-    let subject_alt_name = SubjectAlternativeName::new()
-        .dns("*.example.com")
-        .dns("hello.com")
-        .build(&cert_builder.x509v3_context(Some(ca_cert), None))?;
-    cert_builder.append_extension(subject_alt_name)?;
-    */
-
-    cert_builder.sign(ca_key, hash::MessageDigest::sha256())?;
-    let int_cert = cert_builder.build();
-
-    Ok((int_key, int_cert))
+    Ok((signing_key, cert))
 }
 
 impl SoftToken {
-    pub fn new(falsify_uv: bool) -> Result<(Self, X509), WebauthnCError> {
+    pub fn new(falsify_uv: bool) -> Result<(Self, Certificate), WebauthnCError> {
         let ca_uuid = Uuid::new_v4();
 
         let (ca_key, ca_cert) = build_ca(ca_uuid)?;
 
         let ca = ca_cert.clone();
-        /*
-        // Disabled as older openssl versions can't provide this.
-        trace!(
-            "{}",
-            String::from_utf8_lossy(&ca.to_text().map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?)
-        );
-        */
 
-        let (intermediate_key, intermediate_cert) = build_intermediate(&ca_key, &ca_cert)?;
+        let (intermediate_key, intermediate_cert) = build_intermediate(&ca_key, &ca_cert, ca_uuid)?;
 
-        /*
-        // Disabled as older openssl versions can't provide this.
-        trace!(
-            "{}",
-            String::from_utf8_lossy(&intermediate_cert.to_text().map_err(|e| {
-                error!("OpenSSL Error -> {:?}", e);
-                WebauthnCError::OpenSSL
-            })?)
-        );
-        */
+        let intermediate_key = intermediate_key.to_pkcs8_der().map_err(|err| {
+            error!(?err, "Unable to encode private key as pkcs8");
+            WebauthnCError::CryptographyX509Builder
+        })?;
 
         Ok((
             SoftToken {
-                // We could consider throwing these away?
-                _ca_key: ca_key,
                 ca_cert,
                 intermediate_key,
                 intermediate_cert,
@@ -552,13 +502,26 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
 
         // Now setup to sign.
         // NOTE: for the token version we use the intermediate!
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &self.intermediate_key)?;
+        let private_key_info =
+            PrivateKeyInfo::try_from(self.intermediate_key.as_bytes()).map_err(|err| {
+                error!(?err, "Unable to decode private key pkcs8");
+                WebauthnCError::CryptographyPkcs8
+            })?;
 
-        // Do the signature
-        let signature = signer
-            .update(verification_data.as_slice())
-            .and_then(|_| signer.sign_to_vec())?;
+        let signing_key = EcdsaP256SigningKey::try_from(private_key_info).map_err(|err| {
+            error!(?err, "Unable to convert pkcs8 private key to ecdsa p256");
+            WebauthnCError::CryptographyPkcs8
+        })?;
 
+        let signature = signing_key
+            .try_sign(verification_data.as_slice())
+            .map(|signature: EcdsaP256Signature| signature.to_der().as_bytes().to_vec())
+            .map_err(|err| {
+                error!(?err, "Unable to sign verification data");
+                WebauthnCError::CryptographyEcdsaSignature
+            })?;
+
+        // Build the cbor attestation map.
         let mut attest_map = BTreeMap::new();
 
         attest_map.insert(
@@ -568,7 +531,10 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         let mut att_stmt_map = BTreeMap::new();
         att_stmt_map.insert(Value::Text("alg".to_string()), Value::Integer(-7));
 
-        let x509_bytes = Value::Bytes(self.intermediate_cert.to_der()?);
+        let x509_bytes = Value::Bytes(self.intermediate_cert.to_der().map_err(|err| {
+            error!(?err, "Unable to convert certificate to DER");
+            WebauthnCError::Cbor
+        })?);
 
         att_stmt_map.insert(
             Value::Text("x5c".to_string()),
@@ -850,18 +816,6 @@ impl AuthenticatorBackendHashedClientData for SoftTokenFile {
 #[allow(clippy::panic)]
 mod tests {
     use super::*;
-    use openssl::{hash::MessageDigest, rand::rand_bytes, sign::Verifier, x509::X509};
-    use std::time::Duration;
-    use tempfile::tempfile;
-    use webauthn_rs_core::{
-        proto::{AttestationCaList, AttestationCaListBuilder, COSEKey},
-        WebauthnCore as Webauthn,
-    };
-    use webauthn_rs_proto::{
-        AllowCredentials, AttestationConveyancePreference, COSEAlgorithm, PubKeyCredParams,
-        RelyingParty, User, UserVerificationPolicy,
-    };
-
     use crate::{
         ctap2::{
             commands::{
@@ -873,6 +827,17 @@ mod tests {
         perform_auth_with_request, perform_register_with_request,
         prelude::{Url, WebauthnAuthenticator},
         softtoken::SoftToken,
+    };
+    use crypto_glue::{traits::DecodeDer, x509::x509_verify_signature};
+    use std::time::Duration;
+    use tempfile::tempfile;
+    use webauthn_rs_core::{
+        proto::{AttestationCaList, AttestationCaListBuilder, COSEKey},
+        WebauthnCore as Webauthn,
+    };
+    use webauthn_rs_proto::{
+        AllowCredentials, AttestationConveyancePreference, PubKeyCredParams, RelyingParty, User,
+        UserVerificationPolicy,
     };
 
     const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
@@ -1036,12 +1001,14 @@ mod tests {
 
     #[test]
     fn perform_register_auth_with_command() {
+        let mut rng = rand::thread_rng();
+
         let _ = tracing_subscriber::fmt::try_init();
         let (mut soft_token, _) = SoftToken::new(true).unwrap();
         let mut client_data_hash = vec![0; 32];
         let mut user_id = vec![0; 16];
-        rand_bytes(&mut client_data_hash).unwrap();
-        rand_bytes(&mut user_id).unwrap();
+        rng.fill_bytes(&mut client_data_hash);
+        rng.fill_bytes(&mut user_id);
 
         let request = MakeCredentialRequest {
             client_data_hash: client_data_hash.clone(),
@@ -1109,8 +1076,7 @@ mod tests {
             panic!("Unexpected type");
         };
         let x5c = value_to_vec_u8(x5c[0].to_owned(), "x5c[0]").unwrap();
-        let verification_cert = X509::from_der(&x5c).unwrap();
-        let pubkey = verification_cert.public_key().unwrap();
+        let verification_cert = Certificate::from_der(&x5c).unwrap();
 
         // Reconstruct verification data (auth_data + client_data_hash)
         let mut verification_data =
@@ -1119,10 +1085,7 @@ mod tests {
         verification_data.reserve(client_data_hash.len());
         verification_data.extend_from_slice(&client_data_hash);
 
-        let mut verifier = Verifier::new(MessageDigest::sha256(), &pubkey).unwrap();
-        assert!(verifier
-            .verify_oneshot(&signature, &verification_data)
-            .unwrap());
+        assert!(x509_verify_signature(&verification_data, &signature, &verification_cert).is_ok());
 
         // https://www.w3.org/TR/webauthn-2/#attestation-object
         let cred_id_off = /* rp_id_hash */ 32 + /* flags */ 1 + /* counter */ 4 + /* aaguid */ 16;
@@ -1142,7 +1105,7 @@ mod tests {
         .unwrap();
         let cose_key = COSEKey::try_from(&cose_key).unwrap();
 
-        rand_bytes(&mut client_data_hash).unwrap();
+        rng.fill_bytes(&mut client_data_hash);
         let request = GetAssertionRequest {
             client_data_hash: client_data_hash.clone(),
             rp_id: "example.com".to_string(),
