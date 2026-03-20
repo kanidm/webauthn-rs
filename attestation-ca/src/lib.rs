@@ -119,7 +119,7 @@ impl AttestationCa {
 
     /// Retrieve the Key Identifier for this Attestation Ca
     pub fn get_kid(&self) -> Result<Sha256Output, Error> {
-        x509::x509_digest_sha256(&self.ca).map_err(|err| {
+        x509::x509_digest_cert_sha256(&self.ca).map_err(|err| {
             error!(?err, "Unable to encode certificate for digest");
             Error::DerEncode(err)
         })
@@ -325,7 +325,7 @@ impl AttestationCaListBuilder {
         desc_english: String,
         desc_localised: BTreeMap<String, String>,
     ) -> Result<(), Error> {
-        let kid = x509::x509_digest_sha256(&ca).map_err(|err| {
+        let kid = x509::x509_digest_cert_sha256(&ca).map_err(|err| {
             error!(?err, "Unable to encode certificate for digest");
             Error::DerEncode(err)
         })?;
