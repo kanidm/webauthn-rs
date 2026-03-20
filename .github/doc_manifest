@@ -1,7 +1,6 @@
 # Manifest for check_built_docs.sh
 # Paths are relative to target/doc/
 
-authenticator_cli/index.html
 base64urlsafedata/index.html
 fido_mds/index.html
 fido_mds_tool/index.html
