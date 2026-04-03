@@ -856,7 +856,7 @@ mod tests {
 
         let (soft_token, ca_root) = SoftToken::new(true).unwrap();
 
-        let mut wa = WebauthnAuthenticator::new(soft_token);
+        let mut wa = soft_token;
 
         let unique_id = [
             158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
@@ -926,10 +926,8 @@ mod tests {
 
         let (soft_token, ca_root) = SoftToken::new(true).unwrap();
         let file = tempfile().unwrap();
-        let soft_token = SoftTokenFile::new(soft_token, file);
-        assert_eq!(soft_token.token.tokens.len(), 0);
-
-        let mut wa = WebauthnAuthenticator::new(soft_token);
+        let mut wa = SoftTokenFile::new(soft_token, file);
+        assert_eq!(wa.token.tokens.len(), 0);
 
         let unique_id = [
             158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
@@ -966,19 +964,17 @@ mod tests {
 
         info!("Credential -> {:?}", cred);
 
-        assert_eq!(wa.backend.token.tokens.len(), 1);
+        assert_eq!(wa.token.tokens.len(), 1);
 
         // Save the credential to disk
-        let mut file: File = wa.backend.try_into().unwrap();
+        let mut file: File = wa.try_into().unwrap();
         assert!(file.stream_position().unwrap() > 0);
 
         // Rewind and reload
         file.rewind().unwrap();
 
-        let soft_token = SoftTokenFile::open(file).unwrap();
-        assert_eq!(soft_token.token.tokens.len(), 1);
-
-        let mut wa = WebauthnAuthenticator::new(soft_token);
+        let mut wa = SoftTokenFile::open(file).unwrap();
+        assert_eq!(wa.token.tokens.len(), 1);
 
         let (chal, auth_state) = wan
             .new_challenge_authenticate_builder(vec![cred], None)
