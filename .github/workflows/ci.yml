@@ -145,7 +145,7 @@ jobs:
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
 
-      - run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
+      - run: cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},crypto,ui-cli -- --help
 
       # caBLE-specific examples.
       - if: contains(matrix.features, 'cable')
