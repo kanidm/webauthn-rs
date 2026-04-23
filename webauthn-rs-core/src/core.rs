@@ -310,7 +310,7 @@ impl WebauthnCore {
                     id: self.rp_id.clone(),
                 },
                 user: User {
-                    id: user_unique_id.into(),
+                    id: user_unique_id,
                     name: user_name,
                     display_name: user_display_name,
                 },
@@ -349,7 +349,7 @@ impl WebauthnCore {
         let wr = RegistrationState {
             policy,
             exclude_credentials: exclude_credentials.unwrap_or_else(|| Vec::with_capacity(0)),
-            challenge: challenge.into(),
+            challenge,
             credential_algorithms,
             // We can potentially enforce these!
             require_resident_key,
@@ -394,7 +394,7 @@ impl WebauthnCore {
             extensions,
             allow_synchronised_authenticators,
         } = state;
-        let chal: ChallengeRef = &challenge;
+        let chal: ChallengeRef = challenge;
         let current_time = SystemTime::now();
 
         // send to register_credential_internal
@@ -476,7 +476,7 @@ impl WebauthnCore {
 
         // Verify that the value of C.challenge matches the challenge that was sent to the
         // authenticator in the create() call.
-        if data.client_data_json.challenge.as_slice() != chal.as_ref() {
+        if data.client_data_json.challenge.as_slice() != chal {
             return Err(WebauthnError::MismatchedChallenge);
         }
 
@@ -847,20 +847,18 @@ impl WebauthnCore {
         // We also check the historical policy too. See designs/authentication-use-cases.md
 
         match (&policy, &cred.registration_policy) {
-            (_, UserVerificationPolicy::Required) | (UserVerificationPolicy::Required, _) => {
+            (_, UserVerificationPolicy::Required) | (UserVerificationPolicy::Required, _)
                 // If we requested required at registration or now, enforce that.
-                if !data.authenticator_data.user_verified {
+                if !data.authenticator_data.user_verified => {
                     return Err(WebauthnError::UserNotVerified);
                 }
-            }
-            (_, UserVerificationPolicy::Preferred) => {
+            (_, UserVerificationPolicy::Preferred)
                 // If we asked for Preferred at registration, we MAY have established to the user
                 // that they are required to enter a pin, so we SHOULD enforce this.
-                if cred.user_verified && !data.authenticator_data.user_verified {
+                if cred.user_verified && !data.authenticator_data.user_verified => {
                     debug!("Token registered UV=preferred, enforcing UV policy.");
                     return Err(WebauthnError::UserNotVerified);
                 }
-            }
             // Pass - we can not know if verification was requested to the client in the past correctly.
             // This means we can't know what it's behaviour is at the moment.
             // We must allow unverified tokens now.
@@ -1025,7 +1023,7 @@ impl WebauthnCore {
         let st = AuthenticationState {
             credentials: creds,
             policy,
-            challenge: chal.into(),
+            challenge: chal,
             appid,
             allow_backup_eligible_upgrade,
         };
@@ -1059,7 +1057,7 @@ impl WebauthnCore {
             appid,
             allow_backup_eligible_upgrade,
         } = state;
-        let chal: ChallengeRef = &chal;
+        let chal: ChallengeRef = chal;
 
         // If the allowCredentials option was given when this authentication ceremony was initiated,
         // verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.

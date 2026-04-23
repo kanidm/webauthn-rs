@@ -129,11 +129,11 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
             if let COSEKeyType::EC_EC2(e) = v.key {
                 // This uses the special type of COSE key for PinUvToken
                 let m = BTreeMap::from([
-                    (Value::Integer(1), Value::Integer(2)),         // kty
-                    (Value::Integer(3), Value::Integer(-25)),       // alg
-                    (Value::Integer(-1), Value::Integer(1)),        // crv
-                    (Value::Integer(-2), Value::Bytes(e.x.into())), // x
-                    (Value::Integer(-3), Value::Bytes(e.y.into())), // y
+                    (Value::Integer(1), Value::Integer(2)),   // kty
+                    (Value::Integer(3), Value::Integer(-25)), // alg
+                    (Value::Integer(-1), Value::Integer(1)),  // crv
+                    (Value::Integer(-2), Value::Bytes(e.x)),  // x
+                    (Value::Integer(-3), Value::Bytes(e.y)),  // y
                 ]);
 
                 keys.insert(0x03, Value::Map(m));
@@ -201,8 +201,8 @@ impl TryFrom<BTreeMap<u32, Value>> for ClientPinResponse {
                         type_: COSEAlgorithm::PinUvProtocol,
                         key: COSEKeyType::EC_EC2(COSEEC2Key {
                             curve: ECDSACurve::SECP256R1,
-                            x: x.to_vec().into(),
-                            y: y.to_vec().into(),
+                            x: x.to_vec(),
+                            y: y.to_vec(),
                         }),
                     })
                 }),

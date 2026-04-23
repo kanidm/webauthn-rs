@@ -394,7 +394,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
         Ok(AuthenticatorAttestationResponse {
             attestation_object: ao,
             client_data_json: ccdj,
-            client_data_json_bytes: aarr.client_data_json.clone().into(),
+            client_data_json_bytes: aarr.client_data_json.clone(),
             transports: aarr.transports.clone(),
         })
     }
@@ -417,12 +417,12 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
     fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
         Ok(AuthenticatorAssertionResponse {
             authenticator_data: AuthenticatorData::try_from(aarr.authenticator_data.as_ref())?,
-            authenticator_data_bytes: aarr.authenticator_data.clone().into(),
+            authenticator_data_bytes: aarr.authenticator_data.clone(),
             client_data: serde_json::from_slice(aarr.client_data_json.as_ref())
                 .map_err(WebauthnError::ParseJSONFailure)?,
-            client_data_bytes: aarr.client_data_json.clone().into(),
-            signature: aarr.signature.clone().into(),
-            _user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
+            client_data_bytes: aarr.client_data_json.clone(),
+            signature: aarr.signature.clone(),
+            _user_handle: aarr.user_handle.clone(),
         })
     }
 }

@@ -237,8 +237,8 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
                 type_,
                 key: COSEKeyType::EC_EC2(COSEEC2Key {
                     curve,
-                    x: x.to_vec().into(),
-                    y: y.to_vec().into(),
+                    x: x.to_vec(),
+                    y: y.to_vec(),
                 }),
             };
 
@@ -281,7 +281,7 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             let cose_key = COSEKey {
                 type_,
                 key: COSEKeyType::RSA(COSERSAKey {
-                    n: n.to_vec().into(),
+                    n: n.to_vec(),
                     e: e_temp,
                 }),
             };
@@ -327,7 +327,7 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
                 type_,
                 key: COSEKeyType::EC_OKP(COSEOKPKey {
                     curve,
-                    x: x.to_vec().into(),
+                    x: x.to_vec(),
                 }),
             };
 
@@ -371,8 +371,8 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key {
                     curve: ECDSACurve::SECP256R1,
-                    x: xbn.into(),
-                    y: ybn.into(),
+                    x: xbn,
+                    y: ybn,
                 }))
             }
 
@@ -392,8 +392,8 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key {
                     curve: ECDSACurve::SECP384R1,
-                    x: xbn.into(),
-                    y: ybn.into(),
+                    x: xbn,
+                    y: ybn,
                 }))
             }
             COSEAlgorithm::ES521 => {
@@ -412,8 +412,8 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
 
                 Ok(COSEKeyType::EC_EC2(COSEEC2Key {
                     curve: ECDSACurve::SECP521R1,
-                    x: xbn.into(),
-                    y: ybn.into(),
+                    x: xbn,
+                    y: ybn,
                 }))
             }
 

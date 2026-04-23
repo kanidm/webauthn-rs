@@ -109,7 +109,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 
         let mut user_map = BTreeMap::new();
         // info!("{:?}", id);
-        user_map.insert(Value::Text("id".to_string()), Value::Bytes(id.into()));
+        user_map.insert(Value::Text("id".to_string()), Value::Bytes(id));
         user_map.insert(Value::Text("name".to_string()), Value::Text(name));
         user_map.insert(
             Value::Text("displayName".to_string()),

@@ -208,10 +208,10 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
 
         RegisterPublicKeyCredential {
             id: BASE64_ENGINE.encode(&data_raw_id),
-            raw_id: data_raw_id.into(),
+            raw_id: data_raw_id,
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: data_response_attestation_object.into(),
-                client_data_json: data_response_client_data_json.into(),
+                attestation_object: data_response_attestation_object,
+                client_data_json: data_response_client_data_json,
                 transports,
             },
             type_: "public-key".to_string(),

@@ -141,7 +141,7 @@ impl FakeCredentialIDDistribution for FakePasskeyDistribution {
             let mut cred = vec![0; cred_len];
             seeded_rng.fill_bytes(&mut cred);
 
-            credentials.push(cred.into());
+            credentials.push(cred);
         } else {
             for _i in 0..creds_to_generate {
                 let type_dist = seeded_rng.next_u32();
@@ -165,7 +165,7 @@ impl FakeCredentialIDDistribution for FakePasskeyDistribution {
                 let mut cred = vec![0; cred_len];
                 seeded_rng.fill_bytes(&mut cred);
 
-                credentials.push(cred.into());
+                credentials.push(cred);
             }
         }
 

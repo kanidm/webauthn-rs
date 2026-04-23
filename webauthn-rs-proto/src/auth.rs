@@ -221,12 +221,12 @@ impl From<web_sys::PublicKeyCredential> for PublicKeyCredential {
 
         PublicKeyCredential {
             id: BASE64_ENGINE.encode(&data_raw_id),
-            raw_id: data_raw_id.into(),
+            raw_id: data_raw_id,
             response: AuthenticatorAssertionResponseRaw {
-                authenticator_data: data_response_authenticator_data.into(),
-                client_data_json: data_response_client_data_json.into(),
-                signature: data_response_signature.into(),
-                user_handle: data_response_user_handle.map(Into::into),
+                authenticator_data: data_response_authenticator_data,
+                client_data_json: data_response_client_data_json,
+                signature: data_response_signature,
+                user_handle: data_response_user_handle,
             },
             extensions: data_extensions.into(),
             type_: "public-key".to_string(),

@@ -171,8 +171,8 @@ impl TryFrom<&EcdsaP256PublicKey> for COSEEC2Key {
 
         Ok(COSEEC2Key {
             curve: ECDSACurve::SECP256R1,
-            x: public_key_x.into(),
-            y: public_key_y.into(),
+            x: public_key_x,
+            y: public_key_y,
         })
     }
 }

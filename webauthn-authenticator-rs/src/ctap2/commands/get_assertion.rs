@@ -183,10 +183,7 @@ impl From<GetAssertionResponse> for BTreeMap<u32, Value> {
         let mut keys = BTreeMap::new();
         if let Some(credential) = credential {
             let mut m = BTreeMap::from([
-                (
-                    Value::Text("id".to_string()),
-                    Value::Bytes(credential.id.into()),
-                ),
+                (Value::Text("id".to_string()), Value::Bytes(credential.id)),
                 (
                     Value::Text("type".to_string()),
                     Value::Text(credential.type_),
