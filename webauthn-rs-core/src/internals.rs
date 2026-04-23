@@ -3,120 +3,28 @@
 
 use crate::error::WebauthnError;
 use crate::proto::*;
-use base64urlsafedata::{Base64UrlSafeData, HumanBinaryData};
 use nom::bytes::complete::{tag, take};
 use nom::combinator::cond;
 use nom::combinator::{map_opt, verify};
 use nom::error::ParseError;
 use nom::number::complete::{be_u16, be_u32, be_u64};
 use serde::Deserialize;
-use std::borrow::Borrow;
-use std::ops::Deref;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Challenge(Vec<u8>);
+pub type Challenge = Vec<u8>;
 
-impl Challenge {
-    /// Creates a new Challenge from a vector of bytes.
-    pub(crate) fn new(challenge: Vec<u8>) -> Self {
-        Challenge(challenge)
-    }
-}
-
-impl From<Challenge> for HumanBinaryData {
-    fn from(chal: Challenge) -> Self {
-        HumanBinaryData::from(chal.0)
-    }
-}
-
-impl From<Challenge> for Base64UrlSafeData {
-    fn from(chal: Challenge) -> Self {
-        Base64UrlSafeData::from(chal.0)
-    }
-}
-
-impl From<HumanBinaryData> for Challenge {
-    fn from(d: HumanBinaryData) -> Self {
-        Challenge(d.into())
-    }
-}
-
-impl<'a> From<&'a HumanBinaryData> for &'a ChallengeRef {
-    fn from(d: &'a HumanBinaryData) -> Self {
-        ChallengeRef::new(d.as_slice())
-    }
-}
-
-impl ToOwned for ChallengeRef {
-    type Owned = Challenge;
-
-    fn to_owned(&self) -> Self::Owned {
-        Challenge(self.0.to_vec())
-    }
-}
-
-impl AsRef<[u8]> for ChallengeRef {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl Deref for ChallengeRef {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl Borrow<ChallengeRef> for Challenge {
-    fn borrow(&self) -> &ChallengeRef {
-        ChallengeRef::new(&self.0)
-    }
-}
-
-impl AsRef<ChallengeRef> for Challenge {
-    fn as_ref(&self) -> &ChallengeRef {
-        ChallengeRef::new(&self.0)
-    }
-}
-
-impl Deref for Challenge {
-    type Target = ChallengeRef;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-/// A reference to the [Challenge] issued by the server.
-/// This contains a set of random bytes.
-///
-/// [ChallengeRef] is the `?Sized` type that corresponds to [Challenge]
-/// in the same way that [`&[u8]`] corresponds to [`Vec<u8>`].
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[repr(transparent)]
-pub struct ChallengeRef([u8]);
-
-impl ChallengeRef {
-    /// Creates a new ChallengeRef from a slice
-    pub fn new(challenge: &[u8]) -> &ChallengeRef {
-        // SAFETY
-        // Because of #[repr(transparent)], [u8] is guaranteed to have the same representation as ChallengeRef.
-        // This allows safe casting between *const pointers of these types.
-        unsafe { &*(challenge as *const [u8] as *const ChallengeRef) }
-    }
-}
+/// A reference to a challenge issued by the server. This contains a set of random bytes.
+pub type ChallengeRef<'a> = &'a [u8];
 
 impl PartialEq<Credential> for Credential {
     fn eq(&self, c: &Credential) -> bool {
         self.cred_id == c.cred_id
     }
 }
+
 #[allow(clippy::too_many_arguments)]
 impl Credential {
     pub(crate) fn new(
@@ -313,7 +221,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
         i,
         AttestedCredentialData {
             aaguid,
-            credential_id: HumanBinaryData::from(cred_id.to_vec()),
+            credential_id: cred_id.to_vec(),
             credential_pk: cred_pk,
         },
     ))

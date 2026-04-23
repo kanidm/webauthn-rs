@@ -12,7 +12,6 @@ use crate::{
     BASE64_ENGINE,
 };
 use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
 use futures::executor::block_on;
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, AuthenticatorAssertionResponseRaw,
@@ -504,7 +503,7 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
                 name: "SELECTION".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData::from(vec![0]),
+                id: vec![0],
                 name: "SELECTION".to_string(),
                 display_name: "SELECTION".to_string(),
             },
@@ -623,12 +622,12 @@ impl<T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
 
         Ok(RegisterPublicKeyCredential {
             id,
-            raw_id: Base64UrlSafeData::from(cred_id),
+            raw_id: cred_id,
             type_,
             extensions: RegistrationExtensionsClientOutputs::default(), // TODO
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: Base64UrlSafeData::from(raw),
-                client_data_json: Base64UrlSafeData::new(),
+                attestation_object: raw,
+                client_data_json: Vec::default(),
                 // All transports the token supports, as opposed to the
                 // transport which was actually used.
                 transports: self.info.get_transports(),
@@ -680,16 +679,15 @@ impl<T: Token, U: UiCallback> AuthenticatorBackendHashedClientData
             .credential
             .map(|c| c.type_)
             .ok_or(WebauthnCError::Cbor)?;
-        let signature = Base64UrlSafeData::from(ret.signature.ok_or(WebauthnCError::Cbor)?);
-        let authenticator_data =
-            Base64UrlSafeData::from(ret.auth_data.ok_or(WebauthnCError::Cbor)?);
+        let signature = ret.signature.ok_or(WebauthnCError::Cbor)?;
+        let authenticator_data = ret.auth_data.ok_or(WebauthnCError::Cbor)?;
 
         Ok(PublicKeyCredential {
             id: BASE64_ENGINE.encode(&raw_id),
             raw_id,
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data,
-                client_data_json: Base64UrlSafeData::new(),
+                client_data_json: Vec::default(),
                 signature,
                 // TODO
                 user_handle: None,

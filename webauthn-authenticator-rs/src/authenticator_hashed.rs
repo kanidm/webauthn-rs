@@ -2,9 +2,6 @@
 #[cfg(feature = "ctap2")]
 use std::collections::BTreeMap;
 
-#[cfg(any(feature = "ctap2", feature = "crypto"))]
-use base64urlsafedata::Base64UrlSafeData;
-
 #[cfg(feature = "ctap2")]
 use serde_cbor_2::{ser::to_vec_packed, Value};
 #[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
@@ -106,7 +103,7 @@ impl<T: AuthenticatorBackendHashedClientData> AuthenticatorBackend for T {
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
         let mut cred = self.perform_register(client_data_hash, options, timeout_ms)?;
-        cred.response.client_data_json = Base64UrlSafeData::from(client_data);
+        cred.response.client_data_json = client_data;
 
         Ok(cred)
     }
@@ -123,7 +120,7 @@ impl<T: AuthenticatorBackendHashedClientData> AuthenticatorBackend for T {
             .into();
         let client_data_hash = compute_sha256(&client_data).to_vec();
         let mut cred = self.perform_auth(client_data_hash, options, timeout_ms)?;
-        cred.response.client_data_json = Base64UrlSafeData::from(client_data);
+        cred.response.client_data_json = client_data;
         Ok(cred)
     }
 }
@@ -146,7 +143,7 @@ pub fn perform_register_with_request(
     let options = PublicKeyCredentialCreationOptions {
         rp: request.rp,
         user: request.user,
-        challenge: Base64UrlSafeData::new(),
+        challenge: Vec::default(),
         pub_key_cred_params: request.pub_key_cred_params,
         timeout: Some(timeout_ms),
         exclude_credentials: Some(request.exclude_list),
@@ -189,7 +186,7 @@ pub fn perform_auth_with_request(
     timeout_ms: u32,
 ) -> Result<Vec<u8>, WebauthnCError> {
     let options = PublicKeyCredentialRequestOptions {
-        challenge: Base64UrlSafeData::new(),
+        challenge: Vec::default(),
         timeout: Some(timeout_ms),
         rp_id: request.rp_id,
         allow_credentials: request.allow_list,

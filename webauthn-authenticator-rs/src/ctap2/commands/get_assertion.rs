@@ -1,4 +1,3 @@
-use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 use serde_cbor_2::Value;
 use std::{collections::BTreeMap, str::FromStr};
@@ -143,10 +142,8 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionRequest {
                                 a.remove(&Value::Text("type".to_string()))?,
                                 "type",
                             )?;
-                            let id = Base64UrlSafeData::from(value_to_vec_u8(
-                                a.remove(&Value::Text("id".to_string()))?,
-                                "id",
-                            )?);
+                            let id =
+                                value_to_vec_u8(a.remove(&Value::Text("id".to_string()))?, "id")?;
                             let transports = a
                                 .remove(&Value::Text("transports".to_string()))
                                 .and_then(|v| value_to_vec_string(v, "transports"))
@@ -236,8 +233,7 @@ impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
                 if let Value::Map(mut v) = v {
                     let id = v
                         .remove(&Value::Text("id".to_string()))
-                        .and_then(|v| value_to_vec_u8(v, "0x01.id"))
-                        .map(Base64UrlSafeData::from);
+                        .and_then(|v| value_to_vec_u8(v, "0x01.id"));
                     let type_ = v
                         .remove(&Value::Text("type".to_string()))
                         .and_then(|v| value_to_string(v, "0x01.type"));

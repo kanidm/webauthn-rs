@@ -1,21 +1,27 @@
 //! Types related to authentication (Assertion)
 
-#[cfg(feature = "wasm")]
-use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
-use serde::{Deserialize, Serialize};
-
 use crate::extensions::{AuthenticationExtensionsClientOutputs, RequestAuthenticationExtensions};
 use crate::options::*;
+use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
+
 #[cfg(feature = "wasm")]
 use crate::BASE64_ENGINE;
+#[cfg(feature = "wasm")]
+use base64::Engine;
 
 /// The requested options for the authentication
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialRequestOptions {
     /// The challenge that should be signed by the authenticator.
-    pub challenge: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub challenge: Vec<u8>,
     /// The timeout for the authenticator in case of no interaction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
@@ -117,22 +123,27 @@ impl From<RequestChallengeResponse> for web_sys::CredentialRequestOptions {
 }
 
 /// <https://w3c.github.io/webauthn/#authenticatorassertionresponse>
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AuthenticatorAssertionResponseRaw {
     /// Raw authenticator data.
     #[serde(rename = "authenticatorData")]
-    pub authenticator_data: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub authenticator_data: Vec<u8>,
 
     /// Signed client data.
     #[serde(rename = "clientDataJSON")]
-    pub client_data_json: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub client_data_json: Vec<u8>,
 
     /// Signature
-    pub signature: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub signature: Vec<u8>,
 
     /// Optional userhandle.
     #[serde(rename = "userHandle")]
-    pub user_handle: Option<Base64UrlSafeData>,
+    #[serde_as(as = "Option<IfIsHumanReadable<Base64<UrlSafe, Unpadded>>>")]
+    pub user_handle: Option<Vec<u8>>,
 }
 
 /// A client response to an authentication challenge. This contains all required
@@ -141,13 +152,15 @@ pub struct AuthenticatorAssertionResponseRaw {
 ///
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PublicKeyCredential {
     /// The credential Id, likely base64
     pub id: String,
     /// The binary of the credential id.
     #[serde(rename = "rawId")]
-    pub raw_id: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub raw_id: Vec<u8>,
     /// The authenticator response.
     pub response: AuthenticatorAssertionResponseRaw,
     /// Unsigned Client processed extensions.

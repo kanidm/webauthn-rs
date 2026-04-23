@@ -30,7 +30,6 @@ danger-credential-internals = []
 danger-user-presence-only-security-keys = []
 
 [dependencies]
-base64urlsafedata.workspace = true
 webauthn-rs-core.workspace = true
 url = { workspace = true, features = ["serde"] }
 tracing.workspace = true
