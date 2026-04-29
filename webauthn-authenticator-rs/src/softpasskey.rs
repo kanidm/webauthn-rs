@@ -6,7 +6,6 @@ use crate::crypto::compute_sha256;
 use crate::error::WebauthnCError;
 use crate::BASE64_ENGINE;
 use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
 use crypto_glue::{
     ecdsa_p256::{
         self, EcdsaP256PrivateKey, EcdsaP256PublicEncodedPoint, EcdsaP256Signature,
@@ -355,7 +354,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
             raw_id: key_handle.into(),
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: ao_bytes.into(),
-                client_data_json: Base64UrlSafeData::new(),
+                client_data_json: Vec::new(),
                 transports: None,
             },
             type_: "public-key".to_string(),
@@ -411,7 +410,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
             raw_id: u2sd.key_handle.into(),
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: authdata.into(),
-                client_data_json: Base64UrlSafeData::new(),
+                client_data_json: Vec::new(),
                 signature: u2sd.signature.into(),
                 user_handle: None,
             },
@@ -458,7 +457,7 @@ impl U2FToken for SoftPasskey {
             .iter()
             .filter_map(|ac| {
                 self.tokens
-                    .get(ac.id.as_ref())
+                    .get(&ac.id)
                     .map(|v| (ac.id.clone().into(), v.clone()))
             })
             .take(1)
@@ -516,9 +515,7 @@ mod tests {
     use crate::prelude::{Url, WebauthnAuthenticator};
     use std::time::Duration;
     use webauthn_rs_core::WebauthnCore as Webauthn;
-    use webauthn_rs_proto::{
-        AttestationConveyancePreference, COSEAlgorithm, UserVerificationPolicy,
-    };
+    use webauthn_rs_proto::{AttestationConveyancePreference, UserVerificationPolicy};
 
     const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
 
