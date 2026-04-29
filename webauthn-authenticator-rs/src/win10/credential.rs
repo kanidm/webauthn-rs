@@ -142,7 +142,7 @@ impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
                 *l_ptr.add(i) = WEBAUTHN_CREDENTIAL_EX {
                     dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
                     cbId: id.len() as u32,
-                    pbId: id.as_mut().as_mut_ptr() as *mut _,
+                    pbId: id.as_mut_ptr() as *mut _,
                     pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
                     dwTransports: credential.transports(),
                 };
