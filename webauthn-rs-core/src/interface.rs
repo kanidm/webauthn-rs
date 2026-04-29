@@ -3,7 +3,6 @@
 
 use crate::attestation::verify_attestation_ca_chain;
 use crate::error::*;
-use base64urlsafedata::HumanBinaryData;
 use crypto_glue::{
     ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint, EcdsaP256PublicKey},
     traits::{DecodeDer, EncodeDer, FromEncodedPoint},
@@ -11,6 +10,11 @@ use crypto_glue::{
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable, PickFirst,
+};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::time::SystemTime;
@@ -19,7 +23,7 @@ use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
 use webauthn_rs_proto::options::*;
 
-pub use crate::internals::AttestationObject;
+pub use crate::internals::{AttestationObject, Challenge};
 pub use webauthn_attestation_ca::*;
 
 /// Representation of an AAGUID
@@ -32,11 +36,14 @@ pub type Counter = u32;
 /// The in progress state of a credential registration attempt. You must persist this in a server
 /// side location associated to the active session requesting the registration. This contains the
 /// user unique id which you can use to reference the user requesting the registration.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistrationState {
     pub(crate) policy: UserVerificationPolicy,
+    #[serde_as(as = "IfIsHumanReadable<Vec<Base64<UrlSafe, Unpadded>>>")]
     pub(crate) exclude_credentials: Vec<CredentialID>,
-    pub(crate) challenge: HumanBinaryData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub(crate) challenge: Challenge,
     pub(crate) credential_algorithms: Vec<COSEAlgorithm>,
     pub(crate) require_resident_key: bool,
     pub(crate) authenticator_attachment: Option<AuthenticatorAttachment>,
@@ -46,11 +53,13 @@ pub struct RegistrationState {
 
 /// The in progress state of an authentication attempt. You must persist this associated to the UserID
 /// requesting the registration.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthenticationState {
     pub(crate) credentials: Vec<Credential>,
     pub(crate) policy: UserVerificationPolicy,
-    pub(crate) challenge: HumanBinaryData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub(crate) challenge: Challenge,
     pub(crate) appid: Option<String>,
     pub(crate) allow_backup_eligible_upgrade: bool,
 }
@@ -131,14 +140,17 @@ impl ECDSACurve {
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
+#[serde_as]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEEC2Key {
     /// The curve that this key references.
     pub curve: ECDSACurve,
     /// The key's public X coordinate.
-    pub x: HumanBinaryData,
+    #[serde_as(as = "PickFirst<(IfIsHumanReadable<Base64<UrlSafe, Unpadded>>, _)>")]
+    pub x: Vec<u8>,
     /// The key's public Y coordinate.
-    pub y: HumanBinaryData,
+    #[serde_as(as = "PickFirst<(IfIsHumanReadable<Base64<UrlSafe, Unpadded>>, _)>")]
+    pub y: Vec<u8>,
 }
 
 impl TryFrom<&EcdsaP256PublicKey> for COSEEC2Key {
@@ -159,8 +171,8 @@ impl TryFrom<&EcdsaP256PublicKey> for COSEEC2Key {
 
         Ok(COSEEC2Key {
             curve: ECDSACurve::SECP256R1,
-            x: public_key_x.into(),
-            y: public_key_y.into(),
+            x: public_key_x,
+            y: public_key_y,
         })
     }
 }
@@ -194,22 +206,26 @@ impl TryFrom<&COSEEC2Key> for EcdsaP256PublicKey {
 /// that an authenticator registers, and is used to authenticate the user.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
+#[serde_as]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSEOKPKey {
     /// The curve that this key references.
     pub curve: EDDSACurve,
     /// The key's public X coordinate.
-    pub x: HumanBinaryData,
+    #[serde_as(as = "PickFirst<(IfIsHumanReadable<Base64<UrlSafe, Unpadded>>, _)>")]
+    pub x: Vec<u8>,
 }
 
 /// A COSE RSA PublicKey. This is a provided credential from a registered
 /// authenticator.
 /// You will likely never need to interact with this value, as it is part of the Credential
 /// API.
+#[serde_as]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct COSERSAKey {
     /// An RSA modulus
-    pub n: HumanBinaryData,
+    #[serde_as(as = "PickFirst<(IfIsHumanReadable<Base64<UrlSafe, Unpadded>>, _)>")]
+    pub n: Vec<u8>,
     /// An RSA exponent
     pub e: [u8; 3],
 }
@@ -279,16 +295,18 @@ impl TryFrom<&EcdsaP256PublicKey> for COSEKey {
 }
 
 /// The ID of this Credential
-pub type CredentialID = HumanBinaryData;
+pub type CredentialID = Vec<u8>;
 
 /// The current latest Credential Format
 pub type Credential = CredentialV5;
 
 /// A user's authenticator credential. It contains an id, the public key
 /// and a counter of how many times the authenticator has been used.
+#[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredentialV5 {
     /// The ID of this credential.
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
     pub cred_id: CredentialID,
     /// The public key of this credential
     pub cred: COSEKey,
@@ -360,7 +378,7 @@ impl From<CredentialV3> for Credential {
 
         // prior to 20220520 no multi-device credentials existed to migrate from.
         Credential {
-            cred_id: HumanBinaryData::from(cred_id),
+            cred_id,
             cred,
             counter,
             transports: None,
@@ -379,9 +397,11 @@ impl From<CredentialV3> for Credential {
 }
 
 /// A legacy serialisation from version 3 of Webauthn RS. Only useful for migrations.
+#[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CredentialV3 {
     /// The ID of this credential.
+    #[serde_as(as = "PickFirst<(IfIsHumanReadable<Base64<UrlSafe, Unpadded>>, _)>")]
     pub cred_id: Vec<u8>,
     /// The public key of this credential
     pub cred: COSEKey,
@@ -406,16 +426,17 @@ pub struct CredentialV3 {
 }
 
 /// Serialised Attestation Data which can be stored in a stable database or similar.
+#[serde_as]
 #[derive(Clone, Serialize, Deserialize)]
 pub enum SerialisableAttestationData {
     /// See [ParsedAttestationData::Basic]
-    Basic(Vec<HumanBinaryData>),
+    Basic(#[serde_as(as = "IfIsHumanReadable<Vec<Base64<UrlSafe, Unpadded>>>")] Vec<Vec<u8>>),
     /// See [ParsedAttestationData::Self_]
     Self_,
     /// See [ParsedAttestationData::AttCa]
-    AttCa(Vec<HumanBinaryData>),
+    AttCa(#[serde_as(as = "IfIsHumanReadable<Vec<Base64<UrlSafe, Unpadded>>>")] Vec<Vec<u8>>),
     /// See [ParsedAttestationData::AnonCa]
-    AnonCa(Vec<HumanBinaryData>),
+    AnonCa(#[serde_as(as = "IfIsHumanReadable<Vec<Base64<UrlSafe, Unpadded>>>")] Vec<Vec<u8>>),
     /// See [ParsedAttestationData::ECDAA]
     ECDAA,
     /// See [ParsedAttestationData::None]
@@ -466,6 +487,7 @@ impl Default for ParsedAttestation {
 
 /// The processed Attestation that the Authenticator is providing in its AttestedCredentialData. This
 /// metadata may allow identification of the device and its specific properties.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AttestationMetadata {
     /// no metadata available for this device.
@@ -499,7 +521,8 @@ pub enum AttestationMetadata {
         /// the name of apk that originated this key operation
         apk_package_name: String,
         /// cert chain for this apk
-        apk_certificate_digest_sha256: Vec<HumanBinaryData>,
+        #[serde_as(as = "IfIsHumanReadable<Vec<Base64<UrlSafe, Unpadded>>>")]
+        apk_certificate_digest_sha256: Vec<Vec<u8>>,
         /// A stricter verdict of device integrity. If the value of ctsProfileMatch is true, then the profile of the device running your app matches the profile of a device that has passed Android compatibility testing and has been approved as a Google-certified Android device.
         cts_profile_match: bool,
         /// A more lenient verdict of device integrity. If only the value of basicIntegrity is true, then the device running your app likely wasn't tampered with. However, the device hasn't necessarily passed Android compatibility testing.
@@ -545,7 +568,7 @@ impl Into<SerialisableAttestationData> for ParsedAttestationData {
             ParsedAttestationData::Basic(chain) => SerialisableAttestationData::Basic(
                 chain
                     .into_iter()
-                    .map(|c| HumanBinaryData::from(c.to_der().expect("Invalid DER")))
+                    .map(|c| c.to_der().expect("Invalid DER"))
                     .collect(),
             ),
             ParsedAttestationData::Self_ => SerialisableAttestationData::Self_,
@@ -553,14 +576,14 @@ impl Into<SerialisableAttestationData> for ParsedAttestationData {
                 // HumanBinaryData::from(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| HumanBinaryData::from(c.to_der().expect("Invalid DER")))
+                    .map(|c| c.to_der().expect("Invalid DER"))
                     .collect(),
             ),
             ParsedAttestationData::AnonCa(chain) => SerialisableAttestationData::AnonCa(
                 // HumanBinaryData::from(c.to_der().expect("Invalid DER")),
                 chain
                     .into_iter()
-                    .map(|c| HumanBinaryData::from(c.to_der().expect("Invalid DER")))
+                    .map(|c| c.to_der().expect("Invalid DER"))
                     .collect(),
             ),
             ParsedAttestationData::ECDAA => SerialisableAttestationData::ECDAA,
@@ -683,9 +706,11 @@ pub struct AttestedCredentialData {
 }
 
 /// Information about the authentication that occurred.
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticationResult {
     /// The credential ID that was used to authenticate.
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
     pub(crate) cred_id: CredentialID,
     /// If the credential associated needs updating
     pub(crate) needs_update: bool,

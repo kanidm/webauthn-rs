@@ -59,7 +59,6 @@ use crate::{
 };
 
 use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
 use webauthn_rs_proto::{
     AuthenticatorAssertionResponseRaw, AuthenticatorAttachment,
     AuthenticatorAttestationResponseRaw, PublicKeyCredential, PublicKeyCredentialCreationOptions,
@@ -238,9 +237,7 @@ impl AuthenticatorBackend for Win10 {
             extensions: native_to_registration_extensions(&a.Extensions)?,
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: attestation_object.into(),
-                client_data_json: Base64UrlSafeData::from(
-                    clientdata.client_data_json().as_bytes().to_vec(),
-                ),
+                client_data_json: clientdata.client_data_json().as_bytes().to_vec(),
                 transports: Some(native_to_transports(a.dwUsedTransport)),
             },
         })
@@ -393,9 +390,7 @@ impl AuthenticatorBackend for Win10 {
             raw_id: cred_id.into(),
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: authenticator_data.into(),
-                client_data_json: Base64UrlSafeData::from(
-                    clientdata.client_data_json().as_bytes().to_vec(),
-                ),
+                client_data_json: clientdata.client_data_json().as_bytes().to_vec(),
                 signature: signature.into(),
                 user_handle: user_id.map(Into::into),
             },
