@@ -136,7 +136,6 @@ impl CableFrame {
 mod test {
     use std::collections::BTreeMap;
 
-    use base64urlsafedata::Base64UrlSafeData;
     use serde_cbor_2::Value;
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
@@ -200,10 +199,10 @@ mod test {
                 id: "test.ctap".to_owned(),
             },
             user: User {
-                id: Base64UrlSafeData::from(vec![
+                id: vec![
                     43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80, 203, 110, 163, 198,
                     10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140, 112,
-                ]),
+                ],
                 name: "testctap@ctap.com".to_owned(),
                 display_name: "Test Ctap".to_owned(),
             },

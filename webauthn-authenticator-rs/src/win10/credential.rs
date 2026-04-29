@@ -1,6 +1,5 @@
 //! Wrappers for [AllowCredentials] and [PublicKeyCredentialDescriptor].
 use crate::prelude::WebauthnCError;
-use base64urlsafedata::Base64UrlSafeData;
 use std::pin::Pin;
 use webauthn_rs_proto::{AllowCredentials, AuthenticatorTransport, PublicKeyCredentialDescriptor};
 
@@ -75,13 +74,13 @@ pub struct WinCredentialList {
     /// List of credentials
     _l: Vec<WEBAUTHN_CREDENTIAL_EX>,
     /// List of credential IDs, referenced by [WEBAUTHN_CREDENTIAL_EX::pbId]
-    _ids: Vec<Base64UrlSafeData>,
+    _ids: Vec<Vec<u8>>,
 }
 
 /// Trait to make [PublicKeyCredentialDescriptor] and [AllowCredentials] look the same.
 trait CredentialType: std::fmt::Debug {
     fn type_(&self) -> String;
-    fn id(&self) -> Base64UrlSafeData;
+    fn id(&self) -> Vec<u8>;
     fn transports(&self) -> u32;
 }
 
@@ -89,7 +88,7 @@ impl CredentialType for PublicKeyCredentialDescriptor {
     fn type_(&self) -> String {
         self.type_.clone()
     }
-    fn id(&self) -> Base64UrlSafeData {
+    fn id(&self) -> Vec<u8> {
         self.id.clone()
     }
     fn transports(&self) -> u32 {
@@ -101,7 +100,7 @@ impl CredentialType for AllowCredentials {
     fn type_(&self) -> String {
         self.type_.clone()
     }
-    fn id(&self) -> Base64UrlSafeData {
+    fn id(&self) -> Vec<u8> {
         self.id.clone()
     }
     fn transports(&self) -> u32 {

@@ -10,7 +10,6 @@ use crate::Url;
 use crate::BASE64_ENGINE;
 
 use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
 use webauthn_rs_proto::PublicKeyCredentialCreationOptions;
 use webauthn_rs_proto::{
     AuthenticatorAttestationResponseRaw, RegisterPublicKeyCredential,
@@ -231,7 +230,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
         // been brought up with MS.
 
         let raw_id = if let Some(cred_data) = &attestation_object.auth_data.credential_data {
-            Base64UrlSafeData::from(cred_data.credential_id.clone())
+            cred_data.credential_id.clone()
         } else {
             return Err(WebauthnCError::PlatformAuthenticator);
         };
@@ -334,7 +333,7 @@ impl AuthenticatorBackend for MozillaAuthenticator {
 
         let raw_id = assertion
             .credentials
-            .map(|pkdesc| Base64UrlSafeData::from(pkdesc.id))
+            .map(|pkdesc| pkdesc.id)
             .ok_or(WebauthnCError::Internal)?;
 
         // let authenticator_data = serde_cbor_2::to_vec(&assertion.auth_data)
