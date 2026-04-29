@@ -44,10 +44,14 @@ pub fn get_group() -> Result<EcGroup, WebauthnCError> {
 /// Encrypts some data using AES-256-CBC, with no padding.
 ///
 /// `plaintext.len()` must be a multiple of the cipher's blocksize.
+///
+/// If `iv` is `None`, use an IV of all zeroes.
 pub fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
     let cipher = Cipher::aes_256_cbc();
     let mut ct = vec![0; plaintext.len() + cipher.block_size()];
-    let mut c = Crypter::new(cipher, Mode::Encrypt, key, iv)?;
+    // https://github.com/rust-openssl/rust-openssl/pull/2596/
+    let iv = iv.unwrap_or(&[0; 16]);
+    let mut c = Crypter::new(cipher, Mode::Encrypt, key, Some(iv))?;
     c.pad(false);
     let l = c.update(plaintext, &mut ct)?;
     let l = l + c.finalize(&mut ct[l..])?;
@@ -56,6 +60,8 @@ pub fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8
 }
 
 /// Decrypts some data using AES-256-CBC, with no padding.
+///
+/// If `iv` is `None`, use an IV of all zeroes.
 pub fn decrypt(
     key: &[u8],
     iv: Option<&[u8]>,
@@ -72,7 +78,9 @@ pub fn decrypt(
     }
 
     let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
-    let mut c = Crypter::new(cipher, Mode::Decrypt, key, iv)?;
+    // https://github.com/rust-openssl/rust-openssl/pull/2596/
+    let iv = iv.unwrap_or(&[0; 16]);
+    let mut c = Crypter::new(cipher, Mode::Decrypt, key, Some(iv))?;
     c.pad(false);
     let l = c.update(ciphertext, &mut pt)?;
     let l = l + c.finalize(&mut pt[l..])?;
