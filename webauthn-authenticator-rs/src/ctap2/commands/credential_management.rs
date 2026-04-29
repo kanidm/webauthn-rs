@@ -362,8 +362,6 @@ pub struct CredentialManagementResponse {
 impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!(?raw);
-
         // Parse the relying party field if present.
         let mut rp: Option<RelyingPartyCM> = if let Some(v) = raw.remove(&0x03) {
             Some(from_value(v).map_err(|e| {

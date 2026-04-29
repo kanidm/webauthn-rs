@@ -186,7 +186,6 @@ impl TryFrom<&[u8]> for Atr {
             } else {
                 let tlv = CompactTlv::new(tlv_payload);
                 for (t, v) in tlv {
-                    // trace!("tlv: {:02x?} = {:02x?}", t, v);
                     if t == 7 {
                         // 7816-4 §8.1.1.2.7 Card capabilities
                         if v.len() >= 3 {
