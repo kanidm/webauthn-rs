@@ -850,20 +850,22 @@ impl WebauthnCore {
         // We also check the historical policy too. See designs/authentication-use-cases.md
 
         match (&policy, &cred.registration_policy) {
-            (_, UserVerificationPolicy::Required) | (UserVerificationPolicy::Required, _) => {
-                // If we requested required at registration or now, enforce that.
-                if !data.authenticator_data.user_verified {
-                    return Err(WebauthnError::UserNotVerified);
-                }
+            // If we requested required at registration or now, enforce that.
+            (_, UserVerificationPolicy::Required) | (UserVerificationPolicy::Required, _)
+                if !data.authenticator_data.user_verified =>
+            {
+                return Err(WebauthnError::UserNotVerified);
             }
-            (_, UserVerificationPolicy::Preferred) => {
-                // If we asked for Preferred at registration, we MAY have established to the user
-                // that they are required to enter a pin, so we SHOULD enforce this.
-                if cred.user_verified && !data.authenticator_data.user_verified {
-                    debug!("Token registered UV=preferred, enforcing UV policy.");
-                    return Err(WebauthnError::UserNotVerified);
-                }
+
+            // If we asked for Preferred at registration, we MAY have established to the user
+            // that they are required to enter a pin, so we SHOULD enforce this.
+            (_, UserVerificationPolicy::Preferred)
+                if cred.user_verified && !data.authenticator_data.user_verified =>
+            {
+                debug!("Token registered UV=preferred, enforcing UV policy.");
+                return Err(WebauthnError::UserNotVerified);
             }
+
             // Pass - we can not know if verification was requested to the client in the past correctly.
             // This means we can't know what it's behaviour is at the moment.
             // We must allow unverified tokens now.
