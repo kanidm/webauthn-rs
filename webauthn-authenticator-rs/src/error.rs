@@ -23,8 +23,6 @@ pub enum WebauthnCError {
     Internal,
     #[error("A parser (nom) failure has occurred")]
     ParseNOMFailure,
-    #[error("OpenSSL error: {0}")]
-    OpenSSL(String),
     #[error("An APDU construction failure has occurred")]
     ApduConstruction,
     #[error("An APDU transmission failure has occurred")]
@@ -100,6 +98,42 @@ pub enum WebauthnCError {
     #[cfg(feature = "usb")]
     #[error("U2F error: {0:?}")]
     U2F(crate::transport::types::U2FError),
+
+    #[error("Unable to perform ECDH exchange")]
+    CryptographyEcdh,
+
+    #[error("Unable to perform COSE key operation or transformation")]
+    CryptographyCose,
+
+    #[error("An ECDSA private key contained invalid SEC1 bytes")]
+    CryptographyEcdsaSec1Invalid,
+
+    #[error("Unable to perform ECDSA signature")]
+    CryptographyEcdsaSignature,
+
+    #[error("Invalid HMAC Key")]
+    CryptographyHmacKey,
+
+    #[error("Unable to decrypt cipher text")]
+    CryptographyAes256CbcDecrypt,
+
+    #[error("Unable to expand hkdf key")]
+    CryptographyHkdfExpand,
+
+    #[error("AEAD error")]
+    CryptographyAeadError,
+
+    #[error("Invalid public key")]
+    CryptographyPublicKey,
+
+    #[error("X509 certificate creation failed")]
+    CryptographyX509Builder,
+
+    #[error("Pkcs8 data was not valid")]
+    CryptographyPkcs8,
+
+    #[error("Random generator error: {0}")]
+    Rand(String),
 }
 
 #[cfg(feature = "nfc")]
@@ -131,13 +165,6 @@ impl From<crate::transport::iso7816::Error> for WebauthnCError {
             DataTooLong => WebauthnCError::MessageTooLarge,
             _ => WebauthnCError::Internal,
         }
-    }
-}
-
-#[cfg(feature = "crypto")]
-impl From<openssl::error::ErrorStack> for WebauthnCError {
-    fn from(v: openssl::error::ErrorStack) -> Self {
-        Self::OpenSSL(v.to_string())
     }
 }
 
@@ -176,6 +203,12 @@ impl From<btleplug::Error> for WebauthnCError {
 impl From<crate::transport::types::U2FError> for WebauthnCError {
     fn from(value: crate::transport::types::U2FError) -> Self {
         Self::U2F(value)
+    }
+}
+
+impl From<crypto_glue::rand::Error> for WebauthnCError {
+    fn from(value: crypto_glue::rand::Error) -> Self {
+        Self::Rand(value.to_string())
     }
 }
 

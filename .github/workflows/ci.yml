@@ -55,12 +55,6 @@ jobs:
           sudo apt-get update && \
           sudo apt-get -y install libdbus-1-dev libpcsclite-dev libudev-dev libusb-1.0-0-dev
 
-      - if: runner.os == 'windows'
-        uses: johnwason/vcpkg-action@v4
-        with:
-          pkgs: openssl
-          triplet: x64-windows-static-md
-          token: ${{ github.token }}
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
       - run: cargo build --workspace --exclude webauthn-authenticator-rs --exclude actix_web --exclude web_authn --exclude tide-server
@@ -208,8 +202,7 @@ jobs:
         run: |
           cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
 
-      # caBLE-specific examples. The "cable" feature requires OpenSSL, so this
-      # always OK to run on Windows.
+      # caBLE-specific examples.
       - if: contains(matrix.features, 'cable')
         run: |
           cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
@@ -304,11 +297,5 @@ jobs:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.9
-      - if: runner.os == 'windows'
-        uses: johnwason/vcpkg-action@v4
-        with:
-          pkgs: openssl
-          triplet: x64-windows-static-md
-          token: ${{ github.token }}
 
       - run: cargo build -p actix_tutorial -p axum_tutorial -p tide_tutorial

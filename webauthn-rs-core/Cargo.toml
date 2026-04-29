@@ -21,19 +21,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 base64.workspace = true
-base64urlsafedata.workspace = true
+crypto-glue.workspace = true
 hex.workspace = true
 webauthn-attestation-ca.workspace = true
 webauthn-rs-proto.workspace = true
 serde.workspace = true
 serde_cbor_2.workspace = true
 serde_json.workspace = true
+serde_with.workspace = true
 nom.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-openssl.workspace = true
-openssl-sys.workspace = true
-# We could consider replacing this with openssl rand.
 rand.workspace = true
 rand_chacha.workspace = true
 url = { workspace = true, features = ["serde"] }

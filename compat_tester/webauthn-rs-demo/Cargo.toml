@@ -16,6 +16,7 @@ webauthn-rs-core.workspace = true
 webauthn-rs = { workspace = true, features = ["conditional-ui", "attestation", "resident-key-support", "danger-allow-state-serialisation"] }
 
 tide = "0.16"
+tide-rustls = "0.3.0"
 tokio.workspace = true
 
 structopt = { version = "0.3", default-features = false }
@@ -29,7 +30,3 @@ serde.workspace = true
 webauthn-rs-device-catalog =  { workspace = true }
 fido-mds = { workspace = true }
 reqwest = { version = "0.12", default-features = false, features = [ "rustls-tls-native-roots" ] }
-
-[dependencies.tide-openssl]
-git = "https://github.com/victorcwai/tide-openssl.git"
-rev = "7d0e2215f2f1ebfa71aa30d132213ed45dd95cbf"

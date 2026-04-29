@@ -3,89 +3,62 @@
 use crate::stubs::*;
 
 #[cfg(any(doc, feature = "cable"))]
-use openssl::{
-    bn::BigNumContext,
-    ec::{EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
-};
-use openssl::{
-    ec::{EcGroup, EcKey},
-    md::Md,
-    nid::Nid,
-    pkey::{Id, PKey, Private, Public},
-    pkey_ctx::PkeyCtx,
-    sha::Sha256,
-    symm::{Cipher, Crypter, Mode},
+use crypto_glue::ecdh_p256::EcdhP256PublicKey;
+use crypto_glue::{
+    aes256::Aes256Key,
+    aes256cbc::{
+        Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
+    },
+    block_padding::NoPadding,
+    hkdf_s256::HkdfSha256,
+    s256::{Sha256, Sha256Output},
+    traits::Digest,
 };
 
 use crate::error::WebauthnCError;
 
-pub type SHA256Hash = [u8; 32];
-
-pub fn compute_sha256(data: &[u8]) -> SHA256Hash {
+pub fn compute_sha256(data: &[u8]) -> Sha256Output {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    hasher.finish()
+    hasher.finalize()
 }
 
 #[cfg(feature = "cable")]
 /// Computes the SHA256 of `a || b`.
-pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> SHA256Hash {
+pub fn compute_sha256_2(a: &[u8], b: &[u8]) -> Sha256Output {
     let mut hasher = Sha256::new();
     hasher.update(a);
     hasher.update(b);
-    hasher.finish()
-}
-
-/// Gets an [EcGroup] for P-256
-pub fn get_group() -> Result<EcGroup, WebauthnCError> {
-    Ok(EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?)
+    hasher.finalize()
 }
 
 /// Encrypts some data using AES-256-CBC, with no padding.
 ///
 /// `plaintext.len()` must be a multiple of the cipher's blocksize.
-///
-/// If `iv` is `None`, use an IV of all zeroes.
-pub fn encrypt(key: &[u8], iv: Option<&[u8]>, plaintext: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
-    let cipher = Cipher::aes_256_cbc();
-    let mut ct = vec![0; plaintext.len() + cipher.block_size()];
-    // https://github.com/rust-openssl/rust-openssl/pull/2596/
-    let iv = iv.unwrap_or(&[0; 16]);
-    let mut c = Crypter::new(cipher, Mode::Encrypt, key, Some(iv))?;
-    c.pad(false);
-    let l = c.update(plaintext, &mut ct)?;
-    let l = l + c.finalize(&mut ct[l..])?;
-    ct.truncate(l);
-    Ok(ct)
+pub fn encrypt(
+    key: &Aes256Key,
+    iv: &Aes256CbcIv,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, WebauthnCError> {
+    let enc = Aes256CbcEnc::new(key, iv);
+
+    let ciphertext = enc.encrypt_padded_vec_mut::<NoPadding>(plaintext);
+
+    Ok(ciphertext)
 }
 
 /// Decrypts some data using AES-256-CBC, with no padding.
 ///
 /// If `iv` is `None`, use an IV of all zeroes.
 pub fn decrypt(
-    key: &[u8],
-    iv: Option<&[u8]>,
+    key: &Aes256Key,
+    iv: &Aes256CbcIv,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>, WebauthnCError> {
-    let cipher = Cipher::aes_256_cbc();
-    if !ciphertext.len().is_multiple_of(cipher.block_size()) {
-        error!(
-            "ciphertext length {} is not a multiple of {} bytes",
-            ciphertext.len(),
-            cipher.block_size()
-        );
-        return Err(WebauthnCError::Internal);
-    }
+    let enc = Aes256CbcDec::new(key, iv);
 
-    let mut pt = vec![0; ciphertext.len() + cipher.block_size()];
-    // https://github.com/rust-openssl/rust-openssl/pull/2596/
-    let iv = iv.unwrap_or(&[0; 16]);
-    let mut c = Crypter::new(cipher, Mode::Decrypt, key, Some(iv))?;
-    c.pad(false);
-    let l = c.update(ciphertext, &mut pt)?;
-    let l = l + c.finalize(&mut pt[l..])?;
-    pt.truncate(l);
-    Ok(pt)
+    enc.decrypt_padded_vec_mut::<NoPadding>(ciphertext)
+        .map_err(|_| WebauthnCError::CryptographyAes256CbcDecrypt)
 }
 
 pub fn hkdf_sha_256(
@@ -94,73 +67,28 @@ pub fn hkdf_sha_256(
     info: Option<&[u8]>,
     output: &mut [u8],
 ) -> Result<(), WebauthnCError> {
-    let mut ctx = PkeyCtx::new_id(Id::HKDF)?;
-    ctx.derive_init()?;
-    ctx.set_hkdf_md(Md::sha256())?;
-    ctx.set_hkdf_salt(salt)?;
-    ctx.set_hkdf_key(ikm)?;
-    if let Some(info) = info {
-        ctx.add_hkdf_info(info)?;
-    }
-    ctx.derive(Some(output))?;
-    Ok(())
-}
+    let hk = HkdfSha256::new(Some(salt), ikm);
 
-/// Generate a fresh, random P-256 private key
-pub fn regenerate() -> Result<EcKey<Private>, WebauthnCError> {
-    let ecgroup = get_group()?;
-    let eckey = EcKey::generate(&ecgroup)?;
-    Ok(eckey)
-}
+    let empty: &[u8] = &[];
 
-pub fn ecdh(
-    private_key: EcKey<Private>,
-    peer_key: EcKey<Public>,
-    output: &mut [u8],
-) -> Result<(), WebauthnCError> {
-    let peer_key = PKey::from_ec_key(peer_key)?;
-    let pkey = PKey::from_ec_key(private_key)?;
-    let mut ctx = PkeyCtx::new(&pkey)?;
-    ctx.derive_init()?;
-    ctx.derive_set_peer(&peer_key)?;
-    ctx.derive(Some(output))?;
+    let info = info.unwrap_or(empty);
+
+    hk.expand(info, output)
+        .map_err(|_| WebauthnCError::CryptographyHkdfExpand)?;
     Ok(())
 }
 
 #[cfg(any(doc, feature = "cable"))]
 /// Reads `buf` as a compressed or uncompressed P-256 key.
-pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcKey<Public>, WebauthnCError> {
-    let group = get_group()?;
-    let mut ctx = BigNumContext::new()?;
-    let point = EcPoint::from_bytes(&group, buf, &mut ctx)?;
-    Ok(EcKey::from_public_key(&group, &point)?)
-}
-
-#[cfg(any(doc, feature = "cable"))]
-/// Converts a P-256 `point` into compressed or uncompressed bytes.
-pub fn point_to_bytes(point: &EcPointRef, compressed: bool) -> Result<Vec<u8>, WebauthnCError> {
-    let group = get_group()?;
-    let mut ctx = BigNumContext::new()?;
-    Ok(point.to_bytes(
-        &group,
-        if compressed {
-            PointConversionForm::COMPRESSED
-        } else {
-            PointConversionForm::UNCOMPRESSED
-        },
-        &mut ctx,
-    )?)
-}
-
-#[cfg(any(doc, feature = "cable"))]
-/// Gets the public key for a private `key`.
-pub fn public_key_from_private(key: &EcKeyRef<Private>) -> Result<EcKey<Public>, WebauthnCError> {
-    Ok(EcKey::from_public_key(key.group(), key.public_key())?)
+pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcdhP256PublicKey, WebauthnCError> {
+    EcdhP256PublicKey::from_sec1_bytes(buf).map_err(|_| WebauthnCError::CryptographyPublicKey)
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod test {
     use super::*;
+    use crypto_glue::ecdh_p256;
 
     #[test]
     fn hkdf() {
@@ -202,4 +130,169 @@ mod test {
         hkdf_sha_256(&ck, &[], None, &mut actual).unwrap();
         assert_eq!(expected, actual);
     }
+
+    /// Test using ECDH with ourselves and fully-random keys.
+    #[test]
+    fn ecdh_p256_basic() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let alice_secret = ecdh_p256::new_secret();
+        let alice_pub = alice_secret.public_key();
+
+        let bob_secret = ecdh_p256::new_secret();
+        let bob_pub = bob_secret.public_key();
+        assert_ne!(alice_pub, bob_pub);
+
+        let alice_out = alice_secret.diffie_hellman(&bob_pub);
+        let bob_out = bob_secret.diffie_hellman(&alice_pub);
+        assert_eq!(alice_out.raw_secret_bytes(), bob_out.raw_secret_bytes());
+    }
+
+    /// Test using ECDH with static keys.
+    #[test]
+    fn ecdh_expected() {
+        use crypto_glue::{
+            ecdh_p256::EcdhP256EphemeralSecret, ecdsa_p256::EcdsaP256NonZeroScalar,
+            traits::ToEncodedPoint,
+        };
+
+        let alice_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x13\xeaL\xe1\xd1\xff\xb3\xc2\x88\\\x8eb 0[\xe8a\x92\x1d\xee\xdd\x17\xca:\x171\xae\xbf\x8c\xf0\xdc\xb8").into()).unwrap();
+        let bob_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x84\x0ed:\x90\xee\xb9}\xc8\xb4\xb5\x12\x03\x8b\xc5~\xe1\x13\x04\xceZ\x9d,\xfd\xd6F\x13\xea\xb0\x96?q").into()).unwrap();
+
+        // We need our secrets to be constant for testing. EphemeralSecret is a wrapper for
+        // NonZeroScalar, so we can transmute it directly.
+        let alice_secret: EcdhP256EphemeralSecret = unsafe { std::mem::transmute(alice_secret) };
+        let bob_secret: EcdhP256EphemeralSecret = unsafe { std::mem::transmute(bob_secret) };
+
+        // Check that we can get the same pubkey from either side:
+        let alice_pub = alice_secret.public_key();
+        let alice_pub_point = alice_pub.to_encoded_point(false);
+        assert_eq!(alice_pub_point.as_bytes(), b"\x04\xa5\x99\xe0\xdd{\x1a\xa3m0\x98\x80R\x1a\xc2\x8b\xbe\xc3A\x81\x91W$\x055\x16\xe5\xb0\tF\x86\xe8`\xaf\xe6.\x98\xf5:\x99\xf1\xb4\x1cai\x96\xb0e\x83\x8c&\x12*\xfd,~\x14\xb8\xf8q9-\xd1\x18\xed");
+
+        let bob_pub = bob_secret.public_key();
+        let bob_pub_point = bob_pub.to_encoded_point(false);
+        assert_eq!(bob_pub_point.as_bytes(), b"\x04\xe3F/\xe9\xd6\x8e\xb5L\xc9!\x14w\x0cs8z)\xcc)\r\x87]\x829fC \xf7>\xe5\x07b\x8b\xe8\xfd\xdd\0\xd66\x9d\x11\xfe\xec\xe4Z\x0c\xf4\xc3e#\x19\xc5\xa0\x81\x19\xe7\xd8}}\xd3a\xea\x9a\x12");
+
+        // Now lets do ECDH (like caBLE), and check that Alice came up with our expected secret:
+        let alice_out = alice_secret.diffie_hellman(&bob_pub);
+        assert_eq!(alice_out.raw_secret_bytes().as_slice(), b"\xeeom\xee\xac\x9a\xbc9\xaf\x97g\x83\x11\x87!\x19\x86\xc0D\xc8\x93\xde\xb8wG\x19\xfe\xecy\xe5\x19z");
+
+        // And repeat the process for Bob:
+        let bob_out = alice_secret.diffie_hellman(&bob_pub);
+        assert_eq!(alice_out.raw_secret_bytes(), bob_out.raw_secret_bytes());
+    }
+
+    /*
+    #[test]
+    fn ecdh_p256_openssl() {
+        use openssl::{
+            bn::{BigNum, BigNumContext},
+            ec::{EcGroup, EcKey, EcKeyRef, EcPoint, EcPointRef, PointConversionForm},
+            nid::Nid,
+            pkey::{PKey, Private, Public},
+            pkey_ctx::PkeyCtx,
+        };
+
+        fn get_group() -> Result<EcGroup, WebauthnCError> {
+            Ok(EcGroup::from_curve_name(Nid::X9_62_PRIME256V1)?)
+        }
+
+        fn regenerate() -> Result<EcKey<Private>, WebauthnCError> {
+            let ecgroup = get_group()?;
+            let eckey = EcKey::generate(&ecgroup)?;
+            Ok(eckey)
+        }
+
+        fn ecdh_openssl(
+            private_key: EcKey<Private>,
+            peer_key: EcKey<Public>,
+            output: &mut [u8],
+        ) -> Result<(), WebauthnCError> {
+            let peer_key = PKey::from_ec_key(peer_key)?;
+            let pkey = PKey::from_ec_key(private_key)?;
+            let mut ctx = PkeyCtx::new(&pkey)?;
+            ctx.derive_init()?;
+            ctx.derive_set_peer(&peer_key)?;
+            ctx.derive(Some(output))?;
+            Ok(())
+        }
+
+        fn public_key_from_private(
+            key: &EcKeyRef<Private>,
+        ) -> Result<EcKey<Public>, WebauthnCError> {
+            Ok(EcKey::from_public_key(key.group(), key.public_key())?)
+        }
+
+        fn public_key_from_bytes(buf: &[u8]) -> Result<EcKey<Public>, WebauthnCError> {
+            let group = get_group()?;
+            let mut ctx = BigNumContext::new()?;
+            let point = EcPoint::from_bytes(&group, buf, &mut ctx)?;
+            Ok(EcKey::from_public_key(&group, &point)?)
+        }
+
+        fn point_to_bytes(point: &EcPointRef, compressed: bool) -> Result<Vec<u8>, WebauthnCError> {
+            let group = get_group()?;
+            let mut ctx = BigNumContext::new()?;
+            Ok(point.to_bytes(
+                &group,
+                if compressed {
+                    PointConversionForm::COMPRESSED
+                } else {
+                    PointConversionForm::UNCOMPRESSED
+                },
+                &mut ctx,
+            )?)
+        }
+
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let alice_secret = ecdh_p256::new_secret();
+        let bob_secret = regenerate().unwrap();
+
+        let alice_pub = alice_secret.public_key();
+        let alice_point = alice_pub.to_encoded_point(false);
+        let alice_bytes = alice_point.as_bytes();
+        let alice_ossl = public_key_from_bytes(alice_bytes).unwrap();
+
+        let bob_pub = public_key_from_private(&bob_secret).unwrap();
+        let bob_points = bob_pub.public_key();
+        let bob_bytes = point_to_bytes(bob_pub.public_key(), false).unwrap();
+        let bob_rc = super::public_key_from_bytes(&bob_bytes).unwrap();
+
+        assert_eq!(alice_bytes.len(), bob_bytes.len());
+
+        // Dump openssl coords
+        let group = get_group().unwrap();
+        let mut ctx = BigNumContext::new().unwrap();
+        let mut bob_openssl_x = BigNum::new().unwrap();
+        let mut bob_openssl_y = BigNum::new().unwrap();
+        bob_points
+            .affine_coordinates(&group, &mut bob_openssl_x, &mut bob_openssl_y, &mut ctx)
+            .unwrap();
+        warn!(
+            "bob_openssl: x = {:?}, y = {:?}",
+            bob_openssl_x.to_hex_str(),
+            bob_openssl_y.to_hex_str()
+        );
+
+        // Now do RustCrypto
+        let bob_rc_point = bob_rc.as_affine().to_encoded_point(false);
+        let bob_coords = bob_rc_point.coordinates();
+        warn!("bob_rustcrypto: {:02x?}", bob_coords);
+
+        let mut alice_out = [0; 32];
+        ecdh(&alice_secret, &bob_rc, &mut alice_out).unwrap();
+
+        let mut bob_out = [0; 32];
+        ecdh_openssl(bob_secret, alice_ossl, &mut bob_out).unwrap();
+
+        assert_eq!(
+            alice_out,
+            bob_out,
+            "{:?} != {:?}",
+            hex::encode(alice_out),
+            hex::encode(bob_out)
+        );
+    }
+    */
 }

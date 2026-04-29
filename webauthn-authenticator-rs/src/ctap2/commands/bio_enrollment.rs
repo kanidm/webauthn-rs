@@ -344,7 +344,7 @@ impl BioSubCommand {
         let sub_command_params: Option<BTreeMap<Value, Value>> = self.to_owned().into();
 
         let mut o = Vec::new();
-        o.push(modality.to_u8().expect("Could not coerce modality into u8"));
+        o.push(modality.to_u8().unwrap_or_default());
         o.push(subcommand);
         if let Some(p) = sub_command_params
             .as_ref()

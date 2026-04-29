@@ -5,19 +5,16 @@ use crate::base64_data::Base64UrlSafeData;
 use crate::error::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
+use std::borrow::Borrow;
+use std::ops::Deref;
 
 #[cfg(feature = "wasm")]
 use js_sys::{Array, Object, Uint8Array};
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-use std::borrow::Borrow;
-use std::ops::Deref;
-
 
 #[cfg(feature = "core")]
-
-
 impl CredProtect {
     /// Create a [CredProtect] object
     pub fn new(

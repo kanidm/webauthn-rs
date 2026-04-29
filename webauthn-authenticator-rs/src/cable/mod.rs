@@ -2,7 +2,7 @@
 //!
 //! **tl;dr:** scan a QR code with a `FIDO:/` URL, mobile device sends a BTLE
 //! advertisement, this is used to establish a doubly-encrypted (TLS and
-//! [Noise][]) Websocket tunnel over which the platform can send a single CTAP
+//! [Noise][]) Websocket tunnel over which the initiator can send a single CTAP
 //! 2.x command and get a response.
 //!
 //! A caBLE transaction involves three entities:
@@ -13,6 +13,9 @@
 //! * The *authenticator* (or mobile device) stores credential(s) for the user
 //!   in a secure fashion, with some sort of local authentication (biometrics /
 //!   PIN), instead of using a security key.
+//!
+//!   Most implementations store the credential as a resident key in a synchronised credential
+//!   manager. As a result, credentials are typically *not* hardware-bound and lack attestation.
 //!
 //! * The *tunnel server* provides a two-way channel for the initator and
 //!   authenticator to communicate over WebSockets. There are well-known servers
@@ -42,24 +45,32 @@
 //!
 //! ## Warning
 //!
-//! **This implementation is incomplete, and has not been reviewed from a
-//! cryptography standpoint.**
+//! **This implementation is incomplete, and has not been reviewed for cryptographic security.**
 //!
-//! There is **no** publicly-published spec from this protocol, aside from
-//! [Chromium's C++ implementation][crcable], so this aims to do whatever
-//! Chromium does.
+//! This was written **prior** to the public release of the
+//! [FIDO 2.2 Hybrid Transports specification][fido22-hybrid], and is largely based on
+//! [Chromium's C++ implementation][crcable].
 //!
-//! We've attempted to document and untangle things as best we can, but there
-//! are probably errors in this implementation and its documentation. caBLE's
-//! design appears to have changed multiple times during its development, while
-//! attempting to preserve compatibility with older versions of Chromium.
+//! The official spec is mostly snippets of Golang-like pseudocode. It is missing several critical
+//! details needed to make it *actually work* (even with Android and Chromium), and includes various
+//! ideas that nothing *actually implements* (like using [GREASE][grease] in QR codes). It feels
+//! like the code has never been used in a complete implementation of the protocol.
+//!
+//! The caBLE protocol has significantly changed during its development (2018-2022), and Chromium
+//! attempts to preserve compatibility with older versions (sometimes introducing bugs with
+//! implementations that follow the now-public spec to the letter). Chromium's implementation hasn't
+//! changed much since it was publicly announced (mid-2022), aside from adding the W3C Digital
+//! Identities API (which this library doesn't implement), and it's *much* easier to read than the
+//! official spec.
+//!
+//! We've attempted to document and untangle things as best we can.
 //!
 //! ## Features
 //!
 //! There are two major versions of caBLE, and this only implements caBLE v2.
 //! There are also several minor versions of caBLE v2, which aren't fully
 //! explained (or implemented here); this mostly implements what we *think* is
-//! caBLE v2.1 as both an initiator and an authenticator.
+//! caBLE v2.1 as both an initiator and an authenticator (CTAP 2.2).
 //!
 //! Known-missing functionality includes:
 //!
@@ -68,20 +79,19 @@
 //! * [caBLE over AOA][cableaoa] (Android Open Accessory Protocol)
 //! * [caBLE over Firebase Cloud Messaging][cablefcm]
 //! * Pairing (aka: "contact lists", "remember this computer")
+//! * Digital Credentials over caBLE
 //!
-//! It is impossible to know for certain how many gaps there are until the caBLE
-//! working group publishes documentation *publicly*.
+//! Not all of these protocols (or their quirks) are publicly documented.
 //!
 //! The library is complete enough as an initiator to communicate with
 //! authenticators on Android and iOS 16, and complete enough as an
-//! authenticator to work with Chrome and Safari as initiators.
+//! authenticator to work with Chromium, Safari and Windows 11 as initiators.
 //!
 //! ## Requirements
 //!
 //! The initator (or "browser") requires:
 //!
-//! * a Bluetooth Low Energy (BTLE) adaptor with
-//!   [appropriate permissions](#permissions).
+//! * a Bluetooth Low Energy (BTLE) adaptor with [appropriate permissions](#permissions).
 //!
 //! * an internet connection
 //!
@@ -96,27 +106,25 @@
 //!
 //!   * [this library][share_cable_authenticator]
 //!
-//! * a Bluetooth Low Energy (BTLE) radio which can transmit service data
-//!   advertisements[^adv]
+//! * a Bluetooth Low Energy (BTLE) radio which can transmit service data advertisements[^adv]
 //!
 //! * a camera and QR code scanner[^qr]
 //!
 //! * an internet connection
 //!
-//! **On Android,** Chrome handles the `FIDO:/` URL and establishes the
-//! Websocket tunnel, and proxies commands to
-//! [Google Play's FIDO2 API][gpfido2]. The authenticator
-//! [is stored in Google Password Manager][android-sec], and it also supports
-//! [devicePubKey][] to attest a specific device's identity.
+//! **On Android,** Chrome handles the `FIDO:/` URL and establishes the Websocket tunnel, and
+//! proxies commands to [Google Play's FIDO2 API][gpfido2]. The credential
+//! [is stored in Google Password Manager][android-sec]. It supports [devicePubKey][] extension to
+//! attest a specific device's identity, but lacks traditional attestation (as the key is not
+//! hardware-bound).
 //!
-//! **On iOS,** the authenticator is stored in the iCloud Keychain and shared
-//! with all devices signed in to that iCloud account. There is no way to
-//! identify *which* device was used.
+//! **On iOS,** the authenticator is stored in the iCloud Keychain and shared with all devices
+//! signed in to that iCloud account. There is no way to identify *which* device was used.
 //!
-//! In both cases, the credential is cached in the device's secure element, and
-//! requires user verification (lock screen pattern, PIN, password or biometric
-//! authentication) to access. This user verification is performed on-device,
-//! and is entirely separate to CTAP2's PIN/UV auth.
+//! In both cases, the credential is cached in storage protected by the device's secure element, and
+//! requires user verification (lock screen pattern, PIN, password or biometric authentication) to
+//! access. This user verification is performed on-device, and is entirely separate to CTAP2's
+//! PIN/UV auth.
 //!
 //! [^ios15]: iOS 15 will recognise caBLE QR codes and offer to authenticate,
 //! but this version of the protocol is not supported.
@@ -167,17 +175,24 @@
 //! application uses the [App Sandbox][], you'll *also* need to add the
 //! [Bluetooth entitlement][entitlement].
 //!
-//! ### Windows
+//! ### Windows 10
 //!
-//! An [App Capabilities Declaration][] is required to grant Bluetooth access to
-//! applications distributed via the Windows Store on Windows 10 and later.
+//! An [App Capabilities Declaration][] is required to grant Bluetooth access to applications
+//! distributed via the Windows Store on Windows 10.
 //!
-//! These controls **do not** apply to applications compiled locally, or
-//! distributed outside of the Windows Store.
+//! These controls **do not** apply to applications compiled locally, or distributed outside of the
+//! Windows Store.
 //!
-//! The Windows WebAuthn API does not (presently) support caBLE authenticators,
-//! nor does it limit direct access to them, so this does *not* need to run as
-//! Administrator.
+//! [The Windows WebAuthn API][crate::win10] on Windows 10 **does not** support caBLE
+//! authenticators, and so does not restrict access to them (like supported CTAP transports).
+//!
+//! ### Windows 11 and later
+//!
+//! [The Windows WebAuthn API][crate::win10] on Windows 11 (possibly since 22H2) supports caBLE
+//! authenticators, and restricts access to BTLE advertisements sent by authenticators.
+//!
+//! Use [`Win10::supports_cable()`][crate::win10::Win10::supports_cable] to check if the platform
+//! APIs *might* support caBLE authenticators.
 //!
 //! ## Protocol overview
 //!
@@ -263,8 +278,10 @@
 //! [devicePubKey]: https://w3c.github.io/webauthn/#sctn-device-publickey-extension
 //! [Eid]: discovery::Eid
 //! [entitlement]: https://developer.apple.com/documentation/bundleresources/entitlements/com_apple_security_device_bluetooth
+//! [fido22-hybrid]: https://fidoalliance.org/specs/fido-v2.2-ps-20250714/fido-client-to-authenticator-protocol-v2.2-ps-20250714.html#sctn-hybrid
 //! [GetInfoResponse]: crate::ctap2::GetInfoResponse
 //! [gpfido2]: https://developers.google.com/android/reference/com/google/android/gms/fido/fido2/Fido2PrivilegedApiClient
+//! [grease]: https://www.rfc-editor.org/rfc/rfc8701.html
 //! [HandshakeV2]: handshake::HandshakeV2
 //! [ios]: https://developer.apple.com/videos/play/wwdc2022/10092/
 //! [Noise]: http://noiseprotocol.org/noise.html
@@ -274,11 +291,10 @@
 //! [routing_id]: discovery::Eid::routing_id
 //! [tunnel_server_id]: discovery::Eid::tunnel_server_id
 //!
-//! [^adv]: Unfortunately, most platform Bluetooth APIs do not allow sending
-//! arbitrary Bluetooth service data advertisements, so
-//! [your code must provide one][Advertiser]. The `cable_tunnel` example
-//! provides an implementation using a Bluetooth HCI controller connected to a
-//! serial UART.
+//! [^adv]: Unfortunately, most platform Bluetooth APIs do not allow sending arbitrary Bluetooth
+//! service data advertisements, so [your code must provide one][Advertiser]. The `cable_tunnel`
+//! example provides two implementations: using Bluez on Linux, and using a Bluetooth HCI controller
+//! connected to a serial UART.
 //!
 //! [^pair]: Pairing payloads are only supported on Android. Where supported,
 //! pairing payloads will always be sent, padded to a constant size,
@@ -443,13 +459,8 @@ async fn connect_cable_authenticator_impl<'a, U: UiCallback + 'a>(
         WebauthnCError::NotSupported
     })?;
 
-    let tun = Tunnel::connect_initiator(
-        &connect_uri,
-        psk,
-        disco.local_identity.as_ref(),
-        ui_callback,
-    )
-    .await?;
+    let tun =
+        Tunnel::connect_initiator(&connect_uri, psk, disco.local_identity, ui_callback).await?;
 
     tun.get_authenticator(ui_callback).ok_or_else(|| {
         error!("no supported protocol versions!");

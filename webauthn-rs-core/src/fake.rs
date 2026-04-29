@@ -1,11 +1,10 @@
 //! Fake `CredentialID` generator. See [WebauthnFakeCredentialGenerator] for more details.
 
-use openssl::{hash, pkey, sign};
-use rand::prelude::*;
-use rand_chacha::ChaCha8Rng;
-
 use crate::error::WebauthnError;
 use crate::proto::CredentialID;
+use crypto_glue::hmac_s256::{self, HmacSha256Key};
+use rand::prelude::*;
+use rand_chacha::ChaCha8Rng;
 
 /// A trait for implementing custom `CredentialID` distributions. You *must* use the provided
 /// rng for generating `CredentialID`s to ensure that the outputs are deterministic.
@@ -142,7 +141,7 @@ impl FakeCredentialIDDistribution for FakePasskeyDistribution {
             let mut cred = vec![0; cred_len];
             seeded_rng.fill_bytes(&mut cred);
 
-            credentials.push(cred.into());
+            credentials.push(cred);
         } else {
             for _i in 0..creds_to_generate {
                 let type_dist = seeded_rng.next_u32();
@@ -166,7 +165,7 @@ impl FakeCredentialIDDistribution for FakePasskeyDistribution {
                 let mut cred = vec![0; cred_len];
                 seeded_rng.fill_bytes(&mut cred);
 
-                credentials.push(cred.into());
+                credentials.push(cred);
             }
         }
 
@@ -205,8 +204,7 @@ pub struct WebauthnFakeCredentialGenerator<D>
 where
     D: FakeCredentialIDDistribution,
 {
-    // hmac key
-    hmac_key: pkey::PKey<pkey::Private>,
+    hmac_key: HmacSha256Key,
     distribution: std::marker::PhantomData<D>,
 }
 
@@ -216,12 +214,8 @@ where
 {
     /// Generate a new random HMAC key for the credential generator. You MUST persist this key for
     /// future use.
-    pub fn new_hmac_key() -> Result<Vec<u8>, WebauthnError> {
-        let mut key = vec![0; 16];
-
-        openssl::rand::rand_bytes(&mut key)
-            .map_err(WebauthnError::OpenSSLError)
-            .map(|_| key)
+    pub fn new_hmac_key() -> Result<HmacSha256Key, WebauthnError> {
+        Ok(hmac_s256::new_key())
     }
 }
 
@@ -234,7 +228,7 @@ where
     /// external party to determine if `CredentialID`s are genuine or faked. Rotation of this key
     /// may also allow detection of genuine or fake credentials.
     pub fn new(hmac_key: &[u8]) -> Result<Self, WebauthnError> {
-        let hmac_key = pkey::PKey::hmac(hmac_key).map_err(WebauthnError::OpenSSLError)?;
+        let hmac_key = hmac_s256::key_from_slice(hmac_key).ok_or(WebauthnError::HmacKeyInvalid)?;
 
         Ok(WebauthnFakeCredentialGenerator {
             hmac_key,
@@ -245,15 +239,11 @@ where
     /// Given a username as a byte slice, generate a set of deterministic `CredentialID`s.
     pub fn generate(&self, username: &[u8]) -> Result<Vec<CredentialID>, WebauthnError> {
         // hmac the username
-        let mut signer = sign::Signer::new(hash::MessageDigest::sha256(), &self.hmac_key)
-            .map_err(WebauthnError::OpenSSLError)?;
+
+        let hmac_out = hmac_s256::oneshot(&self.hmac_key, username);
 
         let mut seed = [0; 32];
-        let buf = signer
-            .sign_oneshot_to_vec(username)
-            .map_err(WebauthnError::OpenSSLError)?;
-
-        seed.copy_from_slice(&buf);
+        seed.copy_from_slice(&hmac_out.into_bytes());
 
         // Seed the rng
         let mut seeded_rng = ChaCha8Rng::from_seed(seed);
@@ -267,14 +257,17 @@ where
 #[cfg(test)]
 mod tests {
     use super::{FakePasskeyDistribution, WebauthnFakeCredentialGenerator};
-    use crate::proto::Base64UrlSafeData;
 
     #[test]
     fn test_fake_credential_generator() {
         let _ = tracing_subscriber::fmt::try_init();
 
         let cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
-            WebauthnFakeCredentialGenerator::new(&[0, 1, 2, 3]).unwrap();
+            WebauthnFakeCredentialGenerator::new(&[
+                0, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+            .unwrap();
 
         let cred_a = cred_gen.generate(b"a").unwrap();
         assert!(cred_a.is_empty());
@@ -282,10 +275,10 @@ mod tests {
         let cred_b = cred_gen.generate(b"b").unwrap();
         assert_eq!(
             cred_b,
-            vec![Base64UrlSafeData::from(vec![
+            vec![vec![
                 77, 7, 210, 37, 212, 90, 185, 162, 81, 110, 242, 185, 204, 84, 84, 123, 155, 139,
                 146, 230
-            ])]
+            ]]
         );
 
         let cred_c = cred_gen.generate(b"c").unwrap();
@@ -294,47 +287,51 @@ mod tests {
         let cred_d = cred_gen.generate(b"d").unwrap();
         assert_eq!(
             cred_d,
-            vec![Base64UrlSafeData::from(vec![
+            vec![vec![
                 203, 174, 48, 43, 223, 223, 211, 78, 99, 88, 240, 25, 90, 42, 86, 186, 239, 57,
                 123, 81, 177, 173, 236, 214, 204, 222, 224, 134, 233, 143, 143, 144, 127, 23, 26,
                 145, 217, 217, 110, 194, 235, 76, 2, 59, 56, 98, 47, 236, 103, 98, 235, 239, 195,
                 140, 199, 239, 201, 11, 132, 227, 181, 7, 188, 240, 168
-            ])]
+            ]]
         );
 
         let cred_e = cred_gen.generate(b"e").unwrap();
         assert_eq!(
             cred_e,
             vec![
-                Base64UrlSafeData::from(vec![
+                vec![
                     207, 79, 70, 16, 136, 39, 65, 40, 104, 116, 214, 85, 66, 12, 175, 99, 203, 228,
                     60, 249, 118, 169, 28, 217, 161, 132, 3, 217, 119, 66, 235, 151, 138, 15, 26,
                     76, 161, 44, 225, 120, 34, 131, 48, 195, 116, 81, 178, 0, 218, 96, 167, 1, 70,
                     183, 20, 94, 115, 63, 12, 235, 189, 105, 104, 60, 77
-                ]),
-                Base64UrlSafeData::from(vec![
+                ],
+                vec![
                     175, 118, 205, 177, 121, 39, 194, 157, 251, 53, 216, 180, 38, 22, 44, 155, 132,
                     155, 204, 68, 171, 98, 97, 114, 50, 58, 218, 238, 44, 154, 27, 140, 95, 90,
                     127, 210, 221, 177, 194, 44, 231, 178, 238, 239, 79, 222, 127, 164, 115, 65,
                     160, 6, 55, 150, 30, 140, 18, 159, 229, 159, 78, 216, 120, 27, 122
-                ])
+                ]
             ]
         );
 
         // Demonstrate that re-keying the generator yields different generated credential results.
         let alt_cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
-            WebauthnFakeCredentialGenerator::new(&[3, 2, 1, 0]).unwrap();
+            WebauthnFakeCredentialGenerator::new(&[
+                3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+            .unwrap();
 
         let alt_cred_a = alt_cred_gen.generate(b"a").unwrap();
         assert_ne!(alt_cred_a, cred_a);
         assert_eq!(
             alt_cred_a,
-            vec![Base64UrlSafeData::from(vec![
+            vec![vec![
                 44, 141, 39, 252, 47, 212, 48, 123, 96, 131, 15, 213, 21, 149, 95, 147, 188, 152,
                 201, 171, 245, 103, 22, 246, 211, 172, 143, 86, 97, 96, 109, 246, 23, 54, 13, 127,
                 167, 107, 72, 235, 151, 144, 162, 200, 251, 93, 137, 8, 211, 197, 47, 115, 108,
                 210, 62, 232, 246, 206, 36, 202, 94, 179, 254, 81, 59
-            ])]
+            ]]
         );
     }
 }
