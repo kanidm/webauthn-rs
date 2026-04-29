@@ -630,7 +630,6 @@ const fn padding_len(len: usize) -> usize {
 mod test {
     use std::collections::BTreeMap;
 
-    use base64urlsafedata::Base64UrlSafeData;
     use webauthn_rs_proto::{PubKeyCredParams, PublicKeyCredentialDescriptor, RelyingParty, User};
 
     use crate::{
@@ -800,10 +799,10 @@ mod test {
                 id: String::from("webauthn.firstyear.id.au"),
             },
             user: User {
-                id: Base64UrlSafeData::from(vec![
+                id: vec![
                     0xd6, 0xd7, 0xaa, 0x29, 0x8f, 0xe8, 0x4a, 0x6, 0xaa, 0xde, 0xd7, 0xe4, 0x9d,
                     0x90, 0xa, 0x62,
-                ]),
+                ],
                 name: String::from("a"),
                 display_name: String::from("a"),
             },
@@ -819,7 +818,7 @@ mod test {
             ],
             exclude_list: vec![PublicKeyCredentialDescriptor {
                 type_: String::from("public-key"),
-                id: Base64UrlSafeData::from(vec![0, 1, 2, 3]),
+                id: vec![0, 1, 2, 3],
                 transports: None,
             }],
             options: Some(BTreeMap::from([(String::from("uv"), true)])),

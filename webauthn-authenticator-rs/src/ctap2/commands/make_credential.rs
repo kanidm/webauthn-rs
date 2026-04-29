@@ -1,4 +1,3 @@
-use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
 use serde_cbor_2::{value::to_value, Value};
 use std::collections::BTreeMap;
@@ -110,7 +109,7 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 
         let mut user_map = BTreeMap::new();
         // info!("{:?}", id);
-        user_map.insert(Value::Text("id".to_string()), Value::Bytes(id.into()));
+        user_map.insert(Value::Text("id".to_string()), Value::Bytes(id));
         user_map.insert(Value::Text("name".to_string()), Value::Text(name));
         user_map.insert(
             Value::Text("displayName".to_string()),
@@ -201,10 +200,7 @@ impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialRequest {
                 .and_then(|v| if let Value::Map(v) = v { Some(v) } else { None })
                 .and_then(|mut v| {
                     Some(User {
-                        id: Base64UrlSafeData::from(value_to_vec_u8(
-                            v.remove(&Value::Text("id".to_string()))?,
-                            "id",
-                        )?),
+                        id: value_to_vec_u8(v.remove(&Value::Text("id".to_string()))?, "id")?,
                         name: value_to_string(v.remove(&Value::Text("name".to_string()))?, "name")?,
                         display_name: value_to_string(
                             v.remove(&Value::Text("displayName".to_string()))?,
@@ -292,7 +288,6 @@ mod test {
     use crate::ctap2::CBORResponse;
 
     use super::*;
-    use base64urlsafedata::Base64UrlSafeData;
     use serde_cbor_2::{from_slice, to_vec, Value};
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
@@ -358,10 +353,10 @@ mod test {
                 id: "test.ctap".to_owned(),
             },
             user: User {
-                id: Base64UrlSafeData::from(vec![
+                id: vec![
                     43, 102, 137, 187, 24, 244, 22, 159, 6, 159, 188, 223, 80, 203, 110, 163, 198,
                     10, 134, 27, 154, 123, 99, 148, 105, 131, 224, 181, 119, 183, 140, 112,
-                ]),
+                ],
                 name: "testctap@ctap.com".to_owned(),
                 display_name: "Test Ctap".to_owned(),
             },
@@ -581,7 +576,7 @@ mod test {
                 id: "test".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData::from(b"test"),
+                id: b"test".to_vec(),
                 name: "test".to_string(),
                 display_name: "test".to_string(),
             },

@@ -1,7 +1,6 @@
 //! Types that are expected to be serialised in applications using [crate::Webauthn]
 
 use serde::{Deserialize, Serialize};
-
 use webauthn_rs_core::error::WebauthnError;
 use webauthn_rs_core::proto::{
     AttestationCa, AttestationCaList, AuthenticationResult, AuthenticationState, COSEAlgorithm,

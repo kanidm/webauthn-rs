@@ -59,7 +59,8 @@ exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [workspace.dependencies]
 # These are in release/dependency order.
-base64urlsafedata = { path = "./base64urlsafedata", version = "=0.6.0-dev" }
+# base64urlsafedata = { path = "./base64urlsafedata", version = "=0.6.0-dev" }
+
 fido-hid-rs = { path = "./fido-hid-rs", version = "=0.6.0-dev" }
 webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.6.0-dev" }
 webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.6.0-dev" }
@@ -79,7 +80,7 @@ base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
 
 crypto-glue = "^0.1.15"
-compact_jwt = "0.5.1-dev"
+compact_jwt = "0.5.6"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
@@ -90,8 +91,6 @@ hyper-util = { version = "0.1.10", features = ["tokio"] }
 nom = "7.1"
 num-derive = { version = "0.4.2" }
 peg = "0.8.5"
-openssl = "^0.10.56"
-openssl-sys = "^0.9.109"
 
 tracing-subscriber = { version = "0.3", features = [
     "env-filter",
@@ -118,7 +117,7 @@ uuid = "^1.19.0"
 serde = { version = "^1.0.228", features = ["derive"] }
 serde_cbor_2 = { version = "0.13.0" }
 serde_json = "^1.0.145"
-serde_with = { version = "3.16.1", features = ["base64"] }
+serde_with = { version = "3.16.1", features = ["base64", "macros"] }
 rand = "0.9.2"
 rand_chacha = "0.9.0"
 reqwest = { version = "0.12.25", default-features = false, features = [

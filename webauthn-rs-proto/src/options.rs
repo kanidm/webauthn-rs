@@ -1,8 +1,12 @@
 //! Types that define options as to how an authenticator may interact with
 //! with the server.
 
-use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
 use std::fmt::Display;
 use std::{collections::BTreeMap, str::FromStr};
 
@@ -75,13 +79,15 @@ pub struct RelyingParty {
 }
 
 /// User Entity
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     /// The user's id in base64 form. This MUST be a unique id, and
     /// must NOT contain personally identifying information, as this value can NEVER
     /// be changed. If in doubt, use a UUID.
-    pub id: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub id: Vec<u8>,
     /// A detailed name for the account, such as an email address. This value
     /// **can** change, so **must not** be used as a primary key.
     pub name: String,
@@ -236,13 +242,15 @@ impl TryFrom<&str> for AttestationFormat {
 }
 
 /// <https://www.w3.org/TR/webauthn/#dictdef-publickeycredentialdescriptor>
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct PublicKeyCredentialDescriptor {
     /// The type of credential
     #[serde(rename = "type")]
     pub type_: String,
     /// The credential id.
-    pub id: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub id: Vec<u8>,
     /// The allowed transports for this credential. Note this is a hint, and is NOT
     /// enforced.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -325,13 +333,15 @@ pub struct AuthenticatorSelectionCriteria {
 }
 
 /// A descriptor of a credential that can be used.
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AllowCredentials {
     #[serde(rename = "type")]
     /// The type of credential.
     pub type_: String,
     /// The id of the credential.
-    pub id: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub id: Vec<u8>,
     /// <https://www.w3.org/TR/webauthn/#transport>
     /// may be usb, nfc, ble, internal
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -340,13 +350,15 @@ pub struct AllowCredentials {
 
 /// The data collected and hashed in the operation.
 /// <https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata>
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct CollectedClientData {
     /// The credential type
     #[serde(rename = "type")]
     pub type_: String,
     /// The challenge.
-    pub challenge: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub challenge: Vec<u8>,
     /// The rp origin as the browser understood it.
     pub origin: url::Url,
     /// The inverse of the sameOriginWithAncestors argument value that was

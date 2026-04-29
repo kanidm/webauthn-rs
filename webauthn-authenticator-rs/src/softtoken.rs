@@ -6,7 +6,6 @@ use crate::{
     ctap2::commands::GetInfoResponse, error::WebauthnCError, BASE64_ENGINE,
 };
 use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
 use crypto_glue::{
     der::SecretDocument,
     ecdsa_p256::{
@@ -562,7 +561,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
             raw_id: key_handle.into(),
             response: AuthenticatorAttestationResponseRaw {
                 attestation_object: ao_bytes.into(),
-                client_data_json: Base64UrlSafeData::new(),
+                client_data_json: Vec::new(),
                 transports: Some(vec![AuthenticatorTransport::Internal]),
             },
             type_: "public-key".to_string(),
@@ -618,7 +617,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
             raw_id: u2sd.key_handle.into(),
             response: AuthenticatorAssertionResponseRaw {
                 authenticator_data: authdata.into(),
-                client_data_json: Base64UrlSafeData::new(),
+                client_data_json: Vec::new(),
                 signature: u2sd.signature.into(),
                 user_handle: None,
             },
@@ -665,7 +664,7 @@ impl U2FToken for SoftToken {
             .iter()
             .filter_map(|ac| {
                 self.tokens
-                    .get(ac.id.as_ref())
+                    .get(&ac.id)
                     .map(|v| (ac.id.clone().into(), v.clone()))
             })
             .take(1)
@@ -1013,7 +1012,7 @@ mod tests {
                 id: "example.com".to_string(),
             },
             user: User {
-                id: Base64UrlSafeData::from(user_id),
+                id: Vec::from(user_id),
                 name: "sampleuser".to_string(),
                 display_name: "Sample User".to_string(),
             },
@@ -1090,9 +1089,8 @@ mod tests {
                 .try_into()
                 .unwrap(),
         ) as usize;
-        let cred_id = Base64UrlSafeData::from(
-            (verification_data[cred_id_off + 2..cred_id_off + 2 + cred_id_len]).to_vec(),
-        );
+        let cred_id =
+            Vec::from((verification_data[cred_id_off + 2..cred_id_off + 2 + cred_id_len]).to_vec());
 
         // Future assertions are signed with this COSEKey
         let cose_key: Value = serde_cbor_2::from_slice(

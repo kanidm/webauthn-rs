@@ -71,7 +71,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 base64.workspace = true
-base64urlsafedata.workspace = true
 webauthn-rs-proto.workspace = true
 webauthn-rs-core = { workspace = true, optional = true }
 crypto-glue.workspace = true
