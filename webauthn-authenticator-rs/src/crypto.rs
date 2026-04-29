@@ -48,6 +48,8 @@ pub fn encrypt(
 }
 
 /// Decrypts some data using AES-256-CBC, with no padding.
+///
+/// If `iv` is `None`, use an IV of all zeroes.
 pub fn decrypt(
     key: &Aes256Key,
     iv: &Aes256CbcIv,

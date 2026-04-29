@@ -3,6 +3,7 @@ version = "0.6.0-dev"
 authors = [
     "William Brown <william@blackhats.net.au>",
     "Michael Farrell <micolous+git@gmail.com>",
+    "James Hodgkinson <james@terminaloutcomes.com>",
 ]
 rust-version = "1.88"
 edition = "2021"

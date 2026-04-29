@@ -1106,6 +1106,7 @@ impl TryFrom<RawFidoDevice> for FidoDevice {
             attestation_certificate_key_identifiers: _,
             description,
             alternative_descriptions,
+            friendly_names: _,
             authenticator_version,
             protocol_family,
             schema: _,
