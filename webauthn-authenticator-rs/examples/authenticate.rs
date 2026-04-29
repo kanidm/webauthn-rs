@@ -4,12 +4,12 @@ extern crate tracing;
 #[cfg(feature = "softtoken")]
 use std::fs::OpenOptions;
 use std::io::{stdin, stdout, Write};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
-use clap::clap_derive::ValueEnum;
 #[cfg(any(feature = "cable", feature = "softtoken"))]
 use clap::Args;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+use crypto_glue::rand::{rngs::ThreadRng, RngCore};
 #[cfg(feature = "cable")]
 use tokio_tungstenite::tungstenite::http::uri::Builder;
 #[cfg(feature = "cable-override-tunnel")]
@@ -26,7 +26,7 @@ use webauthn_authenticator_rs::softtoken::{SoftToken, SoftTokenFile};
 use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::types::CableRequestType;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
-use webauthn_authenticator_rs::AuthenticatorBackend;
+use webauthn_authenticator_rs::{AuthenticatorBackend, WebauthnAuthenticator};
 use webauthn_rs_core::proto::RequestAuthenticationExtensions;
 use webauthn_rs_core::WebauthnCore as Webauthn;
 use webauthn_rs_proto::{AttestationConveyancePreference, UserVerificationPolicy};
@@ -224,6 +224,7 @@ async fn main() {
         )
         .compact()
         .init();
+    let mut rng = ThreadRng::default();
 
     let opt = CliParser::parse();
     let ui = Cli {};
@@ -232,23 +233,28 @@ async fn main() {
         .connect_provider(CableRequestType::MakeCredential, &ui)
         .await;
 
+    let origin = Url::parse("https://demo.webauthn-authenticator-rs.example").unwrap();
+
     // WARNING: don't use this as an example of how to use the library!
     let wan = Webauthn::new_unsafe_experts_only(
-        "https://localhost:8080/auth",
-        "localhost",
-        vec![url::Url::parse("https://localhost:8080").unwrap()],
+        "webauthn-authenticator-rs demo",
+        "demo.webauthn-authenticator-rs.example",
+        vec![origin.clone()],
         Duration::from_secs(60),
         None,
         None,
     );
 
-    let unique_id = [
-        158, 170, 228, 89, 68, 28, 73, 194, 134, 19, 227, 153, 107, 220, 150, 238,
-    ];
-    let name = "william";
+    let mut unique_id = [0u8; 16];
+    rng.fill_bytes(&mut unique_id);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default();
+    let user_name = format!("demo-{}", now.as_secs());
+    let display_name = format!("Authenticate Demo {}", now.as_secs());
 
     let builder = wan
-        .new_challenge_register_builder(&unique_id, name, name)
+        .new_challenge_register_builder(&unique_id, &user_name, &display_name)
         .unwrap()
         .attestation(AttestationConveyancePreference::None)
         .user_verification_policy(opt.verification_policy.into());
@@ -257,18 +263,11 @@ async fn main() {
 
     info!("🍿 challenge -> {:x?}", chal);
 
-    let r = u
-        .perform_register(
-            Url::parse("https://localhost:8080").unwrap(),
-            chal.public_key,
-            60_000,
-        )
-        .unwrap();
+    let r = u.do_registration(origin.clone(), chal).unwrap();
 
     let cred = wan.register_credential(&r, &reg_state, None).unwrap();
 
     trace!(?cred);
-    drop(u);
     let mut buf = String::new();
     println!("WARNING: Some NFC keys need to be power-cycled before you can authenticate.");
     println!("Press ENTER to authenticate, or Ctrl-C to abort");
@@ -279,6 +278,7 @@ async fn main() {
         u = provider
             .connect_provider(CableRequestType::GetAssertion, &ui)
             .await;
+
         let (chal, auth_state) = wan
             .new_challenge_authenticate_builder(vec![cred.clone()], None)
             .map(|builder| {
@@ -291,16 +291,10 @@ async fn main() {
             .and_then(|b| wan.generate_challenge_authenticate(b))
             .unwrap();
 
-        let r = u
-            .perform_auth(
-                Url::parse("https://localhost:8080").unwrap(),
-                chal.public_key,
-                60_000,
-            )
-            .map_err(|e| {
-                error!("Error -> {:x?}", e);
-                e
-            });
+        let r = u.do_authentication(origin.clone(), chal).map_err(|e| {
+            error!("Error -> {:x?}", e);
+            e
+        });
         trace!(?r);
 
         if let Ok(r) = r {
@@ -311,7 +305,6 @@ async fn main() {
             info!("auth_res -> {:x?}", auth_res);
         }
 
-        drop(u);
         let mut buf = String::new();
         println!("Press ENTER to try again, or Ctrl-C to abort");
         stdout().flush().ok();
