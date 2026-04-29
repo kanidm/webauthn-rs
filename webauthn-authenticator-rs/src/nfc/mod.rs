@@ -157,11 +157,6 @@ impl NFCDeviceWatcher {
                 vec![ReaderState::new(PNP_NOTIFICATION(), State::UNAWARE)];
 
             'main: while !tx.is_closed() {
-                // trace!(
-                //     "{} known reader(s), pruning ignored readers",
-                //     reader_states.len()
-                // );
-
                 // Remove all disconnected readers
                 reader_states.retain(|state| {
                     !state
@@ -169,15 +164,8 @@ impl NFCDeviceWatcher {
                         .intersects(State::UNKNOWN | State::IGNORE)
                 });
 
-                // trace!("{} reader(s) remain after pruning", reader_states.len());
-
                 // Get a list of readers right now
                 let readers = ctx.list_readers_owned()?;
-                // trace!(
-                //     "{} reader(s) currently connected: {:?}",
-                //     readers.len(),
-                //     readers
-                // );
 
                 if readers.is_empty() && !enumeration_complete {
                     // When there are no real readers connected (ie: other than
@@ -217,7 +205,6 @@ impl NFCDeviceWatcher {
                 }
 
                 // Update view of current states
-                // trace!("Updating {} reader states", reader_states.len());
                 for state in &mut reader_states {
                     state.sync_current_state();
                 }
@@ -239,7 +226,6 @@ impl NFCDeviceWatcher {
                     }
                 }
 
-                // trace!("Updated reader states");
                 let mut tasks = Vec::new();
                 for state in &reader_states {
                     if state.name() == PNP_NOTIFICATION()

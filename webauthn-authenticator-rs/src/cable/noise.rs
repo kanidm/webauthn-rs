@@ -465,8 +465,6 @@ impl CableNoise {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_handshake.cc;l=982;drc=38321ee39cd73ac2d9d4400c56b90613dee5fe29
         let (write_key, read_key) = self.traffic_keys()?;
 
-        // trace!(?write_key);
-        // trace!(?read_key);
         Ok(Crypter::new(read_key, write_key))
     }
 
@@ -548,8 +546,6 @@ impl CableNoise {
         response_message.extend_from_slice(&ct);
 
         let (read_key, write_key) = noise.traffic_keys()?;
-        // trace!(?read_key);
-        // trace!(?write_key);
         Ok((Crypter::new(read_key, write_key), response_message))
     }
 }
