@@ -110,6 +110,8 @@ extern crate num_derive;
 #[macro_use]
 extern crate tracing;
 
+use std::str::FromStr;
+
 use crate::error::WebauthnCError;
 #[cfg(any(
     all(doc, not(doctest)),
@@ -122,6 +124,7 @@ use crate::error::WebauthnCError;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_ENGINE;
 use url::Url;
 
+use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_proto::{
     CreationChallengeResponse, PublicKeyCredential, PublicKeyCredentialCreationOptions,
     PublicKeyCredentialRequestOptions, RegisterPublicKeyCredential, RequestChallengeResponse,
@@ -310,20 +313,34 @@ impl<T: AuthenticatorBackend + ?Sized> WebauthnAuthenticator for T {
         trace!("effective domain -> {:x?}", effective_domain);
         trace!("relying party id -> {:x?}", options.rp.id);
 
+        // Check origin is https:// if effectiveDomain != localhost.
+        if origin.scheme() != "https"
+            && !(effective_domain == "localhost" && origin.scheme() == "http")
+        {
+            error!("An insecure domain or scheme in origin. Must be localhost or https://");
+            return Err(WebauthnCError::Security);
+        }
+
         // If options.rp.id
         //      Is present
         //          If options.rp.id is not a registrable domain suffix of and is not equal to effectiveDomain, return a DOMException whose name is "Security", and terminate this algorithm.
         //      Is not present
         //          Set options.rp.id to effectiveDomain.
 
-        if !effective_domain.ends_with(&options.rp.id) {
-            error!("relying party id domain is not a suffix of the effective domain.");
-            return Err(WebauthnCError::Security);
-        }
+        let rp_id_host = url::Host::parse(&options.rp.id).map_err(|err| {
+            error!("Relying party ID is not a valid host name or IP: {err}");
+            WebauthnCError::Security
+        })?;
+        let rp_id_url =
+            Url::parse(&format!("{}://{rp_id_host}", origin.scheme())).map_err(|err| {
+                error!("Relying party ID is not a valid host name or IP: {err}");
+                WebauthnCError::Security
+            })?;
 
-        // Check origin is https:// if effectiveDomain != localhost.
-        if !(effective_domain == "localhost" || origin.scheme() == "https") {
-            error!("An insecure domain or scheme in origin. Must be localhost or https://");
+        if !WebauthnCore::origins_match(true, true, &origin, &rp_id_url) {
+            error!(
+                "Relying party ID ({rp_id_url}) is not a suffix of the effective domain ({origin})"
+            );
             return Err(WebauthnCError::Security);
         }
 
@@ -370,20 +387,34 @@ impl<T: AuthenticatorBackend + ?Sized> WebauthnAuthenticator for T {
         trace!("effective domain -> {:x?}", effective_domain);
         trace!("relying party id -> {:x?}", options.rp_id);
 
+        // Check origin is https:// if effectiveDomain != localhost.
+        if origin.scheme() != "https"
+            && !(effective_domain == "localhost" && origin.scheme() == "http")
+        {
+            error!("An insecure domain or scheme in origin. Must be localhost or https://");
+            return Err(WebauthnCError::Security);
+        }
+
         // If options.rp.id
         //      Is present
         //          If options.rp.id is not a registrable domain suffix of and is not equal to effectiveDomain, return a DOMException whose name is "Security", and terminate this algorithm.
         //      Is not present
         //          Set options.rp.id to effectiveDomain.
 
-        if !effective_domain.ends_with(&options.rp_id) {
-            error!("relying party id domain is not suffix of effective domain.");
-            return Err(WebauthnCError::Security);
-        }
+        let rp_id_host = url::Host::parse(&options.rp_id).map_err(|err| {
+            error!("Relying party ID is not a valid host name or IP: {err}");
+            WebauthnCError::Security
+        })?;
+        let rp_id_url =
+            Url::parse(&format!("{}://{rp_id_host}", origin.scheme())).map_err(|err| {
+                error!("Relying party ID is not a valid host name or IP: {err}");
+                WebauthnCError::Security
+            })?;
 
-        // Check origin is https:// if effectiveDomain != localhost.
-        if !(effective_domain == "localhost" || origin.scheme() == "https") {
-            error!("An insecure domain or scheme in origin. Must be localhost or https://");
+        if !WebauthnCore::origins_match(true, true, &origin, &rp_id_url) {
+            error!(
+                "Relying party ID ({rp_id_url}) is not a suffix of the effective domain ({origin})"
+            );
             return Err(WebauthnCError::Security);
         }
 

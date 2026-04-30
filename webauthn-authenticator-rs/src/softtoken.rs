@@ -845,9 +845,12 @@ mod tests {
     fn webauthn_authenticator_wan_softtoken_direct_attest() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan = Webauthn::new_unsafe_experts_only(
-            "https://localhost:8080/auth",
-            "localhost",
-            vec![url::Url::parse("https://localhost:8080").unwrap()],
+            "Example RP",
+            "example.com",
+            vec![
+                url::Url::parse("https://example.com").unwrap(),
+                url::Url::parse("https://other.example.com").unwrap(),
+            ],
             AUTHENTICATOR_TIMEOUT,
             None,
             None,
@@ -873,7 +876,7 @@ mod tests {
         info!("🍿 challenge -> {:x?}", chal);
 
         let r = wa
-            .do_registration(Url::parse("https://localhost:8080").unwrap(), chal)
+            .do_registration(Url::parse("https://example.com/auth").unwrap(), chal)
             .map_err(|e| {
                 error!("Error -> {:x?}", e);
                 e
@@ -893,12 +896,12 @@ mod tests {
         info!("Credential -> {:?}", cred);
 
         let (chal, auth_state) = wan
-            .new_challenge_authenticate_builder(vec![cred], None)
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
             .and_then(|b| wan.generate_challenge_authenticate(b))
             .unwrap();
 
         let r = wa
-            .do_authentication(Url::parse("https://localhost:8080").unwrap(), chal)
+            .do_authentication(Url::parse("https://example.com/auth").unwrap(), chal)
             .map_err(|e| {
                 error!("Error -> {:x?}", e);
                 e
@@ -909,15 +912,92 @@ mod tests {
             .authenticate_credential(&r, &auth_state)
             .expect("webauth authentication denied");
         info!("auth_res -> {:x?}", auth_res);
+
+        // Check subdomains
+        let (chal, auth_state) = wan
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
+            .unwrap();
+
+        // Client side should allow this
+        let r = wa
+            .do_authentication(Url::parse("https://auth.example.com").unwrap(), chal)
+            .map_err(|e| {
+                error!("Error -> {:x?}", e);
+                e
+            })
+            .expect("Failed to auth");
+
+        // But server side should reject it, because it doesn't allow subdomains.
+        assert!(matches!(
+            wan.authenticate_credential(&r, &auth_state),
+            Err(WebauthnError::InvalidRPOrigin)
+        ));
+        info!("auth_res -> {:x?}", auth_res);
+
+        // Different domains are not allowed by client
+        let (chal, _) = wan
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
+            .unwrap();
+
+        assert!(matches!(
+            wa.do_authentication(Url::parse("https://auth.example.net").unwrap(), chal),
+            Err(WebauthnCError::Security)
+        ));
+
+        // Different scheme should be rejected
+        let (chal, _) = wan
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
+            .unwrap();
+
+        assert!(matches!(
+            wa.do_authentication(Url::parse("http://example.com/auth").unwrap(), chal),
+            Err(WebauthnCError::Security)
+        ));
+
+        // Check that a different protocol on the same hostname would be rejected
+        let (chal, _) = wan
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
+            .unwrap();
+
+        assert!(matches!(
+            wa.do_authentication(Url::parse("ftp://example.com/auth").unwrap(), chal),
+            Err(WebauthnCError::Security)
+        ));
+
+        // Check that a different hostname would be rejected
+        let (chal, _) = wan
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
+            .unwrap();
+
+        assert!(matches!(
+            wa.do_authentication(Url::parse("https://other-example.com/auth").unwrap(), chal),
+            Err(WebauthnCError::Security)
+        ));
+
+        // Parent domain of an allowed domain
+        let (chal, _) = wan
+            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .and_then(|b| wan.generate_challenge_authenticate(b))
+            .unwrap();
+
+        assert!(matches!(
+            wa.do_authentication(Url::parse("https://example.net/auth").unwrap(), chal),
+            Err(WebauthnCError::Security)
+        ));
     }
 
     #[test]
     fn softtoken_persistence() {
         let _ = tracing_subscriber::fmt::try_init();
         let wan = Webauthn::new_unsafe_experts_only(
-            "https://localhost:8080/auth",
-            "localhost",
-            vec![url::Url::parse("https://localhost:8080").unwrap()],
+            "https://example.com/auth",
+            "example.com",
+            vec![url::Url::parse("https://example.com").unwrap()],
             AUTHENTICATOR_TIMEOUT,
             None,
             None,
@@ -944,7 +1024,7 @@ mod tests {
         info!("🍿 challenge -> {:x?}", chal);
 
         let r = wa
-            .do_registration(Url::parse("https://localhost:8080").unwrap(), chal)
+            .do_registration(Url::parse("https://example.com").unwrap(), chal)
             .map_err(|e| {
                 error!("Error -> {:x?}", e);
                 e
@@ -981,7 +1061,7 @@ mod tests {
             .unwrap();
 
         let r = wa
-            .do_authentication(Url::parse("https://localhost:8080").unwrap(), chal)
+            .do_authentication(Url::parse("https://example.com").unwrap(), chal)
             .map_err(|e| {
                 error!("Error -> {:x?}", e);
                 e
