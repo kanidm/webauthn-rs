@@ -162,7 +162,6 @@ impl From<ClientPinRequest> for BTreeMap<u32, Value> {
 impl TryFrom<BTreeMap<u32, Value>> for ClientPinResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!(?raw);
         Ok(Self {
             key_agreement: raw
                 .remove(&0x01)

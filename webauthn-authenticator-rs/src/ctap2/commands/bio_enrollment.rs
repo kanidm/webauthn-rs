@@ -199,7 +199,6 @@ pub struct TemplateInfo {
 impl TryFrom<BTreeMap<Value, Value>> for TemplateInfo {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<Value, Value>) -> Result<Self, Self::Error> {
-        // trace!(?raw);
         Ok(Self {
             id: raw
                 .remove(&Value::Integer(0x01))
@@ -435,7 +434,6 @@ impl BioEnrollmentResponse {
 impl TryFrom<BTreeMap<u32, Value>> for BioEnrollmentResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!(?raw);
         Ok(Self {
             modality: raw
                 .remove(&0x01)

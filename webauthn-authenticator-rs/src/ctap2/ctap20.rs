@@ -124,12 +124,10 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
         let p = iface.get_key_agreement_cmd();
         let ret = self.token.transmit(p, ui_callback).await?;
         let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
-        trace!(?key_agreement);
 
         // The platform calls encapsulate with the public key that the authenticator
         // returned in order to generate the platform key-agreement key and the shared secret.
         let shared_secret = iface.encapsulate(key_agreement)?;
-        trace!(?shared_secret);
 
         let set_pin = iface.set_pin_cmd(padded_pin, shared_secret.as_slice())?;
         let ret = self.token.transmit(set_pin, ui_callback).await?;
@@ -385,12 +383,10 @@ impl<'a, T: Token, U: UiCallback> Ctap20Authenticator<'a, T, U> {
             let p = iface.get_key_agreement_cmd();
             let ret = self.token.transmit(p, ui_callback).await?;
             let key_agreement = ret.key_agreement.ok_or(WebauthnCError::Internal)?;
-            trace!(?key_agreement);
 
             // The platform calls encapsulate with the public key that the authenticator
             // returned in order to generate the platform key-agreement key and the shared secret.
             let shared_secret = iface.encapsulate(key_agreement)?;
-            trace!(?shared_secret);
 
             // Then the platform obtains a pinUvAuthToken from the
             // authenticator, with the mc (and likely also with the ga)

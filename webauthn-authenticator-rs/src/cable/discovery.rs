@@ -301,7 +301,6 @@ impl Eid {
             }
         };
 
-        trace!("Decrypting {:?} with key {:?}", advert, key);
         let signing_key = PKey::hmac(&key[32..64])?;
         let mut signer = Signer::new(MessageDigest::sha256(), &signing_key)?;
         let calculated_hmac = signer.sign_oneshot_to_vec(&advert[..16])?;

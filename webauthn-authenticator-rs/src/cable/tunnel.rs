@@ -457,7 +457,6 @@ impl TryFrom<BTreeMap<u32, Value>> for CablePostHandshake {
     type Error = WebauthnCError;
 
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        // trace!("raw = {:?}", raw);
         let info = raw
             .remove(&0x01)
             .and_then(|v| value_to_vec_u8(v, "0x01"))

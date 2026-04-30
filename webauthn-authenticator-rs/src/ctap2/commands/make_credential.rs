@@ -186,7 +186,6 @@ impl From<MakeCredentialRequest> for BTreeMap<u32, Value> {
 impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialRequest {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!("raw: {:?}", raw);
         Ok(Self {
             client_data_hash: raw
                 .remove(&0x01)
@@ -273,7 +272,6 @@ impl From<MakeCredentialResponse> for BTreeMap<u32, Value> {
 impl TryFrom<BTreeMap<u32, Value>> for MakeCredentialResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!(?raw);
         Ok(Self {
             fmt: raw.remove(&0x01).and_then(|v| value_to_string(v, "0x01")),
             auth_data: raw.remove(&0x02),
