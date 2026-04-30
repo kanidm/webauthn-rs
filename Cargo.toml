@@ -59,15 +59,15 @@ exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 [workspace.dependencies]
 # These are in release/dependency order.
-# base64urlsafedata = { path = "./base64urlsafedata", version = "=0.6.0-dev" }
+# base64urlsafedata = { path = "./base64urlsafedata", version = "=0.6.1-dev" }
 
-fido-hid-rs = { path = "./fido-hid-rs", version = "=0.6.0-dev" }
-webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.6.0-dev" }
-webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.6.0-dev" }
-fido-mds = { path = "./fido-mds", version = "=0.6.0-dev" }
-webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.6.0-dev" }
-webauthn-rs = { path = "./webauthn-rs", version = "=0.6.0-dev" }
-webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.6.0-dev" }
+fido-hid-rs = { path = "./fido-hid-rs", version = "=0.6.1-dev" }
+webauthn-attestation-ca = { path = "./attestation-ca", version = "=0.6.1-dev" }
+webauthn-rs-proto = { path = "./webauthn-rs-proto", version = "=0.6.1-dev" }
+fido-mds = { path = "./fido-mds", version = "=0.6.1-dev" }
+webauthn-rs-core = { path = "./webauthn-rs-core", version = "=0.6.1-dev" }
+webauthn-rs = { path = "./webauthn-rs", version = "=0.6.1-dev" }
+webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=0.6.1-dev" }
 
 # Currently un-released
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
