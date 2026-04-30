@@ -121,7 +121,6 @@ impl From<GetAssertionRequest> for BTreeMap<u32, Value> {
 impl TryFrom<BTreeMap<u32, Value>> for GetAssertionRequest {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!("raw: {:?}", raw);
         Ok(Self {
             rp_id: raw
                 .remove(&0x01)
@@ -224,7 +223,6 @@ impl From<GetAssertionResponse> for BTreeMap<u32, Value> {
 impl TryFrom<BTreeMap<u32, Value>> for GetAssertionResponse {
     type Error = &'static str;
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!(?raw);
         Ok(Self {
             credential: raw.remove(&0x01).and_then(|v| {
                 if let Value::Map(mut v) = v {

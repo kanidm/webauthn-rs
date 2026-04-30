@@ -306,7 +306,6 @@ impl Eid {
             }
         };
 
-        // trace!("Decrypting {:?} with key {:?}", hex::encode(advert), hex::encode(key));
         let (encryption_key, signing_key): (NonZeroingAes256Key, NonZeroingAes256Key) = key.split();
         let mut extended_signing_key = HmacSha256Key::default();
         extended_signing_key[..32].copy_from_slice(&signing_key);

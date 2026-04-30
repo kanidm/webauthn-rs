@@ -81,7 +81,6 @@ impl TryFrom<BTreeMap<u32, Value>> for HandshakeV2 {
     type Error = WebauthnCError;
 
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        // trace!(?raw);
         let peer_identity = raw
             .remove(&0)
             .and_then(|v| value_to_vec_u8(v, "0x00"))
