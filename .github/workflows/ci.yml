@@ -247,10 +247,16 @@ jobs:
       # This tests that all the stubs work properly for optional dependencies,
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
+      #
+      # webauthn-rs-demo is excluded from doc builds because
+      # of https://github.com/bytecodealliance/rustix/issues/1620, which is
+      # broken on Rust nightly.
       - name: generate docs
         run: |
-          cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all \
+          cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
+            --all \
             --exclude fido-key-manager \
+            --exclude webauthn-rs-demo \
             --no-deps \
             --document-private-items
         env:
@@ -270,10 +276,11 @@ jobs:
           sudo apt-get -y install libpcsclite-dev libusb-1.0-0-dev libdbus-1-dev
       - run: |
           cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
-          --all \
-          --no-deps \
-          --document-private-items \
-          --all-features
+            --all \
+            --exclude webauthn-rs-demo \
+            --no-deps \
+            --document-private-items \
+            --all-features
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
       - uses: actions/upload-artifact@v4
@@ -311,4 +318,4 @@ jobs:
           triplet: x64-windows-static-md
           token: ${{ github.token }}
 
-      - run: cargo build -p actix_tutorial -p axum_tutorial -p tide_tutorial
+      - run: cargo build -p actix_tutorial -p axum_tutorial
