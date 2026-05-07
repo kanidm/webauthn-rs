@@ -1187,6 +1187,8 @@ impl WebauthnCore {
     }
 
     /// Check if a `request_origin` is an allowed suffix of `allowed_origin`.
+    ///
+    /// **Deprecated:** use [`webauthn_rs_proto::origin::origins_match()`][] instead.
     #[deprecated(note = "Use webauthn_rs_proto::origin::origins_match")]
     pub fn origins_match(
         allow_subdomains_origin: bool,
@@ -1194,7 +1196,12 @@ impl WebauthnCore {
         request_origin: &Url,
         allowed_origin: &Url,
     ) -> bool {
-        origins_match(allow_subdomains_origin, allow_any_port, request_origin, allowed_origin)
+        origins_match(
+            allow_subdomains_origin,
+            allow_any_port,
+            request_origin,
+            allowed_origin,
+        )
     }
 
     /// Returns the RP name
