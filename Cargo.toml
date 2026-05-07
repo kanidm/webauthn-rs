@@ -46,6 +46,7 @@ members = [
     # The compat tester
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
+    "compat_tester/webauthn-rs-demo-wasm",
     # Ssh Key Attestation
     "sshkey-attest",
     # RP Proxy
@@ -69,6 +70,7 @@ webauthn-authenticator-rs = { path = "./webauthn-authenticator-rs", version = "=
 # Currently un-released
 cable-tunnel-server-common = { path = "./cable-tunnel-server/common", version = "0.1.0" }
 webauthn-rs-device-catalog = { path = "./device-catalog" }
+webauthn-rs-demo-shared = { path = "./compat_tester/webauthn-rs-demo-shared" }
 
 
 tracing-subscriber = { version = "0.3", features = [

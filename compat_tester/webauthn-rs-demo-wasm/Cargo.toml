@@ -7,8 +7,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-webauthn-rs-demo-shared = { path = "../webauthn-rs-demo-shared", default-features = false }
-webauthn-rs-proto = { path = "../../webauthn-rs-proto", default-features = false, features = [
+webauthn-rs-demo-shared = { workspace = true, default-features = false }
+webauthn-rs-proto = { workspace = true, default-features = false, features = [
     "wasm",
 ] }
 wasm-bindgen = { version = "0.2", features = ["serde-serialize"] }
