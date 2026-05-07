@@ -247,10 +247,14 @@ jobs:
       # This tests that all the stubs work properly for optional dependencies,
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
+      #
+      # webauthn-rs-demo is excluded from doc builds because of
+      # https://github.com/bytecodealliance/rustix/issues/1620, which is broken
+      # on nightly.
       - name: generate docs
         run: |
           cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all \
-            --exclude fido-key-manager \
+            --exclude fido-key-manager webauthn-rs-demo \
             --no-deps \
             --document-private-items
         env:
