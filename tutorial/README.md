@@ -7,7 +7,7 @@ that contains a single-page html/wasm application (`wasm`).
 
 ## Running These
 
-Try `make` for options, typically `make <tide|axum|actix>` will work.
+Try `make` for options, typically `make <axum|actix>` will work.
 
 ## Troubleshooting
 
