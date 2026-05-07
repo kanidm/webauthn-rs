@@ -21,15 +21,15 @@ pub enum Route {
     NotFound,
 }
 
-#[function_component(Nav)]
-fn nav() -> Html {
-    let location = use_location().expect("unable to access location");
-    let cur_route = location.route();
+#[function_component]
+fn Nav() -> Html {
+    // let location = use_location().expect("unable to access location");
+    let cur_route: Option<Route> = use_route();
 
     html! {
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
           <div class="container">
-            <p class="navbar-brand">{ "Webauthn RS" }</p>
+            <p class="navbar-brand">{ "webauthn-rs" }</p>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
                 data-bs-target="#navbarcontent" aria-controls="navbarcontent"
                 aria-expanded="false" aria-label="Toggle navigation">
@@ -62,9 +62,9 @@ fn nav() -> Html {
     }
 }
 
-fn switch(routes: &Route) -> Html {
+fn switch(route: Route) -> Html {
     console::log!("manager::switch");
-    match routes {
+    match route {
         Route::Demo => html! { <Demo /> },
         Route::CompatTest => html! { <CompatTest /> },
         Route::NotFound => {
@@ -80,39 +80,14 @@ fn switch(routes: &Route) -> Html {
     }
 }
 
-pub struct ManagerApp {}
-
-impl Component for ManagerApp {
-    type Message = bool;
-    type Properties = ();
-
-    fn create(_ctx: &Context<Self>) -> Self {
-        console::log!("manager::create");
-        ManagerApp {}
-    }
-
-    fn changed(&mut self, _ctx: &Context<Self>) -> bool {
-        console::log!("manager::change");
-        false
-    }
-
-    fn update(&mut self, _ctx: &Context<Self>, _msg: Self::Message) -> bool {
-        console::log!("manager::update");
-        true
-    }
-
-    fn rendered(&mut self, _ctx: &Context<Self>, _first_render: bool) {
-        console::log!("manager::rendered");
-    }
-
-    fn view(&self, _ctx: &Context<Self>) -> Html {
-        html! {
-          <div class="w-100 h-100">
-            <BrowserRouter>
-                <Nav />
-                <Switch<Route> render={ Switch::render(switch) } />
-            </BrowserRouter>
-          </div>
-        }
+#[function_component]
+pub fn ManagerApp() -> Html {
+    html! {
+        <BrowserRouter>
+            <Nav />
+            <div class="container mt-1">
+                <Switch<Route> render={switch} />
+            </div>
+        </BrowserRouter>
     }
 }

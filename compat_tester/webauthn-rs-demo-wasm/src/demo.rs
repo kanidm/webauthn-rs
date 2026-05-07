@@ -78,10 +78,10 @@ impl Demo {
             serde_wasm_bindgen::to_value(&reg_start).expect_throw("Failed to serialise settings");
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/demo/register_start", &opts)?;
 
@@ -130,10 +130,10 @@ impl Demo {
             serde_wasm_bindgen::to_value(&reg_finish).expect("Failed to serialise rpkc");
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/demo/register_finish", &opts)?;
 
@@ -165,9 +165,9 @@ impl Demo {
     async fn conditional_login_begin() -> Result<AppMsg, FetchError> {
         console::log!("conditional_login_begin()");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
 
         let request = Request::new_with_str_and_init("/demo/condui_login_start", &opts)?;
 
@@ -215,10 +215,10 @@ impl Demo {
         let req_jsvalue = serde_wasm_bindgen::to_value(&pkc).expect("Failed to serialise pkc");
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/demo/condui_login_finish", &opts)?;
 
@@ -259,10 +259,10 @@ impl Demo {
             serde_wasm_bindgen::to_value(&auth_start).expect_throw("Failed to serialise settings");
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/demo/login_start", &opts)?;
 
@@ -306,10 +306,10 @@ impl Demo {
             serde_wasm_bindgen::to_value(&auth_finish).expect("Failed to serialise pkc");
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/demo/login_finish", &opts)?;
 
@@ -368,7 +368,7 @@ impl Demo {
               <h3 class="h3 mb-3 fw-normal">{ "Register a Webauthn Credential" }</h3>
               { ctap2_support }
               <form
-                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                    onsubmit={ ctx.link().callback(|e: SubmitEvent| {
                     console::log!("prevent_default()");
                     e.prevent_default();
                     AppMsg::Register
@@ -456,7 +456,7 @@ impl Demo {
             <main class="text-center form-signin">
               <h3 class="h3 mb-3 fw-normal">{ "Authenticate with Webauthn" }</h3>
               <form
-                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                    onsubmit={ ctx.link().callback(|e: SubmitEvent| {
                     console::log!("prevent_default()");
                     e.prevent_default();
                     AppMsg::Login
@@ -496,7 +496,7 @@ impl Demo {
             <main class="text-center form-signin">
               <h3 class="h3 mb-3 fw-normal">{ "Authenticate with Webauthn" }</h3>
               <form
-                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                    onsubmit={ ctx.link().callback(|e: SubmitEvent| {
                     console::log!("prevent_default()");
                     e.prevent_default();
                     AppMsg::Login
@@ -593,7 +593,7 @@ impl Component for Demo {
         }
     }
 
-    fn changed(&mut self, _ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, _ctx: &Context<Self>, _old_props: &Self::Properties) -> bool {
         false
     }
 
@@ -863,7 +863,7 @@ impl Component for Demo {
                 std::mem::swap(&mut self.abort_controller, &mut abort_controller);
                 let abort_signal = self.abort_controller.signal();
 
-                c_options.signal(&abort_signal);
+                c_options.set_signal(&abort_signal);
 
                 let promise = utils::window()
                     .navigator()

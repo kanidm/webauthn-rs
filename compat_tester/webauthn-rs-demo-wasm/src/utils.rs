@@ -57,5 +57,5 @@ pub fn navigator() -> Navigator {
 }
 
 pub fn clipboard() -> Clipboard {
-    navigator().clipboard().expect("Unable to access clipboard")
+    navigator().clipboard()
 }

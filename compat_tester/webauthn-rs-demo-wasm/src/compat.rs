@@ -159,7 +159,7 @@ impl Component for CompatTest {
         }
     }
 
-    fn changed(&mut self, _ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, _ctx: &Context<Self>, _old_props: &Self::Properties) -> bool {
         false
     }
 
@@ -1065,7 +1065,7 @@ Please add any extra details here:
                     <div id="collapseThree" class="accordion-collapse collapse"
                       aria-labelledby="headingThree" data-bs-parent="#accordionExample">
                       <div class="accordion-body">
-                        <pre>{ data }</pre>
+                        <pre>{ data.as_string() }</pre>
                       </div>
                     </div>
                   </div>
@@ -1082,7 +1082,7 @@ Please add any extra details here:
               { if self.show_next {
                 html! {
                   <form
-                    onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                    onsubmit={ ctx.link().callback(|e: SubmitEvent| {
                         console::log!("prevent_default()");
                         e.prevent_default();
                         AppMsg::Begin
@@ -1125,7 +1125,7 @@ Please add any extra details here:
                     </p>
                     <div class="text-center">
                       <form
-                        onsubmit={ ctx.link().callback(|e: FocusEvent| {
+                        onsubmit={ ctx.link().callback(|e: SubmitEvent| {
                             console::log!("prevent_default()");
                             e.prevent_default();
                             AppMsg::Begin
@@ -1148,10 +1148,10 @@ Please add any extra details here:
 
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/compat/register_start", &opts)?;
 
@@ -1189,10 +1189,10 @@ Please add any extra details here:
 
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/compat/register_finish", &opts)?;
 
@@ -1229,10 +1229,10 @@ Please add any extra details here:
 
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/compat/login_start", &opts)?;
 
@@ -1270,10 +1270,10 @@ Please add any extra details here:
 
         let req_jsvalue = js_sys::JSON::stringify(&req_jsvalue).expect_throw("failed to stringify");
 
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::SameOrigin);
-        opts.body(Some(&req_jsvalue));
+        let opts = RequestInit::new();
+        opts.set_method("POST");
+        opts.set_mode(RequestMode::SameOrigin);
+        opts.set_body(&req_jsvalue);
 
         let request = Request::new_with_str_and_init("/compat/login_finish", &opts)?;
 
