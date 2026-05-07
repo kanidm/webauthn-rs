@@ -254,7 +254,7 @@ jobs:
       - name: generate docs
         run: |
           cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc --all \
-            --exclude fido-key-manager webauthn-rs-demo \
+            --exclude fido-key-manager,webauthn-rs-demo \
             --no-deps \
             --document-private-items
         env:
@@ -275,6 +275,7 @@ jobs:
       - run: |
           cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
           --all \
+          --exclude webauthn-rs-demo \
           --no-deps \
           --document-private-items \
           --all-features
