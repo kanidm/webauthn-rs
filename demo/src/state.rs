@@ -23,6 +23,7 @@ pub struct UserData {
     pub name_to_id: BTreeMap<String, Uuid>,
     pub accounts: BTreeMap<Uuid, UserAccount>,
     pub registrations: BTreeMap<Uuid, PasskeyRegistration>,
+    pub authentications: BTreeMap<Uuid, PasskeyAuthentication>,
 }
 
 pub struct DemoState {

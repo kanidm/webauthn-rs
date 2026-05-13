@@ -1,3 +1,4 @@
+use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
 use crate::state::{DemoState, UserAccount};
 use leptos::{ev::SubmitEvent, logging::*, prelude::*, task::spawn_local};
@@ -102,7 +103,7 @@ pub async fn finish_registration(
     };
 
     let mut users_guard = state.users.write();
-    let Some(reg_state) = users_guard.registrations.remove(&user_unique_id.clone()) else {
+    let Some(reg_state) = users_guard.registrations.remove(&user_unique_id) else {
         return Err(ServerFnError::new("No active registration request"));
     };
     users_guard.commit();
@@ -135,10 +136,6 @@ pub async fn finish_registration(
             Err(ServerFnError::new("Bad request"))
         }
     }
-}
-
-fn is_username_valid(username: &str) -> bool {
-    username.len() >= 3 && !username.contains(char::is_whitespace)
 }
 
 /// Registration page.
@@ -267,7 +264,13 @@ pub fn RegisterPage() -> impl IntoView {
                         {finished_resp.enrolled_keys}
                         " credential(s) enrolled."
                     </p>
-                    <p>"Now try to use the credential on the login page."</p>
+                    <p>
+                        "Now try to use the credential "
+                        <a href="/login">
+                            "on the login page"
+                        </a>
+                        "."
+                    </p>
                 }
             })}
 
