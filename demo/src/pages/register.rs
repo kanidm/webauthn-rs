@@ -1,6 +1,8 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
 use crate::state::{DemoState, UserAccount};
+#[cfg(feature = "ssr")]
+use axum::http::StatusCode;
 use leptos::{
     ev::SubmitEvent,
     logging::*,
@@ -8,6 +10,8 @@ use leptos::{
     server_fn::codec::{Json, JsonEncoding, Post},
     task::spawn_local,
 };
+#[cfg(feature = "ssr")]
+use leptos_axum::ResponseOptions;
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
@@ -44,7 +48,10 @@ pub async fn start_registration(
     username: String,
 ) -> Result<StartRegistrationResponse, ServerFnError> {
     if !is_username_valid(&username) {
-        // FIXME: this returns HTTP 500, when it should be 400
+        if let Some(response) = use_context::<ResponseOptions>() {
+            response.set_status(StatusCode::BAD_REQUEST);
+        }
+
         return Err(ServerFnError::new("invalid username"));
     }
 
@@ -100,6 +107,10 @@ pub async fn start_registration(
 
         Err(e) => {
             error!("challenge_register -> {e:?}");
+
+            if let Some(response) = use_context::<ResponseOptions>() {
+                response.set_status(StatusCode::BAD_REQUEST);
+            }
             Err(ServerFnError::new("registration error"))
         }
     }
@@ -120,6 +131,9 @@ pub async fn finish_registration(
 
     let mut users_guard = state.users.write();
     let Some(reg_state) = users_guard.registrations.remove(&user_unique_id) else {
+        if let Some(response) = use_context::<ResponseOptions>() {
+            response.set_status(StatusCode::BAD_REQUEST);
+        }
         return Err(ServerFnError::new("No active registration request"));
     };
     users_guard.commit();
@@ -149,6 +163,11 @@ pub async fn finish_registration(
 
         Err(e) => {
             log!("challenge_register => {e:?}");
+
+            if let Some(response) = use_context::<ResponseOptions>() {
+                response.set_status(StatusCode::BAD_REQUEST);
+            }
+
             Err(ServerFnError::new("Bad request"))
         }
     }
