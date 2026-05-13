@@ -1,7 +1,13 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
 use crate::state::{DemoState, UserAccount};
-use leptos::{ev::SubmitEvent, logging::*, prelude::*, task::spawn_local};
+use leptos::{
+    ev::SubmitEvent,
+    logging::*,
+    prelude::*,
+    server_fn::codec::{Json, JsonEncoding, Post},
+    task::spawn_local,
+};
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
@@ -29,7 +35,11 @@ pub struct FinishRegistrationResponse {
     created: OffsetDateTime,
 }
 
-#[server(endpoint = "start_registration")]
+#[server(
+    endpoint = "start_registration",
+    input = Post<JsonEncoding>,
+    output = Json,
+)]
 pub async fn start_registration(
     username: String,
 ) -> Result<StartRegistrationResponse, ServerFnError> {
@@ -37,6 +47,8 @@ pub async fn start_registration(
         // FIXME: this returns HTTP 500, when it should be 400
         return Err(ServerFnError::new("invalid username"));
     }
+
+    let username = username.to_ascii_lowercase();
 
     let Some(state) = use_context::<Arc<DemoState>>() else {
         return Err(ServerFnError::new("Server init failure"));
@@ -93,7 +105,11 @@ pub async fn start_registration(
     }
 }
 
-#[server(endpoint = "finish_registration")]
+#[server(
+    endpoint = "finish_registration",
+    input = Post<JsonEncoding>,
+    output = Json,
+)]
 pub async fn finish_registration(
     rpkc: RegisterPublicKeyCredential,
     user_unique_id: Uuid,
