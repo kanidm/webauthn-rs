@@ -1,11 +1,27 @@
 use concread::CowCell;
 use std::collections::BTreeMap;
+use time::OffsetDateTime;
 use webauthn_rs::prelude::*;
+
+#[derive(Clone)]
+pub struct UserAccount {
+    pub created: OffsetDateTime,
+    pub passkeys: Vec<Passkey>,
+}
+
+impl UserAccount {
+    pub fn new(passkey: Passkey) -> Self {
+        Self {
+            created: OffsetDateTime::now_utc(),
+            passkeys: vec![passkey],
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct UserData {
     pub name_to_id: BTreeMap<String, Uuid>,
-    pub passkeys: BTreeMap<Uuid, Vec<Passkey>>,
+    pub accounts: BTreeMap<Uuid, UserAccount>,
     pub registrations: BTreeMap<Uuid, PasskeyRegistration>,
 }
 
@@ -21,4 +37,6 @@ impl DemoState {
             users: Default::default(),
         }
     }
+
+    // TODO: memory management; removing excessive entries.
 }

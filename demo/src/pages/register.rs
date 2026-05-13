@@ -1,11 +1,13 @@
 #[cfg(feature = "ssr")]
-use crate::state::DemoState;
+use crate::state::{DemoState, UserAccount};
 use leptos::{ev::SubmitEvent, logging::*, prelude::*, task::spawn_local};
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, TimestampMilliSeconds};
 #[cfg(feature = "ssr")]
 use std::sync::Arc;
+use time::OffsetDateTime;
 use uuid::Uuid;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::*;
@@ -17,9 +19,13 @@ pub struct StartRegistrationResponse {
     user_unique_id: Uuid,
 }
 
+#[serde_as]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct FinishRegistrationResponse {
     enrolled_keys: u64,
+
+    #[serde_as(as = "TimestampMilliSeconds<i64>")]
+    created: OffsetDateTime,
 }
 
 #[server(endpoint = "start_registration")]
@@ -51,10 +57,13 @@ pub async fn start_registration(
 
     let exclude_credentials: Option<Vec<CredentialID>> = {
         let users_guard = state.users.read();
-        users_guard
-            .passkeys
-            .get(&user_unique_id)
-            .map(|keys| keys.iter().map(|key| key.cred_id().clone()).collect())
+        users_guard.accounts.get(&user_unique_id).map(|account| {
+            account
+                .passkeys
+                .iter()
+                .map(|key| key.cred_id().clone())
+                .collect()
+        })
     };
 
     match state.webauthn.start_passkey_registration(
@@ -105,16 +114,20 @@ pub async fn finish_registration(
         Ok(sk) => {
             let mut users_guard = state.users.write();
 
-            let keys = users_guard
-                .passkeys
+            let account = users_guard
+                .accounts
                 .entry(user_unique_id)
-                .and_modify(|keys| keys.push(sk.clone()))
-                .or_insert_with(|| vec![sk.clone()]);
+                .and_modify(|account| account.passkeys.push(sk.clone()))
+                .or_insert_with(|| UserAccount::new(sk.clone()));
 
-            let enrolled_keys = keys.len() as u64;
+            let enrolled_keys = account.passkeys.len() as u64;
+            let created = account.created;
             users_guard.commit();
 
-            Ok(FinishRegistrationResponse { enrolled_keys })
+            Ok(FinishRegistrationResponse {
+                enrolled_keys,
+                created,
+            })
         }
 
         Err(e) => {
@@ -131,7 +144,7 @@ fn is_username_valid(username: &str) -> bool {
 /// Registration page.
 #[component]
 pub fn RegisterPage() -> impl IntoView {
-    let username = RwSignal::new("".to_string());
+    let username: RwSignal<String> = RwSignal::new("".to_string());
     let (resp, set_resp) = signal(None);
     let (err, set_err) = signal(None);
     #[allow(unused)]
@@ -241,8 +254,14 @@ pub fn RegisterPage() -> impl IntoView {
             <input type="submit" value="Register" />
 
             {move || finished.get().map(|finished_resp| {
+                let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
+
                 view! {
                     <h2>"Authenticator enrolled!"</h2>
+                    <p>
+                        "Account created at "
+                        {created}
+                    </p>
                     <p>
                         "The account now has "
                         {finished_resp.enrolled_keys}
