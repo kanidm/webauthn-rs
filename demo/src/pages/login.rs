@@ -259,6 +259,23 @@ pub fn LoginPage() -> impl IntoView {
 
     view! {
         <h1>"Login with your authenticator"</h1>
+        <p>
+            "From here, you use your authenticator to login with a passkey - you just need the \
+            username."
+        </p>
+
+        <p>
+            "You can visit this demo app from another device or browser, and use any \
+            authenticators that you've previously enrolled there."
+        </p>
+
+        <p>
+            "If you want to register a new credential, "
+            <a href="/register">
+                "go to the registration page"
+            </a>
+            "."
+        </p>
 
         <form on:submit=on_submit>
             <div class="mb-3">
