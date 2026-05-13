@@ -1,15 +1,16 @@
 use axum::Router;
+use axum_server::tls_rustls::RustlsConfig;
 use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 use webauthn_rs::prelude::*;
 use webauthn_rs_demo2::{app::*, state::DemoState};
 
 #[tokio::main]
 pub async fn main() {
     let conf = get_configuration(None).unwrap();
-    let rp_origin = Url::parse("http://localhost:3000").expect("URL parse error");
+    let rp_origin = Url::parse("https://localhost:3000").expect("URL parse error");
     let webauthn = WebauthnBuilder::new("localhost", &rp_origin)
         .expect("WebauthnBuilder err")
         .rp_name("webauthn-rs demo")
@@ -38,9 +39,16 @@ pub async fn main() {
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
-    log!("listening on http://{}", &addr);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app.into_make_service())
+
+    let tls_config =
+        RustlsConfig::from_pem_file(PathBuf::from("./demo/cert.pem"), PathBuf::from("./demo/key.pem"))
+            .await
+            .expect("Failure loading TLS certificates");
+
+    log!("listening on https://{addr}");
+
+    axum_server::bind_rustls(addr, tls_config)
+        .serve(app.into_make_service())
         .await
         .unwrap();
 }

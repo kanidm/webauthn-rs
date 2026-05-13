@@ -15,7 +15,11 @@ Install [`cargo-leptos`][1].
 ## Run the development server
 
 ```sh
-cargo leptos watch
+# WebAuthn must be served over HTTPS, so we generate some self-signed certs.
+./generate_certs.sh
+
+# Run the server without hot-reloading (as HTTPS isn't supported)
+cargo leptos serve
 ```
 
-Then point your browser at http://localhost:3000
+Then point your browser at https://localhost:3000
