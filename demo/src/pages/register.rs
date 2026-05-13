@@ -225,7 +225,32 @@ pub fn RegisterPage() -> impl IntoView {
     };
 
     view! {
-        <h1>"Register"</h1>
+        <h1>"Enroll your authenticator"</h1>
+
+        <p>
+            "From here, you can enroll your authenticator to create a passkey."
+        </p>
+
+        <p>
+            "In a real application, you'd authenticate the user before allowing them to enroll new "
+            "passkeys. Because this is just a demo, you can enroll credentials for "<em>"any"</em>
+            " username without authentication. If the username does not exist, a new user will be "
+            "created."
+        </p>
+
+        <p>
+            "This runs "<code>"webauthn-rs"</code>" in "<em>"non-attested passkey"</em>" mode. "
+            "Your authenticator must support user verification (PIN or biometrics), such as CTAP "
+            "2.0 compliant security keys and synchronised credential managers."
+            <em>"U2F-only keys are not supported."</em>
+        </p>
+
+        <p>
+            "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" does not require "
+            "resident (\"discoverable\") credentials by default, so it won't consume the limited, "
+            "non-reusable storage space on hardware security keys. Synchronised credential "
+            "managers (like iCloud Keychain) may still create a resident key anyway."
+        </p>
 
         <form on:submit=on_submit>
             <div class="mb-3">
