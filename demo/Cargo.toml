@@ -12,14 +12,59 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-leptos = { version = "0.8.0" }
-leptos_router = { version = "0.8.0" }
 axum = { version = "0.8.0", optional = true }
+concread = { version = "0.5.10", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
+leptos = { version = "0.8.0" }
+leptos-use = { version = "0.18.3", features = ["use_window"] }
 leptos_axum = { version = "0.8.0", optional = true }
 leptos_meta = { version = "0.8.0" }
+leptos_router = { version = "0.8.0" }
+serde.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+uuid = { workspace = true, features = ["serde"] }
 wasm-bindgen = { version = "=0.2.120", optional = true }
+wasm-bindgen-futures = { version = "0.4" }
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "AbortController",
+    "AbortSignal",
+    "AuthenticationExtensionsClientOutputs",
+    "AuthenticatorResponse",
+    "Clipboard",
+    "CredentialCreationOptions",
+    "CredentialRequestOptions",
+    "CredentialsContainer",
+    "Element",
+    "Event",
+    "Headers",
+    "HtmlCollection",
+    "HtmlSelectElement",
+    "Navigator",
+    "PublicKeyCredential",
+    "PublicKeyCredentialCreationOptions",
+    "PublicKeyCredentialRpEntity",
+    "PublicKeyCredentialUserEntity",
+    "Request",
+    "RequestCredentials",
+    "RequestInit",
+    "RequestMode",
+    "RequestRedirect",
+    "Response",
+    "Window",
+]
+
+[dependencies.webauthn-rs]
+workspace = true
+optional = true
+features = ["conditional-ui", "attestation", "danger-allow-state-serialisation"]
+
+[dependencies.webauthn-rs-proto]
+workspace = true
+default-features = false
+features = ["wasm"]
 
 [features]
 hydrate = [
@@ -27,10 +72,13 @@ hydrate = [
     "dep:console_error_panic_hook",
     "dep:wasm-bindgen",
 ]
+
 ssr = [
     "dep:axum",
-    "dep:tokio",
+    "dep:concread",
     "dep:leptos_axum",
+    "dep:tokio",
+    "dep:webauthn-rs",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",

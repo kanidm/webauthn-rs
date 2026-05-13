@@ -25,5 +25,13 @@ pub fn HomePage() -> impl IntoView {
             add WebAuthn support to Rust web applications. We provide template and example
             JavaScript and WASM bindings to demonstrate the browser interactions required."
         </p>
+
+        <p>
+            "To show you how it works, let's "
+            <a href="/register">
+                "start the registration flow"
+            </a>
+            "."
+        </p>
     }
 }
