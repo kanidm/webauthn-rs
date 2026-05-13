@@ -1,6 +1,12 @@
 #[cfg(feature = "ssr")]
 use crate::state::DemoState;
-use leptos::{ev::SubmitEvent, logging::*, prelude::*, task::spawn_local};
+use leptos::{
+    ev::SubmitEvent,
+    logging::*,
+    prelude::*,
+    server_fn::codec::{Json, JsonEncoding, Post},
+    task::spawn_local,
+};
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
@@ -13,8 +19,6 @@ use serde_with::{
 use std::sync::Arc;
 use time::OffsetDateTime;
 use uuid::Uuid;
-#[cfg(feature = "ssr")]
-use webauthn_rs::prelude::*;
 use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -35,12 +39,18 @@ pub struct FinishLoginResponse {
     cred_id: Vec<u8>,
 }
 
-#[server(endpoint = "start_login")]
+#[server(
+    endpoint = "start_login",
+    input = Post<JsonEncoding>,
+    output = Json,
+)]
 pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerFnError> {
     if !is_username_valid(&username) {
         // FIXME: this returns HTTP 500, when it should be 400
         return Err(ServerFnError::new("invalid username"));
     }
+
+    let username = username.to_ascii_lowercase();
 
     let Some(state) = use_context::<Arc<DemoState>>() else {
         return Err(ServerFnError::new("Server init failure"));
@@ -81,7 +91,11 @@ pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerF
     }
 }
 
-#[server(endpoint = "finish_login")]
+#[server(
+    endpoint = "finish_login",
+    input = Post<JsonEncoding>,
+    output = Json,
+)]
 pub async fn finish_login(
     pkc: PublicKeyCredential,
     user_unique_id: Uuid,
