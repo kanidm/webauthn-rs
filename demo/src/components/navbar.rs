@@ -24,11 +24,14 @@ pub fn Navbar() -> impl IntoView {
                 <div class="collapse navbar-collapse" id="navbarcontent">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                         <li class="nav-item">
-                            <a class="nav-link" href="#">"Demo"</a>
+                            <a class="nav-link" href="/register">"Register"</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#">"Compatibility tests"</a>
+                            <a class="nav-link" href="/login">"Login"</a>
                         </li>
+                        // <li class="nav-item">
+                        //     <a class="nav-link" href="#">"Compatibility tests"</a>
+                        // </li>
                     </ul>
                 </div>
 
