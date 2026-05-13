@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 axum = { version = "0.8.0", optional = true }
+axum-server = { version = "0.8.0", features = ["tls-rustls"], optional = true }
 concread = { version = "0.5.10", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 leptos = { version = "0.8.0" }
@@ -22,12 +23,14 @@ leptos_meta = { version = "0.8.0" }
 leptos_router = { version = "0.8.0" }
 serde.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+tokio-rustls = { version = "0.26.4", optional = true }
 uuid = { workspace = true, features = ["serde"] }
 wasm-bindgen = { version = "=0.2.120", optional = true }
-wasm-bindgen-futures = { version = "0.4" }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 
 [dependencies.web-sys]
 version = "0.3"
+optional = true
 features = [
     "AbortController",
     "AbortSignal",
@@ -71,13 +74,17 @@ hydrate = [
     "leptos/hydrate",
     "dep:console_error_panic_hook",
     "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:web-sys",
 ]
 
 ssr = [
     "dep:axum",
+    "dep:axum-server",
     "dep:concread",
     "dep:leptos_axum",
     "dep:tokio",
+    "dep:tokio-rustls",
     "dep:webauthn-rs",
     "leptos/ssr",
     "leptos_meta/ssr",
