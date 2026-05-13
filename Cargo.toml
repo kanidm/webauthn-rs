@@ -127,3 +127,11 @@ reqwest = { version = "0.12.25", default-features = false, features = [
 thiserror = "^1.0.69"
 tokio-native-tls = "^0.3.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
+
+# Defines a size-optimized profile for the WASM bundle in release mode
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"
