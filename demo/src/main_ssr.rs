@@ -40,10 +40,12 @@ pub async fn main() {
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
 
-    let tls_config =
-        RustlsConfig::from_pem_file(PathBuf::from("./demo/cert.pem"), PathBuf::from("./demo/key.pem"))
-            .await
-            .expect("Failure loading TLS certificates");
+    let tls_config = RustlsConfig::from_pem_file(
+        PathBuf::from("./demo/cert.pem"),
+        PathBuf::from("./demo/key.pem"),
+    )
+    .await
+    .expect("Failure loading TLS certificates");
 
     log!("listening on https://{addr}");
 
