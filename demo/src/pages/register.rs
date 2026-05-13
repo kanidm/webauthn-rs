@@ -267,24 +267,25 @@ pub fn RegisterPage() -> impl IntoView {
         </p>
 
         <p>
-            "In a real application, you'd authenticate the user before allowing them to enroll new "
-            "passkeys. Because this is just a demo, you can enroll credentials for "<em>"any"</em>
-            " username without authentication. If the username does not exist, a new user will be "
-            "created."
+            "In a real application, you'd authenticate the user before allowing them to enroll new \
+            passkeys. Because this is just a demo, you can enroll credentials for "<em>"any"</em>
+            " username without authentication. If the username does not exist, a new user will be \
+            created. This demo will be periodically reset, deleting all credentials from the \
+            server."
         </p>
 
         <p>
-            "This runs "<code>"webauthn-rs"</code>" in "<em>"non-attested passkey"</em>" mode. "
-            "Your authenticator must support user verification (PIN or biometrics), such as CTAP "
-            "2.0 compliant security keys and synchronised credential managers."
+            "This runs "<code>"webauthn-rs"</code>" in "<em>"non-attested passkey"</em>" mode. \
+            Your authenticator must support user verification (PIN or biometrics), such as CTAP \
+            2.0 compliant security keys and synchronised credential managers. "
             <em>"U2F-only keys are not supported."</em>
         </p>
 
         <p>
-            "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" does not require "
-            "resident (\"discoverable\") credentials by default, so it won't consume the limited, "
-            "non-reusable storage space on hardware security keys. Synchronised credential "
-            "managers (like iCloud Keychain) may still create a resident key anyway."
+            "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" does not require \
+            resident (\"discoverable\") credentials by default, so it won't consume the limited, \
+            non-reusable storage space on hardware security keys. Synchronised credential \
+            managers (like iCloud Keychain) may still create a resident key, and they work too!"
         </p>
 
         <form on:submit=on_submit>
