@@ -214,7 +214,7 @@ pub fn LoginPage() -> impl IntoView {
     };
 
     view! {
-        <h1>"Login"</h1>
+        <h1>"Login with your authenticator"</h1>
 
         <form on:submit=on_submit>
             <div class="mb-3">
