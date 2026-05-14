@@ -5,7 +5,10 @@ use leptos_axum::{generate_route_list, LeptosRoutes};
 use std::sync::Arc;
 use tracing::{info, warn};
 use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
-use webauthn_rs_demo2::{app::*, server_config::ServerArgs, state::DemoState};
+use webauthn_rs_demo2::{
+    app::*,
+    server::{config::ServerArgs, state::DemoState},
+};
 
 #[tokio::main]
 pub async fn main() {
