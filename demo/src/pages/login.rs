@@ -1,5 +1,5 @@
 #[cfg(feature = "ssr")]
-use crate::state::DemoState;
+use crate::server::state::DemoState;
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(not(feature = "ssr"))]
