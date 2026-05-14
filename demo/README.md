@@ -1,6 +1,6 @@
 # webauthn-rs-demo2
 
-Work in progress rewrite of the demo site using axum and leptos.
+Work in progress rewrite of the demo site using `axum` and Leptos.
 
 ## Prerequisites
 
@@ -12,21 +12,89 @@ Install [`cargo-leptos`][1].
 
 ## Run the development server
 
-```sh
-# WebAuthn must be served over HTTPS, so we generate some self-signed certs.
-./generate_certs.sh
+### ...over HTTP
 
-# Run the server without hot-reloading (as WebAuthn requires HTTPS, and leptos' WebSocket
-# side-channel doesn't support HTTPS)
-cargo leptos serve \
+To run the development server over HTTP with automatic reloading:
+
+```sh
+cargo leptos watch \
   -- \
   --rp-name "webauthn-rs demo" \
-  --rp-origin https://localhost:3000 \
-  --tls-public-key "$PWD/cert.pem" \
-  --tls-private-key "$PWD/key.pem"
+  --rp-origin http://localhost:3000
 ```
 
+Then point your browser at http://localhost:3000
+
+### ...over HTTPS
+
+You'll need to serve the app over HTTPS for it to work from non-`localhost` domains.
+
+To run the development server over HTTPS, you can either:
+
+* Run it in HTTP mode, making `--rp-origin` a HTTPS URL, and put a HTTPS reverse proxy in front of
+  HTTP ports 3000 and 3001.
+
+  This supports automatic reloading, but requires more setup work.
+
+* Run it serving HTTPS directly, with `--tls-public-key` and `--tls-private-key`, which *doesn't*
+  support automatic reloading.
+
+  ```sh
+  cargo leptos serve \
+    -- \
+    --rp-name "webauthn-rs demo" \
+    --rp-origin https://localhost:3000 \
+    --tls-public-key "$PWD/cert.pem" \
+    --tls-private-key "$PWD/key.pem"
+  ```
+
 Then point your browser at https://localhost:3000
+
+[`generate_self_signed_certs.sh`](./generate_self_signed_certs.sh) uses `openssl` to generate a
+self-signed certificate for `localhost` which is valid for 5 days, and will only update it if it has
+expired (or is close to expiry). Modify this as you need.
+
+## Server options
+
+The server can be configured with command-line flags (those starting with `--`) and/or environment
+variables (those in `UPPER_CASE`).
+
+If using `cargo leptos serve` or `cargo leptos watch`, you need to put `--` between `cargo-leptos`'
+flags and before any server flags ([see examples above](#over-http)).
+
+* `--rp-origin`, `RP_ORIGIN`: (**required**) Origin URL where the application is served from,
+  including port (if not using a well-known default).
+  
+  This is used for WebAuthn operations, and for the link shown in the application server's startup
+  log.
+  
+  If the hostname is `localhost`, this may be a `http://` or `https://` URL, otherwise it must be a
+  `https://` URL.
+  
+  The URL must not contain path, query, fragment, username or password components.
+
+  The hostname must not be an IP address.
+
+* `--rp-id`, `RP_ID`: (**optional**) Hostname where the relying party is served from.
+
+  This must be the same as or a registerable domain suffix of the Origin URL.
+
+  **If not set**, this defaults to the Origin URL's hostname.
+
+  **If this option is changed, all credentials will be invalidated.**
+
+* `--rp-name`, `RP_NAME`: (**optional**) Human-readable name for the relying party, which might be
+  displayed to the user by their browser. If not set, defaults to the RP ID.
+
+* `--tls-private-key`, `TLS_PRIVATE_KEY`: (**optional**) Absolute path to the server's TLS private
+  key, in PEM format. This must not be encrypted.
+
+  If this option is set, then a TLS public key chain is also required.
+
+* `--tls-public-key`, `TLS_PUBLIC_KEY`: (**optional**) Absolute path to the server's TLS public
+  key chain in PEM format. This must not be encrypted.
+
+  If this option is set, then a TLS private key is also required.
 
 ## Demo limitations
 

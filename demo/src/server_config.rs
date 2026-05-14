@@ -1,6 +1,7 @@
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Parser, ValueHint};
-use std::path::PathBuf;
+use std::{io::ErrorKind, path::PathBuf};
+use tracing::error;
 use webauthn_rs::prelude::*;
 
 #[derive(Debug, Clone, Parser)]
@@ -12,7 +13,7 @@ pub struct ServerArgs {
         value_name = "PEM",
         value_hint = ValueHint::FilePath,
     )]
-    tls_public_key: PathBuf,
+    tls_public_key: Option<PathBuf>,
 
     /// Path to the server's private key in PEM format.
     #[clap(
@@ -21,7 +22,7 @@ pub struct ServerArgs {
         value_name = "PEM",
         value_hint = ValueHint::FilePath,
     )]
-    tls_private_key: PathBuf,
+    tls_private_key: Option<PathBuf>,
 
     /// Relying party ID.
     ///
@@ -60,8 +61,19 @@ pub struct ServerArgs {
 
 impl ServerArgs {
     /// Get a [RustlsConfig][] for the server.
-    pub async fn rustls_config(&self) -> std::io::Result<RustlsConfig> {
-        RustlsConfig::from_pem_file(&self.tls_public_key, &self.tls_private_key).await
+    pub async fn rustls_config(&self) -> std::io::Result<Option<RustlsConfig>> {
+        match (&self.tls_public_key, &self.tls_private_key) {
+            // Absolute paths required due to https://github.com/leptos-rs/cargo-leptos/issues/649
+            (Some(cert), Some(key)) if cert.is_absolute() && key.is_absolute() => {
+                Ok(Some(RustlsConfig::from_pem_chain_file(cert, key).await?))
+            }
+            (None, None) => Ok(None),
+
+            _ => Err(std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "Either both the TLS private and public keys must be specified as absolute paths, or neither",
+            )),
+        }
     }
 
     /// Setup `webauthn-rs` with RP config options.
@@ -76,11 +88,15 @@ impl ServerArgs {
 
         if !self.rp_origin.username().is_empty()
             || self.rp_origin.password().is_some()
-            || self.rp_origin.scheme() != "https"
+            || (self.rp_origin.scheme() != "http" && self.rp_origin.scheme() != "https")
             || self.rp_origin.path() != "/"
             || self.rp_origin.query().is_some()
             || self.rp_origin.fragment().is_some()
         {
+            error!(
+                "RP origin must not contain username, password, path, query or fragments, and must be http or https; got: {:?}",
+                self.rp_origin.as_str(),
+            );
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
@@ -91,5 +107,9 @@ impl ServerArgs {
         }
 
         builder.build()
+    }
+
+    pub fn rp_origin(&self) -> &Url {
+        &self.rp_origin
     }
 }
