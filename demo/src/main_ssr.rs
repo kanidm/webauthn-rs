@@ -1,9 +1,9 @@
 use axum::Router;
 use clap::Parser;
-use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use std::sync::Arc;
+use tracing::{info, warn};
 use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
 use webauthn_rs_demo2::{app::*, server_config::ServerArgs, state::DemoState};
 
@@ -52,10 +52,29 @@ pub async fn main() {
         .await
         .expect("Failure loading TLS certificates");
 
-    log!("listening on https://{addr}");
+    info!(
+        "Listening on {}, visit {} in your browser",
+        addr,
+        args.rp_origin().as_str()
+    );
 
-    axum_server::bind_rustls(addr, tls_config)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    if tls_config.is_some() != (args.rp_origin().scheme() == "https") {
+        warn!(
+            "Application is serving over http{}, but the RP origin's scheme is {}. If this is \
+            intentional, you will need a reverse proxy for this to work!",
+            if tls_config.is_some() { "s" } else { "" },
+            args.rp_origin().scheme(),
+        );
+    }
+
+    match tls_config {
+        Some(tls_config) => axum_server::bind_rustls(addr, tls_config)
+            .serve(app.into_make_service())
+            .await
+            .expect("started"),
+        None => axum_server::bind(addr)
+            .serve(app.into_make_service())
+            .await
+            .expect("started"),
+    };
 }

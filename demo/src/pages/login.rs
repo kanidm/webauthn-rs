@@ -2,9 +2,10 @@
 use crate::state::DemoState;
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
+#[cfg(not(feature = "ssr"))]
+use leptos::logging::*;
 use leptos::{
     ev::SubmitEvent,
-    logging::*,
     prelude::*,
     server_fn::codec::{Json, JsonEncoding, Post},
     task::spawn_local,
@@ -22,6 +23,8 @@ use serde_with::{
 #[cfg(feature = "ssr")]
 use std::sync::Arc;
 use time::OffsetDateTime;
+#[cfg(feature = "ssr")]
+use tracing::*;
 use uuid::Uuid;
 use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
 
@@ -157,7 +160,7 @@ pub async fn finish_login(
         }
 
         Err(e) => {
-            log!("challenge_login => {e:?}");
+            error!("challenge_login => {e:?}");
             if let Some(response) = use_context::<ResponseOptions>() {
                 response.set_status(StatusCode::BAD_REQUEST);
             }
@@ -240,6 +243,7 @@ pub fn LoginPage() -> impl IntoView {
         spawn_local(async move {
             match start_login(username).await {
                 Ok(ret) => {
+                    #[cfg(not(feature = "ssr"))]
                     log!("response: {ret:?}");
                     set_resp.set(Some(ret.clone()));
                     set_err.set(None);
