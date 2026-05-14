@@ -34,6 +34,6 @@ then
         -out "${TLS_PUBLIC_KEY}" \
         -days 5 \
         -subj "/CN=localhost/" \
-        -addext "subjectAltName = IP:127.0.0.1, DNS:localhost" \
+        -addext "subjectAltName = DNS:localhost" \
         -addext "extendedKeyUsage = serverAuth"
 fi
