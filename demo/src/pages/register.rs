@@ -1,6 +1,6 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
-use crate::state::{DemoState, UserAccount};
+use crate::server::state::{DemoState, UserAccount};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(not(feature = "ssr"))]
