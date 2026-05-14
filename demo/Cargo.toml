@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 axum = { version = "0.8.0", optional = true }
 axum-server = { version = "0.8.0", features = ["tls-rustls"], optional = true }
+clap = { workspace = true, optional = true }
 concread = { version = "0.5.10", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 leptos = { version = "0.8.0" }
@@ -26,6 +27,8 @@ serde_with = { workspace = true, features = ["time_0_3"] }
 time = { version = "0.3.47", features = ["formatting"] }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 tokio-rustls = { version = "0.26.4", optional = true }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
 uuid = { workspace = true, features = ["serde"] }
 wasm-bindgen = { version = "=0.2.120", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
@@ -83,10 +86,13 @@ hydrate = [
 ssr = [
     "dep:axum",
     "dep:axum-server",
+    "dep:clap",
     "dep:concread",
     "dep:leptos_axum",
     "dep:tokio",
     "dep:tokio-rustls",
+    "dep:tracing",
+    "dep:tracing-subscriber",
     "dep:webauthn-rs",
     "leptos/ssr",
     "leptos_meta/ssr",
@@ -105,7 +111,8 @@ site-root = "target/site"
 site-pkg-dir = "pkg"
 
 # [Optional] The source CSS file. If it ends with .sass or .scss then it will be compiled by dart-sass into CSS. The CSS is optimized by Lightning CSS before being written to <site-root>/<site-pkg>/{{project-name}}.css
-style-file = "style/main.scss"
+# style-file = "style/main.scss"
+
 # Assets source dir. All files found here will be copied and synchronized to site-root.
 # The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
 #
