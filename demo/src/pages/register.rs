@@ -3,9 +3,10 @@ use crate::pages::is_username_valid;
 use crate::state::{DemoState, UserAccount};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
+#[cfg(not(feature = "ssr"))]
+use leptos::logging::*;
 use leptos::{
     ev::SubmitEvent,
-    logging::*,
     prelude::*,
     server_fn::codec::{Json, JsonEncoding, Post},
     task::spawn_local,
@@ -19,6 +20,8 @@ use serde_with::{serde_as, TimestampMilliSeconds};
 #[cfg(feature = "ssr")]
 use std::sync::Arc;
 use time::OffsetDateTime;
+#[cfg(feature = "ssr")]
+use tracing::*;
 use uuid::Uuid;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::*;
@@ -99,6 +102,8 @@ pub async fn start_registration(
                 .insert(user_unique_id.clone(), reg_state);
             users_guard.commit();
 
+            info!("challenge_register -> {user_unique_id}, {ccr:?}");
+
             Ok(StartRegistrationResponse {
                 ccr,
                 user_unique_id,
@@ -162,13 +167,13 @@ pub async fn finish_registration(
         }
 
         Err(e) => {
-            log!("challenge_register => {e:?}");
+            error!("challenge_register => {e:?}");
 
             if let Some(response) = use_context::<ResponseOptions>() {
                 response.set_status(StatusCode::BAD_REQUEST);
             }
 
-            Err(ServerFnError::new("Bad request"))
+            Err(ServerFnError::new(e.to_string()))
         }
     }
 }
@@ -242,6 +247,7 @@ pub fn RegisterPage() -> impl IntoView {
         spawn_local(async move {
             match start_registration(username).await {
                 Ok(ret) => {
+                    #[cfg(not(feature = "ssr"))]
                     log!("response: {ret:?}");
                     set_resp.set(Some(ret.clone()));
                     set_err.set(None);
