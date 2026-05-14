@@ -19,6 +19,7 @@ Install [`cargo-leptos`][1].
 # Run the server without hot-reloading (as WebAuthn requires HTTPS, and leptos' WebSocket
 # side-channel doesn't support HTTPS)
 cargo leptos serve \
+  -- \
   --rp-name "webauthn-rs demo" \
   --rp-origin https://localhost:3000 \
   --tls-public-key "$PWD/cert.pem" \
