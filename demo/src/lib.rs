@@ -1,7 +1,8 @@
 pub mod app;
 mod components;
 mod pages;
-
+#[cfg(feature = "ssr")]
+pub mod server_config;
 #[cfg(feature = "ssr")]
 pub mod state;
 
