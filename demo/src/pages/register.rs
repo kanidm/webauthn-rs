@@ -1,6 +1,9 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
-use crate::server::state::{DemoState, UserAccount};
+use crate::server::{
+    check_api_request, set_http_response_code,
+    state::{DemoState, UserAccount},
+};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(not(feature = "ssr"))]
@@ -11,8 +14,6 @@ use leptos::{
     server_fn::codec::{Json, JsonEncoding, Post},
     task::spawn_local,
 };
-#[cfg(feature = "ssr")]
-use leptos_axum::ResponseOptions;
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
@@ -50,19 +51,16 @@ pub struct FinishRegistrationResponse {
 pub async fn start_registration(
     username: String,
 ) -> Result<StartRegistrationResponse, ServerFnError> {
-    if !is_username_valid(&username) {
-        if let Some(response) = use_context::<ResponseOptions>() {
-            response.set_status(StatusCode::BAD_REQUEST);
-        }
-
-        return Err(ServerFnError::new("invalid username"));
-    }
-
-    let username = username.to_ascii_lowercase();
-
     let Some(state) = use_context::<Arc<DemoState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
+    check_api_request(&state.webauthn).await?;
+
+    let username = username.to_ascii_lowercase();
+    if !is_username_valid(&username) {
+        set_http_response_code(StatusCode::BAD_REQUEST);
+        return Err(ServerFnError::new("invalid username"));
+    }
 
     let user_unique_id = {
         let mut users_guard = state.users.write();
@@ -112,11 +110,8 @@ pub async fn start_registration(
 
         Err(e) => {
             error!("challenge_register -> {e:?}");
-
-            if let Some(response) = use_context::<ResponseOptions>() {
-                response.set_status(StatusCode::BAD_REQUEST);
-            }
-            Err(ServerFnError::new("registration error"))
+            set_http_response_code(StatusCode::BAD_REQUEST);
+            Err(ServerFnError::new(e.to_string()))
         }
     }
 }
@@ -133,12 +128,11 @@ pub async fn finish_registration(
     let Some(state) = use_context::<Arc<DemoState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
+    check_api_request(&state.webauthn).await?;
 
     let mut users_guard = state.users.write();
     let Some(reg_state) = users_guard.registrations.remove(&user_unique_id) else {
-        if let Some(response) = use_context::<ResponseOptions>() {
-            response.set_status(StatusCode::BAD_REQUEST);
-        }
+        set_http_response_code(StatusCode::BAD_REQUEST);
         return Err(ServerFnError::new("No active registration request"));
     };
     users_guard.commit();
@@ -168,11 +162,7 @@ pub async fn finish_registration(
 
         Err(e) => {
             error!("challenge_register => {e:?}");
-
-            if let Some(response) = use_context::<ResponseOptions>() {
-                response.set_status(StatusCode::BAD_REQUEST);
-            }
-
+            set_http_response_code(StatusCode::BAD_REQUEST);
             Err(ServerFnError::new(e.to_string()))
         }
     }
