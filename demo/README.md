@@ -2,8 +2,6 @@
 
 Work in progress rewrite of the demo site using axum and leptos.
 
-Currently does very little. :)
-
 ## Prerequisites
 
 Install a recent Rust toolchain for your host and `wasm32-unknown-unknown`.
@@ -18,8 +16,13 @@ Install [`cargo-leptos`][1].
 # WebAuthn must be served over HTTPS, so we generate some self-signed certs.
 ./generate_certs.sh
 
-# Run the server without hot-reloading (as its WebSocket side-channel doesn't support HTTPS)
-cargo leptos serve
+# Run the server without hot-reloading (as WebAuthn requires HTTPS, and leptos' WebSocket
+# side-channel doesn't support HTTPS)
+cargo leptos serve \
+  --rp-name "webauthn-rs demo" \
+  --rp-origin https://localhost:3000 \
+  --tls-public-key "$PWD/cert.pem" \
+  --tls-private-key "$PWD/key.pem"
 ```
 
 Then point your browser at https://localhost:3000
