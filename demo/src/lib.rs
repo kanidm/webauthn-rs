@@ -2,9 +2,7 @@ pub mod app;
 mod components;
 mod pages;
 #[cfg(feature = "ssr")]
-pub mod server_config;
-#[cfg(feature = "ssr")]
-pub mod state;
+pub mod server;
 
 #[cfg(feature = "hydrate")]
 #[wasm_bindgen::prelude::wasm_bindgen]
