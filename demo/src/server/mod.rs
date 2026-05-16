@@ -1,9 +1,7 @@
-use axum::http::{
-    header::{ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN},
-    HeaderMap, StatusCode,
-};
+use axum::http::{header::ORIGIN, HeaderMap, HeaderValue, Request, StatusCode};
 use leptos::{context::use_context, server_fn::ServerFnError};
 use leptos_axum::{extract, ResponseOptions};
+use tower_http::request_id::{MakeRequestId, RequestId};
 use webauthn_rs::prelude::*;
 
 pub mod config;
@@ -38,10 +36,6 @@ pub async fn check_api_request(webauthn: &Webauthn) -> Result<(), ServerFnError>
         return Err(ServerFnError::new("Incorrect Origin"));
     }
 
-    if let Some(response) = use_context::<ResponseOptions>() {
-        response.insert_header(ACCESS_CONTROL_ALLOW_ORIGIN, origin_v.clone());
-    }
-
     Ok(())
 }
 
@@ -49,5 +43,16 @@ pub async fn check_api_request(webauthn: &Webauthn) -> Result<(), ServerFnError>
 pub fn set_http_response_code(status_code: StatusCode) {
     if let Some(response) = use_context::<ResponseOptions>() {
         response.set_status(status_code);
+    }
+}
+
+/// Request ID is a randomly-generated UUID.
+#[derive(Clone, Copy)]
+pub struct RandomUuidRequestId;
+
+impl MakeRequestId for RandomUuidRequestId {
+    fn make_request_id<B>(&mut self, _request: &Request<B>) -> Option<RequestId> {
+        let u = Uuid::new_v4();
+        Some(RequestId::new(HeaderValue::from_str(&u.to_string()).ok()?))
     }
 }

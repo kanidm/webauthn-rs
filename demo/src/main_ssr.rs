@@ -1,13 +1,22 @@
-use axum::Router;
+use axum::{
+    http::{HeaderValue, Method},
+    Router,
+};
 use clap::Parser;
 use leptos::prelude::*;
 use leptos_axum::{generate_route_list, LeptosRoutes};
 use std::sync::Arc;
+use tower::ServiceBuilder;
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
+    ServiceBuilderExt,
+};
 use tracing::{info, warn};
 use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
 use webauthn_rs_demo2::{
     app::*,
-    server::{config::ServerArgs, state::DemoState},
+    server::{config::ServerArgs, state::DemoState, RandomUuidRequestId},
 };
 
 #[tokio::main]
@@ -27,6 +36,15 @@ pub async fn main() {
     let conf = get_configuration(None).unwrap();
     let webauthn = args.setup_webauthn().expect("WebauthnBuilder setup error");
 
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(AllowOrigin::list(
+            webauthn
+                .get_allowed_origins()
+                .iter()
+                .filter_map(|u| HeaderValue::from_str(u.as_str()).ok()),
+        ));
+
     let state = Arc::new(DemoState::new(webauthn));
 
     let leptos_options = conf.leptos_options;
@@ -45,7 +63,18 @@ pub async fn main() {
             },
         )
         .fallback(leptos_axum::file_and_error_handler(shell))
-        .with_state(leptos_options);
+        .with_state(leptos_options)
+        .layer(
+            ServiceBuilder::new()
+                .set_x_request_id(RandomUuidRequestId)
+                .layer(
+                    TraceLayer::new_for_http()
+                        .make_span_with(DefaultMakeSpan::new().include_headers(true))
+                        .on_response(DefaultOnResponse::new().include_headers(true)),
+                )
+                .propagate_x_request_id()
+                .layer(cors),
+        );
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
