@@ -23,9 +23,11 @@ leptos_config = { version = "0.8.0", optional = true }
 leptos_axum = { version = "0.8.0", optional = true }
 leptos_meta = { version = "0.8.0" }
 leptos_router = { version = "0.8.0" }
-rusqlite = { version = "0.39.0", optional = true }
+sea-orm = { version = "1.1.20", features = ["sqlx-sqlite", "runtime-tokio", "with-time", "with-uuid"], optional = true }
 serde.workspace = true
+serde_json = { workspace = true, optional = true }
 serde_with = { workspace = true, features = ["time_0_3"] }
+# sqlx = { version = "0.8.6", features = ["sqlite", "time", "uuid"], optional = true }
 thiserror = { workspace = true, optional = true }
 time = { version = "0.3.47", features = ["formatting"] }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
@@ -95,7 +97,8 @@ ssr = [
     "dep:concread",
     "dep:leptos_axum",
     "dep:leptos_config",
-    "dep:rusqlite",
+    "dep:sea-orm",
+    "dep:serde_json",
     "dep:thiserror",
     "dep:tokio",
     "dep:tokio-rustls",
