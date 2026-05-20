@@ -26,12 +26,12 @@ pub struct UserData {
     pub authentications: BTreeMap<Uuid, PasskeyAuthentication>,
 }
 
-pub struct DemoState {
+pub struct ServerState {
     pub webauthn: Webauthn,
     pub users: CowCell<UserData>,
 }
 
-impl DemoState {
+impl ServerState {
     pub fn new(webauthn: Webauthn) -> Self {
         Self {
             webauthn,
