@@ -45,6 +45,7 @@ members = [
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
     "demo",
+    "demo/migration",
     # Ssh Key Attestation
     "sshkey-attest",
     # RP Proxy

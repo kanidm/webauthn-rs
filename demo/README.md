@@ -8,7 +8,14 @@ Install a recent Rust toolchain for your host and `wasm32-unknown-unknown`.
 
 Install [`cargo-leptos`][1].
 
+Install [`sea-orm-cli`][2]:
+
+```sh
+cargo install sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
+```
+
 [1]: https://github.com/leptos-rs/cargo-leptos
+[2]: https://github.com/SeaQL/sea-orm/blob/1.1.20/sea-orm-cli/
 
 ## Run the development server
 
