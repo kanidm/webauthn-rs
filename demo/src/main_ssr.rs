@@ -16,7 +16,7 @@ use tracing::{info, warn};
 use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
 use webauthn_rs_demo2::{
     app::*,
-    server::{config::ServerArgs, state::DemoState, RandomUuidRequestId},
+    server::{config::ServerArgs, state::ServerState, RandomUuidRequestId},
 };
 
 #[tokio::main]
@@ -45,7 +45,7 @@ pub async fn main() {
                 .filter_map(|u| HeaderValue::from_str(u.as_str()).ok()),
         ));
 
-    let state = Arc::new(DemoState::new(webauthn));
+    let state = Arc::new(ServerState::new(webauthn));
 
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
