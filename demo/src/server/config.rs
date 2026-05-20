@@ -1,7 +1,7 @@
 use crate::server::{ServerError, ServerResult};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Parser, ValueHint};
-use rusqlite::Connection;
+use sea_orm::{Database, DatabaseConnection};
 use std::path::PathBuf;
 use tracing::{error, warn};
 use webauthn_rs::prelude::*;
@@ -61,10 +61,8 @@ pub struct ServerArgs {
     rp_name: Option<String>,
 
     /// SQLite database path.
-    ///
-    /// If not provided, uses an in-memory database.
-    #[clap(long, env = "DB_PATH")]
-    db_path: Option<String>,
+    #[clap(long, env = "DB_PATH", value_hint = ValueHint::FilePath)]
+    db_path: PathBuf,
 }
 
 impl ServerArgs {
@@ -125,26 +123,17 @@ impl ServerArgs {
         &self.rp_origin
     }
 
-    fn connect_sqlite(&self) -> ServerResult<Connection> {
-        let Some(db_path) = &self.db_path else {
-            warn!("Using in-memory SQLite database for user data - this is not persistent!");
-            return Ok(Connection::open_in_memory()?);
-        };
+    pub async fn connect_sqlite(&self) -> ServerResult<DatabaseConnection> {
+        // let Some(db_path) = &self.db_path else {
+        //     warn!("Using in-memory SQLite database for user data - this is not persistent!");
+        //     return Ok(sea_orm::Database::connect("sqlite::memory:").await?);
+        // };
 
-        let db_path = PathBuf::from(db_path);
-
-        if !db_path.is_absolute() {
-            return Err(ServerError::PathIsNotAbsolute(db_path));
+        if !self.db_path.is_absolute() {
+            return Err(ServerError::PathIsNotAbsolute(self.db_path.to_path_buf()));
         }
 
-        Ok(Connection::open(db_path)?)
-    }
-
-    pub fn setup_sqlite(&self) -> ServerResult<Connection> {
-        let conn = self.connect_sqlite()?;
-
-        // TODO: create tables
-
-        Ok(conn)
+        let url = format!("sqlite:{}", self.db_path.to_str().unwrap());
+        Ok(Database::connect(url).await?)
     }
 }

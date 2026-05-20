@@ -1,9 +1,6 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
-use crate::server::{
-    check_api_request, set_http_response_code,
-    state::{ServerState, UserAccount},
-};
+use crate::server::{check_api_request, set_http_response_code, state::ServerState};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(not(feature = "ssr"))]
@@ -62,49 +59,37 @@ pub async fn start_registration(
         return Err(ServerFnError::new("invalid username"));
     }
 
-    let user_unique_id = {
-        let mut users_guard = state.users.write();
-        if let Some(uuid) = users_guard.name_to_id.get(&username) {
-            uuid.clone()
-        } else {
-            let uuid = Uuid::new_v4();
-            users_guard
-                .name_to_id
-                .insert(username.clone(), uuid.clone());
-            users_guard.commit();
-            uuid
-        }
-    };
+    let (account, existing) = state.get_or_create_user(username).await?;
 
-    let exclude_credentials: Option<Vec<CredentialID>> = {
-        let users_guard = state.users.read();
-        users_guard.accounts.get(&user_unique_id).map(|account| {
-            account
-                .passkeys
+    let exclude_credentials: Option<Vec<CredentialID>> = if existing {
+        Some(
+            state
+                .get_passkeys_for_account(&account)
+                .await?
                 .iter()
-                .map(|key| key.cred_id().clone())
-                .collect()
-        })
+                .map(|r| todo!() /* r.cred.cred_id().clone() */)
+                .collect(),
+        )
+    } else {
+        None
     };
 
     match state.webauthn.start_passkey_registration(
-        user_unique_id,
-        &username,
-        &username,
+        account.id,
+        &account.username,
+        &account.username,
         exclude_credentials,
     ) {
         Ok((ccr, reg_state)) => {
-            let mut users_guard = state.users.write();
-            users_guard
-                .registrations
-                .insert(user_unique_id.clone(), reg_state);
-            users_guard.commit();
+            let mut registrations_guard = state.registrations.write();
+            registrations_guard.insert(account.id.clone(), reg_state);
+            registrations_guard.commit();
 
-            info!("challenge_register -> {user_unique_id}, {ccr:?}");
+            info!("challenge_register -> {}, {ccr:?}", account.id);
 
             Ok(StartRegistrationResponse {
                 ccr,
-                user_unique_id,
+                user_unique_id: account.id,
             })
         }
 
@@ -130,34 +115,34 @@ pub async fn finish_registration(
     };
     check_api_request(&state.webauthn).await?;
 
-    let mut users_guard = state.users.write();
-    let Some(reg_state) = users_guard.registrations.remove(&user_unique_id) else {
+    let mut registrations_guard = state.registrations.write();
+    let Some(reg_state) = registrations_guard.remove(&user_unique_id) else {
         set_http_response_code(StatusCode::BAD_REQUEST);
         return Err(ServerFnError::new("No active registration request"));
     };
-    users_guard.commit();
+    registrations_guard.commit();
 
     match state
         .webauthn
         .finish_passkey_registration(&rpkc, &reg_state)
     {
         Ok(sk) => {
-            let mut users_guard = state.users.write();
+            todo!();
+            // let mut users_guard = state.users.write();
 
-            let account = users_guard
-                .accounts
-                .entry(user_unique_id)
-                .and_modify(|account| account.passkeys.push(sk.clone()))
-                .or_insert_with(|| UserAccount::new(sk.clone()));
+            // let account = users_guard
+            //     .accounts
+            //     .entry(user_unique_id)
+            //     .and_modify(|account| account.passkeys.push(sk.clone()))
+            //     .or_insert_with(|| UserAccount::new(sk.clone()));
 
-            let enrolled_keys = account.passkeys.len() as u64;
-            let created = account.created;
-            users_guard.commit();
-
-            Ok(FinishRegistrationResponse {
-                enrolled_keys,
-                created,
-            })
+            // let enrolled_keys = account.passkeys.len() as u64;
+            // let created = account.created;
+            // users_guard.commit();
+            // Ok(FinishRegistrationResponse {
+            //     enrolled_keys,
+            //     created,
+            // })
         }
 
         Err(e) => {

@@ -9,8 +9,8 @@ pub enum ServerError {
     #[error("Rusqlite error: {0}")]
     LeptosConfig(#[from] leptos_config::errors::LeptosConfigError),
 
-    #[error("Rusqlite error: {0}")]
-    Rusqlite(#[from] rusqlite::Error),
+    #[error("ORM error: {0}")]
+    Orm(#[from] sea_orm::DbErr),
     
     #[error("WebAuthn error: {0}")]
     Webauthn(#[from] webauthn_rs::prelude::WebauthnError),

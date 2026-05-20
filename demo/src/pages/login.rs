@@ -61,42 +61,52 @@ pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerF
         return Err(ServerFnError::new("invalid username"));
     }
 
-    let users_guard = state.users.read();
-    let Some(user_unique_id) = users_guard.name_to_id.get(&username) else {
-        // In a real service implementation, you may want to send a RequestChallengeResponse with
-        // some deterministically generated key identifiers to prevent account enmueration.
-        set_http_response_code(StatusCode::PRECONDITION_FAILED);
-        return Err(ServerFnError::new("User not found"));
+    let account = match state.get_user_by_username(&username).await {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            // In a real service implementation, you may want to send a RequestChallengeResponse with
+            // some deterministically generated key identifiers to prevent account enmueration.
+            set_http_response_code(StatusCode::PRECONDITION_FAILED);
+            return Err(ServerFnError::new("User not found"));
+        }
+        Err(err) => {
+            return Err(ServerFnError::new("Database error"));
+        }
     };
 
-    let Some(account) = users_guard.accounts.get(user_unique_id) else {
-        set_http_response_code(StatusCode::PRECONDITION_FAILED);
-        return Err(ServerFnError::new("No credentials"));
-    };
+    // let users_guard = state.users.read();
+    // let Some(user_unique_id) = users_guard.name_to_id.get(&username) else {
+    // };
 
-    match state
-        .webauthn
-        .start_passkey_authentication(&account.passkeys)
-    {
-        Ok((rcr, auth_state)) => {
-            let mut users_guard = state.users.write();
-            users_guard
-                .authentications
-                .insert(user_unique_id.clone(), auth_state);
-            users_guard.commit();
+    // let Some(account) = users_guard.accounts.get(user_unique_id) else {
+    //     set_http_response_code(StatusCode::PRECONDITION_FAILED);
+    //     return Err(ServerFnError::new("No credentials"));
+    // };
 
-            Ok(StartLoginResponse {
-                rcr,
-                user_unique_id: user_unique_id.clone(),
-            })
-        }
+    // match state
+    //     .webauthn
+    //     .start_passkey_authentication(&account.passkeys)
+    // {
+    //     Ok((rcr, auth_state)) => {
+    //         let mut users_guard = state.users.write();
+    //         users_guard
+    //             .authentications
+    //             .insert(user_unique_id.clone(), auth_state);
+    //         users_guard.commit();
 
-        Err(e) => {
-            error!("challenge_login -> {e:?}");
-            set_http_response_code(StatusCode::BAD_REQUEST);
-            Err(ServerFnError::new(e.to_string()))
-        }
-    }
+    //         Ok(StartLoginResponse {
+    //             rcr,
+    //             user_unique_id: user_unique_id.clone(),
+    //         })
+    //     }
+
+    //     Err(e) => {
+    //         error!("challenge_login -> {e:?}");
+    //         set_http_response_code(StatusCode::BAD_REQUEST);
+    //         Err(ServerFnError::new(e.to_string()))
+    //     }
+    // }
+    todo!()
 }
 
 #[server(
@@ -113,32 +123,33 @@ pub async fn finish_login(
     };
     check_api_request(&state.webauthn).await?;
 
-    let mut users_guard = state.users.write();
-    let Some(auth_state) = users_guard.authentications.remove(&user_unique_id) else {
+    let mut auth_guard = state.authentications.write();
+    let Some(auth_state) = auth_guard.remove(&user_unique_id) else {
         set_http_response_code(StatusCode::PRECONDITION_FAILED);
         return Err(ServerFnError::new("No active authentication request"));
     };
-    users_guard.commit();
+    auth_guard.commit();
 
     match state
         .webauthn
         .finish_passkey_authentication(&pkc, &auth_state)
     {
         Ok(sk) => {
-            let users_guard = state.users.read();
-            let Some(account) = users_guard.accounts.get(&user_unique_id) else {
-                set_http_response_code(StatusCode::PRECONDITION_FAILED);
-                return Err(ServerFnError::new("No user account"));
-            };
+            todo!();
+            // let users_guard = state.users.read();
+            // let Some(account) = users_guard.accounts.get(&user_unique_id) else {
+            //     set_http_response_code(StatusCode::PRECONDITION_FAILED);
+            //     return Err(ServerFnError::new("No user account"));
+            // };
 
-            let enrolled_keys = account.passkeys.len() as u64;
-            let created = account.created;
+            // let enrolled_keys = account.passkeys.len() as u64;
+            // let created = account.created;
 
-            Ok(FinishLoginResponse {
-                enrolled_keys,
-                created,
-                cred_id: sk.cred_id().clone(),
-            })
+            // Ok(FinishLoginResponse {
+            //     enrolled_keys,
+            //     created,
+            //     cred_id: sk.cred_id().clone(),
+            // })
         }
 
         Err(e) => {

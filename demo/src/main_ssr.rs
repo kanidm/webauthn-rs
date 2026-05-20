@@ -35,7 +35,7 @@ pub async fn main() -> ServerResult {
     let args = ServerArgs::parse();
     let conf = get_configuration(None)?;
     let webauthn = args.setup_webauthn()?;
-    let _sqlite = args.setup_sqlite()?;
+    let sqlite = args.connect_sqlite().await?;
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
@@ -47,7 +47,7 @@ pub async fn main() -> ServerResult {
         ));
 
     // TODO: make database Send/Sync
-    let state = Arc::new(ServerState::new(webauthn));
+    let state = Arc::new(ServerState::new(webauthn, sqlite)?);
 
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
