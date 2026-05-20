@@ -1,7 +1,9 @@
+use crate::server::{ServerError, ServerResult};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Parser, ValueHint};
-use std::{io::ErrorKind, path::PathBuf};
-use tracing::error;
+use rusqlite::Connection;
+use std::path::PathBuf;
+use tracing::{error, warn};
 use webauthn_rs::prelude::*;
 
 #[derive(Debug, Clone, Parser)]
@@ -57,33 +59,43 @@ pub struct ServerArgs {
     /// This may be shown to users when enrolling and using WebAuthn credentials.
     #[clap(long, env = "RP_NAME")]
     rp_name: Option<String>,
+
+    /// SQLite database path.
+    ///
+    /// If not provided, uses an in-memory database.
+    #[clap(long, env = "DB_PATH")]
+    db_path: Option<String>,
 }
 
 impl ServerArgs {
     /// Get a [RustlsConfig][] for the server.
-    pub async fn rustls_config(&self) -> std::io::Result<Option<RustlsConfig>> {
+    pub async fn rustls_config(&self) -> ServerResult<Option<RustlsConfig>> {
         match (&self.tls_public_key, &self.tls_private_key) {
             // Absolute paths required due to https://github.com/leptos-rs/cargo-leptos/issues/649
-            (Some(cert), Some(key)) if cert.is_absolute() && key.is_absolute() => {
-                Ok(Some(RustlsConfig::from_pem_chain_file(cert, key).await?))
+            (Some(cert), Some(key)) => {
+                if !cert.is_absolute() {
+                    Err(ServerError::PathIsNotAbsolute(cert.to_path_buf()))
+                } else if !key.is_absolute() {
+                    Err(ServerError::PathIsNotAbsolute(key.to_path_buf()))
+                } else {
+                    Ok(Some(RustlsConfig::from_pem_chain_file(cert, key).await?))
+                }
             }
+
             (None, None) => Ok(None),
 
-            _ => Err(std::io::Error::new(
-                ErrorKind::InvalidInput,
-                "Either both the TLS private and public keys must be specified as absolute paths, or neither",
-            )),
+            _ => Err(ServerError::TlsNeedsPublicAndPrivateKey),
         }
     }
 
     /// Setup `webauthn-rs` with RP config options.
-    pub fn setup_webauthn(&self) -> Result<Webauthn, WebauthnError> {
+    pub fn setup_webauthn(&self) -> ServerResult<Webauthn> {
         let rp_id = if let Some(rp_id) = &self.rp_id {
             rp_id
         } else if let Some(host) = self.rp_origin.host_str() {
             host
         } else {
-            return Err(WebauthnError::InvalidRPOrigin);
+            return Err(ServerError::InvalidRelyingPartyID);
         };
 
         if !self.rp_origin.username().is_empty()
@@ -97,7 +109,7 @@ impl ServerArgs {
                 "RP origin must not contain username, password, path, query or fragments, and must be http or https; got: {:?}",
                 self.rp_origin.as_str(),
             );
-            return Err(WebauthnError::InvalidRPOrigin);
+            return Err(ServerError::InvalidRelyingPartyOrigin);
         }
 
         let mut builder = WebauthnBuilder::new(rp_id, &self.rp_origin)?;
@@ -106,10 +118,33 @@ impl ServerArgs {
             builder = builder.rp_name(rp_name);
         }
 
-        builder.build()
+        Ok(builder.build()?)
     }
 
     pub fn rp_origin(&self) -> &Url {
         &self.rp_origin
+    }
+
+    fn connect_sqlite(&self) -> ServerResult<Connection> {
+        let Some(db_path) = &self.db_path else {
+            warn!("Using in-memory SQLite database for user data - this is not persistent!");
+            return Ok(Connection::open_in_memory()?);
+        };
+
+        let db_path = PathBuf::from(db_path);
+
+        if !db_path.is_absolute() {
+            return Err(ServerError::PathIsNotAbsolute(db_path));
+        }
+
+        Ok(Connection::open(db_path)?)
+    }
+
+    pub fn setup_sqlite(&self) -> ServerResult<Connection> {
+        let conn = self.connect_sqlite()?;
+
+        // TODO: create tables
+
+        Ok(conn)
     }
 }
