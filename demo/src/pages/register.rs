@@ -2,7 +2,7 @@ use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
 use crate::server::{
     check_api_request, set_http_response_code,
-    state::{DemoState, UserAccount},
+    state::{ServerState, UserAccount},
 };
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
@@ -51,7 +51,7 @@ pub struct FinishRegistrationResponse {
 pub async fn start_registration(
     username: String,
 ) -> Result<StartRegistrationResponse, ServerFnError> {
-    let Some(state) = use_context::<Arc<DemoState>>() else {
+    let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
     check_api_request(&state.webauthn).await?;
@@ -125,7 +125,7 @@ pub async fn finish_registration(
     rpkc: RegisterPublicKeyCredential,
     user_unique_id: Uuid,
 ) -> Result<FinishRegistrationResponse, ServerFnError> {
-    let Some(state) = use_context::<Arc<DemoState>>() else {
+    let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
     check_api_request(&state.webauthn).await?;

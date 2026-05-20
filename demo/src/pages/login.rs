@@ -1,5 +1,5 @@
 #[cfg(feature = "ssr")]
-use crate::server::{check_api_request, set_http_response_code, state::DemoState};
+use crate::server::{check_api_request, set_http_response_code, state::ServerState};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(not(feature = "ssr"))]
@@ -50,7 +50,7 @@ pub struct FinishLoginResponse {
     output = Json,
 )]
 pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerFnError> {
-    let Some(state) = use_context::<Arc<DemoState>>() else {
+    let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
     check_api_request(&state.webauthn).await?;
@@ -108,7 +108,7 @@ pub async fn finish_login(
     pkc: PublicKeyCredential,
     user_unique_id: Uuid,
 ) -> Result<FinishLoginResponse, ServerFnError> {
-    let Some(state) = use_context::<Arc<DemoState>>() else {
+    let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
     check_api_request(&state.webauthn).await?;
