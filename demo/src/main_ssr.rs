@@ -16,11 +16,11 @@ use tracing::{info, warn};
 use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
 use webauthn_rs_demo2::{
     app::*,
-    server::{config::ServerArgs, state::ServerState, RandomUuidRequestId},
+    server::{config::ServerArgs, state::ServerState, RandomUuidRequestId, ServerResult},
 };
 
 #[tokio::main]
-pub async fn main() {
+pub async fn main() -> ServerResult {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
@@ -33,8 +33,9 @@ pub async fn main() {
         .init();
 
     let args = ServerArgs::parse();
-    let conf = get_configuration(None).unwrap();
-    let webauthn = args.setup_webauthn().expect("WebauthnBuilder setup error");
+    let conf = get_configuration(None)?;
+    let webauthn = args.setup_webauthn()?;
+    let _sqlite = args.setup_sqlite()?;
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
@@ -45,6 +46,7 @@ pub async fn main() {
                 .filter_map(|u| HeaderValue::from_str(u.as_str()).ok()),
         ));
 
+    // TODO: make database Send/Sync
     let state = Arc::new(ServerState::new(webauthn));
 
     let leptos_options = conf.leptos_options;
@@ -79,10 +81,7 @@ pub async fn main() {
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
 
-    let tls_config = args
-        .rustls_config()
-        .await
-        .expect("Failure loading TLS certificates");
+    let tls_config = args.rustls_config().await?;
 
     info!(
         "Listening on {}, visit {} in your browser",
@@ -100,13 +99,17 @@ pub async fn main() {
     }
 
     match tls_config {
-        Some(tls_config) => axum_server::bind_rustls(addr, tls_config)
-            .serve(app.into_make_service())
-            .await
-            .expect("started"),
-        None => axum_server::bind(addr)
-            .serve(app.into_make_service())
-            .await
-            .expect("started"),
+        Some(tls_config) => {
+            axum_server::bind_rustls(addr, tls_config)
+                .serve(app.into_make_service())
+                .await?
+        }
+        None => {
+            axum_server::bind(addr)
+                .serve(app.into_make_service())
+                .await?
+        }
     };
+
+    Ok(())
 }
