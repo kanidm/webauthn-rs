@@ -1,42 +1,85 @@
+use crate::server::{models, ServerResult};
 use concread::CowCell;
+use sea_orm::{
+    ActiveModelTrait as _, ActiveValue::Set, ColumnTrait as _, DatabaseConnection,
+    EntityTrait as _, ModelTrait, QueryFilter as _,
+};
 use std::collections::BTreeMap;
 use time::OffsetDateTime;
 use webauthn_rs::prelude::*;
 
-#[derive(Clone)]
-pub struct UserAccount {
-    pub created: OffsetDateTime,
-    pub passkeys: Vec<Passkey>,
-}
-
-impl UserAccount {
-    pub fn new(passkey: Passkey) -> Self {
-        Self {
-            created: OffsetDateTime::now_utc(),
-            passkeys: vec![passkey],
-        }
-    }
-}
-
-#[derive(Clone, Default)]
-pub struct UserData {
-    pub name_to_id: BTreeMap<String, Uuid>,
-    pub accounts: BTreeMap<Uuid, UserAccount>,
-    pub registrations: BTreeMap<Uuid, PasskeyRegistration>,
-    pub authentications: BTreeMap<Uuid, PasskeyAuthentication>,
-}
-
 pub struct ServerState {
     pub webauthn: Webauthn,
-    pub users: CowCell<UserData>,
+    pub db: DatabaseConnection,
+    pub registrations: CowCell<BTreeMap<Uuid, PasskeyRegistration>>,
+    pub authentications: CowCell<BTreeMap<Uuid, PasskeyAuthentication>>,
 }
 
 impl ServerState {
-    pub fn new(webauthn: Webauthn) -> Self {
-        Self {
+    pub fn new(webauthn: Webauthn, db: DatabaseConnection) -> ServerResult<Self> {
+        Ok(Self {
             webauthn,
-            users: Default::default(),
+            db,
+            registrations: CowCell::new(BTreeMap::new()),
+            authentications: CowCell::new(BTreeMap::new()),
+        })
+    }
+
+    pub async fn get_user_by_username(
+        &self,
+        username: &str,
+    ) -> ServerResult<Option<models::account::Model>> {
+        let u = models::account::Entity::find()
+            .filter(models::account::Column::Username.eq(username))
+            .one(&self.db)
+            .await?;
+        Ok(u)
+    }
+
+    pub async fn get_or_create_user(
+        &self,
+        username: String,
+    ) -> ServerResult<(models::account::Model, bool)> {
+        if let Some(account) = self.get_user_by_username(&username).await? {
+            return Ok((account, true));
         }
+
+        let account = models::account::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            created: Set(OffsetDateTime::now_utc()),
+            username: Set(username),
+        };
+
+        let account = account.insert(&self.db).await?;
+
+        Ok((account, false))
+    }
+
+    pub async fn get_passkeys_for_account(
+        &self,
+        account: &models::account::Model,
+    ) -> ServerResult<Vec<models::passkey::Model>> {
+        Ok(account
+            .find_related(models::passkey::Entity)
+            .all(&self.db)
+            .await?)
+    }
+
+    pub async fn add_passkey_for_user_id(
+        &self,
+        account_id: Uuid,
+        cred: Passkey,
+    ) -> ServerResult<models::passkey::Model> {
+        let passkey = models::passkey::ActiveModel {
+            id: Set(Uuid::new_v4()),
+            created: Set(OffsetDateTime::now_utc()),
+            account_id: Set(account_id),
+            cred: Set(cred.into()),
+        };
+
+        let passkey = passkey.insert(&self.db).await?;
+
+        Ok(passkey)
     }
 
     // TODO: memory management; removing excessive entries.

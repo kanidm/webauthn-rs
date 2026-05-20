@@ -6,10 +6,11 @@ use webauthn_rs::prelude::*;
 
 pub mod config;
 mod error;
+pub mod models;
 pub mod state;
 
 pub use self::error::ServerError;
-pub type ServerResult<T = ()> = std::result::Result<T, ServerError>; 
+pub type ServerResult<T = ()> = std::result::Result<T, ServerError>;
 
 /// Checks an API request's `Origin` header against policies.
 ///
