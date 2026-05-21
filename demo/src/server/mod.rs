@@ -5,6 +5,7 @@ use tower_http::request_id::{MakeRequestId, RequestId};
 use webauthn_rs::prelude::*;
 
 pub mod config;
+pub mod cookie;
 mod error;
 pub mod models;
 pub mod state;

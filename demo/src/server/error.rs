@@ -6,6 +6,12 @@ pub enum ServerError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("JWT error: {0}")]
+    Jwt(#[from] compact_jwt::JwtError),
+
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error("Rusqlite error: {0}")]
     LeptosConfig(#[from] leptos_config::errors::LeptosConfigError),
 
@@ -26,4 +32,7 @@ pub enum ServerError {
 
     #[error("Invalid RP origin")]
     InvalidRelyingPartyOrigin,
+
+    #[error("Cookie expired")]
+    CookieExpired,
 }
