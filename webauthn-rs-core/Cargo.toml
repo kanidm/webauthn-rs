@@ -24,7 +24,7 @@ base64.workspace = true
 base64urlsafedata.workspace = true
 hex.workspace = true
 webauthn-attestation-ca.workspace = true
-webauthn-rs-proto.workspace = true
+webauthn-rs-proto = { workspace = true, features = ["origin"] }
 serde.workspace = true
 serde_cbor_2.workspace = true
 serde_json.workspace = true
