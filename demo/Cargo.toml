@@ -15,8 +15,10 @@ crate-type = ["cdylib", "rlib"]
 axum = { version = "0.8.0", optional = true }
 axum-server = { version = "0.8.0", features = ["tls-rustls"], optional = true }
 clap = { workspace = true, optional = true }
+compact_jwt = { workspace = true, optional = true }
 concread = { version = "0.5.10", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
+crypto-glue = { workspace = true, optional = true }
 leptos = { version = "0.8.0" }
 leptos-use = { version = "0.18.3", features = ["use_window"] }
 leptos_config = { version = "0.8.0", optional = true }
@@ -94,7 +96,9 @@ ssr = [
     "dep:axum",
     "dep:axum-server",
     "dep:clap",
+    "dep:compact_jwt",
     "dep:concread",
+    "dep:crypto-glue",
     "dep:leptos_axum",
     "dep:leptos_config",
     "dep:sea-orm",
