@@ -16,12 +16,16 @@ pub struct ServerState {
 }
 
 impl ServerState {
-    pub fn new(webauthn: Webauthn, db: DatabaseConnection, secure: bool) -> ServerResult<Self> {
+    pub fn new(
+        webauthn: Webauthn,
+        db: DatabaseConnection,
+        wrap_key: JweA256KWEncipher,
+        secure: bool,
+    ) -> ServerResult<Self> {
         Ok(Self {
             webauthn,
             db,
-            // TODO: load from config
-            wrap_key: JweA256KWEncipher::generate_ephemeral()?,
+            wrap_key,
             secure,
         })
     }
