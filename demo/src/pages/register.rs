@@ -1,8 +1,15 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
-use crate::server::{check_api_request, set_http_response_code, state::ServerState};
+use crate::server::{
+    check_api_request,
+    cookie::{delete_session_cookie, get_cookie_jar, put_cookie_jar, SessionCookie},
+    set_http_response_code,
+    state::ServerState,
+};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
+#[cfg(feature = "ssr")]
+use cookie::CookieJar;
 #[cfg(not(feature = "ssr"))]
 use leptos::logging::*;
 use leptos::{
@@ -20,7 +27,6 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 #[cfg(feature = "ssr")]
 use tracing::*;
-use uuid::Uuid;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::*;
 use webauthn_rs_proto::{CreationChallengeResponse, RegisterPublicKeyCredential};
@@ -28,7 +34,6 @@ use webauthn_rs_proto::{CreationChallengeResponse, RegisterPublicKeyCredential};
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct StartRegistrationResponse {
     ccr: CreationChallengeResponse,
-    user_unique_id: Uuid,
 }
 
 #[serde_as]
@@ -88,18 +93,26 @@ pub async fn start_registration(
             ServerFnError::new("Registration failure")
         })?;
 
-    // TODO: create a HttpOnly cookie with a random nonce, rather than requiring the
-    // client to pass their user ID back to finish_registration manually.
-    let mut registrations_guard = state.registrations.write();
-    registrations_guard.insert(account.id.clone(), reg_state);
-    registrations_guard.commit();
+    let mut session = SessionCookie::new();
+    session.store_passkey_registration(reg_state, account.id);
+
+    let mut cookie_jar = CookieJar::new();
+    // TODO: secure bit
+    session
+        .put_to_jar(&state.wrap_key, &mut cookie_jar, state.secure)
+        .map_err(|err| {
+            error!("put_to_jar: {err}");
+            ServerFnError::new("Cookie error")
+        })?;
+
+    put_cookie_jar(cookie_jar).await.map_err(|err| {
+        error!("put_cookie_jar: {err}");
+        ServerFnError::new("Cookie error")
+    })?;
 
     info!("start_registration: {}, challenge: {ccr:?}", account.id);
 
-    Ok(StartRegistrationResponse {
-        ccr,
-        user_unique_id: account.id,
-    })
+    Ok(StartRegistrationResponse { ccr })
 }
 
 #[server(
@@ -109,22 +122,32 @@ pub async fn start_registration(
 )]
 pub async fn finish_registration(
     rpkc: RegisterPublicKeyCredential,
-    user_unique_id: Uuid,
 ) -> Result<FinishRegistrationResponse, ServerFnError> {
     let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
     check_api_request(&state.webauthn).await?;
 
-    let reg_state = {
-        let mut registrations_guard = state.registrations.write();
-        let Some(reg_state) = registrations_guard.remove(&user_unique_id) else {
-            set_http_response_code(StatusCode::BAD_REQUEST);
-            return Err(ServerFnError::new("No active registration request"));
-        };
-        registrations_guard.commit();
-        reg_state
+    let mut cookie_jar = get_cookie_jar().await.map_err(|err| {
+        error!("get_cookie_jar: {err}");
+        set_http_response_code(StatusCode::BAD_REQUEST);
+        ServerFnError::new("Cookie error")
+    })?;
+
+    let Some(mut session) = SessionCookie::from_jar(&cookie_jar, &state.wrap_key) else {
+        error!("SessionCookie::from_jar: missing cookie");
+        set_http_response_code(StatusCode::BAD_REQUEST);
+        return Err(ServerFnError::new("Missing cookie"));
     };
+
+    let Some((reg_state, user_unique_id)) = session.take_passkey_registration() else {
+        error!("take_passkey_registration: incorrect state");
+        set_http_response_code(StatusCode::PRECONDITION_FAILED);
+        return Err(ServerFnError::new("Incorrect state"));
+    };
+
+    delete_session_cookie(&mut cookie_jar, state.secure);
+    put_cookie_jar(cookie_jar).await?;
 
     let account = state
         .get_user_by_id(user_unique_id)
@@ -182,7 +205,6 @@ pub fn RegisterPage() -> impl IntoView {
 
     #[cfg(not(feature = "ssr"))]
     let credentials_create = Action::new_unsync(move |start_reg: &StartRegistrationResponse| {
-        let user_unique_id = start_reg.user_unique_id;
         let cco = start_reg.ccr.clone().into();
 
         async move {
@@ -211,7 +233,7 @@ pub fn RegisterPage() -> impl IntoView {
             // Serialise for webauthn-rs
             let rpkc = RegisterPublicKeyCredential::from(w_rpkc);
 
-            match finish_registration(rpkc, user_unique_id).await {
+            match finish_registration(rpkc).await {
                 Ok(r) => {
                     set_err.set(None);
                     set_finished.set(Some(r));
@@ -337,10 +359,6 @@ pub fn RegisterPage() -> impl IntoView {
             {move || resp.get().map(|start_reg| {
                 view! {
                     <h2>"Start registration response"</h2>
-                    <p>
-                        "User ID: "
-                        {start_reg.user_unique_id.to_string()}
-                    </p>
                     <p>
                         "Challenge: "
                         {format!("{:?}", start_reg.ccr)}
