@@ -1,3 +1,4 @@
+use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
 use crate::server::{check_api_request, set_http_response_code, state::ServerState};
 #[cfg(feature = "ssr")]
@@ -24,6 +25,8 @@ use time::OffsetDateTime;
 #[cfg(feature = "ssr")]
 use tracing::*;
 use uuid::Uuid;
+#[cfg(feature = "ssr")]
+use webauthn_rs::prelude::Passkey;
 use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -61,52 +64,55 @@ pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerF
         return Err(ServerFnError::new("invalid username"));
     }
 
-    let account = match state.get_user_by_username(&username).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            // In a real service implementation, you may want to send a RequestChallengeResponse with
-            // some deterministically generated key identifiers to prevent account enmueration.
+    let account = state
+        .get_user_by_username(&username)
+        .await
+        .map_err(|err| {
+            error!("get_by_username: {err}");
+            ServerFnError::new("Database error")
+        })?
+        .ok_or_else(|| {
+            // In a real service implementation, you may want to send a RequestChallengeResponse
+            // with some deterministically generated key identifiers to prevent account enmueration.
             set_http_response_code(StatusCode::PRECONDITION_FAILED);
-            return Err(ServerFnError::new("User not found"));
-        }
-        Err(err) => {
-            return Err(ServerFnError::new("Database error"));
-        }
-    };
+            ServerFnError::new("User not found")
+        })?;
 
-    // let users_guard = state.users.read();
-    // let Some(user_unique_id) = users_guard.name_to_id.get(&username) else {
-    // };
+    let passkeys = state
+        .get_passkeys_for_account(&account)
+        .await
+        .map_err(|err| {
+            error!("get_passkeys_for_account: {err}");
+            ServerFnError::new("Database error")
+        })?;
 
-    // let Some(account) = users_guard.accounts.get(user_unique_id) else {
-    //     set_http_response_code(StatusCode::PRECONDITION_FAILED);
-    //     return Err(ServerFnError::new("No credentials"));
-    // };
+    if passkeys.is_empty() {
+        // Another vector for account enumeration.
+        set_http_response_code(StatusCode::PRECONDITION_FAILED);
+        return Err(ServerFnError::new("No enrolled passkeys"));
+    }
 
-    // match state
-    //     .webauthn
-    //     .start_passkey_authentication(&account.passkeys)
-    // {
-    //     Ok((rcr, auth_state)) => {
-    //         let mut users_guard = state.users.write();
-    //         users_guard
-    //             .authentications
-    //             .insert(user_unique_id.clone(), auth_state);
-    //         users_guard.commit();
+    let passkeys: Vec<Passkey> = passkeys.into_iter().map(From::from).collect();
 
-    //         Ok(StartLoginResponse {
-    //             rcr,
-    //             user_unique_id: user_unique_id.clone(),
-    //         })
-    //     }
+    let (rcr, auth_state) = state
+        .webauthn
+        .start_passkey_authentication(&passkeys)
+        .map_err(|err| {
+            error!("start_passkey_authentication: {err}");
+            set_http_response_code(StatusCode::BAD_REQUEST);
+            ServerFnError::new("start_passkey_authentication")
+        })?;
 
-    //     Err(e) => {
-    //         error!("challenge_login -> {e:?}");
-    //         set_http_response_code(StatusCode::BAD_REQUEST);
-    //         Err(ServerFnError::new(e.to_string()))
-    //     }
-    // }
-    todo!()
+    // TODO: create a HttpOnly cookie with a random nonce, rather than requiring the
+    // client to pass their user ID back to finish_login manually.
+    let mut authentications_guard = state.authentications.write();
+    authentications_guard.insert(account.id.clone(), auth_state);
+    authentications_guard.commit();
+
+    Ok(StartLoginResponse {
+        rcr,
+        user_unique_id: account.id.clone(),
+    })
 }
 
 #[server(
@@ -123,45 +129,51 @@ pub async fn finish_login(
     };
     check_api_request(&state.webauthn).await?;
 
-    let mut auth_guard = state.authentications.write();
-    let Some(auth_state) = auth_guard.remove(&user_unique_id) else {
-        set_http_response_code(StatusCode::PRECONDITION_FAILED);
-        return Err(ServerFnError::new("No active authentication request"));
+    let auth_state = {
+        let mut auth_guard = state.authentications.write();
+        let Some(auth_state) = auth_guard.remove(&user_unique_id) else {
+            set_http_response_code(StatusCode::PRECONDITION_FAILED);
+            return Err(ServerFnError::new("No active authentication request"));
+        };
+        auth_guard.commit();
+        auth_state
     };
-    auth_guard.commit();
 
-    match state
+    let sk = state
         .webauthn
         .finish_passkey_authentication(&pkc, &auth_state)
-    {
-        Ok(sk) => {
-            todo!();
-            // let users_guard = state.users.read();
-            // let Some(account) = users_guard.accounts.get(&user_unique_id) else {
-            //     set_http_response_code(StatusCode::PRECONDITION_FAILED);
-            //     return Err(ServerFnError::new("No user account"));
-            // };
-
-            // let enrolled_keys = account.passkeys.len() as u64;
-            // let created = account.created;
-
-            // Ok(FinishLoginResponse {
-            //     enrolled_keys,
-            //     created,
-            //     cred_id: sk.cred_id().clone(),
-            // })
-        }
-
-        Err(e) => {
-            error!("challenge_login => {e:?}");
+        .map_err(|err| {
+            error!("finish_passkey_authentication: {err}");
             set_http_response_code(StatusCode::BAD_REQUEST);
-            Err(ServerFnError::new(e.to_string()))
-        }
-    }
-}
+            ServerFnError::new("Authentication failed")
+        })?;
 
-fn is_username_valid(username: &str) -> bool {
-    username.len() >= 3 && !username.contains(char::is_whitespace)
+    let account = state
+        .get_user_by_id(user_unique_id)
+        .await
+        .map_err(|err| {
+            error!("get_by_username: {err}");
+            ServerFnError::new("Database error")
+        })?
+        .ok_or_else(|| {
+            // This shouldn't happen
+            set_http_response_code(StatusCode::PRECONDITION_FAILED);
+            ServerFnError::new("User not found")
+        })?;
+
+    let enrolled_keys = state
+        .get_passkey_count_for_account(&account)
+        .await
+        .map_err(|err| {
+            error!("get_passkey_count_for_account: {err}");
+            ServerFnError::new("Database error")
+        })?;
+
+    Ok(FinishLoginResponse {
+        enrolled_keys,
+        created: account.created,
+        cred_id: sk.cred_id().clone(),
+    })
 }
 
 /// Login page.
