@@ -1,4 +1,4 @@
-use sea_orm::{FromJsonQueryResult, entity::prelude::*};
+use sea_orm::{entity::prelude::*, FromJsonQueryResult};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -41,7 +41,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::account::Entity",
         from = "Column::AccountId",
-        to = "super::account::Column::Id",
+        to = "super::account::Column::Id"
     )]
     Account,
 }

@@ -23,4 +23,5 @@ impl Related<super::passkey::Entity> for Entity {
         Relation::Passkey.def()
     }
 }
+
 impl ActiveModelBehavior for ActiveModel {}
