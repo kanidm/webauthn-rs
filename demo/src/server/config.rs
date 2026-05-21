@@ -3,7 +3,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use clap::{Parser, ValueHint};
 use sea_orm::{Database, DatabaseConnection};
 use std::path::PathBuf;
-use tracing::{error, warn};
+use tracing::error;
 use webauthn_rs::prelude::*;
 
 #[derive(Debug, Clone, Parser)]

@@ -67,38 +67,39 @@ pub async fn start_registration(
                 .get_passkeys_for_account(&account)
                 .await?
                 .iter()
-                .map(|r| todo!() /* r.cred.cred_id().clone() */)
+                .map(|r| r.cred.cred_id().clone())
                 .collect(),
         )
     } else {
         None
     };
 
-    match state.webauthn.start_passkey_registration(
-        account.id,
-        &account.username,
-        &account.username,
-        exclude_credentials,
-    ) {
-        Ok((ccr, reg_state)) => {
-            let mut registrations_guard = state.registrations.write();
-            registrations_guard.insert(account.id.clone(), reg_state);
-            registrations_guard.commit();
-
-            info!("challenge_register -> {}, {ccr:?}", account.id);
-
-            Ok(StartRegistrationResponse {
-                ccr,
-                user_unique_id: account.id,
-            })
-        }
-
-        Err(e) => {
-            error!("challenge_register -> {e:?}");
+    let (ccr, reg_state) = state
+        .webauthn
+        .start_passkey_registration(
+            account.id,
+            &account.username,
+            &account.username,
+            exclude_credentials,
+        )
+        .map_err(|err| {
+            error!("start_passkey_registration: {err}");
             set_http_response_code(StatusCode::BAD_REQUEST);
-            Err(ServerFnError::new(e.to_string()))
-        }
-    }
+            ServerFnError::new("Registration failure")
+        })?;
+
+    // TODO: create a HttpOnly cookie with a random nonce, rather than requiring the
+    // client to pass their user ID back to finish_registration manually.
+    let mut registrations_guard = state.registrations.write();
+    registrations_guard.insert(account.id.clone(), reg_state);
+    registrations_guard.commit();
+
+    info!("start_registration: {}, challenge: {ccr:?}", account.id);
+
+    Ok(StartRegistrationResponse {
+        ccr,
+        user_unique_id: account.id,
+    })
 }
 
 #[server(
@@ -115,42 +116,59 @@ pub async fn finish_registration(
     };
     check_api_request(&state.webauthn).await?;
 
-    let mut registrations_guard = state.registrations.write();
-    let Some(reg_state) = registrations_guard.remove(&user_unique_id) else {
-        set_http_response_code(StatusCode::BAD_REQUEST);
-        return Err(ServerFnError::new("No active registration request"));
+    let reg_state = {
+        let mut registrations_guard = state.registrations.write();
+        let Some(reg_state) = registrations_guard.remove(&user_unique_id) else {
+            set_http_response_code(StatusCode::BAD_REQUEST);
+            return Err(ServerFnError::new("No active registration request"));
+        };
+        registrations_guard.commit();
+        reg_state
     };
-    registrations_guard.commit();
 
-    match state
+    let account = state
+        .get_user_by_id(user_unique_id)
+        .await
+        .map_err(|err| {
+            error!("get_user_by_id: {err}");
+            ServerFnError::new("Database error")
+        })?
+        .ok_or_else(|| {
+            // In a real service implementation, you may want to send a RequestChallengeResponse
+            // with some deterministically generated key identifiers to prevent account enmueration.
+            set_http_response_code(StatusCode::PRECONDITION_FAILED);
+            ServerFnError::new("User not found")
+        })?;
+
+    let cred = state
         .webauthn
         .finish_passkey_registration(&rpkc, &reg_state)
-    {
-        Ok(sk) => {
-            todo!();
-            // let mut users_guard = state.users.write();
-
-            // let account = users_guard
-            //     .accounts
-            //     .entry(user_unique_id)
-            //     .and_modify(|account| account.passkeys.push(sk.clone()))
-            //     .or_insert_with(|| UserAccount::new(sk.clone()));
-
-            // let enrolled_keys = account.passkeys.len() as u64;
-            // let created = account.created;
-            // users_guard.commit();
-            // Ok(FinishRegistrationResponse {
-            //     enrolled_keys,
-            //     created,
-            // })
-        }
-
-        Err(e) => {
-            error!("challenge_register => {e:?}");
+        .map_err(|err| {
+            error!("finish_passkey_registration: {err}");
             set_http_response_code(StatusCode::BAD_REQUEST);
-            Err(ServerFnError::new(e.to_string()))
-        }
-    }
+            ServerFnError::new("Registration failure")
+        })?;
+
+    state
+        .add_passkey_for_account(&account, cred)
+        .await
+        .map_err(|err| {
+            error!("add_passkey_for_user_id: {err}");
+            ServerFnError::new("Database error")
+        })?;
+
+    let enrolled_keys = state
+        .get_passkey_count_for_account(&account)
+        .await
+        .map_err(|err| {
+            error!("get_passkey_count_for_account: {err}");
+            ServerFnError::new("Database error")
+        })?;
+
+    Ok(FinishRegistrationResponse {
+        enrolled_keys,
+        created: account.created,
+    })
 }
 
 /// Registration page.
