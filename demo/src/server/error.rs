@@ -11,16 +11,16 @@ pub enum ServerError {
 
     #[error("ORM error: {0}")]
     Orm(#[from] sea_orm::DbErr),
-    
+
     #[error("WebAuthn error: {0}")]
     Webauthn(#[from] webauthn_rs::prelude::WebauthnError),
 
     #[error("Path is not absolute: {0}")]
     PathIsNotAbsolute(PathBuf),
-    
+
     #[error("TLS config needs both public and private key, or neither to disable it")]
     TlsNeedsPublicAndPrivateKey,
-    
+
     #[error("Invalid RP ID")]
     InvalidRelyingPartyID,
 
