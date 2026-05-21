@@ -46,8 +46,8 @@ pub async fn main() -> ServerResult {
                 .filter_map(|u| HeaderValue::from_str(u.as_str()).ok()),
         ));
 
-    // TODO: make database Send/Sync
-    let state = Arc::new(ServerState::new(webauthn, sqlite)?);
+    let rp_is_https = args.rp_origin().scheme() == "https";
+    let state = Arc::new(ServerState::new(webauthn, sqlite, rp_is_https)?);
 
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
@@ -89,7 +89,7 @@ pub async fn main() -> ServerResult {
         args.rp_origin().as_str()
     );
 
-    if tls_config.is_some() != (args.rp_origin().scheme() == "https") {
+    if tls_config.is_some() != rp_is_https {
         warn!(
             "Application is serving over http{}, but the RP origin's scheme is {}. If this is \
             intentional, you will need a reverse proxy for this to work!",

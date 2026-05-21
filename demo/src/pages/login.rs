@@ -1,8 +1,15 @@
 use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
-use crate::server::{check_api_request, set_http_response_code, state::ServerState};
+use crate::server::{
+    check_api_request,
+    cookie::{delete_session_cookie, get_cookie_jar, put_cookie_jar, SessionCookie},
+    set_http_response_code,
+    state::ServerState,
+};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
+#[cfg(feature = "ssr")]
+use cookie::CookieJar;
 #[cfg(not(feature = "ssr"))]
 use leptos::logging::*;
 use leptos::{
@@ -24,7 +31,6 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 #[cfg(feature = "ssr")]
 use tracing::*;
-use uuid::Uuid;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::Passkey;
 use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
@@ -32,7 +38,6 @@ use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct StartLoginResponse {
     rcr: RequestChallengeResponse,
-    user_unique_id: Uuid,
 }
 
 #[serde_as]
@@ -103,16 +108,23 @@ pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerF
             ServerFnError::new("start_passkey_authentication")
         })?;
 
-    // TODO: create a HttpOnly cookie with a random nonce, rather than requiring the
-    // client to pass their user ID back to finish_login manually.
-    let mut authentications_guard = state.authentications.write();
-    authentications_guard.insert(account.id.clone(), auth_state);
-    authentications_guard.commit();
+    let mut session = SessionCookie::new();
+    session.store_passkey_authentication(auth_state, account.id);
 
-    Ok(StartLoginResponse {
-        rcr,
-        user_unique_id: account.id.clone(),
-    })
+    let mut cookie_jar = CookieJar::new();
+    session
+        .put_to_jar(&state.wrap_key, &mut cookie_jar, state.secure)
+        .map_err(|err| {
+            error!("put_to_jar: {err}");
+            ServerFnError::new("Cookie error")
+        })?;
+
+    put_cookie_jar(cookie_jar).await.map_err(|err| {
+        error!("put_cookie_jar: {err}");
+        ServerFnError::new("Cookie error")
+    })?;
+
+    Ok(StartLoginResponse { rcr })
 }
 
 #[server(
@@ -120,24 +132,32 @@ pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerF
     input = Post<JsonEncoding>,
     output = Json,
 )]
-pub async fn finish_login(
-    pkc: PublicKeyCredential,
-    user_unique_id: Uuid,
-) -> Result<FinishLoginResponse, ServerFnError> {
+pub async fn finish_login(pkc: PublicKeyCredential) -> Result<FinishLoginResponse, ServerFnError> {
     let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
     };
     check_api_request(&state.webauthn).await?;
 
-    let auth_state = {
-        let mut auth_guard = state.authentications.write();
-        let Some(auth_state) = auth_guard.remove(&user_unique_id) else {
-            set_http_response_code(StatusCode::PRECONDITION_FAILED);
-            return Err(ServerFnError::new("No active authentication request"));
-        };
-        auth_guard.commit();
-        auth_state
+    let mut cookie_jar = get_cookie_jar().await.map_err(|err| {
+        error!("get_cookie_jar: {err}");
+        set_http_response_code(StatusCode::BAD_REQUEST);
+        ServerFnError::new("Cookie error")
+    })?;
+
+    let Some(mut session) = SessionCookie::from_jar(&cookie_jar, &state.wrap_key) else {
+        error!("SessionCookie::from_jar: missing cookie");
+        set_http_response_code(StatusCode::BAD_REQUEST);
+        return Err(ServerFnError::new("Missing cookie"));
     };
+
+    let Some((auth_state, user_unique_id)) = session.take_passkey_authentication() else {
+        error!("take_passkey_authentication: incorrect state");
+        set_http_response_code(StatusCode::PRECONDITION_FAILED);
+        return Err(ServerFnError::new("Incorrect state"));
+    };
+
+    delete_session_cookie(&mut cookie_jar, state.secure);
+    put_cookie_jar(cookie_jar).await?;
 
     let sk = state
         .webauthn
@@ -187,7 +207,6 @@ pub fn LoginPage() -> impl IntoView {
 
     #[cfg(not(feature = "ssr"))]
     let credentials_get = Action::new_unsync(move |start_login: &StartLoginResponse| {
-        let user_unique_id = start_login.user_unique_id;
         let cro = start_login.rcr.clone().into();
 
         async move {
@@ -216,7 +235,7 @@ pub fn LoginPage() -> impl IntoView {
             // Serialise for webauthn-rs
             let rpkc = PublicKeyCredential::from(w_rpkc);
 
-            match finish_login(rpkc, user_unique_id).await {
+            match finish_login(rpkc).await {
                 Ok(r) => {
                     set_err.set(None);
                     set_finished.set(Some(r));
@@ -326,10 +345,6 @@ pub fn LoginPage() -> impl IntoView {
             {move || resp.get().map(|start_reg| {
                 view! {
                     <h2>"Start authentication response"</h2>
-                    <p>
-                        "User ID: "
-                        {start_reg.user_unique_id.to_string()}
-                    </p>
                     <p>
                         "Challenge: "
                         {format!("{:?}", start_reg.rcr)}

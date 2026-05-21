@@ -1,27 +1,28 @@
 use crate::server::{models, ServerResult};
-use concread::CowCell;
+use compact_jwt::crypto::JweA256KWEncipher;
 use sea_orm::{
     ActiveModelTrait as _, ActiveValue::Set, ColumnTrait as _, DatabaseConnection,
     EntityTrait as _, ModelTrait, PaginatorTrait as _, QueryFilter as _,
 };
-use std::collections::BTreeMap;
 use time::OffsetDateTime;
 use webauthn_rs::prelude::*;
 
 pub struct ServerState {
     pub webauthn: Webauthn,
     pub db: DatabaseConnection,
-    pub registrations: CowCell<BTreeMap<Uuid, PasskeyRegistration>>,
-    pub authentications: CowCell<BTreeMap<Uuid, PasskeyAuthentication>>,
+    pub wrap_key: JweA256KWEncipher,
+    /// Server sets the `Secure` bit on Cookies.
+    pub secure: bool,
 }
 
 impl ServerState {
-    pub fn new(webauthn: Webauthn, db: DatabaseConnection) -> ServerResult<Self> {
+    pub fn new(webauthn: Webauthn, db: DatabaseConnection, secure: bool) -> ServerResult<Self> {
         Ok(Self {
             webauthn,
             db,
-            registrations: CowCell::new(BTreeMap::new()),
-            authentications: CowCell::new(BTreeMap::new()),
+            // TODO: load from config
+            wrap_key: JweA256KWEncipher::generate_ephemeral()?,
+            secure,
         })
     }
 
