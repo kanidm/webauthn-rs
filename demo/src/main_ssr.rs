@@ -47,7 +47,13 @@ pub async fn main() -> ServerResult {
         ));
 
     let rp_is_https = args.rp_origin().scheme() == "https";
-    let state = Arc::new(ServerState::new(webauthn, sqlite, rp_is_https)?);
+
+    let state = Arc::new(ServerState::new(
+        webauthn,
+        sqlite,
+        args.wrap_key(),
+        rp_is_https,
+    )?);
 
     let leptos_options = conf.leptos_options;
     let addr = leptos_options.site_addr;
