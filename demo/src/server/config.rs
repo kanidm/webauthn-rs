@@ -1,6 +1,12 @@
 use crate::server::{ServerError, ServerResult};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Parser, ValueHint};
+use compact_jwt::crypto::JweA256KWEncipher;
+use crypto_glue::{
+    aes256::Aes256Key,
+    hex::{FromHex, FromHexError},
+    traits::Zeroizing,
+};
 use sea_orm::{Database, DatabaseConnection};
 use std::path::PathBuf;
 use tracing::error;
@@ -63,6 +69,24 @@ pub struct ServerArgs {
     /// SQLite database path.
     #[clap(long, env = "DB_PATH", value_hint = ValueHint::FilePath)]
     db_path: PathBuf,
+
+    /// Session cookie encryption key.
+    ///
+    /// This may be changed, but will invalidate any in-progress registration or authentication
+    /// operations.
+    ///
+    /// In a real-world application, you'd load this secret from a file on disk to prevent
+    /// observation.
+    #[clap(long, env = "SECRET_KEY", value_parser = parse_aes256_key)]
+    secret_key: Aes256Key,
+}
+
+/// Parses a Base-16 encoded string.
+///
+/// This function is intended for use as a `clap` `value_parser`.
+fn parse_aes256_key(i: &str) -> Result<Aes256Key, FromHexError> {
+    let k: [u8; 32] = FromHex::from_hex(i)?;
+    Ok(Zeroizing::new(k.into()))
 }
 
 impl ServerArgs {
@@ -135,5 +159,9 @@ impl ServerArgs {
 
         let url = format!("sqlite:{}", self.db_path.to_str().unwrap());
         Ok(Database::connect(url).await?)
+    }
+
+    pub fn wrap_key(&self) -> JweA256KWEncipher {
+        JweA256KWEncipher::from(self.secret_key.clone())
     }
 }
