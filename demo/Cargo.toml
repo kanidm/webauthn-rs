@@ -1,0 +1,180 @@
+[package]
+name = "webauthn-rs-demo2"
+edition = "2021"
+version.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+axum = { version = "0.8.0", optional = true }
+axum-server = { version = "0.8.0", features = ["tls-rustls"], optional = true }
+clap = { workspace = true, optional = true }
+compact_jwt = { workspace = true, optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+cookie = { version = "0.18.1", optional = true }
+crypto-glue = { workspace = true, optional = true }
+leptos = { version = "0.8.0" }
+leptos-use = { version = "0.18.3", features = ["use_window"] }
+leptos_config = { version = "0.8.0", optional = true }
+leptos_axum = { version = "0.8.0", optional = true }
+leptos_meta = { version = "0.8.0" }
+leptos_router = { version = "0.8.0" }
+sea-orm = { version = "1.1.20", features = ["sqlx-sqlite", "runtime-tokio", "with-time", "with-uuid"], optional = true }
+serde.workspace = true
+serde_json = { workspace = true, optional = true }
+serde_with = { workspace = true, features = ["time_0_3"] }
+# sqlx = { version = "0.8.6", features = ["sqlite", "time", "uuid"], optional = true }
+thiserror = { workspace = true, optional = true }
+time = { version = "0.3.47", features = ["formatting"] }
+tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+tokio-rustls = { version = "0.26.4", optional = true }
+tower = { version = "0.5.2", optional = true }
+tower-http = { version = "0.6.10", features = ["cors", "request-id", "trace", "util"], optional = true }
+tracing = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["serde"] }
+wasm-bindgen = { version = "=0.2.120", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+
+[dependencies.web-sys]
+version = "0.3"
+optional = true
+features = [
+    "AbortController",
+    "AbortSignal",
+    "AuthenticationExtensionsClientOutputs",
+    "AuthenticatorResponse",
+    "Clipboard",
+    "CredentialCreationOptions",
+    "CredentialRequestOptions",
+    "CredentialsContainer",
+    "Element",
+    "Event",
+    "Headers",
+    "HtmlCollection",
+    "HtmlSelectElement",
+    "Navigator",
+    "PublicKeyCredential",
+    "PublicKeyCredentialCreationOptions",
+    "PublicKeyCredentialRpEntity",
+    "PublicKeyCredentialUserEntity",
+    "Request",
+    "RequestCredentials",
+    "RequestInit",
+    "RequestMode",
+    "RequestRedirect",
+    "Response",
+    "Window",
+]
+
+[dependencies.webauthn-rs]
+workspace = true
+optional = true
+features = ["conditional-ui", "attestation", "danger-allow-state-serialisation"]
+
+[dependencies.webauthn-rs-proto]
+workspace = true
+default-features = false
+features = ["wasm"]
+
+[features]
+hydrate = [
+    "leptos/hydrate",
+    "dep:console_error_panic_hook",
+    "dep:wasm-bindgen",
+    "dep:wasm-bindgen-futures",
+    "dep:web-sys",
+]
+
+ssr = [
+    "dep:axum",
+    "dep:axum-server",
+    "dep:clap",
+    "dep:compact_jwt",
+    "dep:cookie",
+    "dep:crypto-glue",
+    "dep:leptos_axum",
+    "dep:leptos_config",
+    "dep:sea-orm",
+    "dep:serde_json",
+    "dep:thiserror",
+    "dep:tokio",
+    "dep:tokio-rustls",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:tracing",
+    "dep:tracing-subscriber",
+    "dep:webauthn-rs",
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+]
+
+[package.metadata.leptos]
+# The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
+output-name = "webauth-rs-demo2"
+
+# The site root folder is where cargo-leptos generate all output. WARNING: all content of this folder will be erased on a rebuild. Use it in your server setup.
+site-root = "target/site"
+
+# The site-root relative folder where all compiled output (JS, WASM and CSS) is written
+# Defaults to pkg
+site-pkg-dir = "pkg"
+
+# [Optional] The source CSS file. If it ends with .sass or .scss then it will be compiled by dart-sass into CSS. The CSS is optimized by Lightning CSS before being written to <site-root>/<site-pkg>/{{project-name}}.css
+# style-file = "style/main.scss"
+
+# Assets source dir. All files found here will be copied and synchronized to site-root.
+# The assets-dir cannot have a sub directory with the same name/path as site-pkg-dir.
+#
+# Optional. Env: LEPTOS_ASSETS_DIR.
+assets-dir = "public"
+
+# The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
+site-addr = "127.0.0.1:3000"
+
+# The port to use for automatic reload monitoring
+reload-port = 3001
+
+# [Optional] Command to use when running end2end tests. It will run in the end2end dir.
+#   [Windows] for non-WSL use "npx.cmd playwright test"
+#   This binary name can be checked in Powershell with Get-Command npx
+# end2end-cmd = "npx playwright test"
+# end2end-dir = "end2end"
+
+#  The browserlist query used for optimizing the CSS.
+browserquery = "defaults"
+
+# The environment Leptos will run in, usually either "DEV" or "PROD"
+env = "DEV"
+
+# The features to use when compiling the bin target
+#
+# Optional. Can be over-ridden with the command line parameter --bin-features
+bin-features = ["ssr"]
+
+# If the --no-default-features flag should be used when compiling the bin target
+#
+# Optional. Defaults to false.
+bin-default-features = false
+
+# The features to use when compiling the lib target
+#
+# Optional. Can be over-ridden with the command line parameter --lib-features
+lib-features = ["hydrate"]
+
+# If the --no-default-features flag should be used when compiling the lib target
+#
+# Optional. Defaults to false.
+lib-default-features = false
+
+# The profile to use for the lib target when compiling for release
+#
+# Optional. Defaults to "release".
+lib-profile-release = "wasm-release"

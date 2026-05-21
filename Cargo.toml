@@ -44,6 +44,8 @@ members = [
     # The compat tester
     "compat_tester/webauthn-rs-demo",
     "compat_tester/webauthn-rs-demo-shared",
+    "demo",
+    "demo/migration",
     # Ssh Key Attestation
     "sshkey-attest",
     # RP Proxy
@@ -79,7 +81,7 @@ anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
 
-crypto-glue = "^0.1.15"
+crypto-glue = "^0.1.16"
 compact_jwt = "0.5.6"
 futures = "^0.3.25"
 hex = "0.4.3"
@@ -126,3 +128,11 @@ reqwest = { version = "0.12.25", default-features = false, features = [
 thiserror = "^1.0.69"
 tokio-native-tls = "^0.3.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
+
+# Defines a size-optimized profile for the WASM bundle in release mode
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"
