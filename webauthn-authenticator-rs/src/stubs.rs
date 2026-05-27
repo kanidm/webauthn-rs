@@ -202,7 +202,7 @@ pub mod openssl {
     }
 }
 
-#[cfg(not(feature = "crypto"))]
+#[cfg(not(feature = "ctap2"))]
 pub mod webauthn_rs_core {
     pub mod proto {
         pub struct COSEEC2Key {}

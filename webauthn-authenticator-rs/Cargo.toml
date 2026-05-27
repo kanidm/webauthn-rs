@@ -50,6 +50,7 @@ ctap2 = [
     "dep:serde_bytes",
     "dep:tokio",
     "dep:tokio-stream",
+    "dep:webauthn-rs-core",
 ]
 ctap2-management = ["ctap2"]
 # Support for SoloKey's vendor commands
