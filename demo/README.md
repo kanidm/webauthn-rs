@@ -1,4 +1,4 @@
-# webauthn-rs-demo2
+# webauthn-rs-demo v2
 
 Work in progress rewrite of the demo site using `axum` and Leptos.
 
@@ -11,7 +11,7 @@ Install [`cargo-leptos`][1].
 Install [`sea-orm-cli`][2]:
 
 ```sh
-cargo install sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
+cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
 ```
 
 [1]: https://github.com/leptos-rs/cargo-leptos
