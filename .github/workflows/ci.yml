@@ -19,7 +19,7 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -43,12 +43,12 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: mozilla-actions/sccache-action@v0.0.10
 
       - if: runner.os != 'windows'
         run: |
@@ -143,13 +143,14 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: mozilla-actions/sccache-action@v0.0.10
 
+      # Linux-only dependencies
       - if: runner.os != 'windows'
         run: |
           sudo apt-get update && \
@@ -159,62 +160,62 @@ jobs:
       - if: contains(matrix.features, 'usb') && runner.os != 'windows'
         run: sudo apt-get -y install libusb-1.0-0-dev
 
-      # Don't try to install OpenSSL when there's only the "win10" feature
-      # enabled. We should be able to operate without it.
-      - if: runner.os == 'windows' && matrix.features != 'win10'
-        uses: johnwason/vcpkg-action@v4
-        with:
-          pkgs: openssl
-          triplet: x64-windows-static-md
-          token: ${{ github.token }}
-
-      - run: cargo build -p webauthn-authenticator-rs --features ${{ matrix.features }}
+      - name: "build"
+        run: cargo build -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Don't run clippy on Windows unless it is using a Windows-specific
       # feature which wasn't checked on Linux.
-      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
+      - name: "clippy: webauthn-authenticator-rs"
+        if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }}
-      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
+      - name: "clippy: webauthn-authenticator-rs +ui-cli"
+        if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ui-cli
-      - if: runner.os != 'windows' || contains(matrix.features, 'win10')
+      - name: "clippy: webauthn-authenticator-rs +qrcode +ui-cli"
+        if: runner.os != 'windows' || contains(matrix.features, 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},qrcode,ui-cli
 
-      # "ctap2-management" requires OpenSSL, which we won't have if built with
-      # only "win10" feature on Windows.
-      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+      # "ctap2-management" requires a `ctap2` backend
+      - name: "clippy: webauthn-authenticator-rs +ctap2-management"
+        if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management
-      - if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
+      - name: "clippy: webauthn-authenticator-rs +ctap2-management +qrcode +ui-cli"
+        if: runner.os != 'windows' || (contains(matrix.features, 'win10') && matrix.features != 'win10')
         run: |
           cargo clippy --no-deps -p webauthn-authenticator-rs --all-targets --features ${{ matrix.features }},ctap2-management,qrcode,ui-cli
 
-      - run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
+      - name: "unit tests"
+        run: cargo test -p webauthn-authenticator-rs --features ${{ matrix.features }}
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
 
-      # authenticate example requires OpenSSL (via webauthn-rs-core), so don't
-      # run if features == 'win10'.
-      - if: runner.os != 'windows' || matrix.features != 'win10'
+      # authenticate example requires crypto.
+      - name: "example: authenticate --help"
         run: |
-          cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
+          cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},crypto,ui-cli -- --help
 
       # caBLE-specific examples.
-      - if: contains(matrix.features, 'cable')
+      - name: "example: authenticate --help +qrcode (caBLE only)"
+        if: contains(matrix.features, 'cable')
         run: |
           cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},qrcode,ui-cli -- --help
-      - if: contains(matrix.features, 'cable')
+      - name: "example: cable_domain --help (caBLE only)"
+        if: contains(matrix.features, 'cable')
         run: |
           cargo run -p webauthn-authenticator-rs --example cable_domain --features ${{ matrix.features }} -- --help
-      - if: contains(matrix.features, 'cable')
+      - name: "example: cable_tunnel --help (caBLE only)"
+        if: contains(matrix.features, 'cable')
         run: |
           cargo run -p webauthn-authenticator-rs --example cable_tunnel --features ${{ matrix.features }},ui-cli -- --help
 
       # SoftToken-specific examples.
-      - if: contains(matrix.features, 'softtoken')
+      - name: "example: softtoken --help (softtoken only)"
+        if: contains(matrix.features, 'softtoken')
         run: |
           cargo run -p webauthn-authenticator-rs --example softtoken --features ${{ matrix.features }} -- --help
 
@@ -226,11 +227,11 @@ jobs:
         rust_version: [stable, nightly]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: mozilla-actions/sccache-action@v0.0.10
       - run: |
           sudo apt-get update && \
           sudo apt-get -y install libudev-dev
@@ -255,7 +256,7 @@ jobs:
             --document-private-items
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs-${{ matrix.rust_version }}
           path: |
@@ -278,7 +279,7 @@ jobs:
             --all-features
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs-${{ matrix.rust_version }}-all_features
           path: |
@@ -300,11 +301,11 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust_version }}
           components: clippy
-      - uses: mozilla-actions/sccache-action@v0.0.9
+      - uses: mozilla-actions/sccache-action@v0.0.10
 
       - run: cargo build -p actix_tutorial -p axum_tutorial -p tide_tutorial
