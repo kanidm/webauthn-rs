@@ -15,6 +15,7 @@ use axum::http::{
     HeaderMap, HeaderValue,
 };
 use compact_jwt::{
+    compact::{JweAlg, JweEnc},
     crypto::{JweA256GCMEncipher, JweA256KWEncipher},
     jwe::{Jwe, JweBuilder},
     JweCompact,
@@ -135,6 +136,9 @@ impl SessionCookie {
     /// Parse an encrypted session cookie and check its validity period.
     fn from_encrypted_jwe(cipher: &JweA256KWEncipher, encrypted_jwe: &str) -> ServerResult<Self> {
         let encrypted_jwe = JweCompact::from_str(encrypted_jwe)?;
+        if encrypted_jwe.get_alg_enc() != (JweAlg::A256KW, JweEnc::A256GCM) {
+            return Err(ServerError::InvalidCookie);
+        }
         let jwe = cipher.decipher(&encrypted_jwe)?;
         let o: Self = serde_json::from_slice(jwe.payload())?;
 
@@ -157,10 +161,10 @@ impl SessionCookie {
 
     /// Load an encrypted [`SessionCookie`] from the [`CookieJar`].
     ///
-    /// Returns `None` if the cookie is missing or invalid.
-    pub fn from_jar(jar: &CookieJar, cipher: &JweA256KWEncipher) -> Option<Self> {
-        let cookie = jar.get(COOKIE_NAME)?;
-        Self::from_encrypted_jwe(cipher, cookie.value_trimmed()).ok()
+    /// Returns [`ServerError`] if the cookie is missing or invalid.
+    pub fn from_jar(jar: &CookieJar, cipher: &JweA256KWEncipher) -> ServerResult<Self> {
+        let cookie = jar.get(COOKIE_NAME).ok_or(ServerError::MissingCookie)?;
+        Self::from_encrypted_jwe(cipher, cookie.value_trimmed())
     }
 
     /// Put an encrypted [`SessionCookie`] into the [`CookieJar`].
