@@ -297,7 +297,6 @@ pub fn LoginPage() -> impl IntoView {
         }
     };
 
-
     view! {
         <h1>"Login with your authenticator"</h1>
         <p>
