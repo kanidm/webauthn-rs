@@ -194,10 +194,10 @@ jobs:
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
 
-      # authenticate example should work without OpenSSL on any platform.
+      # authenticate example requires crypto.
       - name: "example: authenticate --help"
         run: |
-          cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},ui-cli -- --help
+          cargo run -p webauthn-authenticator-rs --example authenticate --features ${{ matrix.features }},crypto,ui-cli -- --help
 
       # caBLE-specific examples.
       - name: "example: authenticate --help +qrcode (caBLE only)"
