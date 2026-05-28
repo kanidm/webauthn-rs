@@ -294,11 +294,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+          targets: wasm32-unknown-unknown
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.10
 
-      - name: Install cargo-leptos
-        run: cargo install --locked cargo-leptos
+      # Building from source takes about 11.5 minutes.
+      - name: Install cargo-leptos binaries
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.6/cargo-leptos-installer.sh | sh
 
       - name: Install sea-orm-cli
         run: cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
