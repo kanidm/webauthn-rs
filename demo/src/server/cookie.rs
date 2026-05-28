@@ -29,7 +29,7 @@ use time::{Duration, UtcDateTime};
 use webauthn_rs::prelude::*;
 
 /// Maximum age of a session cookie.
-pub const MAX_AGE: Duration = Duration::minutes(15);
+pub const MAX_AGE: Duration = Duration::minutes(5);
 
 /// Maximum time a session cookie may be timestamped into the future.
 ///

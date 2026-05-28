@@ -108,19 +108,32 @@ flags and before any server flags ([see examples above](#over-http)).
 As this is a demo, there are a number of limitations which reduce the security of the application.
 In a real application, you'd sort this out:
 
-* There's no "session" functionality, so anyone can enroll a credential for any username.
+* There's no "session" functionality, so anyone can enroll a credential for any username. Accounts
+  are "created" when attempting a credential for a username that is not already taken.
 
   In a real app, you'd authenticate the user before allowing them to enroll new credentials.
 
-* Users and credentials are only stored in-memory, and are lost on server shut-down. It's also
-  possible for a large number of registrations, registration attempts or authentication attempts to
-  exhaust memory.
+* There are no rate limits to enrolling or using credentials.
 
-  In a real app, you'd persist users and have some rate limits.
+  In a real app, you might want to issue a proof-of-work challenge.
+
+* Username restrictions (3 - 16 characters of ASCII letters and/or numbers) are entirely arbitrary
+  for the purposes of this demo. This is mainly to limit storage requirements and prevent the
+  insertion of email addresses.
+
+  Your own application may wish to apply different constraints.
+
+* Passkey enrollment and authentication challenges are stored in an encrypted client-side cookie.
+  This cookie may be replayed for up to 5 minutes.
+
+  In a real application, you'd issue and store challenges in a distributed system that only allows
+  them to be used exactly once.
 
 * The application can only process one authentication and one registration flow per user account at
   a time. Starting another authentication or registration flow while one is in progress will
   overwrite the first one.
+
+  This is a side-effect of storing challenges in an encrypted client-side cookie.
 
 * There's no way to label enrolled credentials.
 
