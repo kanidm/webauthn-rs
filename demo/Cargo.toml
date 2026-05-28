@@ -1,5 +1,5 @@
 [package]
-name = "webauthn-rs-demo2"
+name = "webauthn-rs-demo"
 edition = "2021"
 version.workspace = true
 authors.workspace = true
