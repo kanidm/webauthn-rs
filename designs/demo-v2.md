@@ -96,6 +96,8 @@ Initial scope:
 
 * Remove `tide` related code from the `webauthn-rs` repository (v1 demo webapp, tutorial, etc.)
 
+* Update the existing OCI / Docker container image (which exposes a HTTP/HTTPS server port).
+
 ### Future work ideas
 
 * Show the deserialised contents of the attestation blob in the frontend.
@@ -104,8 +106,6 @@ Initial scope:
   mode, etc.)
 
 * Re-implement the compatibility tester.
-
-* Build a OCI / Docker container image which exposes a HTTPS server port.
 
 ## Design decisions
 
