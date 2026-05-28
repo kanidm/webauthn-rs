@@ -30,6 +30,8 @@ The current demo site has three crates:
 * `*-demo-shared`: shared data structures between backend and frontend components, used to define
   its HTTP APIs.
 
+These are all wrapped up into [a Docker container image][9] which serves a single HTTP / HTTPS port.
+
 ### Issues with the current demo
 
 * `tide`'s last release was 4 years ago, and [is no longer actively developed][0] (as of 2022).
@@ -186,5 +188,6 @@ It'd also require writing and maintaining JS/TS, which is not our area of expert
 [6]: https://fy.blackhats.net.au/blog/2023-02-02-how-hype-will-turn-your-security-key-into-junk/
 [7]: #design-decisions
 [8]: https://github.com/kanidm/webauthn-rs/issues/365#issuecomment-1756605203
+[9]: ../Dockerfile
 [leptos]: https://github.com/leptos-rs/leptos
 [islands]: https://book.leptos.dev/islands.html
