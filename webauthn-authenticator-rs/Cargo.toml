@@ -127,6 +127,7 @@ clap.workspace = true
 tokio.workspace = true
 tempfile = { version = "3.23.0" }
 hex = { workspace = true }
+webauthn-rs-core = { workspace = true }
 
 # cable_tunnel - used for connecting to Bluetooth HCI controller over serial
 serialport = { version = "4.8.1" }
