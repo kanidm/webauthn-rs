@@ -35,4 +35,10 @@ pub enum ServerError {
 
     #[error("Cookie expired")]
     CookieExpired,
+
+    #[error("Invalid cookie")]
+    InvalidCookie,
+
+    #[error("Missing cookie")]
+    MissingCookie,
 }
