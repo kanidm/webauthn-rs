@@ -17,6 +17,11 @@ repository = { workspace = true }
 
 [features]
 default = []
+
+# Origin-checking, this is an internal implementation detail
+origin = []
+
+# WASM bindings
 wasm = ["wasm-bindgen", "web-sys", "js-sys", "serde-wasm-bindgen"]
 
 [package.metadata.docs.rs]
