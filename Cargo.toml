@@ -41,9 +41,6 @@ members = [
     # Our Device Catalog
     "device-catalog",
     # "device-catalog-tool",
-    # The compat tester
-    "compat_tester/webauthn-rs-demo",
-    "compat_tester/webauthn-rs-demo-shared",
     # Ssh Key Attestation
     "sshkey-attest",
     # RP Proxy
@@ -51,7 +48,9 @@ members = [
 ]
 
 # Due to --cfg=web_sys_unstable_apis
-exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
+exclude = [
+    "tutorial/wasm",
+]
 
 # [patch.crates-io]
 # crypto-glue = { path = "../crypto-glue" }
