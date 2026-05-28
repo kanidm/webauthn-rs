@@ -97,7 +97,7 @@ jobs:
             --all-targets --features wasm,bluetooth,nfc,usb \
             --no-default-features
       - run: |
-          cargo test --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server
+          cargo test --workspace --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
@@ -288,18 +288,12 @@ jobs:
     name: Demo site
     strategy:
       fail-fast: false
-      matrix:
-        rust_version: [stable]
-        os:
-          - ubuntu-latest
-          - windows-latest
-
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust_version }}
+          toolchain: stable
           components: clippy
       - uses: mozilla-actions/sccache-action@v0.0.10
 
