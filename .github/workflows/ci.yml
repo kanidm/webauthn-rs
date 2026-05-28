@@ -279,7 +279,7 @@ jobs:
             --all-features
         env:
           RUSTDOCFLAGS: ${{ matrix.rust_version == 'nightly' && '--cfg docsrs' || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: docs-${{ matrix.rust_version }}-all_features
           path: |
