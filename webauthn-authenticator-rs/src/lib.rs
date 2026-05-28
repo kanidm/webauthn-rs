@@ -42,11 +42,10 @@
 //! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
 //! * `nfc`: [NFC][] via PC/SC API  [^rustcrypto]
 //! * `softpasskey`: [SoftPasskey][] (for testing) [^rustcrypto]
-//! * `softtoken`: [SoftToken][] (for testing) [^openssl]
+//! * `softtoken`: [SoftToken][] (for testing) [^rustcrypto]
 //! * `usb`: [USB HID][] [^rustcrypto]
 //! * `win10`: [Windows 10][] WebAuthn API
 //!
-//! [^openssl]: Feature requires OpenSSL.
 //! [^rustcrypto]: Feature requires RustCrypto.
 //!
 //! ### Miscellaneous features
@@ -65,11 +64,6 @@
 //!   [This will eventually replace all usages of OpenSSL][no-openssl].
 //!
 //!   Automatically enabled by the `ctap2` and `softpasskey` features.
-//!
-//! * `crypto_openssl`: Enables a depenency on OpenSSL [^openssl].
-//!
-//!   Automatically enabled by the `softtoken` feature, but this
-//!   [will be replaced by RustCrypto][no-openssl].
 //!
 //! * `qrcode`: QR code display for the [Cli][] UI, recommended for use if the
 //!   `cable` and `ui-cli` features are both enabled
