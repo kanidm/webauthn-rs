@@ -282,6 +282,22 @@ pub fn LoginPage() -> impl IntoView {
         });
     };
 
+    let is_invalid = move || {
+        let username = username.get();
+        !username.is_empty() && !is_username_valid(&username)
+    };
+
+    let username_class = move || {
+        if is_invalid() {
+            "form-control is-invalid"
+        } else if !username.get().is_empty() {
+            "form-control is-valid"
+        } else {
+            "form-control"
+        }
+    };
+
+
     view! {
         <h1>"Login with your authenticator"</h1>
         <p>
@@ -303,61 +319,67 @@ pub fn LoginPage() -> impl IntoView {
         </p>
 
         <form on:submit=on_submit>
-            <div class="mb-3">
-                <label for="username" class="form-label">
-                    "Username"
-                </label>
+            <div class="form-floating mb-3">
                 <input
                     type="text"
-                    class="form-control"
+                    class=username_class
                     id="username"
+                    autocomplete="username"
                     placeholder="example"
                     bind:value=username
                 />
 
-                // FIXME
-                <Show when=move || !is_username_valid(&username.get())>
+                <label for="username" class="form-label">
+                    "Username"
+                </label>
+
+                <Show when=is_invalid>
                     <div class="invalid-feedback">
-                        "Username must be at least 3 characters, and may not contain whitespace."
+                        "Usernames must 3-16 characters, and consist only of numbers and basic Latin letters."
                     </div>
                 </Show>
             </div>
 
-            <input type="submit" value="Login" />
-
-            {move || finished.get().map(|finished_resp| {
-                let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
-
-                view! {
-                    <h2>"Logged in!"</h2>
-                    <p>
-                        "Account created at "
-                        {created}
-                    </p>
-                    <p>
-                        "The account has "
-                        {finished_resp.enrolled_keys}
-                        " credential(s) enrolled."
-                    </p>
-                }
-            })}
-
-            {move || resp.get().map(|start_reg| {
-                view! {
-                    <h2>"Start authentication response"</h2>
-                    <p>
-                        "Challenge: "
-                        {format!("{:?}", start_reg.rcr)}
-                    </p>
-                }
-            })}
-
-            {move || err.get().map(|err| {
-                view! {
-                    <h2>"Error!"</h2>
-                    <p>{err}</p>
-                }
-            })}
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                "Login"
+            </button>
         </form>
+
+        {move || finished.get().map(|finished_resp| {
+            let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
+
+            view! {
+                <h2>"Logged in!"</h2>
+                <p>
+                    "Account created at "
+                    {created}
+                </p>
+                <p>
+                    "The account has "
+                    {finished_resp.enrolled_keys}
+                    " credential(s) enrolled."
+                </p>
+            }
+        })}
+
+        {move || resp.get().map(|start_reg| {
+            view! {
+                <h2>"Start authentication response"</h2>
+                <p>
+                    "Challenge: "
+                    {format!("{:?}", start_reg.rcr)}
+                </p>
+            }
+        })}
+
+        {move || err.get().map(|err| {
+            view! {
+                <h2>"Error!"</h2>
+                <p>{err}</p>
+            }
+        })}
     }
 }

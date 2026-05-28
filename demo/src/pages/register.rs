@@ -1,4 +1,4 @@
-use crate::pages::is_username_valid;
+use crate::pages::{is_username_valid, random_username};
 #[cfg(feature = "ssr")]
 use crate::server::{
     check_api_request,
@@ -13,7 +13,7 @@ use cookie::CookieJar;
 #[cfg(not(feature = "ssr"))]
 use leptos::logging::*;
 use leptos::{
-    ev::SubmitEvent,
+    ev::{MouseEvent, SubmitEvent},
     prelude::*,
     server_fn::codec::{Json, JsonEncoding, Post},
     task::spawn_local,
@@ -280,6 +280,26 @@ pub fn RegisterPage() -> impl IntoView {
         });
     };
 
+    let on_random = move |ev: MouseEvent| {
+        ev.prevent_default();
+        username.set(random_username());
+    };
+
+    let is_invalid = move || {
+        let username = username.get();
+        !username.is_empty() && !is_username_valid(&username)
+    };
+
+    let username_class = move || {
+        if is_invalid() {
+            "form-control is-invalid"
+        } else if !username.get().is_empty() {
+            "form-control is-valid"
+        } else {
+            "form-control"
+        }
+    };
+
     view! {
         <h1>"Enroll your authenticator"</h1>
 
@@ -297,81 +317,102 @@ pub fn RegisterPage() -> impl IntoView {
 
         <p>
             "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" discourages \
-            resident (\"discoverable\") credentials by default, so it won't consume the limited, \
-            non-reusable storage space on hardware security keys. Synchronised credential \
-            managers may still create a resident key anyway, and they work too!"
+            resident (\"discoverable\") passkeys by default, so it won't consume the limited, \
+            non-reusable storage space on hardware security keys. Non-resident passkeys are still \
+            strong, self-contained multi-factor authentication, can replace a password, and are no \
+            less secure than resident passkeys!"
         </p>
 
         <p>
             "Because this is just a demo, you can enroll credentials for "<em>"any"</em>
-            " username without authentication. This demo will be periodically reset, deleting all \
-            credentials from the server. In a real application, you'd authenticate the user \
-            before allowing them to enroll new credentials, and persist them in some way."
+            " username without authentication, regardless of whether it has been \"taken\" by \
+            someone else. In a real application, you'd authenticate the user before allowing them \
+            to enroll a new credential."
+        </p>
+
+        <p>
+            "This demo will be periodically reset, deleting all credentials from the server."
         </p>
 
         <form on:submit=on_submit>
-            <div class="mb-3">
-                <label for="username" class="form-label">
-                    "Username"
-                </label>
-                <input
-                    type="text"
-                    class="form-control"
-                    id="username"
-                    placeholder="example"
-                    bind:value=username
-                />
+            <div class="input-group mb-3">
+                <div class="form-floating">
+                    <input
+                        type="text"
+                        class=username_class
+                        id="username"
+                        autocomplete="username"
+                        placeholder="example"
+                        bind:value=username
+                    />
 
-                // FIXME
-                <Show when=move || !is_username_valid(&username.get())>
-                    <div class="invalid-feedback">
-                        "Username must be at least 3 characters, and may not contain whitespace."
-                    </div>
-                </Show>
+                    <label for="username" class="form-label">
+                        "Username"
+                    </label>
+
+                    <Show when=is_invalid>
+                        <div class="invalid-feedback">
+                            "Usernames must 3-16 characters, and consist only of numbers and basic Latin letters."
+                        </div>
+                    </Show>
+                </div>
+
+                <button
+                    class="btn btn-secondary"
+                    type="button"
+                    on:click=on_random
+                >
+                    "Random username"
+                </button>
             </div>
 
-            <input type="submit" value="Register" />
-
-            {move || finished.get().map(|finished_resp| {
-                let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
-
-                view! {
-                    <h2>"Authenticator enrolled!"</h2>
-                    <p>
-                        "Account created at "
-                        {created}
-                    </p>
-                    <p>
-                        "The account now has "
-                        {finished_resp.enrolled_keys}
-                        " credential(s) enrolled."
-                    </p>
-                    <p>
-                        "Now try to use the credential "
-                        <a href="/login">
-                            "on the login page"
-                        </a>
-                        "."
-                    </p>
-                }
-            })}
-
-            {move || resp.get().map(|start_reg| {
-                view! {
-                    <h2>"Start registration response"</h2>
-                    <p>
-                        "Challenge: "
-                        {format!("{:?}", start_reg.ccr)}
-                    </p>
-                }
-            })}
-
-            {move || err.get().map(|err| {
-                view! {
-                    <h2>"Error!"</h2>
-                    <p>{err}</p>
-                }
-            })}
+            <button
+                class="btn btn-primary"
+                type="submit"
+            >
+                "Register"
+            </button>
         </form>
+
+        {move || finished.get().map(|finished_resp| {
+            let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
+
+            view! {
+                <h2>"Authenticator enrolled!"</h2>
+                <p>
+                    "Account created at "
+                    {created}
+                </p>
+                <p>
+                    "The account now has "
+                    {finished_resp.enrolled_keys}
+                    " credential(s) enrolled."
+                </p>
+                <p>
+                    "Now try to use the credential "
+                    <a href="/login">
+                        "on the login page"
+                    </a>
+                    "."
+                </p>
+            }
+        })}
+
+        {move || resp.get().map(|start_reg| {
+            view! {
+                <h2>"Start registration response"</h2>
+                <p>
+                    "Challenge: "
+                    {format!("{:?}", start_reg.ccr)}
+                </p>
+            }
+        })}
+
+        {move || err.get().map(|err| {
+            view! {
+                <h2>"Error!"</h2>
+                <p>{err}</p>
+            }
+        })}
     }
 }
