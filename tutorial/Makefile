@@ -18,8 +18,3 @@ axum: ## Build and run the axum server, builds the WASM parts regardless.
 axum:
 	cd server/axum && ./build_wasm.sh
 	cd server/axum && cargo run
-
-.PHONY: tide
-tide: ## Build and run the tide server
-tide: wasm
-	cd server/tide && cargo run

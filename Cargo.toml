@@ -31,7 +31,6 @@ members = [
     # Authenticator CLI,
     "authenticator-cli",
     # Tutorial / Example sites.
-    "tutorial/server/tide",
     "tutorial/server/axum",
     "tutorial/server/actix_web",
     "tutorial/wasm",
