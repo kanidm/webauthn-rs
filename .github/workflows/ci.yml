@@ -57,14 +57,7 @@ jobs:
 
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
-      - run: |
-          cargo build \
-            --workspace \
-            --exclude webauthn-authenticator-rs \
-            --exclude webauthn-rs-demo \
-            --exclude actix_web \
-            --exclude web_authn \
-            --exclude tide-server
+      - run: cargo build --workspace --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
@@ -314,16 +307,10 @@ jobs:
         run: cargo install --locked cargo-leptos
 
       - name: Install sea-orm-cli
-        run: |
-          cargo install \
-          --locked \
-          sea-orm-cli \
-          --no-default-features \
-          --features sqlx-sqlite,codegen,runtime-tokio
+        run: cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
 
-      - run: cargo leptos build \
-          -p webauthn-rs-demo \
-          --release
+      - name: Demo site release build
+        run: cargo leptos build -p webauthn-rs-demo --release
 
       # TODO: container build
       # TODO: e2e tests
