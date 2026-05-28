@@ -831,6 +831,7 @@ mod tests {
     use std::time::Duration;
     use tempfile::tempfile;
     use webauthn_rs_core::{
+        error::WebauthnError,
         proto::{AttestationCaList, AttestationCaListBuilder, COSEKey},
         WebauthnCore as Webauthn,
     };
