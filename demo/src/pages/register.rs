@@ -134,11 +134,11 @@ pub async fn finish_registration(
         ServerFnError::new("Cookie error")
     })?;
 
-    let Some(mut session) = SessionCookie::from_jar(&cookie_jar, &state.wrap_key) else {
-        error!("SessionCookie::from_jar: missing cookie");
+    let mut session = SessionCookie::from_jar(&cookie_jar, &state.wrap_key).map_err(|err| {
+        error!("SessionCookie::from_jar: missing or invalid cookie: {err}");
         set_http_response_code(StatusCode::BAD_REQUEST);
-        return Err(ServerFnError::new("Missing cookie"));
-    };
+        ServerFnError::new("Missing or invalid cookie")
+    })?;
 
     let Some((reg_state, user_unique_id)) = session.take_passkey_registration() else {
         error!("take_passkey_registration: incorrect state");
