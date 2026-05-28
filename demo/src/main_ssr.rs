@@ -14,7 +14,7 @@ use tower_http::{
 };
 use tracing::{info, warn};
 use tracing_subscriber::{filter::LevelFilter, fmt::format::FmtSpan, EnvFilter};
-use webauthn_rs_demo2::{
+use webauthn_rs_demo::{
     app::*,
     server::{config::ServerArgs, state::ServerState, RandomUuidRequestId, ServerResult},
 };
