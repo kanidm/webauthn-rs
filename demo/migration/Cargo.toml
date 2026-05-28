@@ -1,7 +1,12 @@
 [package]
 name = "migration"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
+authors.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
 publish = false
 
 [lib]
