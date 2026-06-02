@@ -27,9 +27,15 @@ use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::types::CableRequestType;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::{AuthenticatorBackend, WebauthnAuthenticator};
-use webauthn_rs_core::proto::{AttestationMetadata, COSEEC2Key, COSEKey, COSEKeyType, CredentialV5, ECDSACurve, ParsedAttestation, ParsedAttestationData, RequestAuthenticationExtensions};
+use webauthn_rs_core::proto::{
+    AttestationMetadata, COSEEC2Key, COSEKey, COSEKeyType, CredentialV5, ECDSACurve,
+    ParsedAttestation, ParsedAttestationData, RequestAuthenticationExtensions,
+};
 use webauthn_rs_core::WebauthnCore as Webauthn;
-use webauthn_rs_proto::{AttestationConveyancePreference, AttestationFormat, COSEAlgorithm, ExtnState, RegisteredExtensions, UserVerificationPolicy};
+use webauthn_rs_proto::{
+    AttestationConveyancePreference, AttestationFormat, COSEAlgorithm, ExtnState,
+    RegisteredExtensions, UserVerificationPolicy,
+};
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "Register and authenticate test")]
