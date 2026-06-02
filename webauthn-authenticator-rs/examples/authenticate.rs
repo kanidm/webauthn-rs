@@ -27,9 +27,9 @@ use webauthn_authenticator_rs::transport::*;
 use webauthn_authenticator_rs::types::CableRequestType;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::{AuthenticatorBackend, WebauthnAuthenticator};
-use webauthn_rs_core::proto::RequestAuthenticationExtensions;
+use webauthn_rs_core::proto::{AttestationMetadata, COSEEC2Key, COSEKey, COSEKeyType, CredentialV5, ECDSACurve, ParsedAttestation, ParsedAttestationData, RequestAuthenticationExtensions};
 use webauthn_rs_core::WebauthnCore as Webauthn;
-use webauthn_rs_proto::{AttestationConveyancePreference, UserVerificationPolicy};
+use webauthn_rs_proto::{AttestationConveyancePreference, AttestationFormat, COSEAlgorithm, ExtnState, RegisteredExtensions, UserVerificationPolicy};
 
 #[derive(Debug, clap::Parser)]
 #[clap(about = "Register and authenticate test")]
@@ -257,7 +257,7 @@ async fn main() {
         .new_challenge_register_builder(&unique_id, &user_name, &display_name)
         .unwrap()
         .attestation(AttestationConveyancePreference::None)
-        .user_verification_policy(opt.verification_policy.into());
+        .user_verification_policy(opt.verification_policy.clone().into());
 
     let (chal, reg_state) = wan.generate_challenge_register(builder).unwrap();
 
@@ -266,6 +266,34 @@ async fn main() {
     let r = u.do_registration(origin.clone(), chal).unwrap();
 
     let cred = wan.register_credential(&r, &reg_state, None).unwrap();
+    let fake = CredentialV5 {
+        cred_id: vec![0x67; 20],
+        cred: COSEKey {
+            type_: COSEAlgorithm::ES256,
+            key: COSEKeyType::EC_EC2(COSEEC2Key {
+                curve: ECDSACurve::SECP256R1,
+                x: vec![1; 32],
+                y: vec![202; 32],
+            }),
+        },
+        counter: 0,
+        transports: None,
+        user_verified: true,
+        backup_eligible: false,
+        backup_state: false,
+        registration_policy: opt.verification_policy.into(),
+        extensions: RegisteredExtensions {
+            cred_protect: ExtnState::NotRequested,
+            hmac_create_secret: ExtnState::NotRequested,
+            appid: ExtnState::NotRequested,
+            cred_props: ExtnState::Ignored,
+        },
+        attestation: ParsedAttestation {
+            data: ParsedAttestationData::None,
+            metadata: AttestationMetadata::None,
+        },
+        attestation_format: AttestationFormat::None,
+    };
 
     trace!(?cred);
     let mut buf = String::new();
@@ -280,7 +308,7 @@ async fn main() {
             .await;
 
         let (chal, auth_state) = wan
-            .new_challenge_authenticate_builder(vec![cred.clone()], None)
+            .new_challenge_authenticate_builder(vec![fake.clone(), cred.clone()], None)
             .map(|builder| {
                 builder.extensions(Some(RequestAuthenticationExtensions {
                     appid: Some("example.app.id".to_string()),
