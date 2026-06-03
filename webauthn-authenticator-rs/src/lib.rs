@@ -61,6 +61,15 @@
 //!
 //! * `ui-cli`: [Cli][] UI
 //!
+//! ## Migrating to v0.6
+//!
+//! `webauthn-authenticator-rs` v0.6 migrated cryptographic functionality from
+//! OpenSSL to RustCrypto. APIs that exposed or consumed `openssl-rs` types have
+//! been updated to equivalent RustCrypto types, and you no longer need to
+//! install OpenSSL!
+//!
+//! The `crypto` feature flag has been removed.
+//!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
 //! [Bluetooth]: crate::bluetooth
 //! [cert]: https://fidoalliance.org/certification/authenticator-certification-levels/
