@@ -2,14 +2,12 @@
 use unicode_normalization::UnicodeNormalization;
 #[cfg(any(
     all(doc, not(doctest)),
-    feature = "crypto",
     feature = "ctap2",
     feature = "win10"
 ))]
 use url::Url;
 #[cfg(any(
     all(doc, not(doctest)),
-    feature = "crypto",
     feature = "ctap2",
     feature = "win10"
 ))]
@@ -20,7 +18,6 @@ use crate::error::WebauthnCError;
 
 #[cfg(any(
     all(doc, not(doctest)),
-    feature = "crypto",
     feature = "ctap2",
     feature = "win10"
 ))]
@@ -48,7 +45,6 @@ pub fn creation_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClien
 
 #[cfg(any(
     all(doc, not(doctest)),
-    feature = "crypto",
     feature = "ctap2",
     feature = "win10"
 ))]

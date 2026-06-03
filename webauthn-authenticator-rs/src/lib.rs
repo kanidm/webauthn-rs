@@ -36,34 +36,25 @@
 //!
 //! ### Transports and backends
 //!
-//! * `bluetooth`: [Bluetooth][] [^rustcrypto]
-//! * `cable`: [caBLE / Hybrid Authenticator][cable] [^rustcrypto]
+//! * `bluetooth`: [Bluetooth][]
+//! * `cable`: [caBLE / Hybrid Authenticator][cable]
 //!   * `cable-override-tunnel`: [Override caBLE tunnel server URLs][cable-url]
 //! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
-//! * `nfc`: [NFC][] via PC/SC API  [^rustcrypto]
-//! * `softpasskey`: [SoftPasskey][] (for testing) [^rustcrypto]
-//! * `softtoken`: [SoftToken][] (for testing) [^rustcrypto]
-//! * `usb`: [USB HID][] [^rustcrypto]
+//! * `nfc`: [NFC][] via PC/SC API
+//! * `softpasskey`: [SoftPasskey][] (for testing)
+//! * `softtoken`: [SoftToken][] (for testing)
+//! * `usb`: [USB HID][]
 //! * `win10`: [Windows 10][] WebAuthn API
-//!
-//! [^rustcrypto]: Feature requires RustCrypto.
 //!
 //! ### Miscellaneous features
 //!
-//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2]
-//!   [^rustcrypto].
+//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2].
 //!
 //!   Automatically enabled by the `bluetooth`, `cable`, `ctap2-management`,
 //!   `nfc`, `softtoken` and `usb` features.
 //!
 //!   * `ctap2-management`: Adds support for configuring and managing CTAP 2.x
 //!     hardware authenticators to the [CTAP 2.x implementation][crate::ctap2].
-//!
-//! * `crypto`: Enables a dependency on RustCrypto [^rustcrypto].
-//!
-//!   [This will eventually replace all usages of OpenSSL][no-openssl].
-//!
-//!   Automatically enabled by the `ctap2` and `softpasskey` features.
 //!
 //! * `qrcode`: QR code display for the [Cli][] UI, recommended for use if the
 //!   `cable` and `ui-cli` features are both enabled
@@ -133,7 +124,6 @@ pub mod prelude {
 }
 
 mod authenticator_hashed;
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 mod crypto;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]

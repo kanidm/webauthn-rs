@@ -4,7 +4,6 @@ use std::collections::BTreeMap;
 
 #[cfg(feature = "ctap2")]
 use serde_cbor_2::{ser::to_vec_packed, Value};
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 use url::Url;
 #[cfg(feature = "ctap2")]
 use webauthn_rs_proto::PublicKeyCredentialDescriptor;
@@ -18,7 +17,6 @@ use crate::ctap2::commands::{
     GetAssertionRequest, GetAssertionResponse, MakeCredentialRequest, MakeCredentialResponse,
 };
 use crate::error::WebauthnCError;
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 use crate::{
     crypto::compute_sha256,
     util::{creation_to_clientdata, get_to_clientdata},
@@ -84,7 +82,6 @@ pub trait AuthenticatorBackendHashedClientData {
     ) -> Result<PublicKeyCredential, WebauthnCError>;
 }
 
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 /// This provides a [AuthenticatorBackend] implementation for
 /// [AuthenticatorBackendHashedClientData] implementations.
 ///
