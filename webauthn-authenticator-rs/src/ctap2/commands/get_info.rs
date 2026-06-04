@@ -310,7 +310,6 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
     type Error = &'static str;
 
     fn try_from(mut raw: BTreeMap<u32, Value>) -> Result<Self, Self::Error> {
-        trace!("raw = {:?}", raw);
         let versions = raw
             .remove(&0x01)
             .and_then(|v| value_to_set_string(v, "0x01"))
