@@ -39,7 +39,7 @@
 //! * `bluetooth`: [Bluetooth][]
 //! * `cable`: [caBLE / Hybrid Authenticator][cable]
 //!   * `cable-override-tunnel`: [Override caBLE tunnel server URLs][cable-url]
-//! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
+//! * `mozilla`: [Mozilla Authenticator][mozilla] (formerly known as `u2fhid`)
 //! * `nfc`: [NFC][] via PC/SC API
 //! * `softpasskey`: [SoftPasskey][] (for testing)
 //! * `softtoken`: [SoftToken][] (for testing)
@@ -68,7 +68,12 @@
 //! been updated to equivalent RustCrypto types, and you no longer need to
 //! install OpenSSL!
 //!
-//! The `crypto` feature flag has been removed.
+//! * The `crypto` feature flag has been removed. This is effectively enabled by
+//!   default.
+//!
+//! * The `u2fhid` feature flag and `u2fhid::U2FHid` aliases have been removed.
+//!   Use the `mozilla` feature flag and [`MozillaAuthenticator`][mozilla]
+//!   instead (available since v0.5).
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
 //! [Bluetooth]: crate::bluetooth
@@ -76,7 +81,7 @@
 //! [cable]: crate::cable
 //! [cable-url]: crate::cable::connect_cable_authenticator_with_tunnel_uri
 //! [Cli]: crate::ui::Cli
-//! [Mozilla Authenticator]: crate::mozilla
+//! [mozilla]: crate::mozilla::MozillaAuthenticator
 //! [NFC]: crate::nfc
 //! [no-openssl]: https://github.com/kanidm/webauthn-rs/issues/499
 //! [SoftPasskey]: crate::softpasskey
@@ -166,16 +171,6 @@ pub mod softtoken;
 
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub mod usb;
-
-#[cfg(any(all(doc, not(doctest)), feature = "u2fhid"))]
-#[deprecated(
-    since = "0.5.0",
-    note = "The 'u2fhid' feature and module have been renamed to 'mozilla'."
-)]
-/// Mozilla `authenticator-rs` backend. Renamed to [MozillaAuthenticator][crate::mozilla::MozillaAuthenticator].
-pub mod u2fhid {
-    pub use crate::mozilla::MozillaAuthenticator as U2FHid;
-}
 
 #[cfg(any(all(doc, not(doctest)), feature = "win10"))]
 pub mod win10;
