@@ -16,9 +16,9 @@ use webauthn_rs_proto::{
 use crate::ctap2::commands::{
     GetAssertionRequest, GetAssertionResponse, MakeCredentialRequest, MakeCredentialResponse,
 };
-use crate::error::WebauthnCError;
 use crate::{
     crypto::compute_sha256,
+    error::WebauthnCError,
     util::{creation_to_clientdata, get_to_clientdata},
     AuthenticatorBackend,
 };
