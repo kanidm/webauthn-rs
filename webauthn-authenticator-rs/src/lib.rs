@@ -36,22 +36,19 @@
 //!
 //! ### Transports and backends
 //!
-//! * `bluetooth`: [Bluetooth][] [^rustcrypto]
-//! * `cable`: [caBLE / Hybrid Authenticator][cable] [^rustcrypto]
+//! * `bluetooth`: [Bluetooth][]
+//! * `cable`: [caBLE / Hybrid Authenticator][cable]
 //!   * `cable-override-tunnel`: [Override caBLE tunnel server URLs][cable-url]
-//! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
-//! * `nfc`: [NFC][] via PC/SC API  [^rustcrypto]
-//! * `softpasskey`: [SoftPasskey][] (for testing) [^rustcrypto]
-//! * `softtoken`: [SoftToken][] (for testing) [^rustcrypto]
-//! * `usb`: [USB HID][] [^rustcrypto]
+//! * `mozilla`: [Mozilla Authenticator][mozilla] (formerly known as `u2fhid`)
+//! * `nfc`: [NFC][] via PC/SC API
+//! * `softpasskey`: [SoftPasskey][] (for testing)
+//! * `softtoken`: [SoftToken][] (for testing)
+//! * `usb`: [USB HID][]
 //! * `win10`: [Windows 10][] WebAuthn API
-//!
-//! [^rustcrypto]: Feature requires RustCrypto.
 //!
 //! ### Miscellaneous features
 //!
-//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2]
-//!   [^rustcrypto].
+//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2].
 //!
 //!   Automatically enabled by the `bluetooth`, `cable`, `ctap2-management`,
 //!   `nfc`, `softtoken` and `usb` features.
@@ -59,16 +56,24 @@
 //!   * `ctap2-management`: Adds support for configuring and managing CTAP 2.x
 //!     hardware authenticators to the [CTAP 2.x implementation][crate::ctap2].
 //!
-//! * `crypto`: Enables a dependency on RustCrypto [^rustcrypto].
-//!
-//!   [This will eventually replace all usages of OpenSSL][no-openssl].
-//!
-//!   Automatically enabled by the `ctap2` and `softpasskey` features.
-//!
 //! * `qrcode`: QR code display for the [Cli][] UI, recommended for use if the
 //!   `cable` and `ui-cli` features are both enabled
 //!
 //! * `ui-cli`: [Cli][] UI
+//!
+//! ## Migrating to v0.6
+//!
+//! `webauthn-authenticator-rs` v0.6 migrated cryptographic functionality from
+//! OpenSSL to RustCrypto. APIs that exposed or consumed `openssl-rs` types have
+//! been updated to equivalent RustCrypto types, and you no longer need to
+//! install OpenSSL!
+//!
+//! * The `crypto` feature flag has been removed. This is effectively enabled by
+//!   default.
+//!
+//! * The `u2fhid` feature flag and `u2fhid::U2FHid` aliases have been removed.
+//!   Use the `mozilla` feature flag and [`MozillaAuthenticator`][mozilla]
+//!   instead (available since v0.5).
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
 //! [Bluetooth]: crate::bluetooth
@@ -76,7 +81,7 @@
 //! [cable]: crate::cable
 //! [cable-url]: crate::cable::connect_cable_authenticator_with_tunnel_uri
 //! [Cli]: crate::ui::Cli
-//! [Mozilla Authenticator]: crate::mozilla
+//! [mozilla]: crate::mozilla::MozillaAuthenticator
 //! [NFC]: crate::nfc
 //! [no-openssl]: https://github.com/kanidm/webauthn-rs/issues/499
 //! [SoftPasskey]: crate::softpasskey
@@ -133,7 +138,6 @@ pub mod prelude {
 }
 
 mod authenticator_hashed;
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 mod crypto;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
@@ -167,16 +171,6 @@ pub mod softtoken;
 
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub mod usb;
-
-#[cfg(any(all(doc, not(doctest)), feature = "u2fhid"))]
-#[deprecated(
-    since = "0.5.0",
-    note = "The 'u2fhid' feature and module have been renamed to 'mozilla'."
-)]
-/// Mozilla `authenticator-rs` backend. Renamed to [MozillaAuthenticator][crate::mozilla::MozillaAuthenticator].
-pub mod u2fhid {
-    pub use crate::mozilla::MozillaAuthenticator as U2FHid;
-}
 
 #[cfg(any(all(doc, not(doctest)), feature = "win10"))]
 pub mod win10;
