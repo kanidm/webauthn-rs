@@ -136,7 +136,7 @@ impl AuthenticatorBackend for Win10 {
         };
         let extensions = match options.extensions {
             Some(e) => WinExtensionsRequest::new(e)?,
-            None => Box::pin(WinExtensionsRequest::<WinExtensionMakeCredentialRequest>::default()),
+            None => WinExtensionsRequest::<WinExtensionMakeCredentialRequest>::default(),
         };
         // trace!("native extn: {:?}", extensions.native_ptr());
 

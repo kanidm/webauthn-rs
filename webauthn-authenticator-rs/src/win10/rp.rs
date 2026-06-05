@@ -14,36 +14,28 @@ use crate::error::WebauthnCError;
 
 /// Wrapper for [WEBAUTHN_RP_ENTITY_INFORMATION] to ensure pointer lifetime.
 pub struct WinRpEntityInformation {
-    native: WEBAUTHN_RP_ENTITY_INFORMATION,
-    id: HSTRING,
-    name: HSTRING,
+    native: Pin<Box<WEBAUTHN_RP_ENTITY_INFORMATION>>,
+    id: Pin<Box<HSTRING>>,
+    name: Pin<Box<HSTRING>>,
 }
 
 impl WinWrapper<RelyingParty> for WinRpEntityInformation {
     type NativeType = WEBAUTHN_RP_ENTITY_INFORMATION;
-    fn new(rp: RelyingParty) -> Result<Pin<Box<Self>>, WebauthnCError> {
-        let res = Self {
+    fn new(rp: RelyingParty) -> Result<Self, WebauthnCError> {
+        let mut res = Self {
             native: Default::default(),
-            id: rp.id.into(),
-            name: rp.name.into(),
+            id: Box::pin(rp.id.into()),
+            name: Box::pin(rp.name.into()),
         };
 
-        let mut boxed = Box::pin(res);
-
-        let native = WEBAUTHN_RP_ENTITY_INFORMATION {
+        res.native = Box::pin(WEBAUTHN_RP_ENTITY_INFORMATION {
             dwVersion: WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION,
-            pwszId: (&boxed.id).into(),
-            pwszName: (&boxed.name).into(),
+            pwszId: PCWSTR::from_raw(res.id.as_ptr()),
+            pwszName: PCWSTR::from_raw(res.name.as_ptr()),
             pwszIcon: PCWSTR::null(),
-        };
+        });
 
-        // Update the boxed type with the proper native object.
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        Ok(boxed)
+        Ok(res)
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_RP_ENTITY_INFORMATION {

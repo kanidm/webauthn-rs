@@ -10,7 +10,7 @@ use webauthn_rs_proto::{
 use super::WinWrapper;
 
 use windows::{
-    core::HSTRING,
+    core::{HSTRING, PCWSTR},
     Win32::{Foundation::BOOL, Networking::WindowsWebServices::*},
 };
 
@@ -284,9 +284,9 @@ pub(crate) struct WinExtensionsRequest<T>
 where
     T: WinExtensionRequestType + std::fmt::Debug,
 {
-    native: WEBAUTHN_EXTENSIONS,
-    native_list: Vec<WEBAUTHN_EXTENSION>,
-    ids: Vec<HSTRING>,
+    native: Pin<Box<WEBAUTHN_EXTENSIONS>>,
+    native_list: Pin<Box<Vec<Pin<Box<WEBAUTHN_EXTENSION>>>>>,
+    ids: Pin<Box<Vec<Pin<Box<HSTRING>>>>>,
     extensions: Vec<T>,
 }
 
@@ -297,8 +297,8 @@ where
     fn default() -> Self {
         Self {
             native: Default::default(),
-            native_list: vec![],
-            ids: vec![],
+            native_list: Default::default(),
+            ids: Default::default(),
             extensions: vec![],
         }
     }
@@ -314,53 +314,41 @@ where
         &self.native
     }
 
-    fn new(e: T::WrappedType) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(e: T::WrappedType) -> Result<Self, WebauthnCError> {
         // Convert the extensions to a Windows-ish type
         // trace!(?e);
+        // TODO: need to pin extension types
         let extensions = T::to_native(e);
         let len = extensions.len();
 
-        let res = Self {
+        let mut res = Self {
             native: Default::default(),
-            native_list: Vec::with_capacity(len),
-            ids: extensions.iter().map(|e| e.identifier().into()).collect(),
+            native_list: Box::pin(Vec::with_capacity(len)),
+            ids: Box::pin(
+                extensions
+                    .iter()
+                    .map(|e| Box::pin(e.identifier().into()))
+                    .collect(),
+            ),
             extensions,
         };
 
         // trace!(?res.extensions);
-        // Put our final struct on the heap
-        let mut boxed = Box::pin(res);
-
-        // Put in all the "native" values
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            let mut_ptr = Pin::get_unchecked_mut(mut_ref);
-
-            let l = &mut mut_ptr.native_list;
-            let l_ptr = l.as_mut_ptr();
-            for (i, extension) in mut_ptr.extensions.iter_mut().enumerate() {
-                let id = &mut_ptr.ids[i];
-                *l_ptr.add(i) = WEBAUTHN_EXTENSION {
-                    pwszExtensionIdentifier: id.into(),
-                    cbExtension: extension.len(),
-                    pvExtension: extension.ptr(),
-                };
-            }
-
-            l.set_len(len);
+        for (i, extension) in res.extensions.iter_mut().enumerate() {
+            let id = &res.ids[i];
+            res.native_list.push(Box::pin(WEBAUTHN_EXTENSION {
+                pwszExtensionIdentifier: PCWSTR::from_raw(id.as_ptr()),
+                cbExtension: extension.len(),
+                pvExtension: extension.ptr(),
+            }));
         }
 
         // Create the native list element
-        let native = WEBAUTHN_EXTENSIONS {
+        res.native = Box::pin(WEBAUTHN_EXTENSIONS {
             cExtensions: len as u32,
-            pExtensions: boxed.native_list.as_ptr() as *mut _,
-        };
+            pExtensions: res.native_list.as_ptr() as *mut _,
+        });
 
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        Ok(boxed)
+        Ok(res)
     }
 }

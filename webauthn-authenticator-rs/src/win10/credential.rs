@@ -69,12 +69,10 @@ fn transports_to_bitmask(transports: &Option<Vec<AuthenticatorTransport>>) -> u3
 pub struct WinCredentialList {
     /// Native structure, which points to everything else here.
     pub(crate) native: WEBAUTHN_CREDENTIAL_LIST,
-    /// Pointer to _l, because [WEBAUTHN_CREDENTIAL_LIST::ppCredentials] is a double-pointer.
-    _p: *const WEBAUTHN_CREDENTIAL_EX,
     /// List of credentials
-    _l: Vec<WEBAUTHN_CREDENTIAL_EX>,
+    l: Pin<Box<Vec<Pin<Box<WEBAUTHN_CREDENTIAL_EX>>>>>,
     /// List of credential IDs, referenced by [WEBAUTHN_CREDENTIAL_EX::pbId]
-    _ids: Vec<Vec<u8>>,
+    ids: Pin<Box<Vec<Vec<u8>>>>,
 }
 
 /// Trait to make [PublicKeyCredentialDescriptor] and [AllowCredentials] look the same.
@@ -110,7 +108,7 @@ impl CredentialType for AllowCredentials {
 
 impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
     type NativeType = WEBAUTHN_CREDENTIAL_LIST;
-    fn new(credentials: Vec<T>) -> Result<Pin<Box<Self>>, WebauthnCError> {
+    fn new(credentials: Vec<T>) -> Result<Self, WebauthnCError> {
         // Check that all the credential types are supported.
         for c in credentials.iter() {
             let typ = c.type_();
@@ -121,57 +119,30 @@ impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
         }
 
         let len = credentials.len();
-        let res = Self {
+        let mut res = Self {
             native: Default::default(),
-            _p: std::ptr::null(),
-            _l: Vec::with_capacity(len),
-            _ids: credentials.iter().map(|c| c.id()).collect(),
+            l: Box::pin(Vec::with_capacity(len)),
+            ids: Box::pin(credentials.iter().map(|c| c.id()).collect()),
         };
-
-        // Box the struct so it doesn't move.
-        let mut boxed = Box::pin(res);
 
         // Put in all the "native" values
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            let mut_ptr = Pin::get_unchecked_mut(mut_ref);
-            let l = &mut mut_ptr._l;
-            let l_ptr = l.as_mut_ptr();
-            for (i, credential) in credentials.iter().enumerate() {
-                let id = &mut mut_ptr._ids[i];
-                *l_ptr.add(i) = WEBAUTHN_CREDENTIAL_EX {
-                    dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
-                    cbId: id.len() as u32,
-                    pbId: id.as_mut_ptr() as *mut _,
-                    pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
-                    dwTransports: credential.transports(),
-                };
-            }
-
-            l.set_len(len);
+        for (i, credential) in credentials.iter().enumerate() {
+            let id = &mut res.ids[i];
+            res.l.push(Box::pin(WEBAUTHN_CREDENTIAL_EX {
+                dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
+                cbId: id.len() as u32,
+                pbId: id.as_mut_ptr() as *mut _,
+                pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
+                dwTransports: credential.transports(),
+            }));
         }
 
-        // Add a pointer to the pointer...
-        let p = boxed._l.as_ptr();
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref)._p = p;
-        }
-
-        let native = WEBAUTHN_CREDENTIAL_LIST {
+        res.native = WEBAUTHN_CREDENTIAL_LIST {
             cCredentials: len as u32,
-            ppCredentials: std::ptr::addr_of_mut!(boxed._p) as *mut *mut _,
+            ppCredentials: Vec::as_mut_ptr(&mut res.l) as *mut _,
         };
 
-        // Drop in the native struct
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        // trace!(?boxed.native);
-
-        Ok(boxed)
+        Ok(res)
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_CREDENTIAL_LIST {
