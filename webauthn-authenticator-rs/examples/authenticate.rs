@@ -351,8 +351,10 @@ async fn main() {
 
         info!("🍿 challenge -> {chal:x?}");
 
+        // Do registration on the authenticator side (navigator.credentials.create)
         let r = u.do_registration(origin.clone(), chal).unwrap();
 
+        // Register with the RP.
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
         trace!(?cred);
 
@@ -387,23 +389,32 @@ async fn main() {
             .and_then(|b| wan.generate_challenge_authenticate(b))
             .unwrap();
 
-        let r = u.do_authentication(origin.clone(), chal).map_err(|e| {
-            error!("Error -> {:x?}", e);
-            e
-        });
-        trace!(?r);
+        // Do authentication on the authenticator side (ie: navigator.credentials.get)
+        match u.do_authentication(origin.clone(), chal) {
+            Ok(cred) => {
+                info!("Authenticator response: {cred:x?}");
 
-        if let Ok(r) = r {
-            let auth_res = wan
-                .authenticate_credential(&r, &auth_state)
-                .expect("webauth authentication denied");
+                // Authenticate with the RP
+                match wan.authenticate_credential(&cred, &auth_state) {
+                    Ok(auth_res) => {
+                        info!("RP auth success: {auth_res:x?}");
+                    }
 
-            info!("auth_res -> {:x?}", auth_res);
+                    Err(e) => {
+                        error!("RP auth failure: {e}");
+                    }
+                }
+            }
+
+            Err(e) => {
+                error!("Authenticator error: {e:?}");
+            }
         }
 
-        let mut buf = String::new();
         println!("Press ENTER to try again, or Ctrl-C to abort");
         stdout().flush().ok();
+
+        let mut buf = String::new();
         stdin().read_line(&mut buf).expect("Cannot read stdin");
     }
 }
