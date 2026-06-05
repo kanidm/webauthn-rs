@@ -9,7 +9,10 @@ use std::time::{Duration, SystemTime};
 #[cfg(any(feature = "cable", feature = "softtoken"))]
 use clap::Args;
 use clap::{Parser, Subcommand, ValueEnum};
-use crypto_glue::rand::{rngs::ThreadRng, RngCore};
+use crypto_glue::{
+    ecdsa_p256::EcdsaP256PrivateKey,
+    rand::{rngs::ThreadRng, Rng, RngCore},
+};
 #[cfg(feature = "cable")]
 use tokio_tungstenite::tungstenite::http::uri::Builder;
 #[cfg(feature = "cable-override-tunnel")]
@@ -28,17 +31,20 @@ use webauthn_authenticator_rs::types::CableRequestType;
 use webauthn_authenticator_rs::ui::{Cli, UiCallback};
 use webauthn_authenticator_rs::{AuthenticatorBackend, WebauthnAuthenticator};
 use webauthn_rs_core::proto::{
-    AttestationMetadata, COSEEC2Key, COSEKey, COSEKeyType, CredentialV5, ECDSACurve,
-    ParsedAttestation, ParsedAttestationData, RequestAuthenticationExtensions,
+    AttestationMetadata, CredentialV5, ParsedAttestation, ParsedAttestationData,
+    RequestAuthenticationExtensions,
 };
-use webauthn_rs_core::WebauthnCore as Webauthn;
+use webauthn_rs_core::{error::WebauthnResult, WebauthnCore as Webauthn};
 use webauthn_rs_proto::{
-    AttestationConveyancePreference, AttestationFormat, COSEAlgorithm, ExtnState,
-    RegisteredExtensions, UserVerificationPolicy,
+    AttestationConveyancePreference, AttestationFormat, ExtnState, RegisteredExtensions,
+    UserVerificationPolicy,
 };
 
+/// Performs a WebAuthn registration and authentication ceremony with a fake RP.
+///
+/// This is used to test authenticators and transports with `webauthn-authenticator-rs`.
 #[derive(Debug, clap::Parser)]
-#[clap(about = "Register and authenticate test")]
+#[clap(about = "Registration and authentication tester")]
 pub struct CliParser {
     /// Provider to use.
     #[clap(subcommand)]
@@ -47,9 +53,30 @@ pub struct CliParser {
     /// User verification policy for the request.
     #[clap(short, long, value_enum, default_value_t)]
     verification_policy: UvPolicy,
+
+    /// Don't perform a registration ceremony, and just present random fake credentials for
+    /// authentication.
+    #[clap(long)]
+    only_fakes: bool,
+
+    /// Send the fake credential IDs during the registration request as excluded credentials.
+    #[clap(long, conflicts_with = "only_fakes")]
+    fakes_in_registration: bool,
+
+    /// Number of fake credentials to place before the registered credential during the
+    /// authentication ceremony.
+    ///
+    /// Fake credential IDs contain a random length of random bytes.
+    #[clap(long, default_value_t)]
+    fakes_before: usize,
+
+    /// Number of fake credentials to place after the registered credential during the
+    /// authentication ceremony.
+    #[clap(long, default_value_t)]
+    fakes_after: usize,
 }
 
-#[derive(ValueEnum, Clone, Default, Debug)]
+#[derive(ValueEnum, Clone, Copy, Default, Debug)]
 pub enum UvPolicy {
     Discouraged,
     #[default]
@@ -220,6 +247,44 @@ impl Provider {
     }
 }
 
+/// Generate a fake credential that matches the verification policy.
+fn fake_credential(
+    rng: &mut ThreadRng,
+    verification_policy: UvPolicy,
+) -> WebauthnResult<CredentialV5> {
+    let cred_len = rng.gen_range(16..=64);
+    let mut cred_id: Vec<u8> = vec![0; cred_len];
+    rng.fill_bytes(&mut cred_id);
+
+    let key = EcdsaP256PrivateKey::random(rng);
+    let cred = (&key.public_key()).try_into()?;
+
+    Ok(CredentialV5 {
+        cred_id,
+        cred,
+        counter: 0,
+        transports: None,
+        user_verified: matches!(
+            verification_policy,
+            UvPolicy::Preferred | UvPolicy::Required
+        ),
+        backup_eligible: false,
+        backup_state: false,
+        registration_policy: verification_policy.into(),
+        extensions: RegisteredExtensions {
+            cred_protect: ExtnState::NotRequested,
+            hmac_create_secret: ExtnState::NotRequested,
+            appid: ExtnState::NotRequested,
+            cred_props: ExtnState::Ignored,
+        },
+        attestation: ParsedAttestation {
+            data: ParsedAttestationData::None,
+            metadata: AttestationMetadata::None,
+        },
+        attestation_format: AttestationFormat::None,
+    })
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -235,9 +300,7 @@ async fn main() {
     let opt = CliParser::parse();
     let ui = Cli {};
     let provider = opt.provider;
-    let mut u = provider
-        .connect_provider(CableRequestType::MakeCredential, &ui)
-        .await;
+    let mut u: Box<dyn AuthenticatorBackend>;
 
     let origin = Url::parse("https://demo.webauthn-authenticator-rs.example").unwrap();
 
@@ -251,61 +314,60 @@ async fn main() {
         None,
     );
 
-    let mut unique_id = [0u8; 16];
-    rng.fill_bytes(&mut unique_id);
-    let now = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    let user_name = format!("demo-{}", now.as_secs());
-    let display_name = format!("Authenticate Demo {}", now.as_secs());
+    let mut creds =
+        Vec::with_capacity(opt.fakes_before + opt.fakes_after + if opt.only_fakes { 0 } else { 1 });
+    for _ in 0..(opt.fakes_before + opt.fakes_after) {
+        creds.push(
+            fake_credential(&mut rng, opt.verification_policy).expect("Cannot generate fake"),
+        );
+    }
 
-    let builder = wan
-        .new_challenge_register_builder(&unique_id, &user_name, &display_name)
-        .unwrap()
-        .attestation(AttestationConveyancePreference::None)
-        .user_verification_policy(opt.verification_policy.clone().into());
+    if !opt.only_fakes {
+        u = provider
+            .connect_provider(CableRequestType::MakeCredential, &ui)
+            .await;
 
-    let (chal, reg_state) = wan.generate_challenge_register(builder).unwrap();
+        let mut unique_id = [0u8; 16];
+        rng.fill_bytes(&mut unique_id);
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default();
+        let user_name = format!("demo-{}", now.as_secs());
+        let display_name = format!("Authenticate Demo {}", now.as_secs());
 
-    info!("🍿 challenge -> {:x?}", chal);
+        let mut builder = wan
+            .new_challenge_register_builder(&unique_id, &user_name, &display_name)
+            .unwrap()
+            .attestation(AttestationConveyancePreference::None)
+            .user_verification_policy(opt.verification_policy.into());
 
-    let r = u.do_registration(origin.clone(), chal).unwrap();
+        if opt.fakes_in_registration {
+            builder = builder.exclude_credentials(Some(
+                creds.iter().map(|cred| cred.cred_id.clone()).collect(),
+            ))
+        }
 
-    let cred = wan.register_credential(&r, &reg_state, None).unwrap();
-    let fake = CredentialV5 {
-        cred_id: vec![0x67; 20],
-        cred: COSEKey {
-            type_: COSEAlgorithm::ES256,
-            key: COSEKeyType::EC_EC2(COSEEC2Key {
-                curve: ECDSACurve::SECP256R1,
-                x: vec![1; 32],
-                y: vec![202; 32],
-            }),
-        },
-        counter: 0,
-        transports: None,
-        user_verified: true,
-        backup_eligible: false,
-        backup_state: false,
-        registration_policy: opt.verification_policy.into(),
-        extensions: RegisteredExtensions {
-            cred_protect: ExtnState::NotRequested,
-            hmac_create_secret: ExtnState::NotRequested,
-            appid: ExtnState::NotRequested,
-            cred_props: ExtnState::Ignored,
-        },
-        attestation: ParsedAttestation {
-            data: ParsedAttestationData::None,
-            metadata: AttestationMetadata::None,
-        },
-        attestation_format: AttestationFormat::None,
-    };
+        let (chal, reg_state) = wan.generate_challenge_register(builder).unwrap();
 
-    trace!(?cred);
-    let mut buf = String::new();
-    println!("WARNING: Some NFC keys need to be power-cycled before you can authenticate.");
+        info!("🍿 challenge -> {chal:x?}");
+
+        let r = u.do_registration(origin.clone(), chal).unwrap();
+
+        let cred = wan.register_credential(&r, &reg_state, None).unwrap();
+        trace!(?cred);
+
+        creds.insert(opt.fakes_before, cred);
+        println!("WARNING: Some NFC keys need to be power-cycled before you can authenticate.");
+    }
+
+    if creds.is_empty() {
+        panic!("No credentials available to authenticate with.");
+    }
+
     println!("Press ENTER to authenticate, or Ctrl-C to abort");
     stdout().flush().ok();
+
+    let mut buf = String::new();
     stdin().read_line(&mut buf).expect("Cannot read stdin");
 
     loop {
@@ -314,7 +376,7 @@ async fn main() {
             .await;
 
         let (chal, auth_state) = wan
-            .new_challenge_authenticate_builder(vec![fake.clone(), cred.clone()], None)
+            .new_challenge_authenticate_builder(creds.clone(), None)
             .map(|builder| {
                 builder.extensions(Some(RequestAuthenticationExtensions {
                     appid: Some("example.app.id".to_string()),
