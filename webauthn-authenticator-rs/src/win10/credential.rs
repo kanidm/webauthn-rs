@@ -1,24 +1,15 @@
 //! Wrappers for [AllowCredentials] and [PublicKeyCredentialDescriptor].
 use crate::prelude::WebauthnCError;
-use std::pin::Pin;
+use std::{marker::PhantomPinned, pin::Pin};
 use webauthn_rs_proto::{AllowCredentials, AuthenticatorTransport, PublicKeyCredentialDescriptor};
-
-use super::WinWrapper;
-
-use windows::{
-    core::HSTRING,
-    w,
-    Win32::Networking::WindowsWebServices::{
-        WEBAUTHN_CREDENTIAL_EX, WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION, WEBAUTHN_CREDENTIAL_LIST,
-        WEBAUTHN_CTAP_TRANSPORT_BLE, WEBAUTHN_CTAP_TRANSPORT_INTERNAL, WEBAUTHN_CTAP_TRANSPORT_NFC,
-        WEBAUTHN_CTAP_TRANSPORT_TEST, WEBAUTHN_CTAP_TRANSPORT_USB,
-    },
+use windows::Win32::Networking::WindowsWebServices::{
+    WEBAUTHN_CREDENTIAL_EX, WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION, WEBAUTHN_CREDENTIAL_LIST,
+    WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY, WEBAUTHN_CTAP_TRANSPORT_BLE,
+    WEBAUTHN_CTAP_TRANSPORT_INTERNAL, WEBAUTHN_CTAP_TRANSPORT_NFC, WEBAUTHN_CTAP_TRANSPORT_TEST,
+    WEBAUTHN_CTAP_TRANSPORT_USB,
 };
 
-// Most constants are `&str`, but APIs expect `HSTRING`... there's no good work-around.
-// https://github.com/microsoft/windows-rs/issues/2049
-/// [windows::Win32::Networking::WindowsWebServices::WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY]
-const CREDENTIAL_TYPE_PUBLIC_KEY: &HSTRING = w!("public-key");
+use super::{constants::CREDENTIAL_TYPE_PUBLIC_KEY, WinWrapper};
 
 /// Converts an [AuthenticatorTransport] into a value for
 /// [WEBAUTHN_CREDENTIAL_EX::dwTransports]
@@ -68,11 +59,12 @@ fn transports_to_bitmask(transports: &Option<Vec<AuthenticatorTransport>>) -> u3
 /// [PublicKeyCredentialDescriptor] and [AllowCredentials].
 pub struct WinCredentialList {
     /// Native structure, which points to everything else here.
-    pub(crate) native: WEBAUTHN_CREDENTIAL_LIST,
+    pub(super) native: WEBAUTHN_CREDENTIAL_LIST,
     /// List of credentials
-    l: Pin<Box<Vec<Pin<Box<WEBAUTHN_CREDENTIAL_EX>>>>>,
+    l: Vec<Pin<Box<WEBAUTHN_CREDENTIAL_EX>>>,
     /// List of credential IDs, referenced by [WEBAUTHN_CREDENTIAL_EX::pbId]
-    ids: Pin<Box<Vec<Vec<u8>>>>,
+    ids: Vec<Vec<u8>>,
+    _pin: PhantomPinned,
 }
 
 /// Trait to make [PublicKeyCredentialDescriptor] and [AllowCredentials] look the same.
@@ -108,44 +100,57 @@ impl CredentialType for AllowCredentials {
 
 impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
     type NativeType = WEBAUTHN_CREDENTIAL_LIST;
-    fn new(credentials: Vec<T>) -> Result<Self, WebauthnCError> {
+
+    fn new(credentials: Vec<T>) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Check that all the credential types are supported.
         for c in credentials.iter() {
             let typ = c.type_();
-            if typ != *"public-key" {
-                error!("Unsupported credential type: {:?}", c);
+            if typ != WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY {
+                error!("Unsupported credential type: {c:?}");
                 return Err(WebauthnCError::Internal);
             }
         }
 
         let len = credentials.len();
-        let mut res = Self {
-            native: Default::default(),
-            l: Box::pin(Vec::with_capacity(len)),
-            ids: Box::pin(credentials.iter().map(|c| c.id()).collect()),
+
+        let res = Self {
+            ids: credentials.iter().map(|c| c.id()).collect(),
+            native: WEBAUTHN_CREDENTIAL_LIST {
+                cCredentials: len as u32,
+                ppCredentials: std::ptr::null_mut(),
+            },
+            l: Vec::with_capacity(len),
+            _pin: PhantomPinned,
         };
 
+        let mut boxed = Box::new(res);
+
         // Put in all the "native" values
-        for (i, credential) in credentials.iter().enumerate() {
-            let id = &mut res.ids[i];
-            res.l.push(Box::pin(WEBAUTHN_CREDENTIAL_EX {
+        for (credential, id) in credentials.iter().zip(boxed.ids.iter_mut()) {
+            boxed.l.push(Box::pin(WEBAUTHN_CREDENTIAL_EX {
                 dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
                 cbId: id.len() as u32,
-                pbId: id.as_mut_ptr() as *mut _,
+                pbId: id.as_mut_ptr(),
                 pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
                 dwTransports: credential.transports(),
             }));
         }
 
-        res.native = WEBAUTHN_CREDENTIAL_LIST {
-            cCredentials: len as u32,
-            ppCredentials: Vec::as_mut_ptr(&mut res.l) as *mut _,
-        };
+        // Each entry is in a `Box`, so C can treat the parent `Vec` an array of pointers to
+        // `WEBAUTHN_CREDENTIAL_EX`.
+        boxed.native.ppCredentials =
+            Vec::as_mut_ptr(&mut boxed.l) as *mut *mut WEBAUTHN_CREDENTIAL_EX;
 
-        Ok(res)
+        Ok(Box::into_pin(boxed))
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_CREDENTIAL_LIST {
+        &self.native
+    }
+}
+
+impl WinCredentialList {
+    pub fn native(&self) -> *const WEBAUTHN_CREDENTIAL_LIST {
         &self.native
     }
 }

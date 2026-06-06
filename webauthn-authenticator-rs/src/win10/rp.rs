@@ -1,5 +1,5 @@
 //! Wrappers for [RelyingParty].
-use std::pin::Pin;
+use std::{marker::PhantomPinned, pin::Pin};
 
 use webauthn_rs_proto::RelyingParty;
 use windows::{
@@ -14,28 +14,31 @@ use crate::error::WebauthnCError;
 
 /// Wrapper for [WEBAUTHN_RP_ENTITY_INFORMATION] to ensure pointer lifetime.
 pub struct WinRpEntityInformation {
-    native: Pin<Box<WEBAUTHN_RP_ENTITY_INFORMATION>>,
-    id: Pin<Box<HSTRING>>,
-    name: Pin<Box<HSTRING>>,
+    native: WEBAUTHN_RP_ENTITY_INFORMATION,
+    id: HSTRING,
+    name: HSTRING,
+    _pin: PhantomPinned,
 }
 
 impl WinWrapper<RelyingParty> for WinRpEntityInformation {
     type NativeType = WEBAUTHN_RP_ENTITY_INFORMATION;
-    fn new(rp: RelyingParty) -> Result<Self, WebauthnCError> {
-        let mut res = Self {
-            native: Default::default(),
-            id: Box::pin(rp.id.into()),
-            name: Box::pin(rp.name.into()),
+    fn new(rp: RelyingParty) -> Result<Pin<Box<Self>>, WebauthnCError> {
+        let res = Self {
+            id: rp.id.into(),
+            name: rp.name.into(),
+            native: WEBAUTHN_RP_ENTITY_INFORMATION {
+                dwVersion: WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION,
+                ..Default::default()
+            },
+            _pin: PhantomPinned,
         };
 
-        res.native = Box::pin(WEBAUTHN_RP_ENTITY_INFORMATION {
-            dwVersion: WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION,
-            pwszId: PCWSTR::from_raw(res.id.as_ptr()),
-            pwszName: PCWSTR::from_raw(res.name.as_ptr()),
-            pwszIcon: PCWSTR::null(),
-        });
+        let mut boxed = Box::new(res);
 
-        Ok(res)
+        boxed.native.pwszId = PCWSTR::from(&boxed.id);
+        boxed.native.pwszName = PCWSTR::from(&boxed.name);
+
+        Ok(Box::into_pin(boxed))
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_RP_ENTITY_INFORMATION {

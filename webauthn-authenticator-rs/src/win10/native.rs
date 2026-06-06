@@ -54,7 +54,7 @@ pub trait WinWrapper<T> {
     /// Windows equivalent type for `T`
     type NativeType;
     /// Converts a `webauthn-authenticator-rs` type to a Windows type
-    fn new(v: T) -> Result<Self, WebauthnCError>
+    fn new(v: T) -> Result<Pin<Box<Self>>, WebauthnCError>
     where
         Self: Sized;
     /// Returns a pointer to the Windows equivalent type

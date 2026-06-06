@@ -1,7 +1,6 @@
 //! Wrappers for extensions.
 use crate::prelude::WebauthnCError;
-use std::ffi::c_void;
-use std::pin::Pin;
+use std::{ffi::c_void, marker::PhantomPinned, pin::Pin};
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, CredProtect, RegistrationExtensionsClientOutputs,
     RequestRegistrationExtensions,
@@ -23,11 +22,6 @@ pub(crate) enum WinExtensionMakeCredentialRequest {
     MinPinLength(BOOL),
 }
 
-/// Represents a single extension for GetAssertion requests, analogous to a
-/// single [RequestAuthenticationExtensions] field.
-#[derive(Debug)]
-pub(crate) enum WinExtensionGetAssertionRequest {}
-
 /// Generic request extension trait, for abstracting between
 /// [WinExtensionMakeCredentialRequest] and [WinExtensionGetAssertionRequest].
 pub(crate) trait WinExtensionRequestType
@@ -41,7 +35,7 @@ where
     /// Pointer to the native data structure.
     fn ptr(&mut self) -> *mut c_void;
     /// The `webauthn-authenticator-rs` type which this wraps.
-    type WrappedType;
+    type WrappedType: Send;
     /// Converts the [Self::WrappedType] to a [Vec] of Windows API types.
     fn to_native(e: Self::WrappedType) -> Vec<Self>;
 }
@@ -73,7 +67,7 @@ impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
 
     type WrappedType = RequestRegistrationExtensions;
 
-    fn to_native(e: Self::WrappedType) -> Vec<Self> {
+    fn to_native(e: RequestRegistrationExtensions) -> Vec<Self> {
         let mut o: Vec<Self> = Vec::new();
         if let Some(c) = &e.cred_protect {
             o.push(c.into());
@@ -284,10 +278,11 @@ pub(crate) struct WinExtensionsRequest<T>
 where
     T: WinExtensionRequestType + std::fmt::Debug,
 {
-    native: Pin<Box<WEBAUTHN_EXTENSIONS>>,
-    native_list: Pin<Box<Vec<Pin<Box<WEBAUTHN_EXTENSION>>>>>,
-    ids: Pin<Box<Vec<Pin<Box<HSTRING>>>>>,
+    native: WEBAUTHN_EXTENSIONS,
+    native_list: Vec<WEBAUTHN_EXTENSION>,
+    ids: Vec<HSTRING>,
     extensions: Vec<T>,
+    _pin: PhantomPinned,
 }
 
 impl<T> Default for WinExtensionsRequest<T>
@@ -300,6 +295,7 @@ where
             native_list: Default::default(),
             ids: Default::default(),
             extensions: vec![],
+            _pin: PhantomPinned,
         }
     }
 }
@@ -314,41 +310,36 @@ where
         &self.native
     }
 
-    fn new(e: T::WrappedType) -> Result<Self, WebauthnCError> {
+    fn new(e: T::WrappedType) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Convert the extensions to a Windows-ish type
         // trace!(?e);
-        // TODO: need to pin extension types
         let extensions = T::to_native(e);
         let len = extensions.len();
 
-        let mut res = Self {
-            native: Default::default(),
-            native_list: Box::pin(Vec::with_capacity(len)),
-            ids: Box::pin(
-                extensions
-                    .iter()
-                    .map(|e| Box::pin(e.identifier().into()))
-                    .collect(),
-            ),
+        let res = Self {
+            native: WEBAUTHN_EXTENSIONS {
+                cExtensions: len as u32,
+                pExtensions: std::ptr::null_mut(),
+            },
+            native_list: Vec::with_capacity(len),
+            ids: extensions.iter().map(|e| e.identifier().into()).collect(),
             extensions,
+            _pin: PhantomPinned,
         };
 
+        let mut boxed = Box::new(res);
+
         // trace!(?res.extensions);
-        for (i, extension) in res.extensions.iter_mut().enumerate() {
-            let id = &res.ids[i];
-            res.native_list.push(Box::pin(WEBAUTHN_EXTENSION {
+        for (extension, id) in boxed.extensions.iter_mut().zip(boxed.ids.iter()) {
+            boxed.native_list.push(WEBAUTHN_EXTENSION {
                 pwszExtensionIdentifier: PCWSTR::from_raw(id.as_ptr()),
                 cbExtension: extension.len(),
                 pvExtension: extension.ptr(),
-            }));
+            });
         }
 
-        // Create the native list element
-        res.native = Box::pin(WEBAUTHN_EXTENSIONS {
-            cExtensions: len as u32,
-            pExtensions: res.native_list.as_ptr() as *mut _,
-        });
+        boxed.native.pExtensions = Vec::as_mut_ptr(&mut boxed.native_list);
 
-        Ok(res)
+        Ok(Box::into_pin(boxed))
     }
 }
