@@ -35,7 +35,7 @@ where
     /// Pointer to the native data structure.
     fn ptr(&mut self) -> *mut c_void;
     /// The `webauthn-authenticator-rs` type which this wraps.
-    type WrappedType: Send;
+    type WrappedType;
     /// Converts the [Self::WrappedType] to a [Vec] of Windows API types.
     fn to_native(e: Self::WrappedType) -> Vec<Self>;
 }
