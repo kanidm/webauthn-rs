@@ -36,8 +36,8 @@ use webauthn_rs_core::proto::{
 };
 use webauthn_rs_core::{error::WebauthnResult, WebauthnCore as Webauthn};
 use webauthn_rs_proto::{
-    AttestationConveyancePreference, AttestationFormat, ExtnState, RegisteredExtensions,
-    UserVerificationPolicy,
+    AttestationConveyancePreference, AttestationFormat, CredProtect, CredentialProtectionPolicy,
+    ExtnState, RegisteredExtensions, RequestRegistrationExtensions, UserVerificationPolicy,
 };
 
 /// Performs a WebAuthn registration and authentication ceremony with a fake RP.
@@ -53,6 +53,21 @@ pub struct CliParser {
     /// User verification policy for the request.
     #[clap(short, long, value_enum, default_value_t)]
     verification_policy: UvPolicy,
+
+    /// Credential protection policy at registration time.
+    #[clap(short, long, value_enum, default_value_t)]
+    credential_protection_policy: CredProtectPolicy,
+
+    /// If set, registration fails if the authenticator cannot enforce the provided credential
+    /// protection policy.
+    #[clap(long)]
+    enforce_credential_protection_policy: bool,
+
+    /// If set, requests the authenticator's minimum PIN length at registration time. This only
+    /// works if the authenticator has a configured `setMinPINLength` and
+    /// `demo.webauthn-authenticator-rs.example` is in its `minPinLengthRPIDs`.
+    #[clap(long)]
+    min_pin_length: bool,
 
     /// Don't perform a registration ceremony, and just present random fake credentials for
     /// authentication.
@@ -90,6 +105,43 @@ impl From<UvPolicy> for UserVerificationPolicy {
             UvPolicy::Discouraged => UserVerificationPolicy::Discouraged_DO_NOT_USE,
             UvPolicy::Preferred => UserVerificationPolicy::Preferred,
             UvPolicy::Required => UserVerificationPolicy::Required,
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Copy, Default, Debug)]
+pub enum CredProtectPolicy {
+    /// No explicit credential protection policy is set.
+    #[default]
+    Unset,
+
+    /// This reflects `FIDO_2_0` semantics. In this configuration, performing some form of user
+    /// verification at authentication time is OPTIONAL with or without `credentialID` list.
+    Optional,
+
+    /// User verification at authentication time is OPTIONAL when providing a `credentialID` list
+    /// (ie: required for resident keys, optional for non-resident keys). This demo always provides
+    /// a credential ID list and discourages the use of resident keys, so this is essentially the
+    /// same as `optional`.
+    OptionalWithCredIdList,
+
+    /// User verification at authentication time is REQUIRED.
+    Required,
+}
+
+impl From<CredProtectPolicy> for Option<CredentialProtectionPolicy> {
+    fn from(value: CredProtectPolicy) -> Self {
+        match value {
+            CredProtectPolicy::Unset => None,
+            CredProtectPolicy::Optional => {
+                Some(CredentialProtectionPolicy::UserVerificationOptional)
+            }
+            CredProtectPolicy::OptionalWithCredIdList => {
+                Some(CredentialProtectionPolicy::UserVerificationOptionalWithCredentialIDList)
+            }
+            CredProtectPolicy::Required => {
+                Some(CredentialProtectionPolicy::UserVerificationRequired)
+            }
         }
     }
 }
@@ -335,6 +387,23 @@ async fn main() {
         let user_name = format!("demo-{}", now.as_secs());
         let display_name = format!("Authenticate Demo {}", now.as_secs());
 
+        let mut extensions: Option<RequestRegistrationExtensions> = None;
+
+        if let Some(credential_protection_policy) = opt.credential_protection_policy.into() {
+            let extensions = extensions.get_or_insert_default();
+            extensions.cred_protect = Some(CredProtect {
+                credential_protection_policy,
+                enforce_credential_protection_policy: Some(
+                    opt.enforce_credential_protection_policy,
+                ),
+            });
+        }
+
+        if opt.min_pin_length {
+            let extensions = extensions.get_or_insert_default();
+            extensions.min_pin_length = Some(true);
+        }
+
         let mut builder = wan
             .new_challenge_register_builder(&unique_id, &user_name, &display_name)
             .unwrap()
@@ -347,16 +416,21 @@ async fn main() {
             ))
         }
 
+        if let Some(extensions) = extensions {
+            builder = builder.extensions(Some(extensions));
+        }
+
         let (chal, reg_state) = wan.generate_challenge_register(builder).unwrap();
 
         info!("🍿 challenge -> {chal:x?}");
 
         // Do registration on the authenticator side (navigator.credentials.create)
         let r = u.do_registration(origin.clone(), chal).unwrap();
+        info!("Registering: {r:?}");
 
         // Register with the RP.
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
-        trace!(?cred);
+        info!("Registered: {cred:?}");
 
         creds.insert(opt.fakes_before, cred);
         println!("WARNING: Some NFC keys need to be power-cycled before you can authenticate.");

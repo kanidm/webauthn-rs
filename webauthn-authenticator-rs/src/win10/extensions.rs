@@ -1,6 +1,6 @@
-//! Wrappers for extensions.
-use crate::prelude::WebauthnCError;
-use std::{ffi::c_void, marker::PhantomPinned, pin::Pin};
+//! Wrappers for extensions that use Windows' [`WEBAUTHN_EXTENSION`][] type.
+use crate::{prelude::WebauthnCError, win10::Win10};
+use std::{ffi::c_void, marker::PhantomPinned, pin::Pin, result::Result};
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, CredProtect, RegistrationExtensionsClientOutputs,
     RequestRegistrationExtensions,
@@ -23,7 +23,7 @@ pub(crate) enum WinExtensionMakeCredentialRequest {
 }
 
 /// Generic request extension trait, for abstracting between
-/// [WinExtensionMakeCredentialRequest] and [WinExtensionGetAssertionRequest].
+/// [WinExtensionMakeCredentialRequest] and (a future) `WinExtensionGetAssertionRequest`.
 pub(crate) trait WinExtensionRequestType
 where
     Self: Sized,
@@ -37,7 +37,7 @@ where
     /// The `webauthn-authenticator-rs` type which this wraps.
     type WrappedType;
     /// Converts the [Self::WrappedType] to a [Vec] of Windows API types.
-    fn to_native(e: Self::WrappedType) -> Vec<Self>;
+    fn to_native(e: Self::WrappedType) -> Result<Vec<Self>, WebauthnCError>;
 }
 
 impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
@@ -67,19 +67,33 @@ impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
 
     type WrappedType = RequestRegistrationExtensions;
 
-    fn to_native(e: RequestRegistrationExtensions) -> Vec<Self> {
+    fn to_native(
+        e: RequestRegistrationExtensions,
+    ) -> Result<Vec<WinExtensionMakeCredentialRequest>, WebauthnCError> {
         let mut o: Vec<Self> = Vec::new();
+        let api_version = Win10::api_version();
         if let Some(c) = &e.cred_protect {
+            if api_version < 2 {
+                if c.enforce_credential_protection_policy == Some(true) {
+                    error!("Credential protection policy enforcement was requested, but it is not supported by this version of Windows");
+                    return Err(WebauthnCError::UnexpectedState);
+                }
+
+                warn!("Credential protection policy is not supported by this version of Windows");
+            }
             o.push(c.into());
         }
         if let Some(h) = &e.hmac_create_secret {
             o.push(Self::HmacSecret(h.into()))
         }
         if let Some(x) = &e.min_pin_length {
+            if api_version < 3 {
+                warn!("Minimum PIN length request is not supported by this version of Windows");
+            }
             o.push(Self::MinPinLength(x.into()));
         }
 
-        o
+        Ok(o)
     }
 }
 
@@ -313,7 +327,7 @@ where
     fn new(e: T::WrappedType) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Convert the extensions to a Windows-ish type
         // trace!(?e);
-        let extensions = T::to_native(e);
+        let extensions = T::to_native(e)?;
         let len = extensions.len();
 
         let res = Self {
