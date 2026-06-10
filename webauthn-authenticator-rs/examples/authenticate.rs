@@ -18,23 +18,26 @@ use tokio_tungstenite::tungstenite::http::uri::Builder;
 #[cfg(feature = "cable-override-tunnel")]
 use tokio_tungstenite::tungstenite::http::{uri::Parts, Uri};
 use tracing_subscriber::{filter::LevelFilter, EnvFilter};
-#[cfg(feature = "ctap2")]
-use webauthn_authenticator_rs::ctap2::CtapAuthenticator;
-use webauthn_authenticator_rs::prelude::Url;
 #[cfg(feature = "cable")]
 use webauthn_authenticator_rs::prelude::WebauthnCError;
 #[cfg(feature = "softtoken")]
 use webauthn_authenticator_rs::softtoken::{SoftToken, SoftTokenFile};
 #[cfg(feature = "ctap2")]
-use webauthn_authenticator_rs::transport::*;
-use webauthn_authenticator_rs::types::CableRequestType;
-use webauthn_authenticator_rs::ui::{Cli, UiCallback};
-use webauthn_authenticator_rs::{AuthenticatorBackend, WebauthnAuthenticator};
-use webauthn_rs_core::proto::{
-    AttestationMetadata, CredentialV5, ParsedAttestation, ParsedAttestationData,
-    RequestAuthenticationExtensions,
+use webauthn_authenticator_rs::{ctap2::CtapAuthenticator, transport::*};
+use webauthn_authenticator_rs::{
+    prelude::Url,
+    types::CableRequestType,
+    ui::{Cli, UiCallback},
+    AuthenticatorBackend, WebauthnAuthenticator,
 };
-use webauthn_rs_core::{error::WebauthnResult, WebauthnCore as Webauthn};
+use webauthn_rs_core::{
+    error::WebauthnResult,
+    proto::{
+        AttestationMetadata, CredentialV5, ParsedAttestation, ParsedAttestationData,
+        RequestAuthenticationExtensions,
+    },
+    WebauthnCore as Webauthn,
+};
 use webauthn_rs_proto::{
     AttestationConveyancePreference, AttestationFormat, CredProtect, CredentialProtectionPolicy,
     ExtnState, RegisteredExtensions, RequestRegistrationExtensions, UserVerificationPolicy,
