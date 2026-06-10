@@ -74,7 +74,7 @@ pub struct ChangePinOpt {
     ArgGroup::new("policy")
         .multiple(true)
         .required(true)
-        .args(&["length", "rpids", "force-change"])))]
+        .args(&["length", "rpids", "force_change"])))]
 pub struct SetPinPolicyOpt {
     /// Sets the minimum PIN length, in Unicode codepoints.
     #[clap(short, long)]
