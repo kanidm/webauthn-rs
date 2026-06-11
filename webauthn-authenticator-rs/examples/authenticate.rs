@@ -12,6 +12,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crypto_glue::{
     ecdsa_p256::EcdsaP256PrivateKey,
     rand::{rngs::ThreadRng, Rng, RngCore},
+    x509::Certificate,
 };
 #[cfg(feature = "cable")]
 use tokio_tungstenite::tungstenite::http::uri::Builder;
@@ -340,6 +341,17 @@ fn fake_credential(
     })
 }
 
+fn print_certs(certs: &[Certificate]) {
+    for (i, cert) in certs.iter().enumerate() {
+        println!("### Certificate {}", i + 1);
+        println!("Issuer: {}", cert.tbs_certificate.issuer);
+        println!("Subject: {}", cert.tbs_certificate.subject);
+        println!("Serial: {}", cert.tbs_certificate.serial_number);
+
+        println!("");
+    }
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -429,11 +441,54 @@ async fn main() {
 
         // Do registration on the authenticator side (navigator.credentials.create)
         let r = u.do_registration(origin.clone(), chal).unwrap();
-        info!("Registering: {r:?}");
+        trace!("Registering: {r:?}");
 
         // Register with the RP.
         let cred = wan.register_credential(&r, &reg_state, None).unwrap();
-        info!("Registered: {cred:?}");
+        trace!("Registered: {cred:?}");
+
+        match &cred.attestation.data {
+            ParsedAttestationData::None => {
+                println!("## No attestation data");
+            }
+            ParsedAttestationData::Self_ => {
+                println!("## Self-attestation");
+            }
+            ParsedAttestationData::ECDAA => {
+                println!("## ECDAA attestation (not yet implemented)");
+            }
+            ParsedAttestationData::Uncertain => {
+                println!("## Uncertain attestation (not trustworthy)");
+            }
+            ParsedAttestationData::Basic(certs) => {
+                println!(
+                    "## Basic attestation, {} certificate{}",
+                    certs.len(),
+                    if certs.len() == 1 { "" } else { "s" },
+                );
+
+                print_certs(certs);
+            }
+            ParsedAttestationData::AttCa(certs) => {
+                println!(
+                    "## CA attestation, {} certificate{}",
+                    certs.len(),
+                    if certs.len() == 1 { "" } else { "s" },
+                );
+                print_certs(certs);
+            }
+            ParsedAttestationData::AnonCa(certs) => {
+                println!(
+                    "## Anonymous CA attestation, {} certificate{}",
+                    certs.len(),
+                    if certs.len() == 1 { "" } else { "s" },
+                );
+                print_certs(certs);
+            }
+        }
+
+        println!("## Extensions");
+        println!("credProtect: {:?}", cred.extensions.cred_protect);
 
         creds.insert(opt.fakes_before, cred);
         println!("WARNING: Some NFC keys need to be power-cycled before you can authenticate.");
