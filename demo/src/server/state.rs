@@ -67,6 +67,7 @@ impl ServerState {
         Ok((account, false))
     }
 
+    /// Get all enrolled [Passkeys][Passkey] for an [Account][models::account::Model].
     pub async fn get_passkeys_for_account(
         &self,
         account: &models::account::Model,
@@ -88,16 +89,34 @@ impl ServerState {
             .await?)
     }
 
+    /// Add a [Passkey][] as an authorised credential for an [Account][models::account::Model].
     pub async fn add_passkey_for_account(
         &self,
         account: &models::account::Model,
         cred: Passkey,
+        mut label: String,
     ) -> ServerResult<models::passkey::Model> {
+        const MAX_LABEL_BYTE_LENGTH: usize = 64;
+
+        // Truncate the label to 64 bytes on a `char` boundary
+        // (which may not be a grapheme boundary)
+        if label.len() > MAX_LABEL_BYTE_LENGTH {
+            let mut last_p = 0;
+            for (p, _) in label.char_indices() {
+                if p > MAX_LABEL_BYTE_LENGTH {
+                    label.truncate(last_p);
+                    break;
+                }
+                last_p = p;
+            }
+        }
+
         let passkey = models::passkey::ActiveModel {
             id: Set(Uuid::new_v4()),
             created: Set(OffsetDateTime::now_utc()),
             account_id: Set(account.id),
             cred: Set(cred.into()),
+            label: Set(label),
         };
 
         let passkey = passkey.insert(&self.db).await?;

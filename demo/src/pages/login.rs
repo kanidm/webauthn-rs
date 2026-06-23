@@ -1,4 +1,3 @@
-use crate::pages::is_username_valid;
 #[cfg(feature = "ssr")]
 use crate::server::{
     check_api_request,
@@ -6,6 +5,7 @@ use crate::server::{
     set_http_response_code,
     state::ServerState,
 };
+use crate::{api::EnrolledPasskeyInfo, components::CredentialList, pages::is_username_valid};
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
 #[cfg(feature = "ssr")]
@@ -21,11 +21,7 @@ use leptos::{
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
-use serde_with::{
-    base64::{Base64, UrlSafe},
-    formats::Unpadded,
-    serde_as, IfIsHumanReadable, TimestampMilliSeconds,
-};
+use serde_with::{serde_as, TimestampMilliSeconds};
 #[cfg(feature = "ssr")]
 use std::sync::Arc;
 use time::OffsetDateTime;
@@ -43,13 +39,11 @@ pub struct StartLoginResponse {
 #[serde_as]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct FinishLoginResponse {
-    enrolled_keys: u64,
+    /// [`EnrolledPasskeyInfo`][] for all passkeys associated with the account.
+    enrolled_passkeys: Vec<EnrolledPasskeyInfo>,
 
     #[serde_as(as = "TimestampMilliSeconds<i64>")]
     created: OffsetDateTime,
-
-    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
-    cred_id: Vec<u8>,
 }
 
 #[server(
@@ -181,18 +175,22 @@ pub async fn finish_login(pkc: PublicKeyCredential) -> Result<FinishLoginRespons
             ServerFnError::new("User not found")
         })?;
 
-    let enrolled_keys = state
-        .get_passkey_count_for_account(&account)
+    let current_id = sk.cred_id();
+
+    let enrolled_passkeys = state
+        .get_passkeys_for_account(&account)
         .await
         .map_err(|err| {
-            error!("get_passkey_count_for_account: {err}");
+            error!("get_passkeys_for_account: {err}");
             ServerFnError::new("Database error")
         })?;
 
     Ok(FinishLoginResponse {
-        enrolled_keys,
+        enrolled_passkeys: enrolled_passkeys
+            .iter()
+            .map(|p| p.as_enrolled_passkey_info(p.cred.cred_id() == current_id))
+            .collect(),
         created: account.created,
-        cred_id: sk.cred_id().clone(),
     })
 }
 
@@ -356,11 +354,9 @@ pub fn LoginPage() -> impl IntoView {
                     "Account created at "
                     {created}
                 </p>
-                <p>
-                    "The account has "
-                    {finished_resp.enrolled_keys}
-                    " credential(s) enrolled."
-                </p>
+                <CredentialList
+                    credentials={finished_resp.enrolled_passkeys}
+                />
             }
         })}
 

@@ -1,7 +1,7 @@
-use std::ops::Deref;
-
+use crate::api::EnrolledPasskeyInfo;
 use sea_orm::{entity::prelude::*, FromJsonQueryResult};
 use serde::{Deserialize, Serialize};
+use std::ops::Deref;
 use time::OffsetDateTime;
 use uuid::Uuid;
 use webauthn_rs::prelude::Passkey;
@@ -51,6 +51,10 @@ pub struct Model {
 
     /// The serialised credential.
     pub cred: WrappedPasskey,
+
+    /// User-supplied label for the credential.
+    #[sea_orm(default = "")]
+    pub label: String,
 }
 
 impl From<Model> for Passkey {
@@ -82,3 +86,20 @@ impl Related<super::account::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+
+impl Model {
+    /// Create an [`EnrolledPasskeyInfo`][] for this enrolled passkey.
+    pub fn as_enrolled_passkey_info(&self, current: bool) -> EnrolledPasskeyInfo {
+        let mut cred_id_short = [0; 8];
+        let cred_id = self.cred.cred_id();
+        let cred_len = 8.min(cred_id.len());
+        cred_id_short[..cred_len].copy_from_slice(&cred_id[..cred_len]);
+
+        EnrolledPasskeyInfo {
+            created: self.created,
+            cred_id_short,
+            label: self.label.clone(),
+            current,
+        }
+    }
+}
