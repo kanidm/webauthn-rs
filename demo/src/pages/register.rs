@@ -233,14 +233,15 @@ pub fn RegisterPage() -> impl IntoView {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    web_sys::console::log_2(&("create error ".into()), &e);
-                    let Ok(e) = e.dyn_into::<web_sys::DomException>() else {
-                        return;
-                    };
-
+                    web_sys::console::log_2(&("nav.cred.create() error:".into()), &e);
                     set_resp.set(None);
-                    set_err.set(Some(e.to_string().into()));
                     set_finished.set(None);
+
+                    if let Ok(e) = e.dyn_into::<web_sys::DomException>() {
+                        set_err.set(Some(e.to_string().into()));
+                    } else {
+                        set_err.set(Some("Unknown error type".to_string()));
+                    }
                     return;
                 }
             };
@@ -403,43 +404,44 @@ pub fn RegisterPage() -> impl IntoView {
             </button>
         </form>
 
-        {move || finished.get().map(|finished_resp| {
-            let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
+        <ShowLet
+            some=finished.get()
+            let(finished_resp)
+        >
+            <h2>"Authenticator enrolled!"</h2>
+            <p>
+                "Account created at "
+                {finished_resp.created.format(&time::format_description::well_known::Rfc2822)}
+            </p>
+            <p>
+                "Now try to use the credential "
+                <a href="/login">
+                    "on the login page"
+                </a>
+                "."
+            </p>
+            <CredentialList
+                credentials={finished_resp.enrolled_passkeys}
+            />
+        </ShowLet>
 
-            view! {
-                <h2>"Authenticator enrolled!"</h2>
-                <p>
-                    "Account created at "
-                    {created}
-                </p>
-                <p>
-                    "Now try to use the credential "
-                    <a href="/login">
-                        "on the login page"
-                    </a>
-                    "."
-                </p>
-                <CredentialList
-                    credentials={finished_resp.enrolled_passkeys}
-                />
-            }
-        })}
+        <ShowLet
+            some=resp.get()
+            let(start_reg)
+        >
+            <h2>"Start registration challenge"</h2>
+                <pre>
+                    {serde_json::to_string_pretty(&start_reg.ccr).unwrap_or_default()}
+                </pre>
 
-        {move || resp.get().map(|start_reg| {
-            view! {
-                <h2>"Start registration response"</h2>
-                <p>
-                    "Challenge: "
-                    {format!("{:?}", start_reg.ccr)}
-                </p>
-            }
-        })}
+        </ShowLet>
 
-        {move || err.get().map(|err| {
-            view! {
-                <h2>"Error!"</h2>
-                <p>{err}</p>
-            }
-        })}
+        <ShowLet
+            some=err.get()
+            let(err)
+        >
+            <h2>"Error!"</h2>
+            <p>{err}</p>
+        </ShowLet>
     }
 }
