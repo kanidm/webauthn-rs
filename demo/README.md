@@ -25,7 +25,7 @@ The server binary can be configured with command-line flags (those starting with
 environment variables (those in `UPPER_CASE`).
 
 If using `cargo leptos serve` or `cargo leptos watch`, you need to put `--` between `cargo-leptos`'
-flags and before any server flags ([see examples above](#over-http)).
+flags and before any server flags ([see examples below](#over-http)).
 
 * `--rp-origin`, `RP_ORIGIN`: (**required**) Origin URL where the application is served from,
   including port (if not using a well-known default).
@@ -121,6 +121,7 @@ To run the development server over HTTPS, you can either:
   support automatic reloading.
 
   ```sh
+  # Don't forget to set SECRET_KEY and DATABASE_URL as well!
   cargo leptos serve \
     -- \
     --rp-name "webauthn-rs demo" \
