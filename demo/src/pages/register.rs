@@ -334,7 +334,7 @@ pub fn RegisterPage() -> impl IntoView {
         <h1>"Enroll your authenticator"</h1>
 
         <p>
-            "From here, you can enroll your authenticator to create a passkey."
+            "This lets you enroll your authenticator with this demo app to create a passkey."
         </p>
 
         <p>
@@ -400,7 +400,7 @@ pub fn RegisterPage() -> impl IntoView {
                 class="btn btn-primary"
                 type="submit"
             >
-                "Register"
+                "Enroll an authenticator"
             </button>
         </form>
 
@@ -408,13 +408,13 @@ pub fn RegisterPage() -> impl IntoView {
             some=finished.get()
             let(finished_resp)
         >
-            <h2>"Authenticator enrolled!"</h2>
+            <h2>"Your authenticator has been enrolled!"</h2>
             <p>
                 "Account created at "
                 {finished_resp.created.format(&time::format_description::well_known::Rfc2822)}
             </p>
             <p>
-                "Now try to use the credential "
+                "Now try using the passkey "
                 <a href="/login">
                     "on the login page"
                 </a>
