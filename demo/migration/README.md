@@ -1,5 +1,16 @@
 # Running Migrator CLI
 
+> [!TIP]
+> You can run `sea-orm-cli` from the parent directory instead of running this package directly.
+
+Before starting, set up the database URL:
+
+```sh
+# Need `?mode=rwc` to make SeaORM to create a new database file when setting up
+# for the first time. Remove the parameter for an existing database file.
+export DATABASE_URL="sqlite:///path/to/state.db3?mode=rwc"
+```
+
 - Generate a new migration file
     ```sh
     cargo run -- generate MIGRATION_NAME
