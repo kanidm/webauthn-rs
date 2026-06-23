@@ -259,14 +259,17 @@ pub fn LoginPage() -> impl IntoView {
 
     let on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
+        set_finished.set(None);
+        set_resp.set(None);
+        set_err.set(None);
 
         let username = username.get();
 
-        // if !is_username_valid(&username) {
-        // panic!("empty username");
-        // }
+        if !is_username_valid(&username) {
+            set_err.set(Some("Invalid username".to_string()));
+            return;
+        }
 
-        let set_resp = set_resp.clone();
         spawn_local(async move {
             match start_login(username).await {
                 Ok(ret) => {
@@ -331,6 +334,7 @@ pub fn LoginPage() -> impl IntoView {
                     id="username"
                     autocomplete="username"
                     placeholder="example"
+                    autofocus
                     bind:value=username
                 />
 
@@ -354,7 +358,7 @@ pub fn LoginPage() -> impl IntoView {
         </form>
 
         <ShowLet
-            some=finished.get()
+            some=move || finished.get()
             let(finished_resp)
         >
             <h2>"Logged in with a passkey!"</h2>
@@ -368,7 +372,7 @@ pub fn LoginPage() -> impl IntoView {
         </ShowLet>
 
         <ShowLet
-            some=resp.get()
+            some=move || resp.get()
             let(start_auth)
         >
             <h2>"Start authentication challenge"</h2>
@@ -378,7 +382,7 @@ pub fn LoginPage() -> impl IntoView {
         </ShowLet>
 
         <ShowLet
-            some=err.get()
+            some=move || err.get()
             let(err)
         >
             <h2>"Error!"</h2>
