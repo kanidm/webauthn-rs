@@ -27,6 +27,8 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 #[cfg(feature = "ssr")]
 use tracing::*;
+#[cfg(not(feature = "ssr"))]
+use wasm_bindgen::JsCast;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::Passkey;
 use webauthn_rs_proto::{PublicKeyCredential, RequestChallengeResponse};
@@ -220,9 +222,15 @@ pub fn LoginPage() -> impl IntoView {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    web_sys::console::log_2(&("get error".into()), &e);
+                    web_sys::console::log_2(&("nav.cred.get() error:".into()), &e);
                     set_resp.set(None);
-                    set_err.set(e.as_string());
+                    set_finished.set(None);
+
+                    if let Ok(e) = e.dyn_into::<web_sys::DomException>() {
+                        set_err.set(Some(e.to_string().into()));
+                    } else {
+                        set_err.set(Some("Unknown error type".to_string()));
+                    }
                     return;
                 }
             };
@@ -345,36 +353,36 @@ pub fn LoginPage() -> impl IntoView {
             </button>
         </form>
 
-        {move || finished.get().map(|finished_resp| {
-            let created = finished_resp.created.format(&time::format_description::well_known::Rfc2822);
+        <ShowLet
+            some=finished.get()
+            let(finished_resp)
+        >
+            <h2>"Logged in!"</h2>
+            <p>
+                "Account created at "
+                {finished_resp.created.format(&time::format_description::well_known::Rfc2822)}
+            </p>
+            <CredentialList
+                credentials={finished_resp.enrolled_passkeys}
+            />
+        </ShowLet>
 
-            view! {
-                <h2>"Logged in!"</h2>
-                <p>
-                    "Account created at "
-                    {created}
-                </p>
-                <CredentialList
-                    credentials={finished_resp.enrolled_passkeys}
-                />
-            }
-        })}
+        <ShowLet
+            some=resp.get()
+            let(start_auth)
+        >
+            <h2>"Start authentication challenge"</h2>
+            <pre>
+                {serde_json::to_string_pretty(&start_auth.rcr).unwrap_or_default()}
+            </pre>
+        </ShowLet>
 
-        {move || resp.get().map(|start_reg| {
-            view! {
-                <h2>"Start authentication response"</h2>
-                <p>
-                    "Challenge: "
-                    {format!("{:?}", start_reg.rcr)}
-                </p>
-            }
-        })}
-
-        {move || err.get().map(|err| {
-            view! {
-                <h2>"Error!"</h2>
-                <p>{err}</p>
-            }
-        })}
+        <ShowLet
+            some=err.get()
+            let(err)
+        >
+            <h2>"Error!"</h2>
+            <p>{err}</p>
+        </ShowLet>
     }
 }
