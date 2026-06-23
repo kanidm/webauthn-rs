@@ -14,14 +14,14 @@ use crate::{
 use axum::http::StatusCode;
 #[cfg(feature = "ssr")]
 use cookie::CookieJar;
-#[cfg(not(feature = "ssr"))]
-use leptos::logging::*;
 use leptos::{
     ev::{MouseEvent, SubmitEvent},
     prelude::*,
     server_fn::codec::{Json, JsonEncoding, Post},
     task::spawn_local,
 };
+#[cfg(not(feature = "ssr"))]
+use leptos::{logging::*, wasm_bindgen::JsCast};
 #[cfg(not(feature = "ssr"))]
 use leptos_use::use_window;
 use serde::{Deserialize, Serialize};
@@ -31,8 +31,6 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 #[cfg(feature = "ssr")]
 use tracing::*;
-#[cfg(not(feature = "ssr"))]
-use wasm_bindgen::JsCast;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::*;
 use webauthn_rs_proto::{CreationChallengeResponse, RegisterPublicKeyCredential};
