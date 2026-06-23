@@ -304,19 +304,19 @@ pub fn LoginPage() -> impl IntoView {
     };
 
     view! {
-        <h1>"Login with your authenticator"</h1>
+        <h1>"Login with a passkey"</h1>
         <p>
-            "From here, you use your authenticator to login with a passkey - you just need the \
+            "Here you can use your authenticator to login with a passkey - you just need the \
             username."
         </p>
 
         <p>
-            "You can visit this demo app from another device or browser, and use any \
-            authenticators that you've previously enrolled there."
+            "You can also visit this demo app from another device or browser, and use any \
+            authenticators that you've previously enrolled."
         </p>
 
         <p>
-            "If you want to register a new credential, "
+            "If you want to enroll a new authenticator, "
             <a href="/register">
                 "go to the registration page"
             </a>
@@ -349,7 +349,7 @@ pub fn LoginPage() -> impl IntoView {
                 class="btn btn-primary"
                 type="submit"
             >
-                "Login"
+                "Login with passkey"
             </button>
         </form>
 
@@ -357,7 +357,7 @@ pub fn LoginPage() -> impl IntoView {
             some=finished.get()
             let(finished_resp)
         >
-            <h2>"Logged in!"</h2>
+            <h2>"Logged in with a passkey!"</h2>
             <p>
                 "Account created at "
                 {finished_resp.created.format(&time::format_description::well_known::Rfc2822)}
