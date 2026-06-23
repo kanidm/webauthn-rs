@@ -183,3 +183,6 @@ lib-default-features = false
 #
 # Optional. Defaults to "release".
 lib-profile-release = "wasm-release"
+
+# Needed because of https://github.com/leptos-rs/leptos/issues/3433
+always-erase-components = true
