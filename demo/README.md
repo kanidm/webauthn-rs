@@ -1,26 +1,28 @@
 # webauthn-rs-demo v2
 
-Work in progress rewrite of the demo site using `axum` and Leptos.
+`webauthn-rs` demo site, built using `axum`, Leptos and SeaORM.
+
+> [!WARNING]
+> This demo has [many limitations and quirks](#demo-limitations-and-quirks), and isn't intended as
+> an example of how to integrate `webauthn-rs` in a "real" web application.
 
 ## Prerequisites
 
-Install a recent Rust toolchain for your host and `wasm32-unknown-unknown`.
+1.  Install a recent Rust toolchain for your host and `wasm32-unknown-unknown`.
+2.  Install [`cargo-leptos`][1].
+3.  Install [`sea-orm-cli`][2]:
 
-Install [`cargo-leptos`][1].
-
-Install [`sea-orm-cli`][2]:
-
-```sh
-cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
-```
+    ```sh
+    cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
+    ```
 
 [1]: https://github.com/leptos-rs/cargo-leptos
 [2]: https://github.com/SeaQL/sea-orm/blob/1.1.20/sea-orm-cli/
 
 ## Server options
 
-The server can be configured with command-line flags (those starting with `--`) and/or environment
-variables (those in `UPPER_CASE`).
+The server binary can be configured with command-line flags (those starting with `--`) and/or
+environment variables (those in `UPPER_CASE`).
 
 If using `cargo leptos serve` or `cargo leptos watch`, you need to put `--` between `cargo-leptos`'
 flags and before any server flags ([see examples above](#over-http)).
@@ -110,8 +112,8 @@ You'll need to serve the app over HTTPS for it to work from non-`localhost` doma
 
 To run the development server over HTTPS, you can either:
 
-* Run it in HTTP mode, making `--rp-origin` a HTTPS URL, and put a HTTPS reverse proxy in front of
-  HTTP ports 3000 and 3001.
+* Run it [in HTTP mode](#over-http), but make `--rp-origin` a HTTPS URL, and put a HTTPS reverse
+  proxy in front of HTTP ports 3000 and 3001.
 
   This supports automatic reloading, but requires more setup work.
 
@@ -133,43 +135,46 @@ Then point your browser at https://localhost:3000
 self-signed certificate for `localhost` which is valid for 5 days, and will only update it if it has
 expired (or is close to expiry). Modify this as you need.
 
-## Demo limitations
+## Demo limitations and quirks
 
 As this is a demo, there are a number of limitations which reduce the security of the application.
 In a real application, you'd sort this out:
 
-* There's no "session" functionality, so anyone can enroll a credential for any username. Accounts
-  are "created" when attempting a credential for a username that is not already taken.
+* This demo stores all accounts and passkeys in an SQLite database.
 
-  In a real app, you'd authenticate the user before allowing them to enroll new credentials.
+* There's no "authenticated session", so anyone can enroll a credential for any username without
+  prior authentication. Accounts are "created" when attempting a credential for a username that is
+  not already taken.
+
+  In a real app, you'd authenticate the user before allowing them to enroll a new credential.
 
 * There are no rate limits to enrolling or using credentials.
 
-  In a real app, you might want to issue a proof-of-work challenge.
+  In a real app, you might want to apply a server-side per-user/IP rate limit, or issue a
+  proof-of-work challenge to the client before sending a registration or login challenge.
 
-* Username restrictions (3 - 16 characters of ASCII letters and/or numbers) are entirely arbitrary
-  for the purposes of this demo. This is mainly to limit storage requirements and prevent the
-  insertion of email addresses.
+* Username restrictions (3 - 16 characters of ASCII letters and/or numbers) to limit storage
+  requirements and prevent the insertion of email addresses, and aren't a functional limitation of
+  `webauthn-rs`.
 
   Your may wish to apply different constraints in your application.
 
 * Passkey enrollment and authentication challenges are stored in an encrypted client-side cookie.
   This cookie may be replayed for up to 5 minutes.
 
-  In a real application, you'd issue and store challenges in a distributed system that only allows
-  them to be used exactly once.
+  In a real application, you'd issue and store challenges in a distributed system that allows them
+  to be used exactly once.
+
+* One side-effect of using an encrypted client-side cookie is that it can only store one flow state
+  (authentication `xor` registration) at a time. Starting another flow while one is in progress will
+  overwrite the first one.
+
+  However, this demo can have multiple flows running at the same time from different browsers (or
+  users).
 
 * The encryption key for the client side cookie is passed as a regular command line argument or an
-  environment variable, which can leak in some deployment types.
+  environment variable, which can leak in some environments.
 
   In a real application, you'd read the encryption key from a file on disk, and protect that.
 
-* The application can only process one authentication and one registration flow per user account at
-  a time. Starting another authentication or registration flow while one is in progress will
-  overwrite the first one.
-
-  This is a side-effect of storing challenges in an encrypted client-side cookie.
-
-* There's no way to label enrolled credentials.
-
-* There's no way to remove an enrolled credential.
+* There's no way to relabel or remove an enrolled credential.
