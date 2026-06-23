@@ -35,7 +35,7 @@ pub async fn main() -> ServerResult {
     let args = ServerArgs::parse();
     let conf = get_configuration(None)?;
     let webauthn = args.setup_webauthn()?;
-    let sqlite = args.connect_sqlite().await?;
+    let sqlite = args.connect_db().await?;
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])

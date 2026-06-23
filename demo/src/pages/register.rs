@@ -1,10 +1,14 @@
-use crate::pages::{is_username_valid, random_username};
 #[cfg(feature = "ssr")]
 use crate::server::{
     check_api_request,
     cookie::{delete_session_cookie, get_cookie_jar, put_cookie_jar, SessionCookie},
     set_http_response_code,
     state::ServerState,
+};
+use crate::{
+    api::EnrolledPasskeyInfo,
+    components::CredentialList,
+    pages::{is_username_valid, random_username},
 };
 #[cfg(feature = "ssr")]
 use axum::http::StatusCode;
@@ -27,6 +31,8 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 #[cfg(feature = "ssr")]
 use tracing::*;
+#[cfg(not(feature = "ssr"))]
+use wasm_bindgen::JsCast;
 #[cfg(feature = "ssr")]
 use webauthn_rs::prelude::*;
 use webauthn_rs_proto::{CreationChallengeResponse, RegisterPublicKeyCredential};
@@ -39,7 +45,7 @@ pub struct StartRegistrationResponse {
 #[serde_as]
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct FinishRegistrationResponse {
-    enrolled_keys: u64,
+    enrolled_passkeys: Vec<EnrolledPasskeyInfo>,
 
     #[serde_as(as = "TimestampMilliSeconds<i64>")]
     created: OffsetDateTime,
@@ -122,6 +128,7 @@ pub async fn start_registration(
 )]
 pub async fn finish_registration(
     rpkc: RegisterPublicKeyCredential,
+    label: String,
 ) -> Result<FinishRegistrationResponse, ServerFnError> {
     let Some(state) = use_context::<Arc<ServerState>>() else {
         return Err(ServerFnError::new("Server init failure"));
@@ -172,24 +179,29 @@ pub async fn finish_registration(
             ServerFnError::new("Registration failure")
         })?;
 
+    let current_id = cred.cred_id().clone();
+
     state
-        .add_passkey_for_account(&account, cred)
+        .add_passkey_for_account(&account, cred, label)
         .await
         .map_err(|err| {
             error!("add_passkey_for_user_id: {err}");
             ServerFnError::new("Database error")
         })?;
 
-    let enrolled_keys = state
-        .get_passkey_count_for_account(&account)
+    let enrolled_passkeys = state
+        .get_passkeys_for_account(&account)
         .await
         .map_err(|err| {
-            error!("get_passkey_count_for_account: {err}");
+            error!("get_passkeys_for_account: {err}");
             ServerFnError::new("Database error")
         })?;
 
     Ok(FinishRegistrationResponse {
-        enrolled_keys,
+        enrolled_passkeys: enrolled_passkeys
+            .iter()
+            .map(|p| p.as_enrolled_passkey_info(p.cred.cred_id() == &current_id))
+            .collect(),
         created: account.created,
     })
 }
@@ -209,9 +221,10 @@ pub fn RegisterPage() -> impl IntoView {
 
         async move {
             log!("hello from credentials_create");
-            let Some(navigator) = use_window().navigator() else {
+            let Some(ref window) = *use_window() else {
                 return;
             };
+            let navigator = window.navigator();
 
             let r = match wasm_bindgen_futures::JsFuture::from(
                 navigator.credentials().create_with_options(&cco).unwrap(),
@@ -221,8 +234,13 @@ pub fn RegisterPage() -> impl IntoView {
                 Ok(r) => r,
                 Err(e) => {
                     web_sys::console::log_2(&("create error ".into()), &e);
+                    let Ok(e) = e.dyn_into::<web_sys::DomException>() else {
+                        return;
+                    };
+
                     set_resp.set(None);
-                    set_err.set(e.as_string());
+                    set_err.set(Some(e.to_string().into()));
+                    set_finished.set(None);
                     return;
                 }
             };
@@ -233,7 +251,18 @@ pub fn RegisterPage() -> impl IntoView {
             // Serialise for webauthn-rs
             let rpkc = RegisterPublicKeyCredential::from(w_rpkc);
 
-            match finish_registration(rpkc).await {
+            // Prompt for a credential label
+            let Ok(Some(label)) =
+                web_sys::Window::prompt_with_message(&window, "Set a label for this authenticator")
+            else {
+                log!("labelling cancelled");
+                set_resp.set(None);
+                set_err.set(Some("Labelling passkey cancelled".to_string()));
+                set_finished.set(None);
+                return;
+            };
+
+            match finish_registration(rpkc, label).await {
                 Ok(r) => {
                     set_err.set(None);
                     set_finished.set(Some(r));
@@ -384,17 +413,15 @@ pub fn RegisterPage() -> impl IntoView {
                     {created}
                 </p>
                 <p>
-                    "The account now has "
-                    {finished_resp.enrolled_keys}
-                    " credential(s) enrolled."
-                </p>
-                <p>
                     "Now try to use the credential "
                     <a href="/login">
                         "on the login page"
                     </a>
                     "."
                 </p>
+                <CredentialList
+                    credentials={finished_resp.enrolled_passkeys}
+                />
             }
         })}
 

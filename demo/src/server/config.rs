@@ -66,11 +66,11 @@ pub struct ServerArgs {
     #[clap(long, env = "RP_NAME")]
     rp_name: Option<String>,
 
-    /// SQLite database path.
-    #[clap(long, env = "DB_PATH", value_hint = ValueHint::FilePath)]
-    db_path: PathBuf,
+    /// Database URL, eg: `sqlite:///app/state.db3`.
+    #[clap(long, env = "DATABASE_URL", value_hint = ValueHint::Url)]
+    database_url: Url,
 
-    /// Session cookie encryption key.
+    /// Session cookie AES-256 encryption key, as base16. This must be exactly 32 bytes long.
     ///
     /// This may be changed, but will invalidate any in-progress registration or authentication
     /// operations.
@@ -147,18 +147,8 @@ impl ServerArgs {
         &self.rp_origin
     }
 
-    pub async fn connect_sqlite(&self) -> ServerResult<DatabaseConnection> {
-        // let Some(db_path) = &self.db_path else {
-        //     warn!("Using in-memory SQLite database for user data - this is not persistent!");
-        //     return Ok(sea_orm::Database::connect("sqlite::memory:").await?);
-        // };
-
-        if !self.db_path.is_absolute() {
-            return Err(ServerError::PathIsNotAbsolute(self.db_path.to_path_buf()));
-        }
-
-        let url = format!("sqlite:{}", self.db_path.to_str().unwrap());
-        Ok(Database::connect(url).await?)
+    pub async fn connect_db(&self) -> ServerResult<DatabaseConnection> {
+        Ok(Database::connect(self.database_url.clone()).await?)
     }
 
     pub fn wrap_key(&self) -> JweA256KWEncipher {
