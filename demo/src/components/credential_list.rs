@@ -1,4 +1,5 @@
 use crate::api::EnrolledPasskeyInfo;
+use base64::prelude::*;
 use leptos::prelude::*;
 
 #[component]
@@ -33,7 +34,7 @@ pub fn CredentialList(credentials: Vec<EnrolledPasskeyInfo>) -> impl IntoView {
                                 "✅"
                             </Show>
                         </td>
-                        <td><code>{hex::encode(c.cred_id_short)}"..."</code></td>
+                        <td><code>{BASE64_URL_SAFE_NO_PAD.encode(c.cred_id_short)}"..."</code></td>
                         <td>{c.created.format(&time::format_description::well_known::Rfc2822)}</td>
                         <td>{c.label}</td>
                     </tr>

@@ -151,7 +151,7 @@ In a real application, you'd sort this out:
   for the purposes of this demo. This is mainly to limit storage requirements and prevent the
   insertion of email addresses.
 
-  Your own application may wish to apply different constraints.
+  Your may wish to apply different constraints in your application.
 
 * Passkey enrollment and authentication challenges are stored in an encrypted client-side cookie.
   This cookie may be replayed for up to 5 minutes.
