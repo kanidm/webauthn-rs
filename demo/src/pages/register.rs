@@ -281,14 +281,17 @@ pub fn RegisterPage() -> impl IntoView {
 
     let on_submit = move |ev: SubmitEvent| {
         ev.prevent_default();
+        set_finished.set(None);
+        set_resp.set(None);
+        set_err.set(None);
 
         let username = username.get();
 
-        // if !is_username_valid(&username) {
-        // panic!("empty username");
-        // }
+        if !is_username_valid(&username) {
+            set_err.set(Some("Invalid username".to_string()));
+            return;
+        }
 
-        let set_resp = set_resp.clone();
         spawn_local(async move {
             match start_registration(username).await {
                 Ok(ret) => {
@@ -373,6 +376,7 @@ pub fn RegisterPage() -> impl IntoView {
                         id="username"
                         autocomplete="username"
                         placeholder="example"
+                        autofocus
                         bind:value=username
                     />
 
@@ -405,7 +409,7 @@ pub fn RegisterPage() -> impl IntoView {
         </form>
 
         <ShowLet
-            some=finished.get()
+            some=move || finished.get()
             let(finished_resp)
         >
             <h2>"Your authenticator has been enrolled!"</h2>
@@ -426,7 +430,7 @@ pub fn RegisterPage() -> impl IntoView {
         </ShowLet>
 
         <ShowLet
-            some=resp.get()
+            some=move || resp.get()
             let(start_reg)
         >
             <h2>"Start registration challenge"</h2>
@@ -437,7 +441,7 @@ pub fn RegisterPage() -> impl IntoView {
         </ShowLet>
 
         <ShowLet
-            some=err.get()
+            some=move || err.get()
             let(err)
         >
             <h2>"Error!"</h2>
