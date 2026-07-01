@@ -607,7 +607,7 @@ mod tests {
         ];
 
         let a = <GetInfoResponse as CBORResponse>::try_from(raw_apdu.as_slice())
-            .expect("Falied to decode apdu");
+            .expect("Failed to decode apdu");
 
         // Assert the content
         // info!(?a);
@@ -663,7 +663,7 @@ mod tests {
             0, 15, 24, 32, 16, 6, 19, 161, 100, 70, 73, 68, 79, 1, 20, 24, 50,
         ];
         let a = <GetInfoResponse as CBORResponse>::try_from(raw_apdu.as_slice())
-            .expect("Falied to decode apdu");
+            .expect("Failed to decode apdu");
 
         // info!(?a);
         assert_eq!(a.versions.len(), 4);
