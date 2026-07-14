@@ -731,7 +731,7 @@ mod test {
         let mut corrupted = Crypter::new(key1, key0);
 
         for l in 1..5 {
-            let msg = Zeroizing::new(vec![0xff; l]);
+            let msg = vec![0xff; l];
             let mut crypted = alice.encrypt(&msg).unwrap();
             let len = bob.decrypt(&mut crypted).unwrap();
 
@@ -744,6 +744,35 @@ mod test {
             corrupted.reader.n = bob.reader.n;
             assert!(corrupted.decrypt(&mut crypted).is_err());
         }
+    }
+
+    #[test]
+    fn encrypt_decrypt_expected() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let key0: EncryptionKey = Zeroizing::new([42; 32].into());
+        let key1: EncryptionKey = Zeroizing::new([67; 32].into());
+
+        let mut alice = Crypter::new(key0.clone(), key1.clone());
+        alice.use_new_construction();
+        let mut bob = Crypter::new(key1.clone(), key0.clone());
+        bob.use_new_construction();
+
+        let msg = b"The quick brown fox jumps over the lazy dog.";
+        let expected_crypted = [
+            0xa4, 0x22, 0x1b, 0xbd, 0x65, 0xac, 0x9b, 0xd6, 0xda, 0x47, 0x2f, 0x1c, 0x4a, 0x93,
+            0x95, 0x0d, 0xa1, 0x9e, 0xda, 0xcc, 0xbf, 0x61, 0xcd, 0x8e, 0x2f, 0xeb, 0xb6, 0x0d,
+            0xf5, 0xb2, 0xae, 0x33, 0x4c, 0xab, 0xad, 0x4d, 0x74, 0x32, 0x1e, 0x56, 0x7b, 0x0d,
+            0x0c, 0x47, 0x04, 0x29, 0xe0, 0xcb, 0xa7, 0x9c, 0x29, 0xa7, 0x9f, 0x61, 0x48, 0x77,
+            0x7c, 0xd0, 0x00, 0xe3, 0x1d, 0xaa, 0x6e, 0xb7, 0x1d, 0xfe, 0x23, 0xc5, 0x9a, 0x96,
+            0xb2, 0xfe, 0x48, 0xc6, 0x2a, 0x21, 0x20, 0x88, 0x21, 0xec,
+        ];
+
+        let mut crypted = alice.encrypt(msg).unwrap();
+        assert_eq!(expected_crypted, crypted.as_slice());
+        let len = bob.decrypt(&mut crypted).unwrap();
+        crypted.truncate(len);
+        assert_eq!(msg, crypted.as_slice());
     }
 
     #[test]
