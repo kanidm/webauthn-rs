@@ -24,6 +24,8 @@
 #[cfg(feature = "win10")]
 mod clientdata;
 #[cfg(feature = "win10")]
+mod constants;
+#[cfg(feature = "win10")]
 mod cose;
 #[cfg(feature = "win10")]
 mod credential;
@@ -71,7 +73,7 @@ use windows::{
     Win32::{Foundation::BOOL, Networking::WindowsWebServices::*},
 };
 
-use std::slice::from_raw_parts;
+use std::{pin::Pin, slice::from_raw_parts};
 
 /// Authenticator backend for Windows Hello WebAuthn API.
 pub struct Win10 {}
@@ -134,10 +136,11 @@ impl AuthenticatorBackend for Win10 {
         } else {
             None
         };
-        let extensions = match options.extensions {
-            Some(e) => WinExtensionsRequest::new(e)?,
-            None => Box::pin(WinExtensionsRequest::<WinExtensionMakeCredentialRequest>::default()),
-        };
+        let extensions: Pin<Box<WinExtensionsRequest<WinExtensionMakeCredentialRequest>>> =
+            match options.extensions {
+                Some(e) => WinExtensionsRequest::new(e)?,
+                None => Default::default(),
+            };
         // trace!("native extn: {:?}", extensions.native_ptr());
 
         let makecredopts = WEBAUTHN_AUTHENTICATOR_MAKE_CREDENTIAL_OPTIONS {
@@ -259,7 +262,7 @@ impl AuthenticatorBackend for Win10 {
         let rp_id: HSTRING = options.rp_id.clone().into();
         let clientdata = WinClientData::new(get_to_clientdata(origin, options.challenge.clone()))?;
 
-        let mut allow_credentials = WinCredentialList::new(options.allow_credentials)?;
+        let allow_credentials = WinCredentialList::new(options.allow_credentials)?;
 
         let app_id: Option<HSTRING> = options
             .extensions
@@ -314,7 +317,7 @@ impl AuthenticatorBackend for Win10 {
             },
             pbU2fAppId: std::ptr::addr_of_mut!(app_id_used),
             pCancellationId: std::ptr::null_mut(),
-            pAllowCredentialList: &mut allow_credentials.native,
+            pAllowCredentialList: allow_credentials.native() as *mut WEBAUTHN_CREDENTIAL_LIST,
             dwCredLargeBlobOperation: 0,
             cbCredLargeBlob: 0,
             pbCredLargeBlob: std::ptr::null_mut(),
