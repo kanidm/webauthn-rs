@@ -202,7 +202,7 @@ pub(crate) mod android_key_attestation {
 
                 // ensure it is origin bound
                 if software_enforced.all_applications || tee_enforced.all_applications {
-                    return Err(der_parser::error::BerError::InvalidValue {
+                    Err(der_parser::error::BerError::InvalidValue {
                         tag: Tag(600),
                         msg: "all_applications must not be set".to_string(),
                     })?;
@@ -240,7 +240,7 @@ pub(crate) mod android_key_attestation {
                 };
 
                 if !tee_set && !software_set {
-                    return Err(der_parser::error::BerError::InvalidValue {
+                    Err(der_parser::error::BerError::InvalidValue {
                         tag: Tag(701),
                         msg: "both software and tee not set (keymaster values)".to_string(),
                     })?;
