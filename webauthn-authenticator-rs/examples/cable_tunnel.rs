@@ -17,13 +17,13 @@
 //! ```sh
 //! # Create a SoftToken file in /tmp
 //! cargo run --example softtoken \
-//!     --features crypto,ui-cli,softtoken \
+//!     --features ui-cli,softtoken \
 //!     -- \
 //!     create /tmp/softtoken.dat
 //!
 //! # Expose it to an initiator via its caBLE URL using Bluez (Linux)
 //! cargo run --example cable_tunnel \
-//!     --features cable,crypto,ui-cli,qrcode,softtoken \
+//!     --features cable,ui-cli,qrcode,softtoken \
 //!     -- \
 //!     --bluez \
 //!     --softtoken-path /tmp/softtoken.dat \
