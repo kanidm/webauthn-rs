@@ -57,7 +57,7 @@ jobs:
 
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
-      - run: cargo build --workspace --exclude webauthn-authenticator-rs --exclude actix_web --exclude web_authn --exclude tide-server
+      - run: cargo build --workspace --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
@@ -65,7 +65,8 @@ jobs:
           cargo clippy \
             --no-deps \
             --workspace \
-            --exclude webauthn-authenticator-rs  \
+            --exclude webauthn-authenticator-rs \
+            --exclude webauthn-rs-demo \
             --exclude actix_web \
             --exclude web_authn \
             --exclude tide-server \
@@ -76,7 +77,8 @@ jobs:
         run: |
           cargo clippy --no-deps \
             --workspace \
-            --exclude webauthn-authenticator-rs  \
+            --exclude webauthn-authenticator-rs \
+            --exclude webauthn-rs-demo \
             --exclude actix_web \
             --exclude web_authn \
             --exclude tide-server \
@@ -87,14 +89,15 @@ jobs:
           cargo clippy \
             --no-deps \
             --workspace \
-            --exclude webauthn-authenticator-rs  \
+            --exclude webauthn-authenticator-rs \
+            --exclude webauthn-rs-demo \
             --exclude actix_web \
             --exclude web_authn \
             --exclude tide-server \
             --all-targets --features wasm,bluetooth,nfc,usb \
             --no-default-features
       - run: |
-          cargo test --workspace --exclude webauthn-authenticator-rs  --exclude actix_web --exclude web_authn --exclude tide-server
+          cargo test --workspace --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo --exclude actix_web --exclude web_authn --exclude tide-server
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
@@ -240,16 +243,11 @@ jobs:
       # This tests that all the stubs work properly for optional dependencies,
       # but doesn't work for fido-key-manager which includes NFC and USB support
       # by default.
-      #
-      # webauthn-rs-demo is excluded from doc builds because
-      # of https://github.com/bytecodealliance/rustix/issues/1620, which is
-      # broken on Rust nightly.
       - name: generate docs
         run: |
           cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
             --all \
             --exclude fido-key-manager \
-            --exclude webauthn-rs-demo \
             --no-deps \
             --document-private-items
         env:
@@ -270,7 +268,6 @@ jobs:
       - run: |
           cargo ${{ matrix.rust_version == 'nightly' && '+nightly' || '' }} doc \
             --all \
-            --exclude webauthn-rs-demo \
             --no-deps \
             --document-private-items \
             --all-features
@@ -285,6 +282,33 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - run: ./.github/check_built_docs.sh
+
+  demo:
+    name: Demo site
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: mozilla-actions/sccache-action@v0.0.10
+
+      # Building from source takes about 11.5 minutes.
+      - name: Install cargo-leptos binaries
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.6/cargo-leptos-installer.sh | sh
+
+      - name: Install sea-orm-cli
+        run: cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
+
+      - name: Demo site release build
+        run: cargo leptos build -p webauthn-rs-demo --release
+
+      # TODO: container build
+      # TODO: e2e tests
 
   tutorial:
     name: Tutorial builds
