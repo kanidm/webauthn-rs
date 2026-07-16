@@ -36,23 +36,32 @@ OpenSSL.
 ## About WebAuthn
 
 WebAuthn is a modern approach to hardware-based user authentication, consisting of a user with an
-authenticator device (such as a security key, SE or TPM), a browser or client that interacts with
-the device, and a Relying Party (web application) that is able to generate challenges and verify the
-authenticator's response.
+authenticator device, a browser or client that interacts with the device, and a Relying Party (web
+application) that is able to generate challenges and verify the authenticator's response.
 
-Users can enroll their own authenticators and login through a WebAuthn-capable web browser or app.
+Users can register credentials and authenticate through a WebAuthn-capable web browser or app,
+using security hardware their device likely already has (like a TPM or SE) or an external hardware
+security key that can be used on many devices.
 
 Authenticators can provide self-contained, multi-factor authentication (user verification), using a
 PIN that is only transmitted to the authenticator and/or biometrics that never leave the
-authenticator device. The security certification of an authenticator can be cryptographically
-attested to the Relying Party, to ensure that key material is hardware-bound, and cannot be copied.
+authenticator device, and hardware-bound keys that cannot be copied. An authenticator can
+cryptographically attest its security certification to the Relying Party, which can be verified
+with the FIDO MDS or an RP-operated allow/deny list.
 
-Together, these provides a level of security allowing it to *completely replace passwords*, often
-using functionality that users' devices already have (like TPMs and SEs).
+Browsers ensure that a Relying Party can only request credentials belonging to them through strict
+`Origin` checks and requiring HTTPS, making them more difficult to phish than a password or
+one-time code.
 
-This library also supports synchronised "passkey managers" (like iCloud Keychain and Google Password
-Manager) that *do not* use hardware-bound keys, but credentials can be copied, and some don't even
-implement user verification correctly, so they should only ever be used with a second factor.
+With all these features together, WebAuthn can provide a level of security which can
+*completely replace* passwords and one-time codes (TOTP and SMS) by being "something you know" and
+"something you have", using security hardware that many users' devices already have (like TPMs and
+SEs).
+
+WebAuthn (and `webauthn-rs`) also works with software tokens and centrally-synchronised "passkey
+managers" (like iCloud Keychain and Google Password Manager). Credentials stored in these passkey
+managers can be copied, and some don't even implement user verification correctly, so they should
+only ever be used with a secure second factor.
 
 ## Code of Conduct
 
@@ -88,7 +97,7 @@ For additional configuration options for the demo site:
 We have extensively tested a variety of keys and devices, not limited to:
 
 * Yubico 5c / 5ci / FIPS / Bio
-* Touch ID / Face ID / Optic ID (iPhone, iPad, MacBook Pro)
+* iOS and macOS (Touch ID / Face ID / Optic ID)
 * Android
 * Windows Hello (TPM)
 * Softtokens
@@ -129,7 +138,7 @@ feature of the specification:
   management. Synchronised credential managers that always create resident keys (like iCloud
   Keychain) still work in this mode without issue.
   
-  Many other WebAuthn libraries *prefer* or *require* resident keys, which both effectively
+  Many other WebAuthn libraries *prefer* or *require* resident keys, both of which effectively
   *require* residency if user's security key *supports* resident keys, but risks *bricking* a user's
   security key.
 
