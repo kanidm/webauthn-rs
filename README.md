@@ -129,9 +129,9 @@ feature of the specification:
   management. Synchronised credential managers that always create resident keys (like iCloud
   Keychain) still work in this mode without issue.
   
-  Many other WebAuthn libraries *prefer* or *require* resident keys, which are effectively the same
-  thing when a user's security key *supports* resident keys, but risks *bricking* a user's security
-  key.
+  Many other WebAuthn libraries *prefer* or *require* resident keys, which both effectively
+  *require* residency if user's security key *supports* resident keys, but risks *bricking* a user's
+  security key.
 
 * We do not support certain esoteric options.
 
