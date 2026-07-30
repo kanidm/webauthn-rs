@@ -1,6 +1,6 @@
 //! Cryptographic operation wrapper for Webauthn. This module exists to
 //! allow ease of auditing, safe operation wrappers for the webauthn library,
-//! and cryptographic provider abstraction. This module currently uses OpenSSL
+//! and cryptographic provider abstraction. This module currently uses RustCrypto
 //! as the cryptographic primitive provider.
 
 #![allow(non_camel_case_types)]
@@ -245,7 +245,7 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             // The rfc additionally states:
             //   "   Applications MUST check that the curve and the key type are
             //     consistent and reject a key if they are not."
-            // this means feeding the values to openssl to validate them for us!
+            // this means feeding the values to RustCrypto to validate them for us!
 
             cose_key.validate()?;
             // return it
@@ -334,7 +334,7 @@ impl TryFrom<&serde_cbor_2::Value> for COSEKey {
             // The rfc additionally states:
             //   "   Applications MUST check that the curve and the key type are
             //     consistent and reject a key if they are not."
-            // this means feeding the values to openssl to validate them for us!
+            // this means feeding the values to RustCrypto to validate them for us!
             cose_key.validate()?;
             // return it
             Ok(cose_key)
@@ -471,7 +471,7 @@ impl COSEKey {
         self.get_public_key().map(|_| ())
     }
 
-    /// Retrieve the public key of this COSEKey as an OpenSSL structure
+    /// Retrieve the public key of this COSEKey as an RustCrypto structure
     fn get_public_key(&self) -> Result<COSEKeyPublic, WebauthnError> {
         match &self.key {
             COSEKeyType::EC_EC2(ec2k) => match ec2k.curve {
