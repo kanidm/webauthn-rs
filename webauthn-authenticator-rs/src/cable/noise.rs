@@ -421,9 +421,9 @@ impl CableNoise {
     /// renders the internal state invalid for "retrying" or future
     /// transactions.
     pub fn process_response(mut self, response: &[u8]) -> Result<Crypter, WebauthnCError> {
-        if response.len() < 65 {
-            error!("Handshake response too short ({} bytes)", response.len());
-            return Err(WebauthnCError::MessageTooShort);
+        if response.len() != 65 + 16 {
+            error!("Handshake response wrong size ({} bytes)", response.len());
+            return Err(WebauthnCError::InvalidMessageLength);
         }
 
         // ProcessResponse
@@ -479,9 +479,9 @@ impl CableNoise {
         peer_identity: Option<&EcdhP256PublicKey>,
         message: &[u8],
     ) -> Result<(Crypter, Vec<u8>), WebauthnCError> {
-        if message.len() < 65 {
-            error!("Initiator message too short ({} bytes)", message.len());
-            return Err(WebauthnCError::MessageTooShort);
+        if message.len() != 65 + 16 {
+            error!("Initiator message wrong size ({} bytes)", message.len());
+            return Err(WebauthnCError::InvalidMessageLength);
         }
 
         // RespondToHandshake
