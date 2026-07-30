@@ -10,8 +10,6 @@
 
 ## Building and running
 
-First, you'll need to [install OpenSSL's headers and libraries](../OpenSSL.md).
-
 On [Linux](#linux) and [macOS](#macos):
 
 ```sh
