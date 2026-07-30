@@ -470,6 +470,9 @@ pub enum AttachmentHint {
     /// wifi-direct
     #[serde(rename = "wifi_direct")]
     WifiDirect,
+    /// smart-card
+    #[serde(rename = "smart-card")]
+    SmartCard,
 }
 
 /// The authenticator versions this device supports
@@ -487,6 +490,12 @@ pub enum AuthenticatorVersion {
     /// FIDO 2.1
     #[serde(rename = "FIDO_2_1")]
     Fido2_1,
+    /// FIDO 2.2
+    #[serde(rename = "FIDO_2_2")]
+    Fido2_2,
+    /// FIDO 2.3
+    #[serde(rename = "FIDO_2_3")]
+    Fido2_3,
 }
 
 impl fmt::Display for AuthenticatorVersion {
@@ -496,6 +505,8 @@ impl fmt::Display for AuthenticatorVersion {
             AuthenticatorVersion::Fido2_0 => write!(f, "FIDO 2.0"),
             AuthenticatorVersion::Fido2_1Pre => write!(f, "FIDO 2.1 PRE"),
             AuthenticatorVersion::Fido2_1 => write!(f, "FIDO 2.1"),
+            AuthenticatorVersion::Fido2_2 => write!(f, "FIDO 2.2"),
+            AuthenticatorVersion::Fido2_3 => write!(f, "FIDO 2.3"),
         }
     }
 }
@@ -524,6 +535,9 @@ pub enum AuthenticatorTransport {
     /// hybrid (formerly caBLE)
     #[serde(rename = "hybrid")]
     Hybrid,
+    /// smart-card
+    #[serde(rename = "smart-card")]
+    SmartCard,
 }
 
 impl fmt::Display for AuthenticatorTransport {
@@ -536,6 +550,7 @@ impl fmt::Display for AuthenticatorTransport {
             AuthenticatorTransport::Internal => write!(f, "internal"),
             AuthenticatorTransport::Wireless => write!(f, "wireless"),
             AuthenticatorTransport::Hybrid => write!(f, "hybrid (caBLE)"),
+            AuthenticatorTransport::SmartCard => write!(f, "smart-card"),
         }
     }
 }
@@ -624,6 +639,11 @@ pub struct AuthenticatorGetInfo {
     /// The minimum pin length that this device requires.
     #[serde(rename = "minPINLength")]
     pub min_pin_length: Option<u32>,
+
+    /// The maximum pin length that this device accepts,
+    #[serde(rename = "maxPINLength")]
+    pub max_pin_length: Option<u32>,
+
     firmware_version: Option<u32>,
     /// The maximum size of the credBlob if supported
     pub max_cred_blob_length: Option<u32>,
@@ -644,6 +664,31 @@ pub struct AuthenticatorGetInfo {
     /// Supported attestation formats
     #[serde(default)]
     pub attestation_formats: Vec<AttestationFormat>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub enc_identifier: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub enc_cred_store_state: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub authenticator_config_commands: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub long_touch_for_reset: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub transports_for_reset: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub pin_complexity_policy: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    #[serde(rename = "pinComplexityPolicyURL")]
+    pub pin_complexity_policy_url: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub uv_count_since_last_pin_entry: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -845,8 +890,21 @@ pub struct MetadataStatement {
     /// authenticator model (e.g as identified by its AAID/AAGUID).
     #[serde(default)]
     pub ecdaa_trust_anchors: Vec<EcdaaAnchor>,
-    /// An icon representing this device.
+    /// An icon representing this device (light mode).
+    #[serde(default)]
     pub icon: Option<serde_json::Value>,
+    /// An icon representing this device (dark mode).
+    #[serde(default)]
+    pub icon_dark: Option<serde_json::Value>,
+
+    /// Provider logo (light mode).
+    #[serde(default)]
+    pub provider_logo_light: Option<serde_json::Value>,
+
+    /// Provider logo (dark mode).
+    #[serde(default)]
+    pub provider_logo_dark: Option<serde_json::Value>,
+
     /// The list of supported extensions of this authenticator
     #[serde(default)]
     pub supported_extensions: Vec<ExtensionDescriptor>,
