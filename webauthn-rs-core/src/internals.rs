@@ -1381,14 +1381,14 @@ mod tests {
         let _ = tracing_subscriber::fmt::try_init();
 
         let mut valid_acd = vec![0; 16]; // aaguid
-        valid_acd.extend_from_slice(&1023_u16.to_be_bytes());
-        valid_acd.extend_from_slice(&[0; 1023]);
+        valid_acd.extend_from_slice(&4096_u16.to_be_bytes());
+        valid_acd.extend_from_slice(&[0; 4096]);
         valid_acd.push(0xa0); // empty cbor map for public key
         assert!(super::acd_parser(&valid_acd).is_ok());
 
         let mut invalid_acd = vec![0; 16]; // aaguid
-        invalid_acd.extend_from_slice(&1024_u16.to_be_bytes());
-        invalid_acd.extend_from_slice(&[0; 1024]);
+        invalid_acd.extend_from_slice(&4097_u16.to_be_bytes());
+        invalid_acd.extend_from_slice(&[0; 4097]);
         invalid_acd.push(0xa0); // empty cbor map for public key
         assert!(super::acd_parser(&invalid_acd).is_err());
     }
