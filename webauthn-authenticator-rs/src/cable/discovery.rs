@@ -524,8 +524,7 @@ mod test {
         ];
 
         let discovery =
-            Discovery::new_with_qr_secret(CableRequestType::DiscoverableMakeCredential, qr_secret)
-                .unwrap();
+            Discovery::new_with_qr_secret(CableRequestType::MakeCredential, qr_secret).unwrap();
 
         assert_eq!(
             "wss://cable.ua5v.com/cable/new/367CBBF5F5085DF4098476AFE4B9B1D2",

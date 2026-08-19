@@ -43,14 +43,14 @@ impl UiCallback for Cli {
     }
 
     fn cable_qr_code(&self, request_type: CableRequestType, url: String) {
-        match request_type {
-            CableRequestType::DiscoverableMakeCredential | CableRequestType::MakeCredential => {
-                println!("Scan the QR code with your mobile device to create a new credential with caBLE:");
+        println!(
+            "Scan the QR code with your mobile device {}:",
+            match request_type {
+                CableRequestType::MakeCredential => "to enroll a new credential",
+                CableRequestType::GetAssertion => "to authenticate",
+                _ => "",
             }
-            CableRequestType::GetAssertion => {
-                println!("Scan the QR code with your mobile device to sign in with caBLE:");
-            }
-        }
+        );
         println!("This feature requires Android with Google Play, or iOS 16 or later.");
 
         #[cfg(feature = "qrcode")]
