@@ -1,6 +1,7 @@
 //! Internal structures for parsing webauthn registrations and challenges. This *may* change
 //! at anytime and should not be relied on in your library.
 
+use crate::constants::CREDENTIAL_ID_MAX_LENGTH;
 use crate::error::WebauthnError;
 use crate::proto::*;
 use nom::bytes::complete::{tag, take};
@@ -205,6 +206,17 @@ fn aaguid_parser(i: &[u8]) -> nom::IResult<&[u8], Aaguid> {
 fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     let (i, aaguid) = aaguid_parser(i)?;
     let (i, cred_id_len) = be_u16(i)?;
+
+    if cred_id_len > CREDENTIAL_ID_MAX_LENGTH {
+        warn!(
+            "cred_id_len ({:?}) exceeds the WebAuthn maximum of {:?} bytes.",
+            cred_id_len, CREDENTIAL_ID_MAX_LENGTH
+        );
+        return Err(nom::Err::Failure(nom::error::Error::new(
+            i,
+            nom::error::ErrorKind::TooLarge,
+        )));
+    }
 
     if usize::from(cred_id_len) > i.len() {
         warn!(
@@ -1362,6 +1374,23 @@ mod tests {
         ];
 
         assert!(AuthenticatorData::<Authentication>::try_from(raw.as_slice()).is_ok());
+    }
+
+    #[test]
+    fn acd_parser_credential_id_length() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let mut valid_acd = vec![0; 16]; // aaguid
+        valid_acd.extend_from_slice(&4096_u16.to_be_bytes());
+        valid_acd.extend_from_slice(&[0; 4096]);
+        valid_acd.push(0xa0); // empty cbor map for public key
+        assert!(super::acd_parser(&valid_acd).is_ok());
+
+        let mut invalid_acd = vec![0; 16]; // aaguid
+        invalid_acd.extend_from_slice(&4097_u16.to_be_bytes());
+        invalid_acd.extend_from_slice(&[0; 4097]);
+        invalid_acd.push(0xa0); // empty cbor map for public key
+        assert!(super::acd_parser(&invalid_acd).is_err());
     }
 
     #[test]
