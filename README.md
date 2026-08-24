@@ -74,7 +74,7 @@ We have extensively tested a variety of keys and devices, not limited to:
 * Softtokens
 
 If your key/browser combination don't work (generally due to missing crypto routines)
-please conduct a [compatability test](https://webauthn.firstyear.id.au/compat_test) and then open
+please conduct a [compatibility test](https://webauthn.firstyear.id.au/compat_test) and then open
 an issue so that we can resolve the issue!
 
 Known BROKEN Keys/Hardware
@@ -98,5 +98,4 @@ to be standards complaint because:
 
 This library has passed a security audit performed by SUSE product security. Other security reviews
 are welcome!
-
 
