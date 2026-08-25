@@ -7,7 +7,7 @@ use crypto_glue::ecdh_p256::EcdhP256PublicKey;
 use crypto_glue::{
     aes256::Aes256Key,
     aes256cbc::{
-        Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockDecryptMut, BlockEncryptMut, KeyIvInit,
+        Aes256CbcDec, Aes256CbcEnc, Aes256CbcIv, BlockModeDecrypt, BlockModeEncrypt, KeyIvInit,
     },
     block_padding::NoPadding,
     hkdf_s256::HkdfSha256,
@@ -42,7 +42,7 @@ pub fn encrypt(
 ) -> Result<Vec<u8>, WebauthnCError> {
     let enc = Aes256CbcEnc::new(key, iv);
 
-    let ciphertext = enc.encrypt_padded_vec_mut::<NoPadding>(plaintext);
+    let ciphertext = enc.encrypt_padded_vec::<NoPadding>(plaintext);
 
     Ok(ciphertext)
 }
@@ -57,7 +57,7 @@ pub fn decrypt(
 ) -> Result<Vec<u8>, WebauthnCError> {
     let enc = Aes256CbcDec::new(key, iv);
 
-    enc.decrypt_padded_vec_mut::<NoPadding>(ciphertext)
+    enc.decrypt_padded_vec::<NoPadding>(ciphertext)
         .map_err(|_| WebauthnCError::CryptographyAes256CbcDecrypt)
 }
 
@@ -88,7 +88,7 @@ pub fn public_key_from_bytes(buf: &[u8]) -> Result<EcdhP256PublicKey, WebauthnCE
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod test {
     use super::*;
-    use crypto_glue::ecdh_p256;
+    use crypto_glue::{ecdh_p256, traits::ToSec1Point};
 
     #[test]
     fn hkdf() {
@@ -151,10 +151,7 @@ mod test {
     /// Test using ECDH with static keys.
     #[test]
     fn ecdh_expected() {
-        use crypto_glue::{
-            ecdh_p256::EcdhP256EphemeralSecret, ecdsa_p256::EcdsaP256NonZeroScalar,
-            traits::ToEncodedPoint,
-        };
+        use crypto_glue::{ecdh_p256::EcdhP256EphemeralSecret, ecdsa_p256::EcdsaP256NonZeroScalar};
 
         let alice_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x13\xeaL\xe1\xd1\xff\xb3\xc2\x88\\\x8eb 0[\xe8a\x92\x1d\xee\xdd\x17\xca:\x171\xae\xbf\x8c\xf0\xdc\xb8").into()).unwrap();
         let bob_secret = EcdsaP256NonZeroScalar::from_repr((*b"\x84\x0ed:\x90\xee\xb9}\xc8\xb4\xb5\x12\x03\x8b\xc5~\xe1\x13\x04\xceZ\x9d,\xfd\xd6F\x13\xea\xb0\x96?q").into()).unwrap();
@@ -166,11 +163,11 @@ mod test {
 
         // Check that we can get the same pubkey from either side:
         let alice_pub = alice_secret.public_key();
-        let alice_pub_point = alice_pub.to_encoded_point(false);
+        let alice_pub_point = alice_pub.to_sec1_point(false);
         assert_eq!(alice_pub_point.as_bytes(), b"\x04\xa5\x99\xe0\xdd{\x1a\xa3m0\x98\x80R\x1a\xc2\x8b\xbe\xc3A\x81\x91W$\x055\x16\xe5\xb0\tF\x86\xe8`\xaf\xe6.\x98\xf5:\x99\xf1\xb4\x1cai\x96\xb0e\x83\x8c&\x12*\xfd,~\x14\xb8\xf8q9-\xd1\x18\xed");
 
         let bob_pub = bob_secret.public_key();
-        let bob_pub_point = bob_pub.to_encoded_point(false);
+        let bob_pub_point = bob_pub.to_sec1_point(false);
         assert_eq!(bob_pub_point.as_bytes(), b"\x04\xe3F/\xe9\xd6\x8e\xb5L\xc9!\x14w\x0cs8z)\xcc)\r\x87]\x829fC \xf7>\xe5\x07b\x8b\xe8\xfd\xdd\0\xd66\x9d\x11\xfe\xec\xe4Z\x0c\xf4\xc3e#\x19\xc5\xa0\x81\x19\xe7\xd8}}\xd3a\xea\x9a\x12");
 
         // Now lets do ECDH (like caBLE), and check that Alice came up with our expected secret:

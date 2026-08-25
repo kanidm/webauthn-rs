@@ -14,7 +14,7 @@ use crypto_glue::{
         self, EcdsaP256AffinePoint, EcdsaP256NonZeroScalar, EcdsaP256PrivateKey, EcdsaP256PublicKey,
     },
     hmac_s256::{self, HmacSha256},
-    traits::Mac,
+    traits::{KeyInit, Mac},
 };
 use std::{fmt::Debug, ops::Deref};
 use webauthn_rs_core::proto::{COSEKey, COSEKeyType};
@@ -398,10 +398,11 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
         // ALSO AN ERROR, as above
         let (iv, ct) = ciphertext.split_at(16);
 
-        let aes_iv = Aes256CbcIv::from_slice(iv);
+        let mut aes_iv = Aes256CbcIv::default();
+        aes_iv.as_mut_slice().copy_from_slice(iv);
 
         // 4. Return the AES-256-CBC decryption of ct using key and iv.
-        decrypt(&aes_key, aes_iv, ct)
+        decrypt(&aes_key, &aes_iv, ct)
     }
 
     fn authenticate(&self, key: &[u8], message: &[u8]) -> Result<Vec<u8>, WebauthnCError> {
@@ -426,8 +427,8 @@ impl PinUvPlatformInterfaceProtocol for PinUvPlatformInterfaceProtocolTwo {
 mod tests {
     use super::*;
     use crypto_glue::{
-        ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint, EcdsaP256ScalarPrimitive},
-        traits::FromEncodedPoint,
+        ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicSec1Point},
+        traits::FromSec1Point,
     };
     use webauthn_rs_core::proto::{COSEAlgorithm, COSEEC2Key, ECDSACurve};
 
@@ -514,8 +515,8 @@ mod tests {
         field_y.copy_from_slice(&y);
 
         let ec_public_point =
-            EcdsaP256PublicEncodedPoint::from_affine_coordinates(&field_x, &field_y, false);
-        let ec_pub = EcdsaP256PublicKey::from_encoded_point(&ec_public_point).unwrap();
+            EcdsaP256PublicSec1Point::from_affine_coordinates(&field_x, &field_y, false);
+        let ec_pub = EcdsaP256PublicKey::from_sec1_point(&ec_public_point).unwrap();
 
         let v = hex::decode("7452E599FEE739D8A653F6A507343D12D382249108A651402520B72F24FE7684")
             .unwrap();
@@ -525,9 +526,7 @@ mod tests {
 
         field_v.copy_from_slice(&v);
 
-        let secret_scalar_primitive = EcdsaP256ScalarPrimitive::from_bytes(&field_v).unwrap();
-
-        let ec_priv = EcdsaP256PrivateKey::new(secret_scalar_primitive);
+        let ec_priv = EcdsaP256PrivateKey::from_bytes(&field_v).unwrap();
 
         assert_eq!(ec_priv.public_key(), ec_pub);
 
@@ -671,8 +670,8 @@ mod tests {
         field_y.copy_from_slice(&y);
 
         let ec_public_point =
-            EcdsaP256PublicEncodedPoint::from_affine_coordinates(&field_x, &field_y, false);
-        let ec_pub = EcdsaP256PublicKey::from_encoded_point(&ec_public_point).unwrap();
+            EcdsaP256PublicSec1Point::from_affine_coordinates(&field_x, &field_y, false);
+        let ec_pub = EcdsaP256PublicKey::from_sec1_point(&ec_public_point).unwrap();
 
         let v = hex::decode("7452E599FEE739D8A653F6A507343D12D382249108A651402520B72F24FE7684")
             .unwrap();
@@ -682,9 +681,7 @@ mod tests {
 
         field_v.copy_from_slice(&v);
 
-        let secret_scalar_primitive = EcdsaP256ScalarPrimitive::from_bytes(&field_v).unwrap();
-
-        let ec_priv = EcdsaP256PrivateKey::new(secret_scalar_primitive);
+        let ec_priv = EcdsaP256PrivateKey::from_bytes(&field_v).unwrap();
 
         assert_eq!(ec_priv.public_key(), ec_pub);
 

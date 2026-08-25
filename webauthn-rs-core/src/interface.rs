@@ -4,8 +4,8 @@
 use crate::attestation::verify_attestation_ca_chain;
 use crate::error::*;
 use crypto_glue::{
-    ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicEncodedPoint, EcdsaP256PublicKey},
-    traits::{DecodeDer, EncodeDer, FromEncodedPoint},
+    ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicKey, EcdsaP256PublicSec1Point},
+    traits::{DecodeDer, EncodeDer, FromSec1Point},
     x509,
 };
 use serde::de::DeserializeOwned;
@@ -157,7 +157,7 @@ impl TryFrom<&EcdsaP256PublicKey> for COSEEC2Key {
     type Error = WebauthnError;
 
     fn try_from(k: &EcdsaP256PublicKey) -> Result<Self, Self::Error> {
-        let encoded_point = EcdsaP256PublicEncodedPoint::from(k);
+        let encoded_point = EcdsaP256PublicSec1Point::from(k);
 
         let public_key_x = encoded_point
             .x()
@@ -194,9 +194,9 @@ impl TryFrom<&COSEEC2Key> for EcdsaP256PublicKey {
         field_x.copy_from_slice(&k.x);
         field_y.copy_from_slice(&k.y);
 
-        let ep = EcdsaP256PublicEncodedPoint::from_affine_coordinates(&field_x, &field_y, false);
+        let ep = EcdsaP256PublicSec1Point::from_affine_coordinates(&field_x, &field_y, false);
 
-        EcdsaP256PublicKey::from_encoded_point(&ep)
+        EcdsaP256PublicKey::from_sec1_point(&ep)
             .into_option()
             .ok_or(WebauthnError::COSEKeyECDSAXYInvalid)
     }
