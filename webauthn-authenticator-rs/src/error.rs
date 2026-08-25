@@ -206,11 +206,13 @@ impl From<crate::transport::types::U2FError> for WebauthnCError {
     }
 }
 
+/*
 impl From<crypto_glue::rand::Error> for WebauthnCError {
     fn from(value: crypto_glue::rand::Error) -> Self {
         Self::Rand(value.to_string())
     }
 }
+*/
 
 /// FIDO CTAP-2.x error.
 ///
