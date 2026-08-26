@@ -53,7 +53,7 @@ members = [
 exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
 
 # [patch.crates-io]
-# crypto-glue = { path = "../crypto-glue" }
+crypto-glue = { path = "../crypto-glue" }
 # crypto-glue = { git = "https://github.com/kanidm/crypto-glue.git", branch = "6.0-webauthn-rs" }
 
 [workspace.dependencies]
@@ -78,8 +78,8 @@ anyhow = "1.0"
 base64 = "0.21"
 clap = { version = "^4.5", features = ["derive", "env"] }
 
-crypto-glue = "^0.1.18"
-compact_jwt = "0.5.6"
+crypto-glue = "^0.2.0"
+compact_jwt = "0.6.0"
 futures = "^0.3.25"
 hex = "0.4.3"
 http = "^0.2.9"
