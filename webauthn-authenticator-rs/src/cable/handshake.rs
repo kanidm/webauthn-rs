@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use crypto_glue::{ecdh_p256::EcdhP256PublicKey, traits::ToEncodedPoint as _};
+use crypto_glue::{ecdh_p256::EcdhP256PublicKey, traits::ToSec1Point as _};
 use serde::Serialize;
 use serde_cbor_2::Value;
 use std::{
@@ -47,7 +47,7 @@ impl From<HandshakeV2> for BTreeMap<u32, Value> {
         let mut o = BTreeMap::from([
             (
                 0,
-                Value::Bytes(peer_identity.to_encoded_point(true).to_bytes().to_vec()),
+                Value::Bytes(peer_identity.to_sec1_point(true).to_bytes().to_vec()),
             ),
             (1, Value::Bytes(secret.to_vec())),
             (2, Value::Integer(known_domains_count.into())),

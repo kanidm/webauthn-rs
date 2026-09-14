@@ -11,14 +11,14 @@ use crate::stubs::*;
 use crypto_glue::{
     aes256::Aes256Key,
     aes256gcm::{Aes256Gcm, Aes256GcmNonce},
-    block_padding::generic_array::{
-        sequence::Split,
+    block_padding::array::{
+        // sequence::Split,
         typenum::{U16, U32, U64, U96},
-        GenericArray,
+        Array,
     },
     ecdh_p256::{self, EcdhP256EphemeralSecret, EcdhP256PublicKey},
     s256::Sha256Output,
-    traits::{AeadInPlace, KeyInit, ToEncodedPoint as _, Zeroizing},
+    traits::{AeadInOut, KeyInit, ToSec1Point as _, Zeroizing},
 };
 use std::mem::size_of;
 
@@ -121,8 +121,10 @@ impl CipherState {
 
             let cipher = Aes256Gcm::new(key);
             // trace!("encrypting: {:?}", hex::encode(&buf[..padded_len]));
+
+            let work = &mut buf[..padded_len];
             let tag = cipher
-                .encrypt_in_place_detached(&nonce, aad, &mut buf[..padded_len])
+                .encrypt_inout_detached(&nonce, aad, work.into())
                 .map_err(|_| WebauthnCError::CryptographyAeadError)?;
             // trace!(
             //     "encrypted: {:?}, tag: {:?}, nonce: {:?}, aad: {:?}, key: {:?}",
@@ -158,14 +160,16 @@ impl CipherState {
 
             let msg_len = buf.len() - 16;
             let (ct, tag) = buf.split_at_mut(msg_len);
-            let tag: &mut GenericArray<u8, U16> = tag.into();
+            let tag: &mut Array<u8, U16> = tag
+                .try_into()
+                .map_err(|_| WebauthnCError::CryptographyAeadError)?;
 
             let nonce = self.construct_nonce();
 
             let cipher = Aes256Gcm::new(key);
 
             if cipher
-                .decrypt_in_place_detached(&nonce, aad, ct, tag)
+                .decrypt_inout_detached(&nonce, aad, ct.into(), tag)
                 .is_err()
             {
                 // error!(
@@ -233,7 +237,7 @@ impl CipherState {
 ///
 /// [SymmetricState]: https://noiseprotocol.org/noise.html#the-symmetricstate-object
 pub struct CableNoise {
-    ck: Zeroizing<GenericArray<u8, U32>>,
+    ck: Zeroizing<Array<u8, U32>>,
     h: Sha256Output,
 
     cipher_state: CipherState,
@@ -269,7 +273,7 @@ impl CableNoise {
     }
 
     fn mix_hash_point(&mut self, point: &EcdhP256PublicKey) -> Result<(), WebauthnCError> {
-        let point = point.to_encoded_point(false);
+        let point = point.to_sec1_point(false);
         // trace!("mix_hash_point(point={:?})", hex::encode(point.as_bytes()));
         self.mix_hash(point.as_bytes());
         Ok(())
@@ -277,7 +281,7 @@ impl CableNoise {
 
     /// `SymmetricState.MixKey(input_key_material)`
     fn mix_key(&mut self, ikm: &[u8]) -> Result<(), WebauthnCError> {
-        let mut o: Zeroizing<GenericArray<u8, U64>> = Default::default();
+        let mut o: Zeroizing<Array<u8, U64>> = Default::default();
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
         // trace!(
         //     "mix_key(ikm={:?}) => hkdf(salt={:?}, output={:?})",
@@ -285,7 +289,7 @@ impl CableNoise {
         //     hex::encode(&self.ck),
         //     hex::encode(&o),
         // );
-        let (ck, temp_k): (GenericArray<u8, U32>, _) = o.split();
+        let (ck, temp_k): (Array<u8, U32>, _) = o.split();
         self.ck.copy_from_slice(&ck);
         self.cipher_state.init_key(temp_k.into());
         Ok(())
@@ -294,7 +298,7 @@ impl CableNoise {
     /// `SymmetricState.MixKeyAndHash(input_key_material)`
     fn mix_key_and_hash(&mut self, ikm: &[u8]) -> Result<(), WebauthnCError> {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/noise.cc;l=90;drc=38321ee39cd73ac2d9d4400c56b90613dee5fe29
-        let mut o: Zeroizing<GenericArray<u8, U96>> = Default::default();
+        let mut o: Zeroizing<Array<u8, U96>> = Default::default();
         hkdf_sha_256(&self.ck, ikm, None, &mut o)?;
         // trace!(
         //     "mix_key_and_hash(ikm={:?}) => hkdf(salt={:?}, output={:?})",
@@ -302,8 +306,8 @@ impl CableNoise {
         //     hex::encode(&self.ck),
         //     hex::encode(&o),
         // );
-        let (ck, temp): (GenericArray<u8, U32>, _) = o.split();
-        let (temp_h, temp_k): (GenericArray<u8, U32>, GenericArray<u8, U32>) = temp.split();
+        let (ck, temp): (Array<u8, U32>, _) = o.split();
+        let (temp_h, temp_k): (Array<u8, U32>, Array<u8, U32>) = temp.split();
 
         self.ck.copy_from_slice(&ck);
         self.mix_hash(&temp_h);
@@ -333,7 +337,7 @@ impl CableNoise {
     /// further transport messages. `write_key` is for messages sent by the
     /// initiator, `read_key` is for messages sent by the authenticator.
     fn traffic_keys(&self) -> Result<(EncryptionKey, EncryptionKey), WebauthnCError> {
-        let mut o: Zeroizing<GenericArray<u8, U64>> = Default::default();
+        let mut o: Zeroizing<Array<u8, U64>> = Default::default();
         hkdf_sha_256(&self.ck, &[], None, &mut o)?;
 
         let (a, b) = o.split();
@@ -342,7 +346,7 @@ impl CableNoise {
 
     fn get_ephemeral_key_public_bytes(&self) -> Result<[u8; 65], WebauthnCError> {
         let mut o = [0; 65];
-        let point = self.ephemeral_key.public_key().to_encoded_point(false);
+        let point = self.ephemeral_key.public_key().to_sec1_point(false);
         if point.len() != o.len() {
             error!(
                 "unexpected public key length {} != {}",
@@ -641,7 +645,7 @@ mod test {
         let cipher = Aes256Gcm::new(&Default::default());
         let mut buf = vec![];
         let tag = cipher
-            .encrypt_in_place_detached(&[0u8; 12].into(), &[0], &mut buf)
+            .encrypt_inout_detached(&[0u8; 12].into(), &[0], buf.as_mut_slice().into())
             .unwrap();
 
         warn!("our empty tag was: {}", hex::encode(tag));
@@ -650,7 +654,7 @@ mod test {
         let cipher = Aes256Gcm::new(&Default::default());
         let mut buf = vec![];
         cipher
-            .decrypt_in_place_detached(&[0u8; 12].into(), &[0], &mut buf, &tag)
+            .decrypt_inout_detached(&[0u8; 12].into(), &[0], buf.as_mut_slice().into(), &tag)
             .unwrap();
     }
 

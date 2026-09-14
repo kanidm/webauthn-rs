@@ -3,14 +3,14 @@
 use crate::stubs::*;
 
 use crypto_glue::{
-    block_padding::generic_array::{
-        sequence::Split,
+    block_padding::array::{
+        // sequence::Split,
         typenum::{U32, U64},
-        GenericArray,
+        Array,
     },
     ecdh_p256::{self, EcdhP256EphemeralSecret},
     hmac_s256::{self, HmacSha256Key},
-    rand::{rngs::ThreadRng, RngCore},
+    rand::{self, Rng},
     traits::Zeroizing,
 };
 use num_traits::ToPrimitive;
@@ -30,11 +30,11 @@ type QrSecret = [u8; 16];
 
 /// Two concatenated [`Aes256Key`s][crypto_glue::aes256::Aes256Key], the encryption key and signing
 /// key.
-type EidKey = Zeroizing<GenericArray<u8, U64>>;
+type EidKey = Zeroizing<Array<u8, U64>>;
 
 /// Alias for a non-[`Zeroizing`][] form of [`Aes256Key`][crypto_glue::aes256::Aes256Key], used to
 /// reassure Rust's type checker.
-type NonZeroingAes256Key = GenericArray<u8, U32>;
+type NonZeroingAes256Key = Array<u8, U32>;
 
 type CableEid = [u8; 16];
 type TunnelId = [u8; 16];
@@ -77,8 +77,8 @@ impl Discovery {
     pub fn new(request_type: CableRequestType) -> Result<Self, WebauthnCError> {
         // chrome_authenticator_request_delegate.cc  ChromeAuthenticatorRequestDelegate::ConfigureCable
         let mut qr_secret: QrSecret = [0; size_of::<QrSecret>()];
-        let mut rng = ThreadRng::default();
-        rng.try_fill_bytes(&mut qr_secret)?;
+        let mut rng = rand::rng();
+        rng.fill_bytes(&mut qr_secret);
         Self::new_with_qr_secret(request_type, qr_secret)
     }
 
@@ -214,9 +214,9 @@ pub struct Eid {
 impl Eid {
     /// Creates a new [Eid] using a random nonce.
     pub fn new(tunnel_server_id: u16, routing_id: RoutingId) -> Result<Self, WebauthnCError> {
-        let mut rng = ThreadRng::default();
+        let mut rng = rand::rng();
         let mut nonce: BleNonce = [0; size_of::<BleNonce>()];
-        rng.try_fill_bytes(&mut nonce)?;
+        rng.fill_bytes(&mut nonce);
 
         Ok(Self {
             tunnel_server_id,

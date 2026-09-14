@@ -9,16 +9,19 @@ use base64::Engine;
 use crypto_glue::{
     der::SecretDocument,
     ecdsa_p256::{
-        self, EcdsaP256PrivateKey, EcdsaP256PublicEncodedPoint, EcdsaP256Signature,
+        self, EcdsaP256PrivateKey, EcdsaP256PublicSec1Point, EcdsaP256Signature,
         EcdsaP256SigningKey, EcdsaP256VerifyingKey,
     },
     ecdsa_p384::{EcdsaP384DerSignature, EcdsaP384SigningKey, EcdsaP384VerifyingKey},
     pkcs8::PrivateKeyInfo,
-    rand::{self, RngCore},
-    traits::{EncodeDer, Pkcs8EncodePrivateKey, Signer, Zeroizing},
+    rand::{self, Rng},
+    traits::{EncodeDer, Generate, Pkcs8EncodePrivateKey, Signer, ToExtension, Zeroizing},
     x509::{
-        pkeyb64, uuid_to_serial, x509b64, Builder, Certificate, CertificateBuilder, Name, Profile,
-        SubjectPublicKeyInfoOwned, Time, Validity,
+        pkeyb64,
+        profile::{cabf::Root, BuilderProfile},
+        uuid_to_serial, x509b64, BasicConstraints, Builder, CertBuilderError, Certificate,
+        CertificateBuilder, Extension, Name, SubjectPublicKeyInfoOwned, SubjectPublicKeyInfoRef,
+        TbsCertificate, Time, Validity,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -59,7 +62,6 @@ pub struct SoftToken {
 }
 
 fn build_ca(unique_id: Uuid) -> Result<(EcdsaP384SigningKey, Certificate), WebauthnCError> {
-    let mut rng = rand::thread_rng();
     let serial_number = uuid_to_serial(unique_id);
 
     let now = SystemTime::now();
@@ -73,44 +75,37 @@ fn build_ca(unique_id: Uuid) -> Result<(EcdsaP384SigningKey, Certificate), Webau
             WebauthnCError::CryptographyX509Builder
         })?;
 
-    let validity = Validity {
-        not_before,
-        not_after,
-    };
+    let validity = Validity::new(not_before, not_after);
 
-    let profile = Profile::Root;
-
-    let dn_str = format!(
-        "C=AU,ST=QLD,O=Webauthn Authenticator RS,CN=Dynamic Softtoken CA {}",
-        unique_id
-    );
+    // I have no idea why, but x509-cert is reversing this dn?
+    let dn_str = format!("CN=Dynamic Softtoken CA {unique_id},O=WebauthnRS,ST=QLD,C=AU",);
     let root_subject = Name::from_str(&dn_str).map_err(|err| {
         error!(?err, "Invalid root subject DN - THIS IS A BUG.");
         WebauthnCError::CryptographyX509Builder
     })?;
 
-    let signing_key = EcdsaP384SigningKey::random(&mut rng);
+    let emits_ocsp_response = false;
+
+    let profile = Root::new(emits_ocsp_response, root_subject).map_err(|err| {
+        error!(?err, "Unable to build root cert profile - THIS IS A BUG.");
+        WebauthnCError::CryptographyX509Builder
+    })?;
+
+    let signing_key = EcdsaP384SigningKey::generate();
     let verifying_key = EcdsaP384VerifyingKey::from(&signing_key);
-    let pub_key = SubjectPublicKeyInfoOwned::from_key(verifying_key).map_err(|err| {
+    let pub_key = SubjectPublicKeyInfoOwned::from_key(&verifying_key).map_err(|err| {
         error!(?err, "Unable to access subject public key information");
         WebauthnCError::CryptographyX509Builder
     })?;
 
-    let builder = CertificateBuilder::new(
-        profile,
-        serial_number,
-        validity,
-        root_subject.clone(),
-        pub_key.clone(),
-        &signing_key,
-    )
-    .map_err(|err| {
-        error!(?err, "Unable to create certificate builder");
-        WebauthnCError::CryptographyX509Builder
-    })?;
+    let builder = CertificateBuilder::new(profile, serial_number, validity, pub_key.clone())
+        .map_err(|err| {
+            error!(?err, "Unable to create certificate builder");
+            WebauthnCError::CryptographyX509Builder
+        })?;
 
     let cert = builder
-        .build_with_rng::<EcdsaP384DerSignature>(&mut rng)
+        .build::<EcdsaP384SigningKey, EcdsaP384DerSignature>(&signing_key)
         .map_err(|err| {
             error!(?err, "Unable to sign certificate request");
             WebauthnCError::CryptographyX509Builder
@@ -119,13 +114,47 @@ fn build_ca(unique_id: Uuid) -> Result<(EcdsaP384SigningKey, Certificate), Webau
     Ok((signing_key, cert))
 }
 
+struct AttestationProfile {
+    subject: Name,
+    issuer: Name,
+}
+
+impl BuilderProfile for AttestationProfile {
+    fn get_issuer(&self, _subject: &Name) -> Name {
+        self.issuer.clone()
+    }
+
+    fn get_subject(&self) -> Name {
+        self.subject.clone()
+    }
+
+    fn build_extensions(
+        &self,
+        _spk: SubjectPublicKeyInfoRef<'_>,
+        _issuer_spk: SubjectPublicKeyInfoRef<'_>,
+        tbs: &TbsCertificate,
+    ) -> Result<Vec<Extension>, CertBuilderError> {
+        let mut extensions: Vec<Extension> = Vec::with_capacity(1);
+
+        extensions.push(
+            BasicConstraints {
+                // MUST be set FALSE
+                ca: false,
+                // MUST NOT be preset
+                path_len_constraint: None,
+            }
+            .to_extension(&tbs.subject(), &extensions)?,
+        );
+
+        Ok(extensions)
+    }
+}
+
 fn build_intermediate(
     ca_key: &EcdsaP384SigningKey,
     ca_cert: &Certificate,
     unique_id: Uuid,
 ) -> Result<(EcdsaP256SigningKey, Certificate), WebauthnCError> {
-    let mut rng = rand::thread_rng();
-
     let root_serial_uuid = Uuid::new_v4();
     let serial_number = uuid_to_serial(root_serial_uuid);
 
@@ -140,31 +169,26 @@ fn build_intermediate(
             WebauthnCError::CryptographyX509Builder
         })?;
 
-    let validity = Validity {
-        not_before,
-        not_after,
-    };
-
-    let profile = Profile::Leaf {
-        issuer: ca_cert.tbs_certificate.subject.clone(),
-        enable_key_agreement: true,
-        enable_key_encipherment: true,
-        include_subject_key_identifier: true,
-    };
+    let validity = Validity::new(not_before, not_after);
 
     // NOTE: OU=Authenticator Attestation is a requirement of "Packed" attestation.
     let dn_str = format!(
-        "C=AU,ST=QLD,O=Webauthn Authenticator RS,CN=Token {},OU=Authenticator Attestation",
+        "C=AU,O=Webauthn Authenticator RS,CN=Token {},OU=Authenticator Attestation",
         unique_id
     );
-    let root_subject = Name::from_str(&dn_str).map_err(|err| {
+    let subject = Name::from_str(&dn_str).map_err(|err| {
         error!(?err, "Invalid cert subject DN - THIS IS A BUG.");
         WebauthnCError::CryptographyX509Builder
     })?;
 
-    let signing_key = EcdsaP256SigningKey::random(&mut rng);
+    let profile = AttestationProfile {
+        issuer: ca_cert.tbs_certificate().subject().clone(),
+        subject,
+    };
+
+    let signing_key = EcdsaP256SigningKey::generate();
     let verifying_key = EcdsaP256VerifyingKey::from(&signing_key);
-    let pub_key = SubjectPublicKeyInfoOwned::from_key(verifying_key).map_err(|err| {
+    let pub_key = SubjectPublicKeyInfoOwned::from_key(&verifying_key).map_err(|err| {
         error!(?err, "Unable to access subject public key information");
         WebauthnCError::CryptographyX509Builder
     })?;
@@ -173,9 +197,9 @@ fn build_intermediate(
         profile,
         serial_number,
         validity,
-        root_subject.clone(),
+        // root_subject.clone(),
         pub_key.clone(),
-        ca_key,
+        // ca_key,
     )
     .map_err(|err| {
         error!(?err, "Unable to create certificate builder");
@@ -183,7 +207,7 @@ fn build_intermediate(
     })?;
 
     let cert = builder
-        .build_with_rng::<EcdsaP384DerSignature>(&mut rng)
+        .build::<EcdsaP384SigningKey, EcdsaP384DerSignature>(&ca_key)
         .map_err(|err| {
             error!(?err, "Unable to sign certificate request");
             WebauthnCError::CryptographyX509Builder
@@ -405,7 +429,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
 
         // Generate a random credential id
         let mut key_handle: Vec<u8> = vec![0; 32];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         rng.fill_bytes(&mut key_handle);
 
         // Create a new key.
@@ -414,7 +438,7 @@ impl AuthenticatorBackendHashedClientData for SoftToken {
         // Extract the public x and y coords.
         let ecpublic = eckey.public_key();
 
-        let encoded_point = EcdsaP256PublicEncodedPoint::from(ecpublic);
+        let encoded_point = EcdsaP256PublicSec1Point::from(ecpublic);
 
         let public_key_x = encoded_point
             .x()
@@ -1077,7 +1101,7 @@ mod tests {
 
     #[test]
     fn perform_register_auth_with_command() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let _ = tracing_subscriber::fmt::try_init();
         let (mut soft_token, _) = SoftToken::new(true).unwrap();
