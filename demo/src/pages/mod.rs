@@ -11,8 +11,9 @@ fn is_username_valid(username: &str) -> bool {
     (3..=16).contains(&len) && username.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
-const ANIMALS: [&str; 27] = [
+const ANIMALS: [&str; 28] = [
     "bilby",
+    "binchicken",
     "bowerbird",
     "brolga",
     "brushturkey",
