@@ -5,6 +5,7 @@
 ARG RUST_VERSION=1.98.1
 ARG DEBIAN_VERSION=trixie
 
+# Fetch pre-built cargo-leptos binary
 FROM scratch AS leptos-linux-amd64
 ADD \
     --checksum=sha256:35657e0ada6a026389cfffe2c22ca8eacee46250c27fe88b869955fe17a3d05f \
@@ -19,10 +20,10 @@ ADD \
     https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-aarch64-unknown-linux-gnu.tar.gz \
     /cargo-leptos
 
+# COPY --from doesn't allow variable expansion, so expand it here.
 FROM leptos-${TARGETOS}-${TARGETARCH}${TARGETVARIANT} AS leptos
 
-# Docker's rust image sources are owned by rust-lang:
-# https://github.com/rust-lang/docker-rust
+# Docker's rust image is owned by rust-lang: https://github.com/rust-lang/docker-rust
 FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS builder
 
 COPY --from=leptos /cargo-leptos /cargo-leptos/
@@ -33,7 +34,7 @@ RUN \
     <<EOT sh
     set -e
     rustup target add wasm32-unknown-unknown
-    install /cargo-leptos/cargo-leptos-$(uname -m)-unknown-linux-gnu/cargo-leptos /usr/local/bin/
+    install /cargo-leptos/cargo-leptos-$(rustc --print host-tuple)/cargo-leptos /usr/local/bin/
 EOT
 
 WORKDIR /src
