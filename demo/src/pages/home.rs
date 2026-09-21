@@ -14,7 +14,8 @@ pub fn HomePage() -> impl IntoView {
         <ul>
             <li>
                 "a user-provided authenticator, which may be their device's built-in security \
-                processor, a removable authenticator device, or a synchronised credential manager,"
+                processor (TPM / SE), a removable authenticator device, or a synchronised \
+                credential manager,"
             </li>
             <li>"a browser or client that interacts with the authenticator,"</li>
             <li>
