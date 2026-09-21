@@ -87,7 +87,7 @@ LABEL org.opencontainers.image.source=https://github.com/kanidm/webauthn-rs
 LABEL org.opencontainers.image.authors=william@blackhats.net.au
 
 WORKDIR /app
-COPY ./docker_startup.sh ./release/
+COPY ./docker_startup.sh ./
 COPY --from=builder-migration /src/target/release/migration ./migration
 COPY --from=builder-web /src/target/release/webauthn-rs-demo ./webauthn-rs-demo
 COPY --from=builder-web /src/target/site ./site/
@@ -101,4 +101,4 @@ ENV \
     RP_NAME="webauthn-rs demo" \
     RP_ORIGIN="http://localhost:3000"
 
-CMD ["/app/release/docker_startup.sh"]
+CMD ["/app/docker_startup.sh"]
