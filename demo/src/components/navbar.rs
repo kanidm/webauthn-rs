@@ -26,26 +26,22 @@ pub fn Navbar() -> impl IntoView {
                         <li class="nav-item">
                             <a class="nav-link" href="/register">"Register"</a>
                         </li>
+
                         <li class="nav-item">
                             <a class="nav-link" href="/login">"Login"</a>
                         </li>
-                        // <li class="nav-item">
-                        //     <a class="nav-link" href="#">"Compatibility tests"</a>
-                        // </li>
+
+                        <li class="nav-item">
+                            <a
+                                class="nav-link"
+                                href="https://github.com/kanidm/webauthn-rs"
+                                target="_blank"
+                            >
+                                "View on GitHub"
+                            </a>
+                        </li>
                     </ul>
                 </div>
-
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
-                        <a
-                            class="nav-link"
-                            href="https://github.com/kanidm/webauthn-rs"
-                            target="_blank"
-                        >
-                            "View on GitHub"
-                        </a>
-                    </li>
-                </ul>
             </div>
         </nav>
     }
