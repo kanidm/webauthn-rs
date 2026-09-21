@@ -28,6 +28,7 @@ jobs:
       - run: cargo fmt --check
 
   build_and_test:
+    # Everything except the demo site, tutorials, and webauthn-authenticator-rs.
     name: Other build/test
     strategy:
       fail-fast: false
@@ -57,7 +58,9 @@ jobs:
 
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
-      - run: cargo build --workspace --exclude actix_tutorial --exclude axum_tutorial --exclude wasm_tutorial --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo
+
+      - run: |
+          cargo build --workspace --exclude actix_tutorial --exclude axum_tutorial --exclude wasm_tutorial --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
@@ -72,30 +75,6 @@ jobs:
             --exclude webauthn-rs-demo \
             --all-targets
 
-      - name: javascript feature clippy
-        if: runner.os != 'windows'
-        run: |
-          cargo clippy --no-deps \
-            --workspace \
-            --exclude actix_tutorial \
-            --exclude axum_tutorial \
-            --exclude wasm_tutorial \
-            --exclude webauthn-authenticator-rs \
-            --exclude webauthn-rs-demo \
-            --all-targets --features javascript,bluetooth,nfc,usb
-      - name: WASM feature clippy
-        if: runner.os != 'windows'
-        run: |
-          cargo clippy \
-            --no-deps \
-            --workspace \
-            --exclude actix_tutorial \
-            --exclude axum_tutorial \
-            --exclude wasm_tutorial \
-            --exclude webauthn-authenticator-rs \
-            --exclude webauthn-rs-demo \
-            --all-targets --features wasm,bluetooth,nfc,usb \
-            --no-default-features
       - run: |
           cargo test --workspace --exclude actix_tutorial --exclude axum_tutorial --exclude wasm_tutorial --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo
 
@@ -345,3 +324,24 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.10
 
       - run: cargo build -p actix_tutorial -p axum_tutorial
+
+      - name: javascript feature clippy
+        if: runner.os != 'windows'
+        run: |
+          cargo clippy \
+            --no-deps \
+            -p actix_tutorial \
+            -p axum_tutorial \
+            --all-targets \
+            --features javascript
+
+      - name: WASM feature clippy
+        if: runner.os != 'windows'
+        run: |
+          cargo clippy \
+            --no-deps \
+            -p actix_tutorial \
+            -p axum_tutorial \
+            --all-targets \
+            --features wasm \
+            --no-default-features
