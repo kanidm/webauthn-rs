@@ -27,16 +27,16 @@ WORKDIR /src/demo/
 RUN cargo build --release
 
 # == end builder setup, we now have static artifacts.
-FROM run_base
-MAINTAINER william@blackhats.net.au
-EXPOSE 8080
-WORKDIR /
+# FROM run_base
+# MAINTAINER william@blackhats.net.au
+# EXPOSE 8080
+# WORKDIR /
 
-RUN cd /etc && \
-    ln -sf ../usr/share/zoneinfo/Australia/Brisbane localtime
+# RUN cd /etc && \
+#     ln -sf ../usr/share/zoneinfo/Australia/Brisbane localtime
 
-COPY --from=builder /src/target/release/webauthn-rs-demo /bin/
-COPY --from=builder /src/compat_tester/webauthn-rs-demo/pkg /pkg
+# COPY --from=builder /src/target/release/webauthn-rs-demo /bin/
+# COPY --from=builder /src/compat_tester/webauthn-rs-demo/pkg /pkg
 
-ENV RUST_BACKTRACE 1
-CMD ["/bin/webauthn-rs-demo"]
+# ENV RUST_BACKTRACE 1
+# CMD ["/bin/webauthn-rs-demo"]
