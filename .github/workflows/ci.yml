@@ -57,7 +57,7 @@ jobs:
 
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
-      - run: cargo build --workspace --exclude actix_web --exclude tide-server --exclude wasm_tutorial --exclude web_authn --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo
+      - run: cargo build --workspace --exclude actix_tutorial --exclude axum_tutorial --exclude wasm_tutorial --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
@@ -65,8 +65,8 @@ jobs:
           cargo clippy \
             --no-deps \
             --workspace \
-            --exclude actix_web \
-            --exclude tide-server \
+            --exclude actix_tutorial \
+            --exclude axum_tutorial \
             --exclude wasm_tutorial \
             --exclude webauthn-authenticator-rs \
             --exclude webauthn-rs-demo \
@@ -77,8 +77,8 @@ jobs:
         run: |
           cargo clippy --no-deps \
             --workspace \
-            --exclude actix_web \
-            --exclude tide-server \
+            --exclude actix_tutorial \
+            --exclude axum_tutorial \
             --exclude wasm_tutorial \
             --exclude webauthn-authenticator-rs \
             --exclude webauthn-rs-demo \
@@ -89,15 +89,15 @@ jobs:
           cargo clippy \
             --no-deps \
             --workspace \
-            --exclude actix_web \
-            --exclude tide-server \
+            --exclude actix_tutorial \
+            --exclude axum_tutorial \
             --exclude wasm_tutorial \
             --exclude webauthn-authenticator-rs \
             --exclude webauthn-rs-demo \
             --all-targets --features wasm,bluetooth,nfc,usb \
             --no-default-features
       - run: |
-          cargo test --workspace --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo --exclude actix_web --exclude web_authn --exclude tide-server
+          cargo test --workspace --exclude actix_tutorial --exclude axum_tutorial --exclude wasm_tutorial --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo
 
       # Some clap errors manifest as panics at runtime. Running tools with
       # --help should be enough to find an issue.
@@ -305,7 +305,7 @@ jobs:
         run: cargo leptos build -p webauthn-rs-demo --release
 
       - name: Migration tool release build
-        run: cargo build -p migrate --release
+        run: cargo build -p migration --release
 
       - name: Clippy (SSR)
         run: cargo clippy --no-deps -p webauthn-rs-demo --features ssr
