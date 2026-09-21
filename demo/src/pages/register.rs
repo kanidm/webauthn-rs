@@ -442,10 +442,10 @@ pub fn RegisterPage() -> impl IntoView {
 
         <p>
             "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" discourages \
-            resident (\"discoverable\") passkeys by default, so it won't consume the limited, \
-            non-reusable storage space on hardware security keys. Non-resident passkeys are still \
-            strong, self-contained multi-factor authentication, can replace a password, and are no \
-            less secure than resident passkeys!"
+            resident (\"discoverable\") credentials by default, so it won't consume the limited, \
+            potentially-non-reusable storage space on hardware security keys. Non-resident \
+            credentials are still strong, self-contained multi-factor authentication, can replace \
+            a password, and are no less secure than resident credentials!"
         </p>
 
         <p>
