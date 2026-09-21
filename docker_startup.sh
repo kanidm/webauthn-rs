@@ -1,5 +1,5 @@
 #!/bin/sh
 set -e
 
-/app/release/migration
-/app/release/webauthn-rs-demo
+/app/migration
+LEPTOS_SITE_PKG_DIR="/app/site" /app/webauthn-rs-demo
