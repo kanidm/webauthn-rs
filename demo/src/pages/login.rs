@@ -317,7 +317,7 @@ pub fn LoginPage() -> impl IntoView {
         </p>
 
         <p>
-            "If you want to enroll a new authenticator, "
+            "If you want to enrol a new authenticator, "
             <a href="/register">
                 "go to the registration page"
             </a>
