@@ -57,7 +57,15 @@ jobs:
 
       # Transitive dependency of wasm-bindgen; works around https://github.com/rustwasm/wasm-bindgen/issues/3918
       - run: cargo update -p bumpalo --precise 3.14.0
-      - run: cargo build --workspace --exclude webauthn-authenticator-rs --exclude webauthn-rs-demo --exclude actix_web --exclude web_authn --exclude tide-server
+      - run: |
+          cargo build \
+            --workspace \
+            --exclude actix_web \
+            --exclude tide-server \
+            --exclude wasm_tutorial \
+            --exclude web_authn \
+            --exclude webauthn-authenticator-rs \
+            --exclude webauthn-rs-demo \
 
       # Don't run clippy on Windows, we only need to run it on Linux
       - if: runner.os != 'windows'
@@ -65,11 +73,11 @@ jobs:
           cargo clippy \
             --no-deps \
             --workspace \
+            --exclude actix_web \
+            --exclude tide-server \
+            --exclude wasm_tutorial \
             --exclude webauthn-authenticator-rs \
             --exclude webauthn-rs-demo \
-            --exclude actix_web \
-            --exclude web_authn \
-            --exclude tide-server \
             --all-targets
 
       - name: javascript feature clippy
@@ -77,11 +85,11 @@ jobs:
         run: |
           cargo clippy --no-deps \
             --workspace \
+            --exclude actix_web \
+            --exclude tide-server \
+            --exclude wasm_tutorial \
             --exclude webauthn-authenticator-rs \
             --exclude webauthn-rs-demo \
-            --exclude actix_web \
-            --exclude web_authn \
-            --exclude tide-server \
             --all-targets --features javascript,bluetooth,nfc,usb
       - name: WASM feature clippy
         if: runner.os != 'windows'
@@ -89,11 +97,11 @@ jobs:
           cargo clippy \
             --no-deps \
             --workspace \
+            --exclude actix_web \
+            --exclude tide-server \
+            --exclude wasm_tutorial \
             --exclude webauthn-authenticator-rs \
             --exclude webauthn-rs-demo \
-            --exclude actix_web \
-            --exclude web_authn \
-            --exclude tide-server \
             --all-targets --features wasm,bluetooth,nfc,usb \
             --no-default-features
       - run: |
@@ -284,7 +292,7 @@ jobs:
       - run: ./.github/check_built_docs.sh
 
   demo:
-    name: Demo site
+    name: Demo site (local build)
     strategy:
       fail-fast: false
     runs-on: ubuntu-latest
@@ -299,7 +307,7 @@ jobs:
 
       # Building from source takes about 11.5 minutes.
       - name: Install cargo-leptos binaries
-        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.6/cargo-leptos-installer.sh | sh
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-installer.sh | sh
 
       - name: Install sea-orm-cli
         run: cargo install --locked sea-orm-cli --no-default-features --features sqlx-sqlite,codegen,runtime-tokio
@@ -307,7 +315,22 @@ jobs:
       - name: Demo site release build
         run: cargo leptos build -p webauthn-rs-demo --release
 
-      # TODO: container build
+      - name: Clippy (SSR)
+        run: cargo clippy --no-deps -p webauthn-rs-demo --features ssr
+
+      - name: Clippy (WASM)
+        run: cargo clippy --no-deps -p webauthn-rs-demo --target wasm32-unknown-unknown --features hydrate
+      # TODO: e2e tests
+
+  docker:
+    name: Demo site (Docker container)
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build container
+        run: docker build -t webauthn-rs-demo .
       # TODO: e2e tests
 
   tutorial:
