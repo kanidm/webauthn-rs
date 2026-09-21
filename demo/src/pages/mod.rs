@@ -8,7 +8,7 @@ use rand::{seq::IteratorRandom, Rng};
 
 fn is_username_valid(username: &str) -> bool {
     let len = username.len();
-    len >= 3 && len <= 16 && username.chars().all(|c| c.is_ascii_alphanumeric())
+    (3..=16).contains(&len) && username.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
 const ANIMALS: [&str; 27] = [
