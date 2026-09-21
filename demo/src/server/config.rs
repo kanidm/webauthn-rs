@@ -9,7 +9,7 @@ use crypto_glue::{
 };
 use sea_orm::{Database, DatabaseConnection};
 use std::path::PathBuf;
-use tracing::error;
+use tracing::{error, warn};
 use webauthn_rs::prelude::*;
 
 #[derive(Debug, Clone, Parser)]
@@ -78,7 +78,7 @@ pub struct ServerArgs {
     /// In a real-world application, you'd load this secret from a file on disk to prevent
     /// observation.
     #[clap(long, env = "SECRET_KEY", value_parser = parse_aes256_key)]
-    secret_key: Aes256Key,
+    secret_key: Option<Aes256Key>,
 }
 
 /// Parses a Base-16 encoded string.
@@ -152,6 +152,13 @@ impl ServerArgs {
     }
 
     pub fn wrap_key(&self) -> JweA256KWEncipher {
-        JweA256KWEncipher::from(self.secret_key.clone())
+        if let Some(secret_key) = &self.secret_key {
+            JweA256KWEncipher::from(secret_key.clone())
+        } else {
+            warn!("No secret_key specified. All cookies will be invalidated on server shutdown!");
+
+            // Doesn't panic
+            JweA256KWEncipher::generate_ephemeral().unwrap()
+        }
     }
 }
