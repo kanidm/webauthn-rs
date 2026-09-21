@@ -332,37 +332,17 @@ pub fn RegisterPage() -> impl IntoView {
     };
 
     view! {
-        <h1>"Enroll your authenticator"</h1>
+        <h1>"Enrol your authenticator"</h1>
 
         <p>
-            "This lets you enroll your authenticator with this demo app to create a passkey."
+            "This lets you enrol your authenticator with this demo app to create a passkey."
         </p>
 
         <p>
-            "This runs "<code>"webauthn-rs"</code>" in "<em>"non-attested passkey"</em>" mode. \
-            You can use any WebAuthn-compliant authenticator that supports user verification (PIN \
-            or biometric authentication), such as FIDO2 hardware security keys, secure enclaves, \
-            TPMs and synchronised credential managers (like iCloud Keychain). "
-            <em>"U2F-only security keys are not supported in this mode."</em>
-        </p>
-
-        <p>
-            "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" discourages \
-            resident (\"discoverable\") passkeys by default, so it won't consume the limited, \
-            non-reusable storage space on hardware security keys. Non-resident passkeys are still \
-            strong, self-contained multi-factor authentication, can replace a password, and are no \
-            less secure than resident passkeys!"
-        </p>
-
-        <p>
-            "Because this is just a demo, you can enroll credentials for "<em>"any"</em>
+            "Because this is just a demo, you can enrol credentials for "<em>"any"</em>
             " username without authentication, regardless of whether it has been \"taken\" by \
             someone else. In a real application, you'd authenticate the user before allowing them \
-            to enroll a new credential."
-        </p>
-
-        <p>
-            "This demo will be periodically reset, deleting all credentials from the server."
+            to enrol a new credential."
         </p>
 
         <form on:submit=on_submit>
@@ -402,7 +382,7 @@ pub fn RegisterPage() -> impl IntoView {
                 class="btn btn-primary"
                 type="submit"
             >
-                "Enroll an authenticator"
+                "Enrol an authenticator"
             </button>
         </form>
 
@@ -432,10 +412,10 @@ pub fn RegisterPage() -> impl IntoView {
             let(start_reg)
         >
             <h2>"Start registration challenge"</h2>
-                <pre>
-                    {serde_json::to_string_pretty(&start_reg.ccr).unwrap_or_default()}
-                </pre>
 
+            <pre>
+                {serde_json::to_string_pretty(&start_reg.ccr).unwrap_or_default()}
+            </pre>
         </ShowLet>
 
         <ShowLet
@@ -445,5 +425,31 @@ pub fn RegisterPage() -> impl IntoView {
             <h2>"Error!"</h2>
             <p>{err}</p>
         </ShowLet>
+
+        <h2>"Technical details"</h2>
+
+        <p>
+            "This runs "<code>"webauthn-rs"</code>" in "<em>"non-attested passkey"</em>" mode. \
+            You can use any WebAuthn-compliant authenticator that supports user verification (PIN \
+            or biometric authentication), such as FIDO2 hardware security keys, secure enclaves, \
+            TPMs and synchronised credential managers (like iCloud Keychain)."
+        </p>
+
+        <p>
+            "U2F-only security keys " <em>"are not"</em>" supported in this mode, because they \
+            don't support user verification."
+        </p>
+
+        <p>
+            "Unlike many other WebAuthn libraries, "<code>"webauthn-rs"</code>" discourages \
+            resident (\"discoverable\") passkeys by default, so it won't consume the limited, \
+            non-reusable storage space on hardware security keys. Non-resident passkeys are still \
+            strong, self-contained multi-factor authentication, can replace a password, and are no \
+            less secure than resident passkeys!"
+        </p>
+
+        <p>
+            "This demo will be periodically reset, deleting all credentials from the server."
+        </p>
     }
 }

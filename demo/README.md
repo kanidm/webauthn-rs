@@ -179,11 +179,11 @@ In a real application, you'd sort this out:
 
 * This demo stores all accounts and credentials in an SQLite database.
 
-* There's no "authenticated session", so anyone can enroll a credential for any username without
+* There's no "authenticated session", so anyone can enrol a credential for any username without
   prior authentication. Accounts are "created" when attempting a credential for a username that is
   not already taken.
 
-  In a real app, you'd authenticate the user before allowing them to enroll a new credential.
+  In a real app, you'd authenticate the user before allowing them to enrol a new credential.
 
 * There are no rate limits to enrolling or using credentials.
 
