@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-if [ -z "${SECRET_KEY}" ]
+if [ -z "${SECRET_KEY}" ]; then
     echo "WARNING: SECRET_KEY was not specified, randomly generating a key."
     echo "WARNING: All cookies will be invalidated on container restart!"
     export SECRET_KEY="$(openssl rand -hex 32)"
