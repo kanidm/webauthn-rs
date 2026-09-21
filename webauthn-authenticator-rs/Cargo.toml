@@ -22,7 +22,6 @@ qrcode = ["dep:qrcode", "ui-cli"]
 
 # Authenticator transports
 mozilla = ["dep:authenticator", "dep:rpassword"]
-u2fhid = ["mozilla"]
 
 bluetooth = ["dep:btleplug", "ctap2"]
 
