@@ -102,7 +102,7 @@ pub async fn start_login(username: String) -> Result<StartLoginResponse, ServerF
             ServerFnError::new("start_passkey_authentication")
         })?;
 
-    let mut session = SessionCookie::new();
+    let mut session = SessionCookie::default();
     session.store_passkey_authentication(auth_state, account.id);
 
     let mut cookie_jar = CookieJar::new();

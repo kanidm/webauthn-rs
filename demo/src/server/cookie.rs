@@ -70,13 +70,6 @@ pub enum SessionOperation {
 }
 
 impl SessionCookie {
-    pub fn new() -> Self {
-        Self {
-            mtime: UtcDateTime::now(),
-            op: SessionOperation::default(),
-        }
-    }
-
     /// Take a [PasskeyAuthentication] state from the session cookie, replacing it with None.
     pub fn take_passkey_authentication(&mut self) -> Option<(PasskeyAuthentication, Uuid)> {
         let SessionOperation::PasskeyAuthentication {
@@ -179,6 +172,15 @@ impl SessionCookie {
         cookie.set_value(encrypted_payload);
         jar.add(cookie);
         Ok(())
+    }
+}
+
+impl Default for SessionCookie {
+    fn default() -> Self {
+        Self {
+            mtime: UtcDateTime::now(),
+            op: SessionOperation::default(),
+        }
     }
 }
 

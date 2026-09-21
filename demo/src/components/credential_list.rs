@@ -23,7 +23,7 @@ pub fn CredentialList(credentials: Vec<EnrolledPasskeyInfo>) -> impl IntoView {
             <tbody>
                 <For
                     each=move || credentials.clone().into_iter()
-                    key=|c| c.cred_id_short.clone()
+                    key=|c| c.cred_id_short
                     let(c)
                 >
                     <tr

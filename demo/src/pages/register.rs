@@ -97,7 +97,7 @@ pub async fn start_registration(
             ServerFnError::new("Registration failure")
         })?;
 
-    let mut session = SessionCookie::new();
+    let mut session = SessionCookie::default();
     session.store_passkey_registration(reg_state, account.id);
 
     let mut cookie_jar = CookieJar::new();
@@ -252,7 +252,7 @@ pub fn RegisterPage() -> impl IntoView {
 
             // Prompt for a credential label
             let Ok(Some(label)) =
-                web_sys::Window::prompt_with_message(&window, "Set a label for this authenticator")
+                web_sys::Window::prompt_with_message(window, "Set a label for this authenticator")
             else {
                 log!("labelling cancelled");
                 set_resp.set(None);
