@@ -2,4 +2,4 @@
 set -e
 
 /app/migration
-LEPTOS_SITE_PKG_DIR="/app/site" /app/webauthn-rs-demo
+LEPTOS_SITE_ROOT="/app/site" /app/webauthn-rs-demo
