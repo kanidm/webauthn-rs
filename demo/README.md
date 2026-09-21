@@ -8,6 +8,8 @@
 
 ## Prerequisites
 
+> [!TIP]: These are not required when [running from Docker](#run-from-docker).
+
 1.  Install a recent Rust toolchain for your host and `wasm32-unknown-unknown`.
 2.  Install [`cargo-leptos`][1].
 3.  Install [`sea-orm-cli`][2]:
@@ -67,12 +69,18 @@ flags and before any server flags ([see examples below](#over-http)).
   This demo only supports `sqlite` as a database backend. The database file must be
   [created with the migration tool](#setup-the-database) *before* running the server.
 
-* `--secret-key`, `SECRET_KEY`: (**required**) AES-256 secret key used for encrypting the session
+* `--secret-key`, `SECRET_KEY`: (**recommended**) AES-256 secret key used for encrypting the session
   cookie. This is a random, 32 byte value, encoded as base16 (ie: 64 hex digits).
 
   You can generate this with something like: `openssl rand -hex 32`
 
   Changing this value will invalidate all session cookies.
+
+  If no value is specified, a random key will be generated on server start-up. In this mode, all
+  session cookies will be invalidated on service shutdown.
+
+* `LEPTOS_SITE_ADDR` (environment variable only): The host and port to bind to when listening for
+  HTTP or HTTPS connections. By default, this is `127.0.0.1:3000`.
 
 [3]: https://www.sea-ql.org/SeaORM/docs/1.1.x/install-and-config/connection/
 
@@ -136,12 +144,40 @@ Then point your browser at https://localhost:3000
 self-signed certificate for `localhost` which is valid for 5 days, and will only update it if it has
 expired (or is close to expiry). Modify this as you need.
 
+## Run from Docker
+
+> [!NOTE]: This only works on Linux `aarch64` and `x86_64` systems.
+
+The demo site can be built from the [`Dockerfile` in the repository root](../Dockerfile).
+
+```sh
+docker build -t webauthn-rs-demo .
+```
+
+By default, the container:
+
+1. automatically sets up an SQLite database in `/data`, and runs any pending migrations
+1. generates a random secret key on start-up (if none is provided)
+1. listens for HTTP on port 3000
+
+You can [configure this with environment variables](#server-options).
+
+To run the container, storing the database in `/tmp/webauthn-rs-data` on the container host:
+
+```sh
+docker run -p 3000:3000 -v /tmp/webauthn-rs-data:/data --rm -it webauthn-rs-demo
+```
+
+Then visit http://localhost:3000 in your browser.
+
+Press `^C` to shut down the container.
+
 ## Demo limitations and quirks
 
 As this is a demo, there are a number of limitations which reduce the security of the application.
 In a real application, you'd sort this out:
 
-* This demo stores all accounts and passkeys in an SQLite database.
+* This demo stores all accounts and credentials in an SQLite database.
 
 * There's no "authenticated session", so anyone can enroll a credential for any username without
   prior authentication. Accounts are "created" when attempting a credential for a username that is
@@ -179,3 +215,7 @@ In a real application, you'd sort this out:
   In a real application, you'd read the encryption key from a file on disk, and protect that.
 
 * There's no way to relabel or remove an enrolled credential.
+
+* This demo doesn't [generate fake credentials for unknown usernames][3].
+
+[3]: https://docs.rs/webauthn-rs-core/latest/webauthn_rs_core/fake/struct.WebauthnFakeCredentialGenerator.html

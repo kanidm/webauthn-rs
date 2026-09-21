@@ -1,14 +1,26 @@
-# webauthn-rs demo site Docker container.
+# webauthn-rs-demo Docker container.
+#
+# See ./demo/README.md#run-from-docker for more information.
 ARG RUST_VERSION=1.98.1
 ARG DEBIAN_VERSION=trixie
+
+FROM scratch AS leptos-linux-amd64
+ADD --unpack \
+    https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-x86_64-unknown-linux-gnu.tar.gz \
+    /cargo-leptos
+
+FROM scratch AS leptos-linux-arm64
+ADD --unpack \
+    https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-aarch64-unknown-linux-gnu.tar.gz \
+    /cargo-leptos
+
+FROM leptos-${TARGETOS}-${TARGETARCH}${TARGETVARIANT} AS leptos
 
 # Docker's rust image sources are owned by rust-lang:
 # https://github.com/rust-lang/docker-rust
 FROM rust:${RUST_VERSION}-${DEBIAN_VERSION} AS builder
 
-ADD --unpack \
-    https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-x86_64-unknown-linux-gnu.tar.gz \
-    /cargo-leptos
+COPY --from=leptos /cargo-leptos /cargo-leptos/
 
 RUN \
     --mount=type=cache,target=/usr/local/cargo/git/db \
@@ -16,7 +28,7 @@ RUN \
     <<EOT sh
     set -e
     rustup target add wasm32-unknown-unknown
-    install /cargo-leptos/cargo-leptos-x86_64-unknown-linux-gnu/cargo-leptos /usr/local/bin/
+    install /cargo-leptos/cargo-leptos-$(uname -m)-unknown-linux-gnu/cargo-leptos /usr/local/bin/
 EOT
 
 WORKDIR /src
