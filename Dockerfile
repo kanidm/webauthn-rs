@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # webauthn-rs-demo Docker container.
 #
 # See ./demo/README.md#run-from-docker for more information.
@@ -5,12 +6,16 @@ ARG RUST_VERSION=1.98.1
 ARG DEBIAN_VERSION=trixie
 
 FROM scratch AS leptos-linux-amd64
-ADD --unpack \
+ADD \
+    --checksum=sha256:35657e0ada6a026389cfffe2c22ca8eacee46250c27fe88b869955fe17a3d05f \
+    --unpack \
     https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-x86_64-unknown-linux-gnu.tar.gz \
     /cargo-leptos
 
 FROM scratch AS leptos-linux-arm64
-ADD --unpack \
+ADD \
+    --checksum=sha256:91461f8f8200b46eba94975b134d035604cbf9cd800231245e8a123c305e2ad5 \
+    --unpack \
     https://github.com/leptos-rs/cargo-leptos/releases/download/v0.3.9/cargo-leptos-aarch64-unknown-linux-gnu.tar.gz \
     /cargo-leptos
 
