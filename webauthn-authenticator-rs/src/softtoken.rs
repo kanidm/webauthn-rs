@@ -193,18 +193,11 @@ fn build_intermediate(
         WebauthnCError::CryptographyX509Builder
     })?;
 
-    let builder = CertificateBuilder::new(
-        profile,
-        serial_number,
-        validity,
-        // root_subject.clone(),
-        pub_key.clone(),
-        // ca_key,
-    )
-    .map_err(|err| {
-        error!(?err, "Unable to create certificate builder");
-        WebauthnCError::CryptographyX509Builder
-    })?;
+    let builder = CertificateBuilder::new(profile, serial_number, validity, pub_key.clone())
+        .map_err(|err| {
+            error!(?err, "Unable to create certificate builder");
+            WebauthnCError::CryptographyX509Builder
+        })?;
 
     let cert = builder
         .build::<EcdsaP384SigningKey, EcdsaP384DerSignature>(&ca_key)
