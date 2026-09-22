@@ -8,10 +8,10 @@ use crate::BASE64_ENGINE;
 use base64::Engine;
 use crypto_glue::{
     ecdsa_p256::{
-        self, EcdsaP256PrivateKey, EcdsaP256PublicEncodedPoint, EcdsaP256Signature,
+        self, EcdsaP256PrivateKey, EcdsaP256PublicSec1Point, EcdsaP256Signature,
         EcdsaP256SigningKey,
     },
-    rand::{self, RngCore},
+    rand::{self, Rng},
     traits::{Signer, Zeroizing},
 };
 use serde_cbor_2::value::Value;
@@ -208,7 +208,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
 
         // Generate a random credential id
         let mut key_handle: Vec<u8> = vec![0; 32];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         rng.fill_bytes(&mut key_handle);
 
         // Create a new key.
@@ -217,7 +217,7 @@ impl AuthenticatorBackendHashedClientData for SoftPasskey {
         // Extract the public x and y coords.
         let ecpublic = eckey.public_key();
 
-        let encoded_point = EcdsaP256PublicEncodedPoint::from(ecpublic);
+        let encoded_point = EcdsaP256PublicSec1Point::from(ecpublic);
 
         let public_key_x = encoded_point
             .x()

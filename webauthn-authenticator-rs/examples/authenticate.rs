@@ -10,8 +10,8 @@ use std::time::{Duration, SystemTime};
 use clap::Args;
 use clap::{Parser, Subcommand, ValueEnum};
 use crypto_glue::{
-    ecdsa_p256::EcdsaP256PrivateKey,
-    rand::{rngs::ThreadRng, Rng, RngCore},
+    ecdsa_p256,
+    rand::{rngs::ThreadRng, Rng, RngExt},
     x509::Certificate,
 };
 #[cfg(feature = "cable")]
@@ -308,11 +308,11 @@ fn fake_credential(
     rng: &mut ThreadRng,
     verification_policy: UvPolicy,
 ) -> WebauthnResult<CredentialV5> {
-    let cred_len = rng.gen_range(16..=64);
+    let cred_len = rng.random_range(16..=64);
     let mut cred_id: Vec<u8> = vec![0; cred_len];
     rng.fill_bytes(&mut cred_id);
 
-    let key = EcdsaP256PrivateKey::random(rng);
+    let key = ecdsa_p256::new_key();
     let cred = (&key.public_key()).try_into()?;
 
     Ok(CredentialV5 {
@@ -344,9 +344,9 @@ fn fake_credential(
 fn print_certs(certs: &[Certificate]) {
     for (i, cert) in certs.iter().enumerate() {
         println!("### Certificate {}", i + 1);
-        println!("Issuer: {}", cert.tbs_certificate.issuer);
-        println!("Subject: {}", cert.tbs_certificate.subject);
-        println!("Serial: {}", cert.tbs_certificate.serial_number);
+        println!("Issuer: {}", cert.tbs_certificate().issuer());
+        println!("Subject: {}", cert.tbs_certificate().subject());
+        println!("Serial: {}", cert.tbs_certificate().serial_number());
 
         println!("");
     }

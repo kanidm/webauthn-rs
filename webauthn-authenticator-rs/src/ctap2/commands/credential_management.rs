@@ -379,7 +379,7 @@ impl TryFrom<BTreeMap<u32, Value>> for CredentialManagementResponse {
             .and_then(|v| value_to_vec_u8(v, "0x04"))
             .and_then(|v| {
                 // Returns None if not exactly sized.
-                Sha256Output::from_exact_iter(v)
+                Sha256Output::try_from_iter(v).ok()
             })
         {
             if let Some(rp) = &mut rp {
