@@ -31,7 +31,7 @@ use crate::transport::*;
 use crate::ui::UiCallback;
 use crate::usb::framing::*;
 use async_trait::async_trait;
-use crypto_glue::rand::{self, RngCore};
+use crypto_glue::rand::{self, Rng};
 use futures::stream::BoxStream;
 use futures::StreamExt as _;
 
@@ -314,7 +314,7 @@ impl Token for USBToken {
         let mut nonce: [u8; 8] = [0; 8];
         {
             // Scoped to drop rng after usage.
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             rng.fill_bytes(&mut nonce);
         }
 

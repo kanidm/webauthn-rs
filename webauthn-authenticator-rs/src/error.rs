@@ -206,12 +206,6 @@ impl From<crate::transport::types::U2FError> for WebauthnCError {
     }
 }
 
-impl From<crypto_glue::rand::Error> for WebauthnCError {
-    fn from(value: crypto_glue::rand::Error) -> Self {
-        Self::Rand(value.to_string())
-    }
-}
-
 /// FIDO CTAP-2.x error.
 ///
 /// Reference: <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#error-responses>
