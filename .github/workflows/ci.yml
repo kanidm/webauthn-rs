@@ -32,7 +32,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust_version: [ stable, 1.88.0 ]
+        # Single source of truth for minimum Rust in CI.
+        # Update this anchor value when bumping MSRV checks.
+        rust_version:
+          - stable
+          - &rust_oldest_version "1.89.0"
         os:
           - ubuntu-latest
           - windows-latest

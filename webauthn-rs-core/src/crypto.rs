@@ -9,18 +9,18 @@ use super::error::*;
 use crate::proto::*;
 use crypto_glue::{
     ecdsa_p256::{
-        self, EcdsaP256PublicEncodedPoint, EcdsaP256PublicKey, EcdsaP256Signature,
+        self, EcdsaP256PublicKey, EcdsaP256PublicSec1Point, EcdsaP256Signature,
         EcdsaP256VerifyingKey,
     },
     ecdsa_p384::{
-        self, EcdsaP384PublicEncodedPoint, EcdsaP384PublicKey, EcdsaP384Signature,
+        self, EcdsaP384PublicKey, EcdsaP384PublicSec1Point, EcdsaP384Signature,
         EcdsaP384VerifyingKey,
     },
     ecdsa_p521::{
         self,
-        EcdsaP521PublicEncodedPoint,
         EcdsaP521PublicKey,
         // EcdsaP521Signature, EcdsaP521VerifyingKey,
+        EcdsaP521PublicSec1Point,
     },
     rsa::{BigUint, RS256PublicKey, RS256Signature, RS256VerifyingKey},
     s256,
@@ -350,8 +350,8 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
 
     fn try_from((alg, certificate): (COSEAlgorithm, &Certificate)) -> Result<COSEKey, Self::Error> {
         let subject_public_key_info = certificate
-            .tbs_certificate
-            .subject_public_key_info
+            .tbs_certificate()
+            .subject_public_key_info()
             .owned_to_ref();
 
         let key = match alg {
@@ -359,7 +359,7 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
                 let pub_key = EcdsaP256PublicKey::try_from(subject_public_key_info)
                     .map_err(|_err| WebauthnError::CertificatePublicKeyAlgorthimMismatch)?;
 
-                let point = EcdsaP256PublicEncodedPoint::from(pub_key);
+                let point = EcdsaP256PublicSec1Point::from(pub_key);
 
                 let Some(xbn) = point.x().map(|x| x.to_vec()) else {
                     return Err(WebauthnError::EcdsaPointInvalid);
@@ -380,7 +380,7 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
                 let pub_key = EcdsaP384PublicKey::try_from(subject_public_key_info)
                     .map_err(|_err| WebauthnError::CertificatePublicKeyAlgorthimMismatch)?;
 
-                let point = EcdsaP384PublicEncodedPoint::from(pub_key);
+                let point = EcdsaP384PublicSec1Point::from(pub_key);
 
                 let Some(xbn) = point.x().map(|x| x.to_vec()) else {
                     return Err(WebauthnError::EcdsaPointInvalid);
@@ -400,7 +400,7 @@ impl TryFrom<(COSEAlgorithm, &Certificate)> for COSEKey {
                 let pub_key = EcdsaP521PublicKey::try_from(subject_public_key_info)
                     .map_err(|_err| WebauthnError::CertificatePublicKeyAlgorthimMismatch)?;
 
-                let point = EcdsaP521PublicEncodedPoint::from(pub_key);
+                let point = EcdsaP521PublicSec1Point::from(pub_key);
 
                 let Some(xbn) = point.x().map(|x| x.to_vec()) else {
                     return Err(WebauthnError::EcdsaPointInvalid);
@@ -492,8 +492,8 @@ impl COSEKey {
                 }
             },
             COSEKeyType::RSA(rsak) => {
-                let n = BigUint::from_bytes_be(&rsak.n);
-                let e = BigUint::from_bytes_be(&rsak.e);
+                let n = BigUint::from_be_slice_vartime(&rsak.n);
+                let e = BigUint::from_be_slice_vartime(&rsak.e);
 
                 RS256PublicKey::new(n, e)
                     .map(COSEKeyPublic::RsaS256)

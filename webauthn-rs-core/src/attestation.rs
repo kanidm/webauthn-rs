@@ -311,8 +311,8 @@ pub fn validate_extension<T>(
 where
     T: AttestationX509Extension,
 {
-    x509.tbs_certificate
-        .extensions
+    x509.tbs_certificate()
+        .extensions()
         .as_ref()
         .and_then(|extensions| {
             extensions.iter().find_map(|extension| {
@@ -494,11 +494,11 @@ pub(crate) fn verify_packed_attestation(
 /// [0]: https://www.w3.org/TR/webauthn-2/#sctn-packed-attestation-cert-requirements
 pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), WebauthnError> {
     // https://w3c.github.io/webauthn/#sctn-packed-attestation-cert-requirements
-    let x509_cert = &pubk.tbs_certificate;
+    let x509_cert = pubk.tbs_certificate();
 
     // The attestation certificate MUST have the following fields/extensions:
     // Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
-    if x509_cert.version != x509::Version::V3 {
+    if x509_cert.version() != x509::Version::V3 {
         trace!("X509 Version != v3");
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
@@ -513,21 +513,14 @@ pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), Webauthn
     //  Literal string “Authenticator Attestation” (UTF8String)
     // Subject-CN
     //  A UTF8String of the vendor’s choosing
-    let subject = &x509_cert.subject;
+    let subject = x509_cert.subject();
 
     let mut subject_c_present = false;
     let mut subject_o_present = false;
     let mut subject_cn_present = false;
     let mut subject_ou_valid = false;
 
-    for rdn in subject.0.iter() {
-        if rdn.0.len() != 1 {
-            // We don't want to deal with empty or multivalue rdns.
-            continue;
-        }
-
-        let ava = &rdn.0.as_slice()[0];
-
+    for ava in subject.iter() {
         if ava.oid == rfc4519::C {
             subject_c_present = true
         } else if ava.oid == rfc4519::O {
@@ -564,7 +557,7 @@ pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), Webauthn
     //
     // The problem with this check, is that it's not actually required that this
     // oid be present at all ...
-    let fido_gen_ce_aaguid_critical = x509_cert.extensions.as_ref().and_then(|extensions| {
+    let fido_gen_ce_aaguid_critical = x509_cert.extensions().as_ref().and_then(|extensions| {
         extensions.iter().find_map(|extension| {
             (extension.extn_id == FidoGenCeAaguid::OID).then_some(extension.critical)
         })
@@ -577,7 +570,7 @@ pub fn assert_packed_attest_req(pubk: &x509::Certificate) -> Result<(), Webauthn
 
     // The Basic Constraints extension MUST have the CA component set to false.
     let basic_constraints = x509_cert
-        .get::<BasicConstraints>()
+        .get_extension::<BasicConstraints>()
         .map_err(|_| {
             trace!("error reading extensions");
             WebauthnError::AttestationCertificateRequirementsNotMet
@@ -977,17 +970,17 @@ pub(crate) fn verify_tpm_attestation(
 }
 
 pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), WebauthnError> {
-    let x509_cert = &x509.tbs_certificate;
+    let x509_cert = x509.tbs_certificate();
 
     // TPM attestation certificate MUST have the following fields/extensions:
 
     // Version MUST be set to 3.
-    if x509_cert.version != x509::Version::V3 {
+    if x509_cert.version() != x509::Version::V3 {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
     // Subject field MUST be set to empty.
-    if !x509_cert.subject.is_empty() {
+    if !x509_cert.subject().is_empty() {
         return Err(WebauthnError::AttestationCertificateRequirementsNotMet);
     }
 
@@ -1005,7 +998,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), Weba
     // firmware version, using the directoryName form within the GeneralName
     // structure.
     let subject_alt_name = x509_cert
-        .get::<SubjectAltName>()
+        .get_extension::<SubjectAltName>()
         .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
         .and_then(|(critical, extn)| critical.then_some(extn))
         .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
@@ -1019,7 +1012,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), Weba
 
     // The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
     let extended_key_usage = x509_cert
-        .get::<ExtendedKeyUsage>()
+        .get_extension::<ExtendedKeyUsage>()
         .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
         .and_then(|(critical, extn)| critical.then_some(extn))
         .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
@@ -1030,7 +1023,7 @@ pub(crate) fn assert_tpm_attest_req(x509: &x509::Certificate) -> Result<(), Weba
 
     // The Basic Constraints extension MUST have the CA component set to false.
     let basic_constraints = x509_cert
-        .get::<BasicConstraints>()
+        .get_extension::<BasicConstraints>()
         .map_err(|_| WebauthnError::AttestationCertificateRequirementsNotMet)?
         .and_then(|(critical, extn)| critical.then_some(extn))
         .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)?;
