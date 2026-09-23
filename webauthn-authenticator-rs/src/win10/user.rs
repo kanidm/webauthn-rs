@@ -2,6 +2,7 @@
 use crate::error::WebauthnCError;
 use std::{marker::PhantomPinned, pin::Pin};
 use webauthn_rs_proto::User;
+use windows::core::PCWSTR;
 use windows::{
     core::HSTRING,
     Win32::Networking::WindowsWebServices::{
@@ -38,8 +39,8 @@ impl WinWrapper<User> for WinUserEntityInformation {
         let mut boxed = Box::new(res);
 
         boxed.native.pbId = boxed.id.as_mut_ptr();
-        boxed.native.pwszName = (&boxed.name).into();
-        boxed.native.pwszDisplayName = (&boxed.display_name).into();
+        boxed.native.pwszName = PCWSTR::from_raw(boxed.name.as_ptr());
+        boxed.native.pwszDisplayName = PCWSTR::from_raw(boxed.display_name.as_ptr());
 
         Ok(Box::into_pin(boxed))
     }
