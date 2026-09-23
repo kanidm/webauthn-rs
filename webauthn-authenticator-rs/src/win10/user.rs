@@ -38,9 +38,9 @@ impl WinWrapper<User> for WinUserEntityInformation {
             dwVersion: WEBAUTHN_USER_ENTITY_INFORMATION_CURRENT_VERSION,
             cbId: boxed._id.len() as u32,
             pbId: boxed._id.as_ptr() as *mut _,
-            pwszName: (&boxed._name).into(),
+            pwszName: PCWSTR::from_raw(boxed._name.as_ptr()),
             pwszIcon: PCWSTR::null(),
-            pwszDisplayName: (&boxed._display_name).into(),
+            pwszDisplayName: PCWSTR::from_raw(boxed._display_name.as_ptr()),
         };
 
         // Update the boxed type with the proper native object.

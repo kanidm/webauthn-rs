@@ -5,17 +5,9 @@ use webauthn_rs_proto::CollectedClientData;
 use super::WinWrapper;
 use crate::error::WebauthnCError;
 
-use windows::{
-    core::HSTRING,
-    w,
-    Win32::Networking::WindowsWebServices::{
-        WEBAUTHN_CLIENT_DATA, WEBAUTHN_CLIENT_DATA_CURRENT_VERSION,
-    },
+use windows::Win32::Networking::WindowsWebServices::{
+    WEBAUTHN_CLIENT_DATA, WEBAUTHN_CLIENT_DATA_CURRENT_VERSION, WEBAUTHN_HASH_ALGORITHM_SHA_256,
 };
-// Most constants are `&str`, but APIs expect `HSTRING`... there's no good work-around.
-// https://github.com/microsoft/windows-rs/issues/2049
-/// [windows::Win32::Networking::WindowsWebServices::WEBAUTHN_HASH_ALGORITHM_SHA_256]
-const SHA_256: &HSTRING = w!("SHA-256");
 
 /// Wrapper for [WEBAUTHN_CLIENT_DATA] to ensure pointer lifetime.
 pub struct WinClientData {
@@ -46,7 +38,7 @@ impl WinWrapper<CollectedClientData> for WinClientData {
             dwVersion: WEBAUTHN_CLIENT_DATA_CURRENT_VERSION,
             cbClientDataJSON: boxed.client_data_json.len() as u32,
             pbClientDataJSON: boxed.client_data_json.as_ptr() as *mut _,
-            pwszHashAlgId: SHA_256.into(),
+            pwszHashAlgId: WEBAUTHN_HASH_ALGORITHM_SHA_256,
         };
 
         // Update the boxed type with the proper native object.
