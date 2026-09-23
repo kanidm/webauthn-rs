@@ -418,6 +418,9 @@ pub enum PublicKeyAlg {
     /// rsa_2048_raw
     #[serde(rename = "rsa_2048_raw")]
     Rsa2048Raw,
+    /// rsa_2048_der
+    #[serde(rename = "rsa_2048_der")]
+    Rsa2048Der,
     /// cose
     #[serde(rename = "cose")]
     Cose,
