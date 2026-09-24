@@ -31,7 +31,6 @@ members = [
     # Tutorial / Example sites.
     "tutorial/server/axum",
     "tutorial/server/actix_web",
-    "tutorial/wasm",
     # Attestatation struct format
     "attestation-ca",
     # Fido MDS tools

@@ -5,8 +5,7 @@ use thiserror::Error;
 use webauthn_rs::prelude::WebauthnError;
 
 pub(crate) mod auth;
-pub(crate) mod index;
-pub(crate) mod serve_wasm;
+pub(crate) mod serve_assets;
 
 /**
 Type alias for Errors that implement [actix_web::ResponseError] through `Error`
