@@ -6,20 +6,15 @@ use webauthn_rs_proto::{AllowCredentials, AuthenticatorTransport, PublicKeyCrede
 
 use super::WinWrapper;
 
+use windows::Win32::Networking::WindowsWebServices::WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY;
 use windows::{
-    core::HSTRING,
-    w,
+    core::w,
     Win32::Networking::WindowsWebServices::{
         WEBAUTHN_CREDENTIAL_EX, WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION, WEBAUTHN_CREDENTIAL_LIST,
         WEBAUTHN_CTAP_TRANSPORT_BLE, WEBAUTHN_CTAP_TRANSPORT_INTERNAL, WEBAUTHN_CTAP_TRANSPORT_NFC,
         WEBAUTHN_CTAP_TRANSPORT_TEST, WEBAUTHN_CTAP_TRANSPORT_USB,
     },
 };
-
-// Most constants are `&str`, but APIs expect `HSTRING`... there's no good work-around.
-// https://github.com/microsoft/windows-rs/issues/2049
-/// [windows::Win32::Networking::WindowsWebServices::WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY]
-const CREDENTIAL_TYPE_PUBLIC_KEY: &HSTRING = w!("public-key");
 
 /// Converts an [AuthenticatorTransport] into a value for
 /// [WEBAUTHN_CREDENTIAL_EX::dwTransports]
@@ -144,7 +139,7 @@ impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
                     dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
                     cbId: id.len() as u32,
                     pbId: id.as_mut().as_mut_ptr() as *mut _,
-                    pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
+                    pwszCredentialType: WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY,
                     dwTransports: credential.transports(),
                 };
             }

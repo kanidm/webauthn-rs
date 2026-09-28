@@ -32,8 +32,8 @@ impl WinWrapper<RelyingParty> for WinRpEntityInformation {
 
         let native = WEBAUTHN_RP_ENTITY_INFORMATION {
             dwVersion: WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION,
-            pwszId: (&boxed.id).into(),
-            pwszName: (&boxed.name).into(),
+            pwszId: PCWSTR::from_raw(boxed.id.as_ptr()),
+            pwszName: PCWSTR::from_raw(boxed.name.as_ptr()),
             pwszIcon: PCWSTR::null(),
         };
 
