@@ -123,6 +123,4 @@ impl ServerState {
 
         Ok(passkey)
     }
-
-    // TODO: memory management; removing excessive entries.
 }
