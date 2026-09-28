@@ -5,9 +5,6 @@
 //!
 //! [`SessionCookie`] then stored in a [`Jwe`], which is encrypted with a key-wrapped key before
 //! being sent to the client. This avoids the need to persist this data elsewhere in the server.
-//!
-//! While [`cookie`] has its own way to encrypt data, we discovered a security issue with its
-//! implementation.
 
 use crate::server::{ServerError, ServerResult};
 use axum::http::{
