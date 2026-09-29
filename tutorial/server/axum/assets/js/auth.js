@@ -21,6 +21,7 @@ function register () {
         });
     })
     .then((credential) => {
+        transports = credential.response.getTransports();
         fetch('http://localhost:8080/register_finish', {
             method: 'POST',
             headers: {
@@ -33,6 +34,7 @@ function register () {
                 response: {
                     attestationObject: Base64.fromUint8Array(new Uint8Array(credential.response.attestationObject), true),
                     clientDataJSON: Base64.fromUint8Array(new Uint8Array(credential.response.clientDataJSON), true),
+                    transports
                 },
             })
         })
