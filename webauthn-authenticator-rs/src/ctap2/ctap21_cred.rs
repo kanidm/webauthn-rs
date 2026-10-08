@@ -11,7 +11,6 @@ use crate::ui::UiCallback;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::{
-    crypto::SHA256Hash,
     ctap2::{
         commands::{
             CredSubCommand, CredentialManagementRequestTrait, CredentialManagementResponse,
@@ -24,6 +23,9 @@ use crate::{
     error::{CtapError, WebauthnCError},
     transport::Token,
 };
+
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
+use crypto_glue::s256::Sha256Output;
 
 /// Trait to provide a [CredentialManagementAuthenticator] implementation.
 pub trait CredentialManagementAuthenticatorInfo<U: UiCallback>: Sync + Send {
@@ -174,7 +176,7 @@ pub trait CredentialManagementAuthenticator {
     /// feature.
     async fn enumerate_credentials_by_hash(
         &mut self,
-        rp_id_hash: SHA256Hash,
+        rp_id_hash: Sha256Output,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError>;
 
     /// Enumerates all discoverable credentials on the authenticator for a
@@ -287,7 +289,7 @@ where
 
     async fn enumerate_credentials_by_hash(
         &mut self,
-        rp_id_hash: SHA256Hash,
+        rp_id_hash: Sha256Output,
     ) -> Result<Vec<DiscoverableCredential>, WebauthnCError> {
         self.check_credential_management_support()?;
         enumerate_credentials_impl(self, CredSubCommand::EnumerateCredentialsBegin(rp_id_hash))

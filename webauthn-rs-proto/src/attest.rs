@@ -1,16 +1,21 @@
 //! Types related to attestation (Registration)
 
-#[cfg(feature = "wasm")]
-use base64::Engine;
-use base64urlsafedata::Base64UrlSafeData;
-use serde::{Deserialize, Serialize};
-
 use crate::extensions::{RegistrationExtensionsClientOutputs, RequestRegistrationExtensions};
 use crate::options::*;
+use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
+
 #[cfg(feature = "wasm")]
 use crate::BASE64_ENGINE;
+#[cfg(feature = "wasm")]
+use base64::Engine;
 
 /// <https://w3c.github.io/webauthn/#dictionary-makecredentialoptions>
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicKeyCredentialCreationOptions {
@@ -19,7 +24,8 @@ pub struct PublicKeyCredentialCreationOptions {
     /// The user.
     pub user: User,
     /// The one-time challenge for the credential to sign.
-    pub challenge: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub challenge: Vec<u8>,
     /// The set of cryptographic types allowed by this server.
     pub pub_key_cred_params: Vec<PubKeyCredParams>,
 
@@ -122,15 +128,18 @@ impl From<CreationChallengeResponse> for web_sys::CredentialCreationOptions {
 }
 
 /// <https://w3c.github.io/webauthn/#authenticatorattestationresponse>
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct AuthenticatorAttestationResponseRaw {
     /// <https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-attestationobject>
     #[serde(rename = "attestationObject")]
-    pub attestation_object: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub attestation_object: Vec<u8>,
 
     /// <https://w3c.github.io/webauthn/#dom-authenticatorresponse-clientdatajson>
     #[serde(rename = "clientDataJSON")]
-    pub client_data_json: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub client_data_json: Vec<u8>,
 
     /// <https://w3c.github.io/webauthn/#dom-authenticatorattestationresponse-gettransports>
     #[serde(default)]
@@ -144,6 +153,7 @@ pub struct AuthenticatorAttestationResponseRaw {
 /// You should not need to handle the inner content of this structure - you should
 /// provide this to the correctly handling function of Webauthn only.
 /// <https://w3c.github.io/webauthn/#iface-pkcredential>
+#[serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RegisterPublicKeyCredential {
     /// The id of the PublicKey credential, likely in base64.
@@ -158,7 +168,8 @@ pub struct RegisterPublicKeyCredential {
     /// used in a real registration, because the true credential ID is taken from the
     /// attestation data.
     #[serde(rename = "rawId")]
-    pub raw_id: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub raw_id: Vec<u8>,
     /// <https://w3c.github.io/webauthn/#dom-publickeycredential-response>
     pub response: AuthenticatorAttestationResponseRaw,
     /// The type of credential.
@@ -197,10 +208,10 @@ impl From<web_sys::PublicKeyCredential> for RegisterPublicKeyCredential {
 
         RegisterPublicKeyCredential {
             id: BASE64_ENGINE.encode(&data_raw_id),
-            raw_id: data_raw_id.into(),
+            raw_id: data_raw_id,
             response: AuthenticatorAttestationResponseRaw {
-                attestation_object: data_response_attestation_object.into(),
-                client_data_json: data_response_client_data_json.into(),
+                attestation_object: data_response_attestation_object,
+                client_data_json: data_response_client_data_json,
                 transports,
             },
             type_: "public-key".to_string(),

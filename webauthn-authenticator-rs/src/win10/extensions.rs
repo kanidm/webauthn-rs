@@ -1,7 +1,6 @@
-//! Wrappers for extensions.
-use crate::prelude::WebauthnCError;
-use std::ffi::c_void;
-use std::pin::Pin;
+//! Wrappers for extensions that use Windows' [`WEBAUTHN_EXTENSION`][] type.
+use crate::{prelude::WebauthnCError, win10::Win10};
+use std::{ffi::c_void, marker::PhantomPinned, pin::Pin, result::Result};
 use webauthn_rs_proto::{
     AuthenticationExtensionsClientOutputs, CredProtect, RegistrationExtensionsClientOutputs,
     RequestRegistrationExtensions,
@@ -10,7 +9,7 @@ use webauthn_rs_proto::{
 use super::WinWrapper;
 
 use windows::{
-    core::HSTRING,
+    core::{HSTRING, PCWSTR},
     Win32::{Foundation::BOOL, Networking::WindowsWebServices::*},
 };
 
@@ -23,13 +22,8 @@ pub(crate) enum WinExtensionMakeCredentialRequest {
     MinPinLength(BOOL),
 }
 
-/// Represents a single extension for GetAssertion requests, analogous to a
-/// single [RequestAuthenticationExtensions] field.
-#[derive(Debug)]
-pub(crate) enum WinExtensionGetAssertionRequest {}
-
 /// Generic request extension trait, for abstracting between
-/// [WinExtensionMakeCredentialRequest] and [WinExtensionGetAssertionRequest].
+/// [WinExtensionMakeCredentialRequest] and (a future) `WinExtensionGetAssertionRequest`.
 pub(crate) trait WinExtensionRequestType
 where
     Self: Sized,
@@ -43,7 +37,7 @@ where
     /// The `webauthn-authenticator-rs` type which this wraps.
     type WrappedType;
     /// Converts the [Self::WrappedType] to a [Vec] of Windows API types.
-    fn to_native(e: Self::WrappedType) -> Vec<Self>;
+    fn to_native(e: Self::WrappedType) -> Result<Vec<Self>, WebauthnCError>;
 }
 
 impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
@@ -73,19 +67,33 @@ impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
 
     type WrappedType = RequestRegistrationExtensions;
 
-    fn to_native(e: Self::WrappedType) -> Vec<Self> {
+    fn to_native(
+        e: RequestRegistrationExtensions,
+    ) -> Result<Vec<WinExtensionMakeCredentialRequest>, WebauthnCError> {
         let mut o: Vec<Self> = Vec::new();
+        let api_version = Win10::api_version();
         if let Some(c) = &e.cred_protect {
+            if api_version < 2 {
+                if c.enforce_credential_protection_policy == Some(true) {
+                    error!("Credential protection policy enforcement was requested, but it is not supported by this version of Windows");
+                    return Err(WebauthnCError::UnexpectedState);
+                }
+
+                warn!("Credential protection policy is not supported by this version of Windows");
+            }
             o.push(c.into());
         }
         if let Some(h) = &e.hmac_create_secret {
             o.push(Self::HmacSecret(h.into()))
         }
         if let Some(x) = &e.min_pin_length {
+            if api_version < 3 {
+                warn!("Minimum PIN length request is not supported by this version of Windows");
+            }
             o.push(Self::MinPinLength(x.into()));
         }
 
-        o
+        Ok(o)
     }
 }
 
@@ -246,8 +254,31 @@ pub fn native_to_assertion_extensions(
 ) -> Result<AuthenticationExtensionsClientOutputs, WebauthnCError> {
     let /* mut */ o = AuthenticationExtensionsClientOutputs::default();
 
+    if native.cExtensions == 0 || native.pExtensions.is_null() {
+        return Ok(o);
+    }
+
+    if !native.pExtensions.is_aligned() {
+        // Windows gave us garbage
+        return Err(WebauthnCError::Internal);
+    }
+
+    if native.cExtensions > 0xf {
+        // Too many extensions
+        return Err(WebauthnCError::MessageTooLarge);
+    }
+
     for i in 0..(native.cExtensions as usize) {
-        let extn = unsafe { &*native.pExtensions.add(i) };
+        let extn = unsafe {
+            let p = native.pExtensions.add(i);
+            // This should always be true, unless the start pointer was very high
+            if p.is_null() || !p.is_aligned() {
+                break;
+            }
+
+            &*p
+        };
+
         let win = WinExtensionGetAssertionResponse::try_from(extn)?;
         match win {
             WinExtensionGetAssertionResponse::CredBlob => (),
@@ -265,6 +296,7 @@ where
     native_list: Vec<WEBAUTHN_EXTENSION>,
     ids: Vec<HSTRING>,
     extensions: Vec<T>,
+    _pin: PhantomPinned,
 }
 
 impl<T> Default for WinExtensionsRequest<T>
@@ -274,9 +306,10 @@ where
     fn default() -> Self {
         Self {
             native: Default::default(),
-            native_list: vec![],
-            ids: vec![],
+            native_list: Default::default(),
+            ids: Default::default(),
             extensions: vec![],
+            _pin: PhantomPinned,
         }
     }
 }
@@ -294,50 +327,33 @@ where
     fn new(e: T::WrappedType) -> Result<Pin<Box<Self>>, WebauthnCError> {
         // Convert the extensions to a Windows-ish type
         // trace!(?e);
-        let extensions = T::to_native(e);
+        let extensions = T::to_native(e)?;
         let len = extensions.len();
 
         let res = Self {
-            native: Default::default(),
+            native: WEBAUTHN_EXTENSIONS {
+                cExtensions: len as u32,
+                pExtensions: std::ptr::null_mut(),
+            },
             native_list: Vec::with_capacity(len),
             ids: extensions.iter().map(|e| e.identifier().into()).collect(),
             extensions,
+            _pin: PhantomPinned,
         };
+
+        let mut boxed = Box::new(res);
 
         // trace!(?res.extensions);
-        // Put our final struct on the heap
-        let mut boxed = Box::pin(res);
-
-        // Put in all the "native" values
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            let mut_ptr = Pin::get_unchecked_mut(mut_ref);
-
-            let l = &mut mut_ptr.native_list;
-            let l_ptr = l.as_mut_ptr();
-            for (i, extension) in mut_ptr.extensions.iter_mut().enumerate() {
-                let id = &mut_ptr.ids[i];
-                *l_ptr.add(i) = WEBAUTHN_EXTENSION {
-                    pwszExtensionIdentifier: id.into(),
-                    cbExtension: extension.len(),
-                    pvExtension: extension.ptr(),
-                };
-            }
-
-            l.set_len(len);
+        for (extension, id) in boxed.extensions.iter_mut().zip(boxed.ids.iter()) {
+            boxed.native_list.push(WEBAUTHN_EXTENSION {
+                pwszExtensionIdentifier: PCWSTR::from_raw(id.as_ptr()),
+                cbExtension: extension.len(),
+                pvExtension: extension.ptr(),
+            });
         }
 
-        // Create the native list element
-        let native = WEBAUTHN_EXTENSIONS {
-            cExtensions: len as u32,
-            pExtensions: boxed.native_list.as_ptr() as *mut _,
-        };
+        boxed.native.pExtensions = Vec::as_mut_ptr(&mut boxed.native_list);
 
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        Ok(boxed)
+        Ok(Box::into_pin(boxed))
     }
 }

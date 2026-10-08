@@ -11,7 +11,7 @@
 //! [btleplug] (and many platform APIs) do not support sending arbitrary service
 //! data advertisements, so authenticators using this library will need to
 //! implement the [Advertiser] trait themselves. See `examples/cable_tunnel` for
-//! an example using a serial-connected BTLE HCI controller.
+//! an example using a serial-connected BTLE HCI controller and also with Bluez.
 #[cfg(doc)]
 use crate::stubs::*;
 
@@ -97,13 +97,18 @@ impl Scanner {
     /// Gets a [ScanFilter] that matches FIDO and Google caBLE service data
     /// advertisements.
     fn get_scan_filter() -> ScanFilter {
-        // Sending a service filter to bluez causes it to not give us *any*
-        // advertisements *at all*, so we have to drink straight from the
-        // firehose instead.
-        #[cfg(target_os = "linux")]
+        // Linux: Bluez filters by "service class UUIDs" list (type 0x03). If a device only sends
+        // "service data" events (type 0x16), Bluez ignores it, so Android works but iOS doesn't.
+        // Bluez will also give us events for other applications (by design), so there's no reason
+        // to set a filter.
+        //
+        // Windows: filters are broken on Windows 11. On Windows 11, you should use the Windows
+        // Hello WebAuthn API (`win10` module), because it supports caBLE too.
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         return Default::default();
 
-        #[cfg(not(target_os = "linux"))]
+        // macOS has stricter privacy controls, so we need to set filters there.
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         ScanFilter {
             services: vec![FIDO_CABLE_SERVICE, GOOGLE_CABLE_SERVICE],
         }

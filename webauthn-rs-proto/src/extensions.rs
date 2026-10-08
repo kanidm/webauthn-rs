@@ -1,7 +1,11 @@
 //! Extensions allowing certain types of authenticators to provide supplemental information.
 
-use base64urlsafedata::Base64UrlSafeData;
 use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
 
 /// Valid credential protection policies
 #[derive(Debug, Serialize, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -153,13 +157,16 @@ impl Into<js_sys::Object> for &RequestRegistrationExtensions {
 /// The inputs to the hmac secret if it was created during registration.
 ///
 /// <https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-20210615.html#sctn-hmac-secret-extension>
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HmacGetSecretInput {
     /// Retrieve a symmetric secrets from the authenticator with this input.
-    pub output1: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub output1: Vec<u8>,
     /// Rotate the secret in the same operation.
-    pub output2: Option<Base64UrlSafeData>,
+    #[serde_as(as = "Option<IfIsHumanReadable<Base64<UrlSafe, Unpadded>>>")]
+    pub output2: Option<Vec<u8>>,
 }
 
 /// Extension option inputs for PublicKeyCredentialRequestOptions
@@ -224,13 +231,16 @@ impl Into<js_sys::Object> for &RequestAuthenticationExtensions {
 }
 
 /// The response to a hmac get secret request.
+#[serde_as]
 #[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HmacGetSecretOutput {
     /// Output of HMAC(Salt 1 || Client Secret)
-    pub output1: Base64UrlSafeData,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub output1: Vec<u8>,
     /// Output of HMAC(Salt 2 || Client Secret)
-    pub output2: Option<Base64UrlSafeData>,
+    #[serde_as(as = "Option<IfIsHumanReadable<Base64<UrlSafe, Unpadded>>>")]
+    pub output2: Option<Vec<u8>>,
 }
 
 /// <https://w3c.github.io/webauthn/#dictdef-authenticationextensionsclientoutputs>
@@ -263,12 +273,10 @@ impl From<web_sys::AuthenticationExtensionsClientOutputs>
             .and_then(|jv| {
                 let output2 = js_sys::Reflect::get(&jv, &"output2".into())
                     .map(|v| Uint8Array::new(&v).to_vec())
-                    .map(Base64UrlSafeData::from)
                     .ok();
 
                 let output1 = js_sys::Reflect::get(&jv, &"output1".into())
                     .map(|v| Uint8Array::new(&v).to_vec())
-                    .map(Base64UrlSafeData::from)
                     .ok();
 
                 output1.map(|output1| HmacGetSecretOutput { output1, output2 })

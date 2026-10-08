@@ -1,8 +1,13 @@
 #![deny(warnings)]
 #![warn(unused_extern_crates)]
 
-use base64urlsafedata::HumanBinaryData;
 use serde::{Deserialize, Serialize};
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
+
 #[cfg(feature = "core")]
 use webauthn_rs_core::error::WebauthnError;
 
@@ -13,8 +18,6 @@ pub use webauthn_rs_proto::{
     RequestAuthenticationExtensions, RequestChallengeResponse, RequestRegistrationExtensions,
     UserVerificationPolicy,
 };
-
-pub type CredentialID = HumanBinaryData;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum AttestationLevel {
@@ -83,9 +86,11 @@ pub struct RegisterWithSettings {
     pub extensions: Option<RequestRegistrationExtensions>,
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RegistrationSuccess {
-    pub cred_id: CredentialID,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub cred_id: Vec<u8>,
     // pub cred: Credential,
     pub uv: bool,
     pub alg: COSEAlgorithm,
@@ -93,10 +98,12 @@ pub struct RegistrationSuccess {
     pub extensions: RegisteredExtensions,
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct AuthenticateWithSettings {
     pub username: String,
-    pub use_cred_id: Option<CredentialID>,
+    #[serde_as(as = "Option<IfIsHumanReadable<Base64<UrlSafe, Unpadded>>>")]
+    pub use_cred_id: Option<Vec<u8>>,
     pub uv: Option<UserVerificationPolicy>,
     pub extensions: Option<RequestAuthenticationExtensions>,
 }
@@ -117,9 +124,11 @@ impl From<&RegisterWithSettings> for AuthenticateWithSettings {
     }
 }
 
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AuthenticationSuccess {
-    pub cred_id: CredentialID,
+    #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
+    pub cred_id: Vec<u8>,
     pub uv: bool,
     // pub counter: u32,
     pub extensions: AuthenticationExtensions,
@@ -225,7 +234,7 @@ impl CTestAttestState {
         std::mem::swap(self, &mut n_self);
     }
 
-    pub fn get_credential_id(&self) -> Option<&CredentialID> {
+    pub fn get_credential_id(&self) -> Option<&[u8]> {
         match self {
             CTestAttestState::Passed { rs, .. } => Some(&rs.cred_id),
             _ => None,
@@ -456,8 +465,6 @@ pub enum ResponseError {
     ParseJSONFailure,
     ParseNOMFailure,
     ParseInsufficientBytesAvailable,
-    OpenSSLError,
-    OpenSSLErrorNoCurveName,
     COSEKeyInvalidCBORValue,
     COSEKeyInvalidType,
     COSEKeyEDUnsupported,
@@ -557,7 +564,6 @@ impl From<WebauthnError> for ResponseError {
             WebauthnError::ParseJSONFailure(_) => Self::ParseJSONFailure,
             WebauthnError::ParseNOMFailure => Self::ParseNOMFailure,
             WebauthnError::ParseInsufficientBytesAvailable => Self::ParseInsufficientBytesAvailable,
-            WebauthnError::OpenSSLErrorNoCurveName => Self::OpenSSLErrorNoCurveName,
             WebauthnError::COSEKeyInvalidCBORValue => Self::COSEKeyInvalidCBORValue,
             WebauthnError::COSEKeyInvalidType => Self::COSEKeyInvalidType,
             WebauthnError::COSEKeyEDUnsupported => Self::COSEKeyEDUnsupported,
@@ -593,7 +599,6 @@ impl From<WebauthnError> for ResponseError {
             WebauthnError::CredentialCrossOrigin => Self::CredentialCrossOrigin,
             #[allow(unreachable_patterns)]
             _ => Self::UnknownError(format!("{value:?}")),
-            // WebauthnError::OpenSSLError(_)                                                                                =>      Self::OpenSSLError,
         }
     }
 }

@@ -7,8 +7,8 @@ edition = "2021"
 core = ["webauthn-rs-core"]
 
 [dependencies]
-base64urlsafedata.workspace = true
 serde.workspace = true
+serde_with.workspace = true
 
 webauthn-rs-core = { workspace = true, optional = true }
 webauthn-rs-proto = { workspace = true }

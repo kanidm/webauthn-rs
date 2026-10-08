@@ -53,7 +53,7 @@ pub fn encode(i: &[u8]) -> String {
         let mut chunk: [u8; 8] = [0; 8];
         chunk[0..chunk_len].copy_from_slice(c);
         let v = u64::from_le_bytes(chunk);
-        let _ = write!(out, "{:0width$}", v, width = w);
+        let _ = write!(out, "{v:0w$}");
         out
     })
 }
@@ -82,7 +82,7 @@ pub fn decode(i: &str) -> Result<Vec<u8>, DecodeError> {
     // - we've previously thrown an error for anything containing non-ASCII digits.
     // - each ASCII digit is exactly 1 byte in UTF-8.
     // - &str is always valid UTF-8.
-    let mut o = Vec::with_capacity(((i.len() + CHUNK_DIGITS - 1) / CHUNK_DIGITS) * CHUNK_SIZE);
+    let mut o = Vec::with_capacity(i.len().div_ceil(CHUNK_DIGITS) * CHUNK_SIZE);
 
     i.as_bytes()
         .chunks(CHUNK_DIGITS)

@@ -1,7 +1,6 @@
 # Manifest for check_built_docs.sh
 # Paths are relative to target/doc/
 
-authenticator_cli/index.html
 base64urlsafedata/index.html
 fido_mds/index.html
 fido_mds_tool/index.html
@@ -9,9 +8,9 @@ fido_mds_tool/index.html
 webauthn_authenticator_rs/index.html
 webauthn_authenticator_rs/bluetooth/index.html
 webauthn_authenticator_rs/cable/index.html
+webauthn_authenticator_rs/mozilla/index.html
 webauthn_authenticator_rs/nfc/index.html
 webauthn_authenticator_rs/usb/index.html
-webauthn_authenticator_rs/u2fhid/index.html
 webauthn_authenticator_rs/win10/index.html
 
 webauthn_rs/index.html

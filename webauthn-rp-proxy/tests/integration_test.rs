@@ -28,6 +28,7 @@ mod tests {
         assert!(v["client"].is_object());
         assert!(v["client"]["publicKey"].is_object());
         assert!(v["server"].is_object());
+
         assert!(v["server"]["rs"]["challenge"].is_string());
         Ok(())
     }

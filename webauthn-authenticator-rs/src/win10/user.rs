@@ -1,55 +1,47 @@
 //! Wrappers for [User].
-use std::pin::Pin;
-
+use crate::error::WebauthnCError;
+use std::{marker::PhantomPinned, pin::Pin};
 use webauthn_rs_proto::User;
 use windows::{
-    core::{HSTRING, PCWSTR},
+    core::HSTRING,
     Win32::Networking::WindowsWebServices::{
         WEBAUTHN_USER_ENTITY_INFORMATION, WEBAUTHN_USER_ENTITY_INFORMATION_CURRENT_VERSION,
     },
 };
 
 use super::WinWrapper;
-use crate::error::WebauthnCError;
 
 /// Wrapper for [WEBAUTHN_USER_ENTITY_INFORMATION] to ensure pointer lifetime, analgous to [User].
 pub struct WinUserEntityInformation {
     native: WEBAUTHN_USER_ENTITY_INFORMATION,
-    _id: Vec<u8>,
-    _name: HSTRING,
-    _display_name: HSTRING,
+    id: Vec<u8>,
+    name: HSTRING,
+    display_name: HSTRING,
+    _pin: PhantomPinned,
 }
 
 impl WinWrapper<User> for WinUserEntityInformation {
     type NativeType = WEBAUTHN_USER_ENTITY_INFORMATION;
     fn new(u: User) -> Result<Pin<Box<Self>>, WebauthnCError> {
-        // Construct an incomplete type first, so that all the pointers are fixed.
         let res = Self {
-            native: WEBAUTHN_USER_ENTITY_INFORMATION::default(),
-            _id: u.id.into(),
-            _name: u.name.into(),
-            _display_name: u.display_name.into(),
+            native: WEBAUTHN_USER_ENTITY_INFORMATION {
+                dwVersion: WEBAUTHN_USER_ENTITY_INFORMATION_CURRENT_VERSION,
+                cbId: u.id.len() as u32,
+                ..Default::default()
+            },
+            id: u.id,
+            name: u.name.into(),
+            display_name: u.display_name.into(),
+            _pin: PhantomPinned,
         };
 
-        let mut boxed = Box::pin(res);
+        let mut boxed = Box::new(res);
 
-        // Create the real native type, which contains bare pointers.
-        let native = WEBAUTHN_USER_ENTITY_INFORMATION {
-            dwVersion: WEBAUTHN_USER_ENTITY_INFORMATION_CURRENT_VERSION,
-            cbId: boxed._id.len() as u32,
-            pbId: boxed._id.as_ptr() as *mut _,
-            pwszName: (&boxed._name).into(),
-            pwszIcon: PCWSTR::null(),
-            pwszDisplayName: (&boxed._display_name).into(),
-        };
+        boxed.native.pbId = boxed.id.as_mut_ptr();
+        boxed.native.pwszName = (&boxed.name).into();
+        boxed.native.pwszDisplayName = (&boxed.display_name).into();
 
-        // Update the boxed type with the proper native object.
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        Ok(boxed)
+        Ok(Box::into_pin(boxed))
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_USER_ENTITY_INFORMATION {
