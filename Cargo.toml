@@ -49,7 +49,9 @@ members = [
 ]
 
 # Due to --cfg=web_sys_unstable_apis
-exclude = ["compat_tester/webauthn-rs-demo-wasm", "tutorial/wasm"]
+exclude = [
+    "tutorial/wasm",
+]
 
 [patch.crates-io]
 ## This section allows local patching of crates in the case that both crates require
