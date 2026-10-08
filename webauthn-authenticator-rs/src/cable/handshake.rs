@@ -13,7 +13,8 @@ use crate::{
     cable::{base10, discovery::Discovery, tunnel::ASSIGNED_DOMAINS_COUNT, CableRequestType},
     crypto::public_key_from_bytes,
     ctap2::commands::{
-        value_to_bool, value_to_string, value_to_u32, value_to_u64, value_to_vec_u8,
+        value_to_bool, value_to_string, value_to_u32, value_to_u64, value_to_vec_u32,
+        value_to_vec_u8,
     },
     error::WebauthnCError,
 };
@@ -29,7 +30,7 @@ pub struct HandshakeV2 {
     timestamp: SystemTime,
     supports_linking_info: bool,
     pub(super) request_type: CableRequestType,
-    supports_non_discoverable_make_credential: bool,
+    supported_transports: Vec<u32>,
 }
 
 impl From<HandshakeV2> for BTreeMap<u32, Value> {
@@ -41,7 +42,7 @@ impl From<HandshakeV2> for BTreeMap<u32, Value> {
             timestamp,
             supports_linking_info,
             request_type,
-            supports_non_discoverable_make_credential,
+            supported_transports,
         } = value;
 
         let mut o = BTreeMap::from([
@@ -64,13 +65,22 @@ impl From<HandshakeV2> for BTreeMap<u32, Value> {
             // Chrome omits this field when false, but Safari always includes it.
             // Presence of this field = v2.1, missing = v2.0
             (4, Value::Bool(supports_linking_info)),
-            (5, Value::Text(request_type.to_cable_string())),
         ]);
 
-        if supports_non_discoverable_make_credential
-            && request_type == CableRequestType::MakeCredential
-        {
-            o.insert(6, Value::Bool(true));
+        if let Some(request_type) = request_type.to_cable_string() {
+            o.insert(5, Value::Text(request_type.to_string()));
+        }
+
+        if !supported_transports.is_empty() {
+            o.insert(
+                6,
+                Value::Array(
+                    supported_transports
+                        .into_iter()
+                        .map(|v: u32| Value::Integer(v.into()))
+                        .collect(),
+                ),
+            );
         }
 
         o
@@ -86,7 +96,17 @@ impl TryFrom<BTreeMap<u32, Value>> for HandshakeV2 {
             .and_then(|v| value_to_vec_u8(v, "0x00"))
             .ok_or(WebauthnCError::MissingRequiredField)?;
 
-        let peer_identity = public_key_from_bytes(&peer_identity)?;
+        let peer_identity: &[u8; 33] = peer_identity
+            .as_slice()
+            .try_into()
+            .map_err(|_| WebauthnCError::CryptographyPublicKey)?;
+
+        if peer_identity[0] != 2 && peer_identity[0] != 3 {
+            // Must be compressed public key
+            return Err(WebauthnCError::CryptographyPublicKey);
+        }
+
+        let peer_identity = public_key_from_bytes(peer_identity)?;
 
         let secret = raw
             .remove(&1)
@@ -111,20 +131,15 @@ impl TryFrom<BTreeMap<u32, Value>> for HandshakeV2 {
             .and_then(|v| value_to_bool(&v, "0x04"))
             .unwrap_or_default();
 
-        let supports_non_discoverable_make_credential = raw
+        let supported_transports = raw
             .remove(&6)
-            .and_then(|v| value_to_bool(&v, "0x06"))
+            .and_then(|v| value_to_vec_u32(v, "0x06"))
             .unwrap_or_default();
 
         let request_type = raw
             .remove(&5)
             .and_then(|v| value_to_string(v, "0x05"))
-            .and_then(|v| {
-                CableRequestType::from_cable_string(
-                    v.as_str(),
-                    supports_non_discoverable_make_credential,
-                )
-            })
+            .map(|v| CableRequestType::from_cable_string(v.as_str()))
             .unwrap_or_default();
 
         Ok(Self {
@@ -134,7 +149,7 @@ impl TryFrom<BTreeMap<u32, Value>> for HandshakeV2 {
             timestamp,
             supports_linking_info,
             request_type,
-            supports_non_discoverable_make_credential,
+            supported_transports,
         })
     }
 }
@@ -152,7 +167,7 @@ impl HandshakeV2 {
             timestamp: SystemTime::now(),
             supports_linking_info: false,
             request_type,
-            supports_non_discoverable_make_credential: false,
+            supported_transports: vec![],
         })
     }
 
