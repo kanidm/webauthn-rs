@@ -10,7 +10,7 @@ use rand_chacha::ChaCha8Rng;
 /// rng for generating `CredentialID`s to ensure that the outputs are deterministic.
 pub trait FakeCredentialIDDistribution {
     /// Given the provided rng, generate fake `CredentialID`s.
-    fn generate<R: RngCore>(seeded_rng: &mut R) -> Vec<CredentialID>;
+    fn generate<R: Rng>(seeded_rng: &mut R) -> Vec<CredentialID>;
 }
 
 // Median number of credentials on an account. Due to synced credentials a lot of consumers will
@@ -101,7 +101,7 @@ pub struct FakePasskeyDistribution;
 
 impl FakeCredentialIDDistribution for FakePasskeyDistribution {
     /// Given the provided rng, generate fake `CredentialID`s.
-    fn generate<R: RngCore>(seeded_rng: &mut R) -> Vec<CredentialID> {
+    fn generate<R: Rng>(seeded_rng: &mut R) -> Vec<CredentialID> {
         // How many credentials should we create?
         let cred_dist = seeded_rng.next_u32();
 
