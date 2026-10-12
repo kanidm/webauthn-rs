@@ -36,22 +36,19 @@
 //!
 //! ### Transports and backends
 //!
-//! * `bluetooth`: [Bluetooth][] [^openssl]
-//! * `cable`: [caBLE / Hybrid Authenticator][cable] [^openssl]
+//! * `bluetooth`: [Bluetooth][]
+//! * `cable`: [caBLE / Hybrid Authenticator][cable]
 //!   * `cable-override-tunnel`: [Override caBLE tunnel server URLs][cable-url]
-//! * `mozilla`: [Mozilla Authenticator][], formerly known as `u2fhid`
-//! * `nfc`: [NFC][] via PC/SC API [^openssl]
-//! * `softpasskey`: [SoftPasskey][] (for testing) [^openssl]
-//! * `softtoken`: [SoftToken][] (for testing) [^openssl]
-//! * `usb`: [USB HID][] [^openssl]
+//! * `mozilla`: [Mozilla Authenticator][mozilla] (formerly known as `u2fhid`)
+//! * `nfc`: [NFC][] via PC/SC API
+//! * `softpasskey`: [SoftPasskey][] (for testing)
+//! * `softtoken`: [SoftToken][] (for testing)
+//! * `usb`: [USB HID][]
 //! * `win10`: [Windows 10][] WebAuthn API
-//!
-//! [^openssl]: Feature requires OpenSSL.
 //!
 //! ### Miscellaneous features
 //!
-//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2]
-//!   [^openssl].
+//! * `ctap2`: [CTAP 2.0, 2.1 and 2.1-PRE implementation][crate::ctap2].
 //!
 //!   Automatically enabled by the `bluetooth`, `cable`, `ctap2-management`,
 //!   `nfc`, `softtoken` and `usb` features.
@@ -59,17 +56,24 @@
 //!   * `ctap2-management`: Adds support for configuring and managing CTAP 2.x
 //!     hardware authenticators to the [CTAP 2.x implementation][crate::ctap2].
 //!
-//! * `crypto`: Enables OpenSSL support [^openssl]. This allows the library to
-//!   avoid a hard dependency on OpenSSL on Windows, if only the `win10` backend
-//!   is enabled.
-//!
-//!   Automatically enabled by the `ctap2`, `softpasskey` and `softtoken`
-//!   features.
-//!
 //! * `qrcode`: QR code display for the [Cli][] UI, recommended for use if the
 //!   `cable` and `ui-cli` features are both enabled
 //!
 //! * `ui-cli`: [Cli][] UI
+//!
+//! ## Migrating to v0.6
+//!
+//! `webauthn-authenticator-rs` v0.6 migrated cryptographic functionality from
+//! OpenSSL to RustCrypto. APIs that exposed or consumed `openssl-rs` types have
+//! been updated to equivalent RustCrypto types, and you no longer need to
+//! install OpenSSL!
+//!
+//! * The `crypto` feature flag has been removed. This is effectively enabled by
+//!   default.
+//!
+//! * The `u2fhid` feature flag and `u2fhid::U2FHid` aliases have been removed.
+//!   Use the `mozilla` feature flag and [`MozillaAuthenticator`][mozilla]
+//!   instead (available since v0.5).
 //!
 //! [FIDO2 certified]: https://fidoalliance.org/fido-certified-showcase/
 //! [Bluetooth]: crate::bluetooth
@@ -77,8 +81,9 @@
 //! [cable]: crate::cable
 //! [cable-url]: crate::cable::connect_cable_authenticator_with_tunnel_uri
 //! [Cli]: crate::ui::Cli
-//! [Mozilla Authenticator]: crate::mozilla
+//! [mozilla]: crate::mozilla::MozillaAuthenticator
 //! [NFC]: crate::nfc
+//! [no-openssl]: https://github.com/kanidm/webauthn-rs/issues/499
 //! [SoftPasskey]: crate::softpasskey
 //! [SoftToken]: crate::softtoken
 //! [USB HID]: crate::usb
@@ -91,6 +96,7 @@
 #![deny(clippy::todo)]
 #![deny(clippy::unimplemented)]
 #![deny(clippy::unwrap_used)]
+// TODO: remove expect() calls from examples, cable, mozilla, softtoken, ui-cli, win10
 // #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 #![deny(clippy::unreachable)]
@@ -104,6 +110,14 @@ extern crate num_derive;
 extern crate tracing;
 
 use crate::error::WebauthnCError;
+#[cfg(any(
+    all(doc, not(doctest)),
+    feature = "ctap2",
+    feature = "mozilla",
+    feature = "softpasskey",
+    feature = "softtoken",
+    feature = "win10",
+))]
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as BASE64_ENGINE;
 use url::Url;
 
@@ -124,7 +138,6 @@ pub mod prelude {
 }
 
 mod authenticator_hashed;
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
 mod crypto;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2"))]
@@ -159,16 +172,6 @@ pub mod softtoken;
 #[cfg(any(all(doc, not(doctest)), feature = "usb"))]
 pub mod usb;
 
-#[cfg(any(all(doc, not(doctest)), feature = "u2fhid"))]
-#[deprecated(
-    since = "0.5.0",
-    note = "The 'u2fhid' feature and module have been renamed to 'mozilla'."
-)]
-/// Mozilla `authenticator-rs` backend. Renamed to [MozillaAuthenticator][crate::mozilla::MozillaAuthenticator].
-pub mod u2fhid {
-    pub use crate::mozilla::MozillaAuthenticator as U2FHid;
-}
-
 #[cfg(any(all(doc, not(doctest)), feature = "win10"))]
 pub mod win10;
 
@@ -181,16 +184,21 @@ pub use crate::authenticator_hashed::{
     perform_auth_with_request, perform_register_with_request, AuthenticatorBackendHashedClientData,
 };
 
-#[cfg(any(all(doc, not(doctest)), feature = "crypto"))]
-pub use crate::crypto::SHA256Hash;
-
-pub struct WebauthnAuthenticator<T>
-where
-    T: AuthenticatorBackend,
-{
-    backend: T,
+#[doc(hidden)]
+mod private {
+    /// Sealing trait for [crate::WebauthnAuthenticator].
+    pub trait WebauthnAuthenticator {}
+    impl<T: crate::AuthenticatorBackend + ?Sized> WebauthnAuthenticator for T {}
 }
 
+/// Trait for low-level WebAuthn operations.
+///
+/// **Warning:** implementors of this trait **might not** implement all security checks required by
+/// [the WebAuthn `PublicKeyCredential` interface][0].
+///
+/// The [`WebauthnAuthenticator`][] `trait` provides a safe interface.
+///
+/// [0]: https://www.w3.org/TR/webauthn-3/#iface-pkcredential
 pub trait AuthenticatorBackend {
     fn perform_register(
         &mut self,
@@ -207,25 +215,50 @@ pub trait AuthenticatorBackend {
     ) -> Result<PublicKeyCredential, WebauthnCError>;
 }
 
-impl<T> WebauthnAuthenticator<T>
-where
-    T: AuthenticatorBackend,
-{
-    pub fn new(backend: T) -> Self {
-        WebauthnAuthenticator { backend }
-    }
+/// High-level [WebAuthn `PublicKeyCredential`][0]-like trait for interfacing with an authenticator.
+///
+/// Unlike using [`AuthenticatorBackend`][] directly, this trait *always* provides security checks
+/// required by the WebAuthn specification.
+///
+/// This is a sealed trait that is only implemented for
+/// [`impl AuthenticatorBackend`][crate::AuthenticatorBackend].
+///
+/// [0]: https://www.w3.org/TR/webauthn-3/#iface-pkcredential
+pub trait WebauthnAuthenticator: private::WebauthnAuthenticator {
+    /// Perform a WebAuthn registration ceremony.
+    ///
+    /// ### References
+    ///
+    /// * [§ 5.1.3: Create a New Credential - PublicKeyCredential’s `[[Create]](origin, options, sameOriginWithAncestors)` Method][0]
+    /// * [§ 6.3.2: The authenticatorMakeCredential Operation][1]
+    ///
+    /// [0]: https://www.w3.org/TR/webauthn-3/#sctn-createCredential
+    /// [1]: https://www.w3.org/TR/webauthn-3/#sctn-op-make-cred
+    fn do_registration(
+        &mut self,
+        origin: Url,
+        options: CreationChallengeResponse,
+        // _same_origin_with_ancestors: bool,
+    ) -> Result<RegisterPublicKeyCredential, WebauthnCError>;
+
+    /// Perform a WebAuthn authentication ceremony.
+    ///
+    /// ### References
+    ///
+    /// * [§ 5.1.4: Use an Existing Credential to Make an Assertion - PublicKeyCredential’s `[[Get]](options)` Method][0]
+    /// * [§ 6.3.3: The authenticatorGetAssertion operation][1]
+    ///
+    /// [0]: https://www.w3.org/TR/webauthn-3/#sctn-getAssertion
+    /// [1]: https://www.w3.org/TR/webauthn-3/#sctn-op-get-assertion
+    fn do_authentication(
+        &mut self,
+        origin: Url,
+        options: RequestChallengeResponse,
+    ) -> Result<PublicKeyCredential, WebauthnCError>;
 }
 
-impl<T> WebauthnAuthenticator<T>
-where
-    T: AuthenticatorBackend,
-{
-    /// 5.1.3. Create a New Credential - PublicKeyCredential’s Create (origin, options, sameOriginWithAncestors) Method
-    /// <https://www.w3.org/TR/webauthn/#createCredential>
-    ///
-    /// 6.3.2. The authenticatorMakeCredential Operation
-    /// <https://www.w3.org/TR/webauthn/#op-make-cred>
-    pub fn do_registration(
+impl<T: AuthenticatorBackend + ?Sized> WebauthnAuthenticator for T {
+    fn do_registration(
         &mut self,
         origin: Url,
         options: CreationChallengeResponse,
@@ -297,11 +330,10 @@ where
             return Err(WebauthnCError::Security);
         }
 
-        self.backend.perform_register(origin, options, timeout_ms)
+        self.perform_register(origin, options, timeout_ms)
     }
 
-    /// <https://www.w3.org/TR/webauthn/#getAssertion>
-    pub fn do_authentication(
+    fn do_authentication(
         &mut self,
         origin: Url,
         options: RequestChallengeResponse,
@@ -372,6 +404,6 @@ where
             return Err(WebauthnCError::Security);
         }
 
-        self.backend.perform_auth(origin, options, timeout_ms)
+        self.perform_auth(origin, options, timeout_ms)
     }
 }

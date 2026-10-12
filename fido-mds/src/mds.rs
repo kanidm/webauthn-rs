@@ -4,14 +4,16 @@
 //! This allows parsing the fido metadata blob and consuming it's content. See `FidoMds`
 //! for more.
 
-use compact_jwt::{crypto::JwsX509VerifierBuilder, JwsCompact, JwsVerifier, JwtError};
-use openssl::x509;
+use compact_jwt::{
+    crypto::{Certificate, DecodePem, JwsX509VerifierBuilder},
+    JwsCompact, JwsVerifier, JwtError,
+};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
-
 use std::collections::BTreeMap;
+use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
+use std::time::SystemTime;
 use uuid::Uuid;
 
 static GLOBAL_SIGN_ROOT_CA_R3: &str = r#"
@@ -35,6 +37,40 @@ jjM5RcOO5LlXbKr8EpbsU8Yt5CRsuZRj+9xTaGdWPoO4zzUhw8lo/s7awlOqzJCK
 mcIfeg7jLQitChws/zyrVQ4PkX4268NXSb7hLi18YIvDQVETI53O9zJrlAGomecs
 Mx86OyXShkDOOyyGeMlhLxS67ttVb9+E7gUJTb0o2HLO02JQZR7rkpeDMdmztcpH
 WD9f
+-----END CERTIFICATE-----
+"#;
+
+static GLOBAL_SIGN_ROOT_CA_R46: &str = r#"
+-----BEGIN CERTIFICATE-----
+MIIFWjCCA0KgAwIBAgISEdK7udcjGJ5AXwqdLdDfJWfRMA0GCSqGSIb3DQEBDAUA
+MEYxCzAJBgNVBAYTAkJFMRkwFwYDVQQKExBHbG9iYWxTaWduIG52LXNhMRwwGgYD
+VQQDExNHbG9iYWxTaWduIFJvb3QgUjQ2MB4XDTE5MDMyMDAwMDAwMFoXDTQ2MDMy
+MDAwMDAwMFowRjELMAkGA1UEBhMCQkUxGTAXBgNVBAoTEEdsb2JhbFNpZ24gbnYt
+c2ExHDAaBgNVBAMTE0dsb2JhbFNpZ24gUm9vdCBSNDYwggIiMA0GCSqGSIb3DQEB
+AQUAA4ICDwAwggIKAoICAQCsrHQy6LNl5brtQyYdpokNRbopiLKkHWPd08EsCVeJ
+OaFV6Wc0dwxu5FUdUiXSE2te4R2pt32JMl8Nnp8semNgQB+msLZ4j5lUlghYruQG
+vGIFAha/r6gjA7aUD7xubMLL1aa7DOn2wQL7Id5m3RerdELv8HQvJfTqa1VbkNud
+316HCkD7rRlr+/fKYIje2sGP1q7Vf9Q8g+7XFkyDRTNrJ9CG0Bwta/OrffGFqfUo
+0q3v84RLHIf8E6M6cqJaESvWJ3En7YEtbWaBkoe0G1h6zD8K+kZPTXhc+CtI4wSE
+y132tGqzZfxCnlEmIyDLPRT5ge1lFgBPGmSXZgjPjHvjK8Cd+RTyG/FWaha/LIWF
+zXg4mutCagI0GIMXTpRW+LaCtfOW3T3zvn8gdz57GSNrLNRyc0NXfeD412lPFzYE
++cCQYDdF3uYM2HSNrpyibXRdQr4G9dlkbgIQrImwTDsHTUB+JMWKmIJ5jqSngiCN
+I/onccnfxkF0oE32kRbcRoxfKWMxWXEM2G/CtjJ9++ZdU6Z+Ffy7dXxd7Pj2Fxzs
+x2sZy/N78CsHpdlseVR2bJ0cpm4O6XkMqCNqo98bMDGfsVR7/mrLZqrcZdCinkqa
+ByFrgY/bxFn63iLABJzjqls2k+g9vXqhnQt2sQvHnf3PmKgGwvgqo6GDoLclcqUC
+4wIDAQABo0IwQDAOBgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNV
+HQ4EFgQUA1yrc4GHqMywptWU4jaWSf8FmSwwDQYJKoZIhvcNAQEMBQADggIBAHx4
+7PYCLLtbfpIrXTncvtgdokIzTfnvpCo7RGkerNlFo048p9gkUbJUHJNOxO97k4Vg
+JuoJSOD1u8fpaNK7ajFxzHmuEajwmf3lH7wvqMxX63bEIaZHU1VNaL8FpO7XJqti
+2kM3S+LGteWygxk6x9PbTZ4IevPuzz5i+6zoYMzRx6Fcg0XERczzF2sUyQQCPtIk
+pnnpHs6i58FZFZ8d4kuaPp92CC1r2LpXFNqD6v6MVenQTqnMdzGxRBF6XLE+0xRF
+FRhiJBPSy03OXIPBNvIQtQ6IbbjhVp+J3pZmOUdkLG5NrmJ7v2B0GbhWrJKsFjLt
+rWhV/pi60zTe9Mlhww6G9kuEYO4Ne7UyWHmRVSyBQ7N0H3qqJZ4d16GLuc1CLgSk
+ZoNNiTW2bKg2SnkheCLQQrzRQDGQob4Ez8pn7fXwgNNgyYMqIgXQBztSvwyeqiv5
+u+YfjyW6hY0XHgL+XVAEV8/+LbzvXMAaq7afJMbfc2hIkCwU9D9SGuTSyxTDYWnP
+4vkYxboznxSjBF25cfe1lNj2M8FawTSLfJvdkzrnE6JwYZ+vj+vYxXX4M2bUdGc6
+N3ec592kD3ZDZopD8p/7DEJ4Y9HiD2971KE9dJeFt0g5QdYg/NA6s/rob8SKunE3
+vouXsXgxT7PntgMTzlSdriVZzH81Xwj3QEUxeCp6
 -----END CERTIFICATE-----
 "#;
 
@@ -382,6 +418,9 @@ pub enum PublicKeyAlg {
     /// rsa_2048_raw
     #[serde(rename = "rsa_2048_raw")]
     Rsa2048Raw,
+    /// rsa_2048_der
+    #[serde(rename = "rsa_2048_der")]
+    Rsa2048Der,
     /// cose
     #[serde(rename = "cose")]
     Cose,
@@ -468,6 +507,9 @@ pub enum AttachmentHint {
     /// wifi-direct
     #[serde(rename = "wifi_direct")]
     WifiDirect,
+    /// smart-card
+    #[serde(rename = "smart-card")]
+    SmartCard,
 }
 
 /// The authenticator versions this device supports
@@ -485,6 +527,12 @@ pub enum AuthenticatorVersion {
     /// FIDO 2.1
     #[serde(rename = "FIDO_2_1")]
     Fido2_1,
+    /// FIDO 2.2
+    #[serde(rename = "FIDO_2_2")]
+    Fido2_2,
+    /// FIDO 2.3
+    #[serde(rename = "FIDO_2_3")]
+    Fido2_3,
 }
 
 impl fmt::Display for AuthenticatorVersion {
@@ -494,6 +542,8 @@ impl fmt::Display for AuthenticatorVersion {
             AuthenticatorVersion::Fido2_0 => write!(f, "FIDO 2.0"),
             AuthenticatorVersion::Fido2_1Pre => write!(f, "FIDO 2.1 PRE"),
             AuthenticatorVersion::Fido2_1 => write!(f, "FIDO 2.1"),
+            AuthenticatorVersion::Fido2_2 => write!(f, "FIDO 2.2"),
+            AuthenticatorVersion::Fido2_3 => write!(f, "FIDO 2.3"),
         }
     }
 }
@@ -522,6 +572,9 @@ pub enum AuthenticatorTransport {
     /// hybrid (formerly caBLE)
     #[serde(rename = "hybrid")]
     Hybrid,
+    /// smart-card
+    #[serde(rename = "smart-card")]
+    SmartCard,
 }
 
 impl fmt::Display for AuthenticatorTransport {
@@ -534,6 +587,7 @@ impl fmt::Display for AuthenticatorTransport {
             AuthenticatorTransport::Internal => write!(f, "internal"),
             AuthenticatorTransport::Wireless => write!(f, "wireless"),
             AuthenticatorTransport::Hybrid => write!(f, "hybrid (caBLE)"),
+            AuthenticatorTransport::SmartCard => write!(f, "smart-card"),
         }
     }
 }
@@ -622,6 +676,11 @@ pub struct AuthenticatorGetInfo {
     /// The minimum pin length that this device requires.
     #[serde(rename = "minPINLength")]
     pub min_pin_length: Option<u32>,
+
+    /// The maximum pin length that this device accepts,
+    #[serde(rename = "maxPINLength")]
+    pub max_pin_length: Option<u32>,
+
     firmware_version: Option<u32>,
     /// The maximum size of the credBlob if supported
     pub max_cred_blob_length: Option<u32>,
@@ -642,6 +701,31 @@ pub struct AuthenticatorGetInfo {
     /// Supported attestation formats
     #[serde(default)]
     pub attestation_formats: Vec<AttestationFormat>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub enc_identifier: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub enc_cred_store_state: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub authenticator_config_commands: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub long_touch_for_reset: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub transports_for_reset: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub pin_complexity_policy: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    #[serde(rename = "pinComplexityPolicyURL")]
+    pub pin_complexity_policy_url: Option<serde_json::Value>,
+
+    /// ⚠️  WARNING - CONTENT AND USE OF THIS VALUE IS NOT DOCUMENTED BY FIDO
+    pub uv_count_since_last_pin_entry: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -843,8 +927,21 @@ pub struct MetadataStatement {
     /// authenticator model (e.g as identified by its AAID/AAGUID).
     #[serde(default)]
     pub ecdaa_trust_anchors: Vec<EcdaaAnchor>,
-    /// An icon representing this device.
+    /// An icon representing this device (light mode).
+    #[serde(default)]
     pub icon: Option<serde_json::Value>,
+    /// An icon representing this device (dark mode).
+    #[serde(default)]
+    pub icon_dark: Option<serde_json::Value>,
+
+    /// Provider logo (light mode).
+    #[serde(default)]
+    pub provider_logo_light: Option<serde_json::Value>,
+
+    /// Provider logo (dark mode).
+    #[serde(default)]
+    pub provider_logo_dark: Option<serde_json::Value>,
+
     /// The list of supported extensions of this authenticator
     #[serde(default)]
     pub supported_extensions: Vec<ExtensionDescriptor>,
@@ -1142,21 +1239,23 @@ impl FromStr for FidoMds {
     type Err = JwtError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Setup the trusted CA store so that we can validate the authenticity of the MDS blob.
-        let root_ca = x509::X509::from_pem(GLOBAL_SIGN_ROOT_CA_R3.as_bytes())
-            .map_err(|_| JwtError::OpenSSLError)?;
-
         let jws = JwsCompact::from_str(s)?;
 
-        let fullchain = jws
+        let (leaf, chain) = jws
             .get_x5c_chain()
             .and_then(|chain| chain.ok_or(JwtError::InvalidHeaderFormat))?;
 
-        let verifier = JwsX509VerifierBuilder::new()
-            .add_fullchain(fullchain)
-            .add_trust_root(root_ca)
-            .build()
-            .map_err(|_| JwtError::OpenSSLError)?;
+        let mut builder = JwsX509VerifierBuilder::new(&leaf, &chain);
+
+        // Setup the trusted CA store so that we can validate the authenticity of the MDS blob.
+        for ca in [GLOBAL_SIGN_ROOT_CA_R3, GLOBAL_SIGN_ROOT_CA_R46] {
+            let root_ca =
+                Certificate::from_pem(ca.as_bytes()).map_err(|_| JwtError::CryptoError)?;
+            builder = builder.add_trust_root(root_ca);
+        }
+
+        let now = SystemTime::now();
+        let verifier = builder.build(now).map_err(|_| JwtError::CryptoError)?;
 
         // Now we can release the embedded cert, since we have asserted the trust in the chain
         // that has signed this metadata.

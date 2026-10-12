@@ -1,37 +1,15 @@
-#[cfg(any(
-    all(doc, not(doctest)),
-    feature = "crypto",
-    feature = "ctap2",
-    feature = "win10"
-))]
-use base64urlsafedata::Base64UrlSafeData;
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use unicode_normalization::UnicodeNormalization;
-#[cfg(any(
-    all(doc, not(doctest)),
-    feature = "crypto",
-    feature = "ctap2",
-    feature = "win10"
-))]
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 use url::Url;
-#[cfg(any(
-    all(doc, not(doctest)),
-    feature = "crypto",
-    feature = "ctap2",
-    feature = "win10"
-))]
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 use webauthn_rs_proto::CollectedClientData;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::error::WebauthnCError;
 
-#[cfg(any(
-    all(doc, not(doctest)),
-    feature = "crypto",
-    feature = "ctap2",
-    feature = "win10"
-))]
-pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
+pub fn creation_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClientData {
     // Let collectedClientData be a new CollectedClientData instance whose fields are:
     //    type
     //        The string "webauthn.create".
@@ -53,13 +31,8 @@ pub fn creation_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> Coll
     }
 }
 
-#[cfg(any(
-    all(doc, not(doctest)),
-    feature = "crypto",
-    feature = "ctap2",
-    feature = "win10"
-))]
-pub fn get_to_clientdata(origin: Url, challenge: Base64UrlSafeData) -> CollectedClientData {
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
+pub fn get_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClientData {
     CollectedClientData {
         type_: "webauthn.get".to_string(),
         challenge,

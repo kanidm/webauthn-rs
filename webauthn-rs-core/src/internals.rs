@@ -1,125 +1,31 @@
 //! Internal structures for parsing webauthn registrations and challenges. This *may* change
 //! at anytime and should not be relied on in your library.
 
+use crate::constants::CREDENTIAL_ID_MAX_LENGTH;
 use crate::error::WebauthnError;
 use crate::proto::*;
-use serde::Deserialize;
-
-use base64urlsafedata::{Base64UrlSafeData, HumanBinaryData};
-
-use std::borrow::Borrow;
-use std::ops::Deref;
-
 use nom::bytes::complete::{tag, take};
 use nom::combinator::cond;
 use nom::combinator::{map_opt, verify};
 use nom::error::ParseError;
 use nom::number::complete::{be_u16, be_u32, be_u64};
+use serde::Deserialize;
 
 /// Representation of a UserId
 pub type UserId = Vec<u8>;
 
 /// A challenge issued by the server. This contains a set of random bytes.
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Challenge(Vec<u8>);
+pub type Challenge = Vec<u8>;
 
-impl Challenge {
-    /// Creates a new Challenge from a vector of bytes.
-    pub(crate) fn new(challenge: Vec<u8>) -> Self {
-        Challenge(challenge)
-    }
-}
-
-impl From<Challenge> for HumanBinaryData {
-    fn from(chal: Challenge) -> Self {
-        HumanBinaryData::from(chal.0)
-    }
-}
-
-impl From<Challenge> for Base64UrlSafeData {
-    fn from(chal: Challenge) -> Self {
-        Base64UrlSafeData::from(chal.0)
-    }
-}
-
-impl From<HumanBinaryData> for Challenge {
-    fn from(d: HumanBinaryData) -> Self {
-        Challenge(d.into())
-    }
-}
-
-impl<'a> From<&'a HumanBinaryData> for &'a ChallengeRef {
-    fn from(d: &'a HumanBinaryData) -> Self {
-        ChallengeRef::new(d.as_slice())
-    }
-}
-
-impl ToOwned for ChallengeRef {
-    type Owned = Challenge;
-
-    fn to_owned(&self) -> Self::Owned {
-        Challenge(self.0.to_vec())
-    }
-}
-
-impl AsRef<[u8]> for ChallengeRef {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl Deref for ChallengeRef {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-impl Borrow<ChallengeRef> for Challenge {
-    fn borrow(&self) -> &ChallengeRef {
-        ChallengeRef::new(&self.0)
-    }
-}
-
-impl AsRef<ChallengeRef> for Challenge {
-    fn as_ref(&self) -> &ChallengeRef {
-        ChallengeRef::new(&self.0)
-    }
-}
-
-impl Deref for Challenge {
-    type Target = ChallengeRef;
-
-    fn deref(&self) -> &Self::Target {
-        self.as_ref()
-    }
-}
-
-/// A reference to the [Challenge] issued by the server.
-/// This contains a set of random bytes.
-///
-/// [ChallengeRef] is the `?Sized` type that corresponds to [Challenge]
-/// in the same way that [`&[u8]`] corresponds to [`Vec<u8>`].
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[repr(transparent)]
-pub struct ChallengeRef([u8]);
-
-impl ChallengeRef {
-    /// Creates a new ChallengeRef from a slice
-    pub fn new(challenge: &[u8]) -> &ChallengeRef {
-        // SAFETY
-        // Because of #[repr(transparent)], [u8] is guaranteed to have the same representation as ChallengeRef.
-        // This allows safe casting between *const pointers of these types.
-        unsafe { &*(challenge as *const [u8] as *const ChallengeRef) }
-    }
-}
+/// A reference to a challenge issued by the server. This contains a set of random bytes.
+pub type ChallengeRef<'a> = &'a [u8];
 
 impl PartialEq<Credential> for Credential {
     fn eq(&self, c: &Credential) -> bool {
         self.cred_id == c.cred_id
     }
 }
+
 #[allow(clippy::too_many_arguments)]
 impl Credential {
     pub(crate) fn new(
@@ -301,6 +207,17 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
     let (i, aaguid) = aaguid_parser(i)?;
     let (i, cred_id_len) = be_u16(i)?;
 
+    if cred_id_len > CREDENTIAL_ID_MAX_LENGTH {
+        warn!(
+            "cred_id_len ({:?}) exceeds the WebAuthn maximum of {:?} bytes.",
+            cred_id_len, CREDENTIAL_ID_MAX_LENGTH
+        );
+        return Err(nom::Err::Failure(nom::error::Error::new(
+            i,
+            nom::error::ErrorKind::TooLarge,
+        )));
+    }
+
     if usize::from(cred_id_len) > i.len() {
         warn!(
             "cred_id_len ({:?}) is larger than remaining number of bytes to parse ({:?}).",
@@ -316,7 +233,7 @@ fn acd_parser(i: &[u8]) -> nom::IResult<&[u8], AttestedCredentialData> {
         i,
         AttestedCredentialData {
             aaguid,
-            credential_id: HumanBinaryData::from(cred_id.to_vec()),
+            credential_id: cred_id.to_vec(),
             credential_pk: cred_pk,
         },
     ))
@@ -489,7 +406,7 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAttestationResponseRaw>
         Ok(AuthenticatorAttestationResponse {
             attestation_object: ao,
             client_data_json: ccdj,
-            client_data_json_bytes: aarr.client_data_json.clone().into(),
+            client_data_json_bytes: aarr.client_data_json.clone(),
             transports: aarr.transports.clone(),
         })
     }
@@ -512,12 +429,12 @@ impl<T: Ceremony> TryFrom<&AuthenticatorAssertionResponseRaw>
     fn try_from(aarr: &AuthenticatorAssertionResponseRaw) -> Result<Self, Self::Error> {
         Ok(AuthenticatorAssertionResponse {
             authenticator_data: AuthenticatorData::try_from(aarr.authenticator_data.as_ref())?,
-            authenticator_data_bytes: aarr.authenticator_data.clone().into(),
+            authenticator_data_bytes: aarr.authenticator_data.clone(),
             client_data: serde_json::from_slice(aarr.client_data_json.as_ref())
                 .map_err(WebauthnError::ParseJSONFailure)?,
-            client_data_bytes: aarr.client_data_json.clone().into(),
-            signature: aarr.signature.clone().into(),
-            _user_handle: aarr.user_handle.clone().map(|uh| uh.into()),
+            client_data_bytes: aarr.client_data_json.clone(),
+            signature: aarr.signature.clone(),
+            _user_handle: aarr.user_handle.clone(),
         })
     }
 }
@@ -1457,6 +1374,23 @@ mod tests {
         ];
 
         assert!(AuthenticatorData::<Authentication>::try_from(raw.as_slice()).is_ok());
+    }
+
+    #[test]
+    fn acd_parser_credential_id_length() {
+        let _ = tracing_subscriber::fmt::try_init();
+
+        let mut valid_acd = vec![0; 16]; // aaguid
+        valid_acd.extend_from_slice(&4096_u16.to_be_bytes());
+        valid_acd.extend_from_slice(&[0; 4096]);
+        valid_acd.push(0xa0); // empty cbor map for public key
+        assert!(super::acd_parser(&valid_acd).is_ok());
+
+        let mut invalid_acd = vec![0; 16]; // aaguid
+        invalid_acd.extend_from_slice(&4097_u16.to_be_bytes());
+        invalid_acd.extend_from_slice(&[0; 4097]);
+        invalid_acd.push(0xa0); // empty cbor map for public key
+        assert!(super::acd_parser(&invalid_acd).is_err());
     }
 
     #[test]

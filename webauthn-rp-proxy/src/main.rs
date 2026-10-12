@@ -31,14 +31,21 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use serde_with::{
+    base64::{Base64, UrlSafe},
+    formats::Unpadded,
+    serde_as, IfIsHumanReadable,
+};
 use std::io::{self, Read, Write};
 use std::process;
 use uuid::Uuid;
 use webauthn_rs::prelude::*;
 
+#[serde_as]
 #[derive(Deserialize)]
 struct RegisterStartRequest {
-    exclude_credentials: Vec<CredentialID>,
+    #[serde_as(as = "IfIsHumanReadable<Vec<Base64<UrlSafe, Unpadded>>>")]
+    exclude_credentials: Vec<Vec<u8>>,
     rp_id: String,
     rp_origin: String,
     user_display_name: String,

@@ -2,107 +2,80 @@
 use crate::prelude::WebauthnCError;
 use std::pin::Pin;
 use webauthn_rs_proto::PubKeyCredParams;
-
-use super::WinWrapper;
-
 use windows::{
     core::HSTRING,
     Win32::Networking::WindowsWebServices::{
         WEBAUTHN_COSE_CREDENTIAL_PARAMETER, WEBAUTHN_COSE_CREDENTIAL_PARAMETERS,
-        WEBAUTHN_COSE_CREDENTIAL_PARAMETER_CURRENT_VERSION,
+        WEBAUTHN_COSE_CREDENTIAL_PARAMETER_CURRENT_VERSION, WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY,
     },
 };
 
-/// Wrapper for [WEBAUTHN_COSE_CREDENTIAL_PARAMETER] to ensure pointer lifetime.
-struct WinCoseCredentialParameter {
-    native: WEBAUTHN_COSE_CREDENTIAL_PARAMETER,
-    _typ: HSTRING,
-}
-
-impl WinCoseCredentialParameter {
-    fn from(p: PubKeyCredParams) -> Pin<Box<Self>> {
-        let res = Self {
-            native: Default::default(),
-            _typ: p.type_.into(),
-        };
-
-        let mut boxed = Box::pin(res);
-
-        let native = WEBAUTHN_COSE_CREDENTIAL_PARAMETER {
-            dwVersion: WEBAUTHN_COSE_CREDENTIAL_PARAMETER_CURRENT_VERSION,
-            pwszCredentialType: (&boxed._typ).into(),
-            lAlg: p.alg as i32,
-        };
-
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        boxed
-    }
-}
+use super::{constants::CREDENTIAL_TYPE_PUBLIC_KEY, WinWrapper};
 
 pub struct WinCoseCredentialParameters {
+    /// Wrapper structure, points to `params`.
     native: WEBAUTHN_COSE_CREDENTIAL_PARAMETERS,
-    _params: Vec<Pin<Box<WinCoseCredentialParameter>>>,
-    _l: Vec<WEBAUTHN_COSE_CREDENTIAL_PARAMETER>,
+
+    /// Array of all parameters, each points to an entry in `types`.
+    ///
+    /// [`WEBAUTHN_COSE_CREDENTIAL_PARAMETERS::pCredentialParameters`][] is a pointer to the first
+    /// [`WEBAUTHN_COSE_CREDENTIAL_PARAMETER`][], so this needs to be a contiguous block of memory.
+    params: Vec<WEBAUTHN_COSE_CREDENTIAL_PARAMETER>,
+
+    /// Credential type identifiers used in `params`.
+    ///
+    /// The string buffer of the [`HSTRING`] is heap allocated and effectively pinned.
+    types: Vec<HSTRING>,
 }
 
 impl WinWrapper<Vec<PubKeyCredParams>> for WinCoseCredentialParameters {
     type NativeType = WEBAUTHN_COSE_CREDENTIAL_PARAMETERS;
 
     fn new(params: Vec<PubKeyCredParams>) -> Result<Pin<Box<Self>>, WebauthnCError> {
-        let params: Vec<Pin<Box<WinCoseCredentialParameter>>> = params
-            .into_iter()
-            .map(WinCoseCredentialParameter::from)
-            .collect();
-        Ok(WinCoseCredentialParameters::from_wrapped(params))
+        let res = Self {
+            native: WEBAUTHN_COSE_CREDENTIAL_PARAMETERS {
+                cCredentialParameters: params.len() as u32,
+                pCredentialParameters: std::ptr::null_mut(),
+            },
+            params: Vec::with_capacity(params.len()),
+            types: Vec::with_capacity(
+                params
+                    .iter()
+                    .filter(|p| p.type_ != WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY)
+                    .count(),
+            ),
+        };
+
+        let mut boxed = Box::new(res);
+
+        for param in params {
+            let pwsz_credential_type = if param.type_ == WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY {
+                CREDENTIAL_TYPE_PUBLIC_KEY.into()
+            } else {
+                // Unlikely path, as WebAuthn L3 doesn't specify this.
+                let typ = HSTRING::from(param.type_);
+
+                // Even though the `HSTRING` is moved when pushed into the `Vec` (and potentially
+                // many times if the `Vec` reallocates), its header and string buffer are heap
+                // allocated and don't move.
+                let ptr = (&typ).into();
+                boxed.types.push(typ);
+                ptr
+            };
+
+            boxed.params.push(WEBAUTHN_COSE_CREDENTIAL_PARAMETER {
+                dwVersion: WEBAUTHN_COSE_CREDENTIAL_PARAMETER_CURRENT_VERSION,
+                pwszCredentialType: pwsz_credential_type,
+                lAlg: param.alg as i32,
+            });
+        }
+
+        boxed.native.pCredentialParameters = Vec::as_mut_ptr(&mut boxed.params);
+
+        Ok(Box::into_pin(boxed))
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_COSE_CREDENTIAL_PARAMETERS {
         &self.native
-    }
-}
-
-impl WinCoseCredentialParameters {
-    fn from_wrapped(params: Vec<Pin<Box<WinCoseCredentialParameter>>>) -> Pin<Box<Self>> {
-        let len = params.len();
-        let res = Self {
-            native: Default::default(),
-            _l: Vec::with_capacity(len),
-            _params: params,
-        };
-
-        // Box and pin the struct so it's on the heap and doesn't move.
-        let mut boxed = Box::pin(res);
-
-        // Put in all the "native" values
-        let p_ptr = boxed._params.as_ptr();
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            let l = &mut Pin::get_unchecked_mut(mut_ref)._l;
-            let l_ptr = l.as_mut_ptr();
-            for i in 0..len {
-                *l_ptr.add(i) = (&(*p_ptr.add(i))).native;
-            }
-
-            l.set_len(len);
-        }
-
-        // let mut l: Vec<WEBAUTHN_COSE_CREDENTIAL_PARAMETER> =
-        //     params.iter().map(|p| p.native).collect();
-
-        let native = WEBAUTHN_COSE_CREDENTIAL_PARAMETERS {
-            cCredentialParameters: boxed._l.len() as u32,
-            pCredentialParameters: boxed._l.as_mut_ptr() as *mut _,
-        };
-
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        boxed
     }
 }

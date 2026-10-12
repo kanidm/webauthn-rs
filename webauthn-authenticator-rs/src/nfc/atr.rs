@@ -48,6 +48,8 @@ pub struct Atr {
     /// ([`Self::t1`]), but is beyond the scope of this module.
     ///
     /// FIDO tokens should always return `false`.
+    ///
+    /// [pcsc-spec]: https://pcscworkgroup.com/specifications/download/
     pub storage_card: bool,
 
     /// Card issuer's data (ISO/IEC 7816-4:2005 §8.1.1.2.5). The structure of

@@ -1,5 +1,5 @@
 //! Wrappers for [RelyingParty].
-use std::pin::Pin;
+use std::{marker::PhantomPinned, pin::Pin};
 
 use webauthn_rs_proto::RelyingParty;
 use windows::{
@@ -17,33 +17,28 @@ pub struct WinRpEntityInformation {
     native: WEBAUTHN_RP_ENTITY_INFORMATION,
     id: HSTRING,
     name: HSTRING,
+    _pin: PhantomPinned,
 }
 
 impl WinWrapper<RelyingParty> for WinRpEntityInformation {
     type NativeType = WEBAUTHN_RP_ENTITY_INFORMATION;
     fn new(rp: RelyingParty) -> Result<Pin<Box<Self>>, WebauthnCError> {
         let res = Self {
-            native: Default::default(),
             id: rp.id.into(),
             name: rp.name.into(),
+            native: WEBAUTHN_RP_ENTITY_INFORMATION {
+                dwVersion: WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION,
+                ..Default::default()
+            },
+            _pin: PhantomPinned,
         };
 
-        let mut boxed = Box::pin(res);
+        let mut boxed = Box::new(res);
 
-        let native = WEBAUTHN_RP_ENTITY_INFORMATION {
-            dwVersion: WEBAUTHN_RP_ENTITY_INFORMATION_CURRENT_VERSION,
-            pwszId: (&boxed.id).into(),
-            pwszName: (&boxed.name).into(),
-            pwszIcon: PCWSTR::null(),
-        };
+        boxed.native.pwszId = PCWSTR::from(&boxed.id);
+        boxed.native.pwszName = PCWSTR::from(&boxed.name);
 
-        // Update the boxed type with the proper native object.
-        unsafe {
-            let mut_ref: Pin<&mut Self> = Pin::as_mut(&mut boxed);
-            Pin::get_unchecked_mut(mut_ref).native = native;
-        }
-
-        Ok(boxed)
+        Ok(Box::into_pin(boxed))
     }
 
     fn native_ptr(&self) -> &WEBAUTHN_RP_ENTITY_INFORMATION {

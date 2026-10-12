@@ -1,7 +1,7 @@
 //! Possible errors that may occur during Webauthn Operation processing
 
 use base64::DecodeError as b64DecodeError;
-use openssl::error::ErrorStack as OpenSSLErrorStack;
+use crypto_glue::x509::X509VerificationError;
 use serde_cbor_2::error::Error as CBORError;
 use serde_json::error::Error as JSONError;
 // use serde::{Deserialize, Serialize};
@@ -154,7 +154,7 @@ pub enum WebauthnError {
     #[error(
         "The attestation was parsed, but is not trusted by one of the selected CA certificates"
     )]
-    AttestationChainNotTrusted(String),
+    AttestationChainNotTrusted(X509VerificationError),
 
     #[error("The X5C trust root is not a valid algorithm for signing")]
     CertificatePublicKeyInvalid,
@@ -173,12 +173,6 @@ pub enum WebauthnError {
 
     #[error("In parsing the attestation object, there was insufficient data")]
     ParseInsufficientBytesAvailable,
-
-    #[error("An OpenSSL Error has occurred")]
-    OpenSSLError(#[from] OpenSSLErrorStack),
-
-    #[error("The requested OpenSSL curve is not supported by OpenSSL")]
-    OpenSSLErrorNoCurveName,
 
     #[error("The COSEKey contains invalid CBOR which can not be processed")]
     COSEKeyInvalidCBORValue,
@@ -289,6 +283,24 @@ pub enum WebauthnError {
 
     #[error("The attestation requst indicates cred protect was required, but user verification was not performed")]
     SshPublicKeyInconsistentUserVerification,
+
+    #[error("Malformed X509 DER was encountered")]
+    X509DerInvalid,
+
+    #[error("An invalid HMAC Key was found")]
+    HmacKeyInvalid,
+
+    #[error("A signature was not valid for the algorthim, and can not be validated")]
+    SignatureInvalid,
+
+    #[error("The SEC1 Affine Points of the provided ECDSA Public Key are invalid or compressed")]
+    EcdsaPointInvalid,
+
+    #[error("The public key of this certificate does not match the provided COSE Algorithm")]
+    CertificatePublicKeyAlgorthimMismatch,
+
+    #[error("The RSA parameters provided are invalid")]
+    RsaParametersInvalid,
 }
 
 impl PartialEq for WebauthnError {
