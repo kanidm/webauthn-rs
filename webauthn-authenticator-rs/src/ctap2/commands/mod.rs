@@ -191,7 +191,7 @@ fn value_to_map(v: Value, loc: &str) -> Option<BTreeMap<Value, Value>> {
     }
 }
 
-fn value_to_vec_u32(v: Value, loc: &str) -> Option<Vec<u32>> {
+pub(crate) fn value_to_vec_u32(v: Value, loc: &str) -> Option<Vec<u32>> {
     value_to_vec(v, loc).map(|v| {
         v.into_iter()
             .filter_map(|i| value_to_u32(&i, loc))

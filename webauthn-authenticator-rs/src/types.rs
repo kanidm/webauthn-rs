@@ -4,17 +4,31 @@
 //! at build time, because they are part of some other API which doesn't change.
 
 /// caBLE request type.
+///
+/// As of v0.6, this struct is non-exhaustive to support non-CTAP protocols that use caBLE as a
+/// transport layer.
 #[derive(Debug, PartialEq, Eq, Clone, Default, Copy)]
+#[non_exhaustive]
 pub enum CableRequestType {
-    /// Logging in with an existing credential.
+    /// Unknown request type.
     #[default]
+    Unknown,
+
+    /// CTAP 2: Authenticate with an existing credential.
     GetAssertion,
 
-    /// Creating a new, non-discoverable credential.
+    /// CTAP 2: Create a new credential.
     MakeCredential,
 
-    /// Creating a new, discoverable credential.
+    /// Deprecated, use [`MakeCredential`][Self::MakeCredential].
+    #[deprecated(since = "0.6.2", note = "Use MakeCredential")]
     DiscoverableMakeCredential,
+
+    /// Digital Credentials API: credential presentation (not supported)
+    DigitalCredentialPresentation,
+
+    /// Digital Credentials API: credential issuance (not supported)
+    DigitalCredentialIssuance,
 }
 
 /// States that a caBLE connection can be in for

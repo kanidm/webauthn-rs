@@ -344,28 +344,26 @@ use crate::{
 type Psk = [u8; 32];
 
 impl CableRequestType {
-    fn to_cable_string(self) -> String {
+    fn to_cable_string(self) -> Option<&'static str> {
         use CableRequestType::*;
+        #[allow(deprecated)]
         match self {
-            GetAssertion => String::from("ga"),
-            DiscoverableMakeCredential => String::from("mc"),
-            MakeCredential => String::from("mc"),
+            GetAssertion => Some("ga"),
+            MakeCredential | DiscoverableMakeCredential => Some("mc"),
+            DigitalCredentialIssuance => Some("dci"),
+            DigitalCredentialPresentation => Some("dcp"),
+            Unknown => None,
         }
     }
 
-    fn from_cable_string(
-        val: &str,
-        supports_non_discoverable_make_credential: bool,
-    ) -> Option<Self> {
+    fn from_cable_string(val: &str) -> Self {
         use CableRequestType::*;
         match val {
-            "ga" => Some(GetAssertion),
-            "mc" => Some(if supports_non_discoverable_make_credential {
-                MakeCredential
-            } else {
-                DiscoverableMakeCredential
-            }),
-            _ => None,
+            "ga" => GetAssertion,
+            "mc" => MakeCredential,
+            "dci" => DigitalCredentialIssuance,
+            "dcp" => DigitalCredentialPresentation,
+            _ => Unknown,
         }
     }
 }
@@ -425,6 +423,17 @@ async fn connect_cable_authenticator_impl<'a, U: UiCallback + 'a>(
     ui_callback: &'a U,
     connect_uri: Option<Builder>,
 ) -> Result<CtapAuthenticator<'a, Tunnel, U>, WebauthnCError> {
+    #[allow(deprecated)]
+    if !matches!(
+        request_type,
+        CableRequestType::MakeCredential
+            | CableRequestType::GetAssertion
+            | CableRequestType::DiscoverableMakeCredential
+    ) {
+        error!("Unsupported cable request type: {request_type:?}");
+        return Err(WebauthnCError::NotSupported);
+    }
+
     // TODO: it may be better to return a caBLE-specific authenticator object,
     // rather than CtapAuthenticator, because the device will close the
     // Websocket connection as soon as we've sent a single command.
@@ -603,6 +612,14 @@ where
     transports.push("hybrid".to_string());
 
     let handshake = HandshakeV2::from_qr_url(url)?;
+    if !matches!(
+        handshake.request_type,
+        CableRequestType::GetAssertion | CableRequestType::MakeCredential
+    ) {
+        error!("Unknown or unsupported caBLE request type");
+        return Err(WebauthnCError::NotSupported);
+    }
+
     let discovery = handshake.to_discovery()?;
 
     let tunnel_uri = match options.tunnel_uri {
@@ -634,8 +651,7 @@ where
                 break;
             }
             CableFrameType::Ctap => match (handshake.request_type, msg.parse_request()?) {
-                (CableRequestType::MakeCredential, RequestType::MakeCredential(mc))
-                | (CableRequestType::DiscoverableMakeCredential, RequestType::MakeCredential(mc)) => {
+                (CableRequestType::MakeCredential, RequestType::MakeCredential(mc)) => {
                     perform_register_with_request(backend, mc, timeout_ms)
                 }
                 (CableRequestType::GetAssertion, RequestType::GetAssertion(ga)) => {
@@ -697,28 +713,39 @@ mod test {
     #[test]
     fn cable_request_type() {
         assert_eq!(
-            Some(CableRequestType::DiscoverableMakeCredential),
-            CableRequestType::from_cable_string("mc", false)
+            CableRequestType::MakeCredential,
+            CableRequestType::from_cable_string("mc"),
         );
         assert_eq!(
-            Some(CableRequestType::MakeCredential),
-            CableRequestType::from_cable_string("mc", true)
+            CableRequestType::GetAssertion,
+            CableRequestType::from_cable_string("ga"),
         );
         assert_eq!(
-            Some(CableRequestType::GetAssertion),
-            CableRequestType::from_cable_string("ga", false)
+            CableRequestType::Unknown,
+            CableRequestType::from_cable_string("nonsense"),
         );
         assert_eq!(
-            Some(CableRequestType::GetAssertion),
-            CableRequestType::from_cable_string("ga", true)
+            CableRequestType::DigitalCredentialIssuance,
+            CableRequestType::from_cable_string("dci"),
         );
-        assert_eq!(None, CableRequestType::from_cable_string("nonsense", false));
+        assert_eq!(
+            CableRequestType::DigitalCredentialPresentation,
+            CableRequestType::from_cable_string("dcp"),
+        );
 
+        assert_eq!(None, CableRequestType::Unknown.to_cable_string());
         assert_eq!(
-            "mc",
-            CableRequestType::DiscoverableMakeCredential.to_cable_string()
+            Some("mc"),
+            CableRequestType::MakeCredential.to_cable_string(),
         );
-        assert_eq!("mc", CableRequestType::MakeCredential.to_cable_string());
-        assert_eq!("ga", CableRequestType::GetAssertion.to_cable_string());
+        assert_eq!(Some("ga"), CableRequestType::GetAssertion.to_cable_string());
+        assert_eq!(
+            Some("dci"),
+            CableRequestType::DigitalCredentialIssuance.to_cable_string(),
+        );
+        assert_eq!(
+            Some("dcp"),
+            CableRequestType::DigitalCredentialPresentation.to_cable_string(),
+        );
     }
 }
