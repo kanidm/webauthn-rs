@@ -1039,9 +1039,9 @@ impl WebauthnCore {
     /// is the output of `navigator.credentials.get()`, which is processed by this
     /// function. If the authentication fails, appropriate errors will be returned.
     ///
-    /// This method attempts to match against multiple potential [Credential]s using
-    /// [AuthenticationState::credentials]. If you need to process a single [Credential] in a
-    /// resident key flow, use
+    /// This method attempts to match against multiple potential [Credential]s from
+    /// [AuthenticationState::set_allowed_credentials]. If you need to process a single
+    /// [Credential], use
     /// [`authenticate_single_credential`][Self::authenticate_single_credential] instead.
     ///
     /// This requires the associated [AuthenticationState] that was created by
@@ -1102,9 +1102,9 @@ impl WebauthnCore {
     /// is the output of `navigator.credentials.get()`, which is processed by this
     /// function. If the authentication fails, appropriate errors will be returned.
     ///
-    /// This method takes a single matching [Credential], and *ignores*
-    /// [AuthenticationState::credentials]. If you need to process multiple [Credential]s, use
-    /// [`authenticate_credential`][Self::authenticate_credential].
+    /// This method takes a single matching [Credential], and *ignores* those passed in
+    /// [AuthenticationState::set_allowed_credentials]. If you need to process multiple
+    /// [Credential]s, use [`authenticate_credential`][Self::authenticate_credential].
     ///
     /// This requires the associated [AuthenticationState] that was created by
     /// [`generate_challenge_authenticate`][Self::generate_challenge_authenticate].
