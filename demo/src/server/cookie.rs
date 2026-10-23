@@ -6,7 +6,10 @@
 //! [`SessionCookie`] then stored in a [`Jwe`], which is encrypted with a key-wrapped key before
 //! being sent to the client. This avoids the need to persist this data elsewhere in the server.
 
-use crate::server::{ServerError, ServerResult};
+use crate::{
+    app::MAX_AGE,
+    server::{ServerError, ServerResult},
+};
 use axum::http::{
     header::{COOKIE, SET_COOKIE},
     HeaderMap, HeaderValue,
@@ -24,9 +27,6 @@ use serde::{Deserialize, Serialize};
 use std::{mem::take, str::FromStr as _};
 use time::{Duration, UtcDateTime};
 use webauthn_rs::prelude::*;
-
-/// Maximum age of a session cookie.
-pub const MAX_AGE: Duration = Duration::minutes(5);
 
 /// Maximum time a session cookie may be timestamped into the future.
 ///
@@ -83,6 +83,9 @@ pub enum SessionOperation {
         #[serde(rename = "u")]
         account_id: Uuid,
     },
+
+    #[serde(rename = "da")]
+    DiscoverableAuthentication(Box<DiscoverableAuthentication>),
 }
 
 impl SessionCookie {
@@ -112,6 +115,15 @@ impl SessionCookie {
         Some((*reg, uuid))
     }
 
+    /// Take a [DiscoverableAuthentication] state from the session cookie, replacing it with None.
+    pub fn take_discoverable_authentication(&mut self) -> Option<DiscoverableAuthentication> {
+        let SessionOperation::DiscoverableAuthentication(reg) = take(&mut self.op) else {
+            return None;
+        };
+
+        Some(*reg)
+    }
+
     /// Store a [`PasskeyAuthentication`] state into the session cookie, overwriting any existing
     /// operation.
     pub fn store_passkey_authentication(&mut self, auth: PasskeyAuthentication, account_id: Uuid) {
@@ -128,6 +140,12 @@ impl SessionCookie {
             reg: Box::new(reg),
             account_id,
         };
+    }
+
+    /// Store a [`DiscoverableAuthentication`] state into the session cookie, overwriting any existing
+    /// operation.
+    pub fn store_discoverable_authentication(&mut self, auth: DiscoverableAuthentication) {
+        self.op = SessionOperation::DiscoverableAuthentication(Box::new(auth));
     }
 
     /// Convert this [`SessionCookie`] into an unencrypted [`Jwe`], updating the modification time.
