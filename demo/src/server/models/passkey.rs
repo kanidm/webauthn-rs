@@ -102,4 +102,9 @@ impl Model {
             current,
         }
     }
+
+    /// Get the credential ID for the passkey.
+    pub fn cred_id(&self) -> &[u8] {
+        self.cred.0.cred_id()
+    }
 }
