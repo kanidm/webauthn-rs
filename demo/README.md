@@ -212,7 +212,7 @@ In a real application, you'd sort this out:
 * The encryption key for the client side cookie is passed as a regular command line argument or an
   environment variable, which can leak in some environments.
 
-  In a real application, you'd read the encryption key from a file on disk, and protect that.
+  In a real application, you'd read the encryption key in another way.
 
 * There's no way to relabel or remove an enrolled credential.
 
