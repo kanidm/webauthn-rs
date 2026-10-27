@@ -33,7 +33,26 @@ pub const MAX_AGE: Duration = Duration::minutes(5);
 /// This shouldn't happen under normal circumstances.
 pub const MAX_FUTURE: Duration = Duration::minutes(1);
 
-const COOKIE_NAME: &str = "webauthn-rs-demo";
+/// Insecure cookie name, used for HTTP connections.
+///
+/// This does not include [a name prefix][0].
+///
+/// [0]: https://www.ietf.org/archive/id/draft-ietf-httpbis-layered-cookies-02.html#section-4.1.3
+const INSECURE_COOKIE_NAME: &str = "webauthn-rs-demo";
+
+/// [Prefixed][0] secure cookie name, used for HTTPS connections.
+///
+/// [0]: https://www.ietf.org/archive/id/draft-ietf-httpbis-layered-cookies-02.html#section-4.1.3.4
+const SECURE_COOKIE_NAME: &str = "__Host-Http-webauthn-rs-demo";
+
+/// Get the cookie name appropriate for the context.
+fn cookie_name(secure: bool) -> &'static str {
+    if secure {
+        SECURE_COOKIE_NAME
+    } else {
+        INSECURE_COOKIE_NAME
+    }
+}
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct SessionCookie {
@@ -152,8 +171,14 @@ impl SessionCookie {
     /// Load an encrypted [`SessionCookie`] from the [`CookieJar`].
     ///
     /// Returns [`ServerError`] if the cookie is missing or invalid.
-    pub fn from_jar(jar: &CookieJar, cipher: &JweA256KWEncipher) -> ServerResult<Self> {
-        let cookie = jar.get(COOKIE_NAME).ok_or(ServerError::MissingCookie)?;
+    pub fn from_jar(
+        jar: &CookieJar,
+        cipher: &JweA256KWEncipher,
+        secure: bool,
+    ) -> ServerResult<Self> {
+        let cookie = jar
+            .get(cookie_name(secure))
+            .ok_or(ServerError::MissingCookie)?;
         Self::from_encrypted_jwe(cipher, cookie.value_trimmed())
     }
 
@@ -190,16 +215,16 @@ pub async fn get_cookie_jar() -> Result<CookieJar, ServerFnError> {
         let Ok(v) = h.to_str() else {
             continue;
         };
-        let Ok(cookie) = Cookie::parse_encoded(v) else {
-            continue;
-        };
+        for cookie in Cookie::split_parse_encoded(v) {
+            if let Ok(cookie) = cookie {
+                jar.add_original(cookie.into_owned());
 
-        jar.add_original(cookie.into_owned());
-
-        if max_cookies == 0 {
-            break;
+                if max_cookies == 0 {
+                    break;
+                }
+                max_cookies -= 1;
+            }
         }
-        max_cookies -= 1;
     }
 
     Ok(jar)
@@ -220,7 +245,7 @@ pub async fn put_cookie_jar(jar: CookieJar) -> Result<(), ServerFnError> {
 
 /// Template for `webauthn-rs-demo`'s session cookie.
 fn build_cookie(secure: bool) -> Cookie<'static> {
-    let cookie = Cookie::build(COOKIE_NAME)
+    let cookie = Cookie::build(cookie_name(secure))
         .http_only(true)
         .same_site(SameSite::Strict)
         .secure(secure)

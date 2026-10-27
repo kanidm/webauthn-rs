@@ -138,11 +138,12 @@ pub async fn finish_login(pkc: PublicKeyCredential) -> Result<FinishLoginRespons
         ServerFnError::new("Cookie error")
     })?;
 
-    let mut session = SessionCookie::from_jar(&cookie_jar, &state.wrap_key).map_err(|err| {
-        error!("SessionCookie::from_jar: missing or invalid cookie: {err}");
-        set_http_response_code(StatusCode::BAD_REQUEST);
-        ServerFnError::new("Missing cookie")
-    })?;
+    let mut session =
+        SessionCookie::from_jar(&cookie_jar, &state.wrap_key, state.secure).map_err(|err| {
+            error!("SessionCookie::from_jar: missing or invalid cookie: {err}");
+            set_http_response_code(StatusCode::BAD_REQUEST);
+            ServerFnError::new("Missing cookie")
+        })?;
 
     let Some((auth_state, user_unique_id)) = session.take_passkey_authentication() else {
         error!("take_passkey_authentication: incorrect state");
