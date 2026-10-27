@@ -1,4 +1,7 @@
-use crate::server::{ServerError, ServerResult};
+use crate::{
+    app::MAX_AGE,
+    server::{ServerError, ServerResult},
+};
 use axum_server::tls_rustls::RustlsConfig;
 use clap::{Parser, ValueHint};
 use compact_jwt::crypto::JweA256KWEncipher;
@@ -134,7 +137,8 @@ impl ServerArgs {
             return Err(ServerError::InvalidRelyingPartyOrigin);
         }
 
-        let mut builder = WebauthnBuilder::new(rp_id, &self.rp_origin)?;
+        let mut builder =
+            WebauthnBuilder::new(rp_id, &self.rp_origin)?.timeout(MAX_AGE.unsigned_abs());
 
         if let Some(rp_name) = &self.rp_name {
             builder = builder.rp_name(rp_name);

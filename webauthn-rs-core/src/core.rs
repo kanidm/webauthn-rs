@@ -1039,8 +1039,13 @@ impl WebauthnCore {
     /// is the output of `navigator.credentials.get()`, which is processed by this
     /// function. If the authentication fails, appropriate errors will be returned.
     ///
-    /// This requires the associated AuthenticationState that was created by
-    /// generate_challenge_authenticate
+    /// This method attempts to match against multiple potential [Credential]s from
+    /// [AuthenticationState::set_allowed_credentials]. If you need to process a single
+    /// [Credential], use
+    /// [`authenticate_single_credential`][Self::authenticate_single_credential] instead.
+    ///
+    /// This requires the associated [AuthenticationState] that was created by
+    /// [`generate_challenge_authenticate`][Self::generate_challenge_authenticate].
     ///
     /// On successful authentication, an Ok result is returned. The Ok may contain the CredentialID
     /// and associated counter, which you *should* update for security purposes. If the Ok returns
@@ -1053,16 +1058,6 @@ impl WebauthnCore {
         // Steps 1 through 4 are client side.
 
         // https://w3c.github.io/webauthn/#verifying-assertion
-        // Lookup challenge
-
-        let AuthenticationState {
-            credentials: creds,
-            policy,
-            challenge: chal,
-            appid,
-            allow_backup_eligible_upgrade,
-        } = state;
-        let chal: ChallengeRef = chal;
 
         // If the allowCredentials option was given when this authentication ceremony was initiated,
         // verify that credential.id identifies one of the public key credentials that were listed in allowCredentials.
@@ -1091,7 +1086,7 @@ impl WebauthnCore {
             // Using credential’s id attribute (or the corresponding rawId, if base64url encoding is
             // inappropriate for your use case), look up the corresponding credential public key.
             let mut found_cred: Option<&Credential> = None;
-            for cred in creds {
+            for cred in &state.credentials {
                 if cred.cred_id.as_slice() == rsp.raw_id.as_slice() {
                     found_cred = Some(cred);
                     break;
@@ -1100,6 +1095,43 @@ impl WebauthnCore {
 
             found_cred.ok_or(WebauthnError::CredentialNotFound)?
         };
+        self.authenticate_single_credential(rsp, state, cred)
+    }
+
+    /// Process an authenticate response from the authenticator and browser. This
+    /// is the output of `navigator.credentials.get()`, which is processed by this
+    /// function. If the authentication fails, appropriate errors will be returned.
+    ///
+    /// This method takes a single matching [Credential], and *ignores* those passed in
+    /// [AuthenticationState::set_allowed_credentials]. If you need to process multiple
+    /// [Credential]s, use [`authenticate_credential`][Self::authenticate_credential].
+    ///
+    /// This requires the associated [AuthenticationState] that was created by
+    /// [`generate_challenge_authenticate`][Self::generate_challenge_authenticate].
+    ///
+    /// On successful authentication, an Ok result is returned. The Ok may contain the CredentialID
+    /// and associated counter, which you *should* update for security purposes. If the Ok returns
+    /// `None` then the credential does not have a counter.
+    pub fn authenticate_single_credential(
+        &self,
+        rsp: &PublicKeyCredential,
+        state: &AuthenticationState,
+        cred: &Credential,
+    ) -> Result<AuthenticationResult, WebauthnError> {
+        // Lookup challenge
+        let AuthenticationState {
+            credentials: _,
+            policy,
+            challenge: chal,
+            appid,
+            allow_backup_eligible_upgrade,
+        } = state;
+
+        if cred.cred_id.as_slice() != rsp.raw_id.as_slice() {
+            return Err(WebauthnError::CredentialNotFound);
+        }
+
+        let chal: ChallengeRef = chal;
 
         // Identify the user being authenticated and verify that this user is the owner of the public
         // key credential source credentialSource identified by credential.id:

@@ -4,8 +4,12 @@ use leptos_router::{
     components::{Route, Router, Routes},
     StaticSegment,
 };
+use time::Duration;
 
 use crate::{components::*, pages::*};
+
+/// Maximum age of a session cookie.
+pub const MAX_AGE: Duration = Duration::minutes(5);
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {

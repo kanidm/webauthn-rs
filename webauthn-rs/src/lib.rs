@@ -188,6 +188,8 @@
 extern crate tracing;
 
 mod interface;
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
+mod private;
 
 use std::time::Duration;
 use url::Url;
@@ -197,6 +199,8 @@ use webauthn_rs_core::proto::*;
 use webauthn_rs_core::WebauthnCore;
 
 use crate::interface::*;
+#[cfg(any(all(doc, not(doctest)), feature = "conditional-ui"))]
+use crate::private::CredentialRef;
 
 /// Fake `CredentialID` generator. See [WebauthnFakeCredentialGenerator](fake::WebauthnFakeCredentialGenerator) for more details.
 pub mod fake {
@@ -1346,8 +1350,8 @@ impl Webauthn {
     /// will extract the users Uuid and the Credential ID that was used by the user
     /// in their authentication.
     ///
-    /// You must use this information to locate the relavent credential that was used
-    /// to allow you to finish the authentication.
+    /// You must use this information to locate the user's [Credential] to allow you to
+    /// [finish the authentication ceremony][Self::finish_discoverable_authentication_v2].
     pub fn identify_discoverable_authentication<'a>(
         &'_ self,
         reg: &'a PublicKeyCredential,
@@ -1359,10 +1363,18 @@ impl Webauthn {
             .ok_or(WebauthnError::InvalidUserUniqueId)
     }
 
-    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), the
-    /// stored [DiscoverableAuthentication] and the users [DiscoverableKey],
-    /// complete the authentication of the user. This asserts that user verification must have been correctly
-    /// performed allowing you to trust this as a MFA interfaction.
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), the stored
+    /// [DiscoverableAuthentication] and the user's [DiscoverableKey], complete the authentication
+    /// of the user. This asserts that user verification must have been correctly performed allowing
+    /// you to trust this as a MFA interaction.
+    ///
+    /// # Deprecated
+    ///
+    /// Use [`finish_discoverable_authentication_v2`][Self::finish_discoverable_authentication_v2]
+    /// instead to avoid some needless copies.
+    /// [`identify_discoverable_authentication`][Self::identify_discoverable_authentication]
+    /// provides a credential ID, so only the matching [Credential] is needed to complete
+    /// authentication.
     ///
     /// # Errors
     /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
@@ -1381,6 +1393,7 @@ impl Webauthn {
     /// valid per the above check. If you wish
     /// you *may* use the content of the [AuthenticationResult] for extended validations (such as the
     /// user verification flag).
+    #[deprecated = "Use finish_discoverable_authentication_v2"]
     pub fn finish_discoverable_authentication(
         &self,
         reg: &PublicKeyCredential,
@@ -1390,6 +1403,45 @@ impl Webauthn {
         let creds = creds.iter().map(|dk| dk.cred.clone()).collect();
         state.ast.set_allowed_credentials(creds);
         self.core.authenticate_credential(reg, &state.ast)
+    }
+
+    /// Given the `PublicKeyCredential` returned by the user agent (e.g. a browser), the stored
+    /// [DiscoverableAuthentication] and the user's [Credential], complete the authentication of the
+    /// user. This asserts that user verification must have been correctly performed allowing you to
+    /// trust this as a MFA interaction.
+    ///
+    /// As [`identify_discoverable_authentication`][Self::identify_discoverable_authentication]
+    /// provides a credential ID, only one [Credential] needs to be provided.
+    ///
+    /// This version of the method accepts a single [Credential] directly. This avoids some needless
+    /// copies and conversion with
+    /// [`finish_discoverable_authentication`][Self::finish_discoverable_authentication].
+    ///
+    /// # Errors
+    /// If any part of the registration is incorrect or invalid, an error will be returned. See [WebauthnError].
+    ///
+    /// # Returns
+    /// On success, [AuthenticationResult] is returned which contains some details of the Authentication
+    /// process.
+    ///
+    /// As per <https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion> 21:
+    ///
+    /// If the Credential Counter is greater than 0 you MUST assert that the counter is greater than
+    /// the stored counter. If the counter is equal or less than this MAY indicate a cloned credential
+    /// and you SHOULD invalidate and reject that credential as a result.
+    ///
+    /// From this [AuthenticationResult] you *should* update the Credential's Counter value if it is
+    /// valid per the above check. If you wish
+    /// you *may* use the content of the [AuthenticationResult] for extended validations (such as the
+    /// user verification flag).
+    pub fn finish_discoverable_authentication_v2(
+        &self,
+        reg: &PublicKeyCredential,
+        state: DiscoverableAuthentication,
+        cred: impl CredentialRef,
+    ) -> WebauthnResult<AuthenticationResult> {
+        self.core
+            .authenticate_single_credential(reg, &state.ast, cred.credential())
     }
 }
 
