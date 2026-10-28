@@ -83,14 +83,7 @@ email webauthn at firstyear.id.au
 
 You can test this library via our [demonstration site](https://webauthn.firstyear.id.au/)
 
-Or you can run the demonstration your self locally with:
-
-    cd compat_tester/webauthn-rs-demo
-    cargo run
-
-For additional configuration options for the demo site:
-
-    cargo run -- --help
+Or you can run [the demonstration locally](./demo/README.md).
 
 ## Known Supported Keys/Harwdare
 
