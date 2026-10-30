@@ -82,7 +82,7 @@ use webauthn_authenticator_rs::softtoken::SoftTokenFile;
     clap(group(
         ArgGroup::new("bluetooth")
             .required(true)
-            .args(&["serial_port", "bluez"])
+            .args(&["serial_port", "bluez", "stdout"])
     ))
 )]
 #[cfg_attr(
@@ -90,7 +90,7 @@ use webauthn_authenticator_rs::softtoken::SoftTokenFile;
     clap(group(
         ArgGroup::new("bluetooth")
             .required(true)
-            .args(&["serial_port"])
+            .args(&["serial_port", "stdout"])
     ))
 )]
 #[clap(group(
@@ -108,16 +108,20 @@ pub struct CliParser {
     #[clap(short, long)]
     pub serial_port: Option<String>,
 
-    #[cfg(target_os = "linux")]
-    /// Use Bluez to send BTLE advertisements.
-    #[clap(long)]
-    pub bluez: bool,
-
     /// Baud rate for communication with Bluetooth HCI controller.
     ///
     /// By default, Apache Mynewt's NimBLE HCI demo runs at 1000000 baud.
     #[clap(short, long, default_value = "1000000")]
     pub baud_rate: u32,
+
+    #[cfg(target_os = "linux")]
+    /// Use Bluez to send BTLE advertisements.
+    #[clap(long)]
+    pub bluez: bool,
+
+    /// Write the BTLE beacon to stdout.
+    #[clap(long)]
+    pub stdout: bool,
 
     /// Tunnel server ID to use. 0 = Google.
     #[clap(short, long, default_value = "0")]
@@ -301,10 +305,15 @@ enum Advertisers {
     SerialHci(SerialHciAdvertiser),
     #[cfg(target_os = "linux")]
     Bluez(BluezAdvertiser),
+    Stdout,
 }
 
 impl Advertisers {
     async fn new(opt: &CliParser) -> Self {
+        if opt.stdout {
+            return Self::Stdout;
+        }
+
         #[cfg(target_os = "linux")]
         if opt.bluez {
             return Self::Bluez(BluezAdvertiser::new().await);
@@ -327,6 +336,13 @@ impl Advertiser for Advertisers {
             Self::SerialHci(a) => a.start_advertising(service_uuid, payload).await,
             #[cfg(target_os = "linux")]
             Self::Bluez(a) => a.start_advertising(service_uuid, payload).await,
+            Self::Stdout => {
+                println!(
+                    "BTLE beacon: UUID: 0x{service_uuid:x}, payload: {}",
+                    hex::encode(payload)
+                );
+                Ok(())
+            }
         }
     }
 
@@ -335,6 +351,7 @@ impl Advertiser for Advertisers {
             Self::SerialHci(a) => a.stop_advertising().await,
             #[cfg(target_os = "linux")]
             Self::Bluez(a) => a.stop_advertising().await,
+            Self::Stdout => Ok(()),
         }
     }
 }
