@@ -35,11 +35,11 @@ tracing.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 url = { workspace = true, features = ["serde"] }
-x509-parser = "0.16"
-der-parser = "9.0"
+x509-parser = "0.18"
+der-parser = "10.0"
 uuid = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-hex-literal = "0.4"
+hex-literal = "1.1"
 tracing-subscriber.workspace = true
 webauthn-rs-device-catalog.workspace = true
