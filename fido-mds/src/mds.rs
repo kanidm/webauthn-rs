@@ -430,6 +430,9 @@ pub enum PublicKeyAlg {
 #[serde(deny_unknown_fields)]
 /// A type of attestation
 pub enum AttestationType {
+    /// none
+    #[serde(rename = "none")]
+    None,
     /// basic_full
     #[serde(rename = "basic_full")]
     BasicFull,
@@ -833,6 +836,7 @@ pub struct MetadataStatement {
     ///   ],
     /// ]
     ///
+    #[serde(default)]
     pub user_verification_details: Vec<Vec<VerificationMethodAndCombinations>>,
     /// The list of key protection types supported by the authenticator. Must be set to the complete
     /// list of the supported KEY_PROTECTION_ constant case-sensitive string names.
@@ -889,6 +893,7 @@ pub struct MetadataStatement {
     ///
     /// ❗️ This is represented as an enum in this project to help you understand the possible values
     /// that *may* exist. This contradicts the MDS spec, but it's better for you the consumer.
+    #[serde(default)]
     pub attachment_hint: Vec<AttachmentHint>,
     /// ⚠️  WARNING - Content of this value is not well documented to it's intent or usage!
     ///
