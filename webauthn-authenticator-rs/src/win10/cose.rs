@@ -2,6 +2,7 @@
 use crate::prelude::WebauthnCError;
 use std::pin::Pin;
 use webauthn_rs_proto::PubKeyCredParams;
+use windows::core::PCWSTR;
 use windows::{
     core::HSTRING,
     Win32::Networking::WindowsWebServices::{
@@ -10,6 +11,7 @@ use windows::{
     },
 };
 
+use super::native::StringEqualPtr;
 use super::{constants::CREDENTIAL_TYPE_PUBLIC_KEY, WinWrapper};
 
 pub struct WinCoseCredentialParameters {
@@ -41,7 +43,7 @@ impl WinWrapper<Vec<PubKeyCredParams>> for WinCoseCredentialParameters {
             types: Vec::with_capacity(
                 params
                     .iter()
-                    .filter(|p| p.type_ != WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY)
+                    .filter(|p| !p.type_.equals_wide(CREDENTIAL_TYPE_PUBLIC_KEY))
                     .count(),
             ),
         };
@@ -49,18 +51,23 @@ impl WinWrapper<Vec<PubKeyCredParams>> for WinCoseCredentialParameters {
         let mut boxed = Box::new(res);
 
         for param in params {
-            let pwsz_credential_type = if param.type_ == WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY {
-                CREDENTIAL_TYPE_PUBLIC_KEY.into()
-            } else {
-                // Unlikely path, as WebAuthn L3 doesn't specify this.
-                let typ = HSTRING::from(param.type_);
+            let pwsz_credential_type = unsafe {
+                if param
+                    .type_
+                    .equals_pcwstr(WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY)
+                {
+                    WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY
+                } else {
+                    // Unlikely path, as WebAuthn L3 doesn't specify this.
+                    let typ = HSTRING::from(param.type_);
 
-                // Even though the `HSTRING` is moved when pushed into the `Vec` (and potentially
-                // many times if the `Vec` reallocates), its header and string buffer are heap
-                // allocated and don't move.
-                let ptr = (&typ).into();
-                boxed.types.push(typ);
-                ptr
+                    // Even though the `HSTRING` is moved when pushed into the `Vec` (and potentially
+                    // many times if the `Vec` reallocates), its header and string buffer are heap
+                    // allocated and don't move.
+                    let ptr = PCWSTR::from_raw(typ.as_ptr());
+                    boxed.types.push(typ);
+                    ptr
+                }
             };
 
             boxed.params.push(WEBAUTHN_COSE_CREDENTIAL_PARAMETER {

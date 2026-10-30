@@ -1,4 +1,6 @@
 //! Wrappers for [AllowCredentials] and [PublicKeyCredentialDescriptor].
+use super::native::StringEqualPtr;
+use super::{constants::CREDENTIAL_TYPE_PUBLIC_KEY, WinWrapper};
 use crate::prelude::WebauthnCError;
 use std::{marker::PhantomPinned, pin::Pin};
 use webauthn_rs_proto::{AllowCredentials, AuthenticatorTransport, PublicKeyCredentialDescriptor};
@@ -8,8 +10,6 @@ use windows::Win32::Networking::WindowsWebServices::{
     WEBAUTHN_CTAP_TRANSPORT_INTERNAL, WEBAUTHN_CTAP_TRANSPORT_NFC, WEBAUTHN_CTAP_TRANSPORT_TEST,
     WEBAUTHN_CTAP_TRANSPORT_USB,
 };
-
-use super::{constants::CREDENTIAL_TYPE_PUBLIC_KEY, WinWrapper};
 
 /// Converts an [AuthenticatorTransport] into a value for
 /// [WEBAUTHN_CREDENTIAL_EX::dwTransports]
@@ -105,7 +105,7 @@ impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
         // Check that all the credential types are supported.
         for c in credentials.iter() {
             let typ = c.type_();
-            if typ != WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY {
+            if !typ.equals_wide(CREDENTIAL_TYPE_PUBLIC_KEY) {
                 error!("Unsupported credential type: {c:?}");
                 return Err(WebauthnCError::Internal);
             }
@@ -131,7 +131,7 @@ impl<T: CredentialType> WinWrapper<Vec<T>> for WinCredentialList {
                 dwVersion: WEBAUTHN_CREDENTIAL_EX_CURRENT_VERSION,
                 cbId: id.len() as u32,
                 pbId: id.as_mut_ptr(),
-                pwszCredentialType: CREDENTIAL_TYPE_PUBLIC_KEY.into(),
+                pwszCredentialType: WEBAUTHN_CREDENTIAL_TYPE_PUBLIC_KEY,
                 dwTransports: credential.transports(),
             }));
         }
