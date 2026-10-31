@@ -18,12 +18,7 @@ use crate::ctap2::commands::{
 };
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 use crate::util::{creation_to_clientdata, get_to_clientdata};
-use crate::{
-    crypto::compute_sha256,
-    error::WebauthnCError,
-    AuthenticatorBackend,
-};
-
+use crate::{crypto::compute_sha256, error::WebauthnCError, AuthenticatorBackend};
 
 /// [AuthenticatorBackend] with a `client_data_hash` parameter, for proxying
 /// requests.
