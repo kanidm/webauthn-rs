@@ -16,12 +16,9 @@ use webauthn_rs_proto::{
 use crate::ctap2::commands::{
     GetAssertionRequest, GetAssertionResponse, MakeCredentialRequest, MakeCredentialResponse,
 };
-use crate::{
-    crypto::compute_sha256,
-    error::WebauthnCError,
-    util::{creation_to_clientdata, get_to_clientdata},
-    AuthenticatorBackend,
-};
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
+use crate::util::{creation_to_clientdata, get_to_clientdata};
+use crate::{crypto::compute_sha256, error::WebauthnCError, AuthenticatorBackend};
 
 /// [AuthenticatorBackend] with a `client_data_hash` parameter, for proxying
 /// requests.
@@ -87,6 +84,7 @@ pub trait AuthenticatorBackendHashedClientData {
 ///
 /// This implementation creates and hashes the `client_data_json`, and inserts
 /// it back into the response type as normal.
+#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 impl<T: AuthenticatorBackendHashedClientData> AuthenticatorBackend for T {
     fn perform_register(
         &mut self,
