@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use serde_cbor_2::Value;
+use serde_cbor_2::{value::to_value, Value};
 use std::fmt;
 use uuid::Uuid;
-use webauthn_rs_proto::AuthenticatorTransport;
+use webauthn_rs_proto::{AuthenticatorTransport, PubKeyCredParams};
 
 use self::CBORCommand;
 use super::*;
@@ -49,7 +49,7 @@ pub struct GetInfoResponse {
     /// [AuthenticatorTransport].
     pub transports: Option<Vec<String>>,
     /// List of supported algorithms for credential generation.
-    pub algorithms: Option<Value>,
+    pub algorithms: Option<Vec<PubKeyCredParams>>,
     pub max_serialized_large_blob_array: Option<usize>,
     pub force_pin_change: bool,
     /// Current minimum PIN length, in Unicode code points.
@@ -163,7 +163,15 @@ impl fmt::Display for GetInfoResponse {
         }
 
         if let Some(v) = &self.algorithms {
-            writeln!(f, "algorithms: {v:?}")?;
+            write!(f, "algorithms: ")?;
+            for alg in v {
+                if let Some(cose_alg) = alg.cose_alg() {
+                    write!(f, "{cose_alg:?} ")?;
+                } else {
+                    write!(f, "{} ", alg.alg)?;
+                }
+            }
+            writeln!(f)?;
         }
 
         if let Some(v) = self.max_serialized_large_blob_array {
@@ -360,7 +368,9 @@ impl TryFrom<BTreeMap<u32, Value>> for GetInfoResponse {
             .remove(&0x09)
             .and_then(|v| value_to_vec_string(v, "0x09"));
 
-        let algorithms = raw.remove(&0x0A);
+        let algorithms = raw
+            .remove(&0x0A)
+            .and_then(|v| serde_cbor_2::value::from_value(v).ok());
 
         let max_serialized_large_blob_array =
             raw.remove(&0x0b).and_then(|v| value_to_usize(v, "0x0b"));
@@ -519,7 +529,9 @@ impl From<GetInfoResponse> for BTreeMap<u32, Value> {
         }
 
         if let Some(algorithms) = algorithms {
-            o.insert(0x0a, algorithms);
+            if let Ok(algorithms) = to_value(algorithms) {
+                o.insert(0x0a, algorithms);
+            }
         }
 
         if let Some(v) = max_serialized_large_blob_array {

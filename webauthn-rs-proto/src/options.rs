@@ -1,6 +1,7 @@
 //! Types that define options as to how an authenticator may interact with
 //! with the server.
 
+use crate::COSEAlgorithm;
 use serde::{Deserialize, Serialize};
 use serde_with::{
     base64::{Base64, UrlSafe},
@@ -98,13 +99,20 @@ pub struct User {
 }
 
 /// Public key cryptographic parameters
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq, Eq)]
 pub struct PubKeyCredParams {
     /// The type of public-key credential.
     #[serde(rename = "type")]
     pub type_: String,
     /// The algorithm in use defined by COSE.
     pub alg: i64,
+}
+
+impl PubKeyCredParams {
+    /// Get the [`COSEAlgorithm`] identifier for this algorithm.
+    pub fn cose_alg(&self) -> Option<COSEAlgorithm> {
+        COSEAlgorithm::try_from(self.alg).ok()
+    }
 }
 
 /// <https://www.w3.org/TR/webauthn/#enumdef-attestationconveyancepreference>

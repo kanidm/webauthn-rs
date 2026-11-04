@@ -73,10 +73,10 @@ impl COSEAlgorithm {
     }
 }
 
-impl TryFrom<i128> for COSEAlgorithm {
+impl TryFrom<i32> for COSEAlgorithm {
     type Error = ();
 
-    fn try_from(i: i128) -> Result<Self, Self::Error> {
+    fn try_from(i: i32) -> Result<Self, Self::Error> {
         match i {
             -7 => Ok(COSEAlgorithm::ES256),
             -35 => Ok(COSEAlgorithm::ES384),
@@ -91,5 +91,23 @@ impl TryFrom<i128> for COSEAlgorithm {
             -65535 => Ok(COSEAlgorithm::INSECURE_RS1),
             _ => Err(()),
         }
+    }
+}
+
+impl TryFrom<i64> for COSEAlgorithm {
+    type Error = ();
+
+    fn try_from(i: i64) -> Result<Self, Self::Error> {
+        let i = i32::try_from(i).map_err(|_| ())?;
+        COSEAlgorithm::try_from(i)
+    }
+}
+
+impl TryFrom<i128> for COSEAlgorithm {
+    type Error = ();
+
+    fn try_from(i: i128) -> Result<Self, Self::Error> {
+        let i = i32::try_from(i).map_err(|_| ())?;
+        COSEAlgorithm::try_from(i)
     }
 }
