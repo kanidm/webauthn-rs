@@ -116,6 +116,7 @@ tungstenite = { version = "^0.28.0", default-features = false, features = [
 ] }
 url = "2"
 uuid = "^1.19.0"
+web-time = "^1.1.0"
 serde = { version = "^1.0.228", features = ["derive"] }
 serde_cbor_2 = { version = "0.13.0" }
 serde_json = "^1.0.145"

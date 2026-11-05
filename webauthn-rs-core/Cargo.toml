@@ -39,6 +39,9 @@ x509-parser = "0.18"
 der-parser = "10.0"
 uuid = { workspace = true, features = ["serde"] }
 
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+web-time.workspace = true
+
 [dev-dependencies]
 hex-literal = "1.1"
 tracing-subscriber.workspace = true
