@@ -35,8 +35,8 @@ impl WinWrapper<RelyingParty> for WinRpEntityInformation {
 
         let mut boxed = Box::new(res);
 
-        boxed.native.pwszId = PCWSTR::from(&boxed.id);
-        boxed.native.pwszName = PCWSTR::from(&boxed.name);
+        boxed.native.pwszId = PCWSTR::from_raw(boxed.id.as_ptr());
+        boxed.native.pwszName = PCWSTR::from_raw(boxed.name.as_ptr());
 
         Ok(Box::into_pin(boxed))
     }

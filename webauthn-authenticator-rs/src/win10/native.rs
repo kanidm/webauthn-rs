@@ -1,9 +1,9 @@
 //! Helpers for working with Windows native types.
+use crate::error::WebauthnCError;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::pin::Pin;
-
-use crate::error::WebauthnCError;
+use windows::core::PCWSTR;
 
 /// Smart pointer type to automatically `free()` bare pointers we got from
 /// Windows' API when dropped.
@@ -59,4 +59,19 @@ pub trait WinWrapper<T> {
         Self: Sized;
     /// Returns a pointer to the Windows equivalent type
     fn native_ptr(&self) -> &Self::NativeType;
+}
+
+pub trait StringEqualPtr {
+    unsafe fn equals_pcwstr(&self, other: PCWSTR) -> bool;
+    fn equals_wide(&self, other: &[u16]) -> bool;
+}
+
+impl StringEqualPtr for String {
+    unsafe fn equals_pcwstr(&self, other: PCWSTR) -> bool {
+        self.encode_utf16().eq(other.as_wide().iter().copied())
+    }
+
+    fn equals_wide(&self, other: &[u16]) -> bool {
+        self.encode_utf16().eq(other.iter().copied())
+    }
 }

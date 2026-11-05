@@ -6,11 +6,12 @@ use webauthn_rs_proto::{
     RequestRegistrationExtensions,
 };
 
+use super::constants::{ID_CRED_BLOB, ID_CRED_PROTECT, ID_HMAC_SECRET, ID_MIN_PIN_LENGTH};
 use super::WinWrapper;
 
 use windows::{
-    core::{HSTRING, PCWSTR},
-    Win32::{Foundation::BOOL, Networking::WindowsWebServices::*},
+    core::{BOOL, HSTRING, PCWSTR},
+    Win32::Networking::WindowsWebServices::*,
 };
 
 /// Represents a single extension for MakeCredential requests, analogous to a
@@ -28,8 +29,8 @@ pub(crate) trait WinExtensionRequestType
 where
     Self: Sized,
 {
-    /// Extension identier, as string.
-    fn identifier(&self) -> &str;
+    /// Extension identier
+    fn identifier(&self) -> HSTRING;
     /// Length of the native data structure, in bytes.
     fn len(&self) -> u32;
     /// Pointer to the native data structure.
@@ -41,12 +42,12 @@ where
 }
 
 impl WinExtensionRequestType for WinExtensionMakeCredentialRequest {
-    fn identifier(&self) -> &str {
-        match self {
-            Self::HmacSecret(_) => WEBAUTHN_EXTENSIONS_IDENTIFIER_HMAC_SECRET,
-            Self::CredProtect(_) => WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_PROTECT,
-            Self::MinPinLength(_) => WEBAUTHN_EXTENSIONS_IDENTIFIER_MIN_PIN_LENGTH,
-        }
+    fn identifier(&self) -> HSTRING {
+        HSTRING::from_wide(match self {
+            Self::HmacSecret(_) => ID_HMAC_SECRET,
+            Self::CredProtect(_) => ID_CRED_PROTECT,
+            Self::MinPinLength(_) => ID_MIN_PIN_LENGTH,
+        })
     }
 
     fn len(&self) -> u32 {
@@ -169,26 +170,22 @@ impl TryFrom<&WEBAUTHN_EXTENSION> for WinExtensionMakeCredentialResponse {
 
     /// Reads a [WEBAUTHN_EXTENSION] for a response to a MakeCredential call.
     fn try_from(e: &WEBAUTHN_EXTENSION) -> Result<Self, WebauthnCError> {
-        let id = unsafe {
-            e.pwszExtensionIdentifier
-                .to_string()
-                .map_err(|_| WebauthnCError::Internal)?
-        };
-        // let id = &HSTRING::from_wide(unsafe { e.pwszExtensionIdentifier.as_wide() });
-        match id.as_str() {
-            WEBAUTHN_EXTENSIONS_IDENTIFIER_HMAC_SECRET => {
+        let id = unsafe { e.pwszExtensionIdentifier.as_wide() };
+
+        match id {
+            ID_HMAC_SECRET => {
                 read_extension::<'_, BOOL, _>(e).map(WinExtensionMakeCredentialResponse::HmacSecret)
             }
-            WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_PROTECT => {
+            ID_CRED_PROTECT => {
                 read_extension2(e).map(WinExtensionMakeCredentialResponse::CredProtect)
             }
             // Value intentonally ignored
-            WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_BLOB => Ok(Self::CredBlob),
-            WEBAUTHN_EXTENSIONS_IDENTIFIER_MIN_PIN_LENGTH => {
+            ID_CRED_BLOB => Ok(Self::CredBlob),
+            ID_MIN_PIN_LENGTH => {
                 read_extension2(e).map(WinExtensionMakeCredentialResponse::MinPinLength)
             }
             o => {
-                error!("unknown extension: {:?}", o);
+                error!("unknown extension: {:?}", String::from_utf16_lossy(o));
                 Err(WebauthnCError::Internal)
             }
         }
@@ -231,14 +228,10 @@ impl TryFrom<&WEBAUTHN_EXTENSION> for WinExtensionGetAssertionResponse {
 
     /// Reads a [WEBAUTHN_EXTENSION] for a response to a GetAssertion call.
     fn try_from(e: &WEBAUTHN_EXTENSION) -> Result<Self, Self::Error> {
-        let id = unsafe {
-            e.pwszExtensionIdentifier
-                .to_string()
-                .map_err(|_| WebauthnCError::Internal)?
-        };
+        let id = unsafe { e.pwszExtensionIdentifier.as_wide() };
 
-        match id.as_str() {
-            WEBAUTHN_EXTENSIONS_IDENTIFIER_CRED_BLOB => Ok(Self::CredBlob),
+        match id {
+            ID_CRED_BLOB => Ok(Self::CredBlob),
             o => {
                 error!("unknown extension: {:?}", o);
                 Err(WebauthnCError::Internal)
@@ -336,7 +329,7 @@ where
                 pExtensions: std::ptr::null_mut(),
             },
             native_list: Vec::with_capacity(len),
-            ids: extensions.iter().map(|e| e.identifier().into()).collect(),
+            ids: extensions.iter().map(|e| e.identifier()).collect(),
             extensions,
             _pin: PhantomPinned,
         };
