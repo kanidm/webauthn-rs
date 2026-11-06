@@ -396,7 +396,7 @@ impl WebauthnCore {
             allow_synchronised_authenticators,
         } = state;
         let chal: ChallengeRef = challenge;
-        let current_time = SystemTime::now();
+        let current_time = crate::time::now();
 
         // send to register_credential_internal
         let credential = self.register_credential_internal(
