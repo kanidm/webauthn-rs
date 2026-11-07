@@ -847,7 +847,6 @@ mod tests {
     };
     use crypto_glue::{traits::DecodeDer, x509::x509_verify_signature};
     use std::time::Duration;
-    use tempfile::tempfile;
     use webauthn_rs_core::{
         error::WebauthnError,
         proto::{AttestationCaList, AttestationCaListBuilder, COSEKey},
@@ -1024,6 +1023,8 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn softtoken_persistence() {
+        use tempfile::tempfile;
+
         let _ = tracing_subscriber::fmt().without_time().try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "https://example.com/auth",

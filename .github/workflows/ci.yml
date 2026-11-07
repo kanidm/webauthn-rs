@@ -351,3 +351,75 @@ jobs:
             --features wasm \
             --no-default-features
 
+  # Testing WASM in browsers
+  wasm-js:
+    name: WASM + JS targets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      # Building the tests as we don't want to unconditionally use sources of
+      # time and entropy for WASM+JS environments.
+      - name: "Build tests: base64urlsafedata, sshkey-attest, webauthn-rs, webauthn-rs-core, webauthn-rs-proto"
+        run: |
+          cargo build \
+            --target wasm32-unknown-unknown \
+            -p base64urlsafedata \
+            -p sshkey-attest \
+            -p webauthn-rs \
+            -p webauthn-rs-core \
+            -p webauthn-rs-proto \
+            --tests
+
+      - name: "Build tests: webauthn-authenticator-rs"
+        run: |
+          cargo build \
+            --target wasm32-unknown-unknown \
+            -p webauthn-authenticator-rs \
+            --features softtoken,softpasskey,ctap2,ctap2-management,vendor-solokey,vendor-yubikey \
+            --tests
+
+      - name: "Test Chromium: base64urlsafedata, sshkey-attest, webauthn-rs, webauthn-rs-core, webauthn-rs-proto"
+        run: |
+          ./.github/wasm_multitest.sh --chrome \
+            base64urlsafedata \
+            sshkey-attest \
+            webauthn-rs \
+            webauthn-rs-core \
+            webauthn-rs-proto
+
+      - name: "Test Firefox: base64urlsafedata, sshkey-attest, webauthn-rs, webauthn-rs-core, webauthn-rs-proto"
+        run: |
+          ./.github/wasm_multitest.sh --firefox \
+            base64urlsafedata \
+            sshkey-attest \
+            webauthn-rs \
+            webauthn-rs-core \
+            webauthn-rs-proto
+
+      - name: "Test Chromium: webauthn-authenticator-rs"
+        run: |
+          wasm-pack test \
+            --headless \
+            --chrome \
+            webauthn-authenticator-rs \
+            --features softtoken,softpasskey,ctap2,ctap2-management,vendor-solokey,vendor-yubikey
+
+      - name: "Test Firefox: webauthn-authenticator-rs"
+        run: |
+          wasm-pack test \
+            --headless \
+            --firefox \
+            webauthn-authenticator-rs \
+            --features softtoken,softpasskey,ctap2,ctap2-management,vendor-solokey,vendor-yubikey
+

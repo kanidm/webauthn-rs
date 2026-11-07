@@ -32,6 +32,7 @@ cable = [
     "dep:hex",
     "dep:tokio",
     "dep:tokio-tungstenite",
+    "tokio/net",
 ]
 
 # Add APIs which allow overriding the caBLE tunnel server protocol and domain.
@@ -43,9 +44,9 @@ cable-override-tunnel = ["cable"]
 ctap2 = [
     "dep:hex",
     "dep:serde_bytes",
+    "dep:tokio",
     "dep:tokio-stream",
     "dep:webauthn-rs-core",
-    "tokio/net",
 ]
 ctap2-management = ["ctap2"]
 # Support for SoloKey's vendor commands
