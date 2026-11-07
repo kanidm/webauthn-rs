@@ -15,6 +15,7 @@ use crypto_glue::{
     ecdsa_p384::{EcdsaP384DerSignature, EcdsaP384SigningKey, EcdsaP384VerifyingKey},
     pkcs8::PrivateKeyInfo,
     rand::{self, Rng},
+    time::now,
     traits::{EncodeDer, Generate, Pkcs8EncodePrivateKey, Signer, ToExtension, Zeroizing},
     x509::{
         pkeyb64,
@@ -29,7 +30,7 @@ use serde_cbor_2::value::Value;
 use std::collections::HashMap;
 use std::iter;
 use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use std::{collections::BTreeMap, fs::File, io::Read};
 use std::{
     collections::BTreeSet,
@@ -64,7 +65,7 @@ pub struct SoftToken {
 fn build_ca(unique_id: Uuid) -> Result<(EcdsaP384SigningKey, Certificate), WebauthnCError> {
     let serial_number = uuid_to_serial(unique_id);
 
-    let now = SystemTime::now();
+    let now = now();
     let not_before = Time::try_from(now).map_err(|err| {
         error!(?err, "Unable to convert system time");
         WebauthnCError::CryptographyX509Builder
@@ -158,7 +159,7 @@ fn build_intermediate(
     let root_serial_uuid = Uuid::new_v4();
     let serial_number = uuid_to_serial(root_serial_uuid);
 
-    let now = SystemTime::now();
+    let now = now();
     let not_before = Time::try_from(now).map_err(|err| {
         error!(?err, "Unable to convert system time");
         WebauthnCError::CryptographyX509Builder

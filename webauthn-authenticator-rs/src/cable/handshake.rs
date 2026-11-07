@@ -1,7 +1,7 @@
 #[cfg(doc)]
 use crate::stubs::*;
 
-use crypto_glue::{ecdh_p256::EcdhP256PublicKey, traits::ToSec1Point as _};
+use crypto_glue::{ecdh_p256::EcdhP256PublicKey, time::now, traits::ToSec1Point as _};
 use serde::Serialize;
 use serde_cbor_2::Value;
 use std::{
@@ -149,7 +149,7 @@ impl HandshakeV2 {
             peer_identity: public_key,
             secret: qr_key,
             known_domains_count: ASSIGNED_DOMAINS_COUNT,
-            timestamp: SystemTime::now(),
+            timestamp: now(),
             supports_linking_info: false,
             request_type,
             supports_non_discoverable_make_credential: false,

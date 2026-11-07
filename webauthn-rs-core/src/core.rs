@@ -26,6 +26,7 @@ use crate::error::WebauthnError;
 use crate::internals::*;
 use crate::proto::origin::origins_match;
 use crate::proto::*;
+use crypto_glue::time::now;
 use rand::prelude::*;
 use std::time::{Duration, SystemTime};
 use url::Url;
@@ -396,7 +397,7 @@ impl WebauthnCore {
             allow_synchronised_authenticators,
         } = state;
         let chal: ChallengeRef = challenge;
-        let current_time = SystemTime::now();
+        let current_time = now();
 
         // send to register_credential_internal
         let credential = self.register_credential_internal(
@@ -1250,6 +1251,7 @@ mod tests {
         engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
         Engine,
     };
+    use crypto_glue::time::now;
     use std::time::{Duration, SystemTime};
     use url::Url;
     use webauthn_rs_device_catalog::data::{
@@ -1307,7 +1309,7 @@ mod tests {
             Some(&YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM.try_into().unwrap()),
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1351,7 +1353,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1395,7 +1397,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         debug!(?result);
         assert!(result.is_ok());
@@ -1440,7 +1442,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1485,7 +1487,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1530,7 +1532,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1822,7 +1824,7 @@ mod tests {
             Some(&AttestationCaList::default()),
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1840,7 +1842,7 @@ mod tests {
             Some(&(APPLE_WEBAUTHN_ROOT_CA_PEM.try_into().unwrap())),
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1870,7 +1872,7 @@ mod tests {
             Some(&att_ca_list),
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -1898,7 +1900,7 @@ mod tests {
             Some(&att_ca_list),
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -1989,7 +1991,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(result.is_ok());
@@ -2362,7 +2364,7 @@ mod tests {
             ),
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
         trace!("{:?}", result);
         assert!(matches!(
@@ -3046,7 +3048,7 @@ mod tests {
                 None,
                 &RequestRegistrationExtensions::default(),
                 true,
-                SystemTime::now(),
+                now(),
             )
             .expect("Failed to register credential");
 
@@ -3140,7 +3142,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
 
         // temporarily disabled due to ed25519 support being absent.
@@ -3186,7 +3188,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
 
         // temporarily disabled due to ed25519 support being absent.
@@ -3232,7 +3234,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         debug!("{:?}", result);
         // Currently UNSUPPORTED as openssl doesn't have eddsa management utils that we need.
@@ -3276,7 +3278,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
         debug!("{:?}", result);
         assert!(result.is_ok());
@@ -3323,7 +3325,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         debug!("{:?}", result);
         assert!(result.is_err());
@@ -3371,7 +3373,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             false,
-            SystemTime::now(),
+            now(),
         );
         debug!("{:?}", result);
         assert!(matches!(result, Err(WebauthnError::ParseNOMFailure)));
@@ -3526,7 +3528,7 @@ mod tests {
             Some(&(GOOGLE_SAFETYNET_CA_OLD.try_into().unwrap())),
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
         dbg!(&result);
         assert_eq!(result, Err(WebauthnError::AttestationNotSupported));
@@ -3627,7 +3629,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
 
         assert!(matches!(
@@ -3676,7 +3678,7 @@ mod tests {
             None,
             &RequestRegistrationExtensions::default(),
             true,
-            SystemTime::now(),
+            now(),
         );
 
         debug!(?result);
@@ -3741,7 +3743,7 @@ mod tests {
             None,
             &reg_extn,
             true,
-            SystemTime::now(),
+            now(),
         );
 
         debug!(?result);
@@ -3811,7 +3813,7 @@ mod tests {
             None,
             &reg_extn,
             true,
-            SystemTime::now(),
+            now(),
         );
 
         debug!(?result);

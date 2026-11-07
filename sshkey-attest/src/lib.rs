@@ -331,7 +331,7 @@ fn to_ssh_pubkey(cose: &COSEKey) -> Result<PublicKey, WebauthnError> {
 mod tests {
     use super::{verify_fido_sk_ssh_attestation, WebauthnError};
     use base64::{engine::general_purpose::STANDARD, Engine};
-    use std::time::SystemTime;
+    use crypto_glue::time::now;
     use webauthn_rs_core::proto::{
         AttestationCaList, AttestationCaListBuilder, CredentialProtectionPolicy, ExtnState,
     };
@@ -368,7 +368,7 @@ mod tests {
             .expect("Failed to build att ca list");
         let att_ca_list: AttestationCaList = att_ca_builder.build();
 
-        let current_time = SystemTime::now();
+        let current_time = now();
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
@@ -423,7 +423,7 @@ mod tests {
             .expect("Failed to build att ca list");
         let att_ca_list: AttestationCaList = att_ca_builder.build();
 
-        let current_time = SystemTime::now();
+        let current_time = now();
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
@@ -474,7 +474,7 @@ mod tests {
             .expect("Failed to build att ca list");
         let att_ca_list: AttestationCaList = att_ca_builder.build();
 
-        let current_time = SystemTime::now();
+        let current_time = now();
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
@@ -532,7 +532,7 @@ mod tests {
             .expect("Failed to build att ca list");
         let att_ca_list: AttestationCaList = att_ca_builder.build();
 
-        let current_time = SystemTime::now();
+        let current_time = now();
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
@@ -579,7 +579,7 @@ mod tests {
             .expect("Failed to build att ca list");
         let att_ca_list: AttestationCaList = att_ca_builder.build();
 
-        let current_time = SystemTime::now();
+        let current_time = now();
 
         // Parse
         let att = verify_fido_sk_ssh_attestation(
