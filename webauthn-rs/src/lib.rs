@@ -1584,10 +1584,20 @@ impl Webauthn {
 
 #[cfg(test)]
 mod tests {
+    use crate::prelude::*;
+
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     /// Test that building a webauthn object from a chrome extension origin is successful.
     fn test_webauthnbuilder_chrome_url() -> Result<(), Box<dyn std::error::Error>> {
-        use crate::prelude::*;
         let rp_id = "2114c9f524d0cbd74dbe846a51c3e5b34b83ac02c5220ec5cdff751096fa25a5";
         let rp_origin = Url::parse(&format!("chrome-extension://{rp_id}"))?;
         eprintln!("{rp_origin:?}");
