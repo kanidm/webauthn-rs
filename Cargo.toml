@@ -103,8 +103,6 @@ tokio = { version = "1.47.2", features = [
     "sync",
     "test-util",
     "macros",
-    "net",
-    "rt-multi-thread",
     "time",
 ] }
 
