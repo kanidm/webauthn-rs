@@ -1020,6 +1020,8 @@ mod tests {
         ));
     }
 
+    // Test fails on wasm32-wasip2 due to tempfile
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn softtoken_persistence() {
         let _ = tracing_subscriber::fmt().without_time().try_init();
