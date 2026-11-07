@@ -858,11 +858,21 @@ mod tests {
         UserVerificationPolicy,
     };
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
+
     fn webauthn_authenticator_wan_softtoken_direct_attest() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "Example RP",
             "example.com",
@@ -1012,7 +1022,7 @@ mod tests {
 
     #[test]
     fn softtoken_persistence() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "https://example.com/auth",
             "example.com",
@@ -1094,10 +1104,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
+
     fn perform_register_auth_with_command() {
         let mut rng = rand::rng();
 
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let (mut soft_token, _) = SoftToken::new(true).unwrap();
         let mut client_data_hash = vec![0; 32];
         let mut user_id = vec![0; 16];

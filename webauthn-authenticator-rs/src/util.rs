@@ -1,14 +1,11 @@
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use unicode_normalization::UnicodeNormalization;
-#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 use url::Url;
-#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 use webauthn_rs_proto::CollectedClientData;
 
 #[cfg(any(all(doc, not(doctest)), feature = "ctap2-management"))]
 use crate::error::WebauthnCError;
 
-#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 pub fn creation_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClientData {
     // Let collectedClientData be a new CollectedClientData instance whose fields are:
     //    type
@@ -31,7 +28,6 @@ pub fn creation_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClien
     }
 }
 
-#[cfg(any(all(doc, not(doctest)), feature = "ctap2", feature = "win10"))]
 pub fn get_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClientData {
     CollectedClientData {
         type_: "webauthn.get".to_string(),
@@ -72,9 +68,18 @@ pub fn check_pin(pin: &str, min_length: usize) -> Result<String, WebauthnCError>
 mod test {
     use super::*;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_check_pin() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let checks = vec![
             ("1234", 4, Ok("1234".to_string())),
             ("123", 4, Err(WebauthnCError::PinTooShort)),

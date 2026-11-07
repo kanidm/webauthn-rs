@@ -219,7 +219,16 @@ crate::deserialize_cbor!(ClientPinResponse);
 mod tests {
     use super::*;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn get_pin_retries() {
         let c = ClientPinRequest {
             pin_uv_protocol: Some(1),
@@ -247,6 +256,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn get_key_agreement() {
         let c = ClientPinRequest {
             pin_uv_protocol: Some(2),
@@ -297,6 +310,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn get_pin_token() {
         let c = ClientPinRequest {
             pin_uv_protocol: Some(2),
@@ -366,6 +383,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn get_pin_uv_auth_token_using_uv_with_permissions() {
         let c = ClientPinRequest {
             pin_uv_protocol: Some(2),
@@ -410,6 +431,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn set_pin() {
         let c = ClientPinRequest {
             pin_uv_protocol: Some(2),

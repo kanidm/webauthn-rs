@@ -92,7 +92,7 @@ mod test {
 
     #[test]
     fn hkdf() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let salt: Vec<u8> = (0..0x0d).collect();
         let ikm: [u8; 22] = [0x0b; 22];
         let info: Vec<u8> = (0xf0..0xfa).collect();
@@ -112,7 +112,7 @@ mod test {
     #[test]
     fn hkdf_chromium() {
         // Compare hkdf using values debug-logged from Chromium
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let ck = [
             0x30, 0x7a, 0x70, 0x6e, 0x63, 0x38, 0x2e, 0x8e, 0x9d, 0x46, 0xcc, 0xdb, 0xc, 0xeb,
             0xed, 0x5c, 0x2b, 0x19, 0x28, 0xc5, 0xae, 0x2d, 0xee, 0x63, 0x52, 0xe1, 0x30, 0xac,
@@ -134,7 +134,7 @@ mod test {
     /// Test using ECDH with ourselves and fully-random keys.
     #[test]
     fn ecdh_p256_basic() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let alice_secret = ecdh_p256::new_secret();
         let alice_pub = alice_secret.public_key();

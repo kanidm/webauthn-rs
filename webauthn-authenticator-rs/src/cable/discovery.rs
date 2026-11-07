@@ -434,7 +434,7 @@ mod test {
 
     #[test]
     fn encrypt_decrypt() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let d = Discovery::new_with_qr_secret(CableRequestType::MakeCredential, [0; 16]).unwrap();
         let c = Eid {
@@ -517,7 +517,7 @@ mod test {
 
     #[test]
     fn decrypt_known() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let qr_secret = [
             1, 254, 166, 247, 196, 128, 116, 147, 220, 37, 111, 158, 172, 247, 86, 201,
         ];
