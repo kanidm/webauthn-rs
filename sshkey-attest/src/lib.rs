@@ -337,9 +337,18 @@ mod tests {
     };
     use webauthn_rs_device_catalog::data::yubico::YUBICO_U2F_ROOT_CA_SERIAL_457200631_PEM;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_ssh_ecdsa_sk_attest() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // Create with:
         //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
@@ -394,8 +403,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_ssh_ecdsa_sk_credprotect_attest() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // Create with:
         //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
@@ -449,8 +462,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_ssh_ed25519_sk_attest() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // Create with:
         // dd if=/dev/urandom of=/tmp/id_ed25519_sk.chal bs=16 count=1
@@ -505,8 +522,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_ssh_ecdsa_sk_reject_attest_aaguid() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // Create with:
         //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
@@ -551,8 +572,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_ssh_ecdsa_sk_reject_attest_ca() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // Create with:
         //  dd if=/dev/urandom of=/Users/william/.ssh/id_ecdsa_sk.chal bs=16 count=1
