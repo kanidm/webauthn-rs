@@ -24,7 +24,16 @@ mod tests {
     use super::*;
     use crate::transport::iso7816::ISO7816LengthForm;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn reset_request() {
         let req = ResetRequest {};
         let short = vec![0x80, 0x10, 0, 0, 1, 0x7, 0];

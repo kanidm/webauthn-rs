@@ -145,7 +145,7 @@ mod test {
 
     #[test]
     fn sample_make_credential_request() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#example-1a030b94
         /*
         {

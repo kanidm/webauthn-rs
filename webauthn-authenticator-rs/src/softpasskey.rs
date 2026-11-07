@@ -517,11 +517,20 @@ mod tests {
     use webauthn_rs_core::WebauthnCore as Webauthn;
     use webauthn_rs_proto::{AttestationConveyancePreference, UserVerificationPolicy};
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn webauthn_authenticator_wan_softpasskey_self_attest() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "https://localhost:8080/auth",
             "localhost",

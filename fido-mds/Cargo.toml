@@ -19,6 +19,7 @@ repository = { workspace = true }
 webauthn-attestation-ca.workspace = true
 base64.workspace = true
 crc32c = "^0.6.8"
+crypto-glue.workspace = true
 compact_jwt.workspace = true
 peg.workspace = true
 serde.workspace = true

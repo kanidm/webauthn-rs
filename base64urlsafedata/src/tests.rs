@@ -1,9 +1,18 @@
 use super::*;
 
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+use wasm_bindgen_test::*;
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+wasm_bindgen_test_configure!(run_in_browser);
+
 macro_rules! from_json_test {
     ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, expected): (&str, &[u8]) = $value;
                 assert_eq!(serde_json::from_str::<Base64UrlSafeData>(input).unwrap(), expected);
@@ -17,6 +26,10 @@ macro_rules! from_invalid_json_test {
     ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let input: &str = $value;
                 assert!(serde_json::from_str::<Base64UrlSafeData>(input).is_err());
@@ -30,6 +43,10 @@ macro_rules! from_cbor_test {
     ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, expected): (&[u8], &[u8]) = $value;
                 assert_eq!(serde_cbor_2::from_slice::<Base64UrlSafeData>(input).unwrap(), expected);
@@ -43,6 +60,10 @@ macro_rules! from_invalid_cbor_test {
     ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let input: &[u8] = $value;
                 assert!(serde_cbor_2::from_slice::<Base64UrlSafeData>(input).is_err());
@@ -113,6 +134,10 @@ from_invalid_cbor_test! {
 }
 
 #[test]
+#[cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    wasm_bindgen_test
+)]
 fn to_json() {
     let input = [0x00, 0x01, 0x02, 0xff];
 
@@ -128,6 +153,10 @@ fn to_json() {
 }
 
 #[test]
+#[cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    wasm_bindgen_test
+)]
 fn to_cbor() {
     let input = [0x00, 0x01, 0x02, 0xff];
 
@@ -151,6 +180,10 @@ fn to_cbor() {
 }
 
 #[test]
+#[cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    wasm_bindgen_test
+)]
 fn interop_from() {
     let input = [0x00, 0x01, 0x02, 0xff];
     let a = Base64UrlSafeData::from(input.as_ref());
@@ -163,6 +196,10 @@ fn interop_from() {
 }
 
 #[test]
+#[cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    wasm_bindgen_test
+)]
 fn interop_equality() {
     let input = [0x00, 0x01, 0x02, 0xff];
     let other = [0xff, 0x00, 0x01, 0x02];
@@ -199,6 +236,10 @@ fn interop_equality() {
 }
 
 #[test]
+#[cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    wasm_bindgen_test
+)]
 fn interop_vec() {
     let mut a = Base64UrlSafeData::from([0, 1, 2, 3]);
     a.push(4);

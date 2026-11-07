@@ -432,7 +432,16 @@ mod tests {
     };
     use webauthn_rs_core::proto::{COSEAlgorithm, COSEEC2Key, ECDSACurve};
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn pin_encryption_and_hashing() {
         // https://github.com/mozilla/authenticator-rs/blob/f2d255c48d3e3762a27873b270520072bf501d0e/src/crypto/mod.rs#L833
         let pin = "1234";
@@ -474,6 +483,10 @@ mod tests {
 
     // https://github.com/Yubico/python-fido2/blob/8c00d0494501028135fd13adbe8c56a8d8b7e437/tests/test_ctap2.py#L274
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn shared_secret_pin_protocol_one() {
         let expected_secret = vec![
             0xc4, 0x2a, 0x3, 0x9d, 0x54, 0x81, 0x0, 0xdf, 0xba, 0x52, 0x1e, 0x48, 0x7d, 0xeb, 0xcb,
@@ -627,6 +640,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn shared_secret_pin_protocol_two() {
         let expected_secret = vec![
             0x65, 0xef, 0x95, 0x5d, 0xd8, 0xcf, 0xca, 0xca, 0xb4, 0x89, 0xad, 0x58, 0x2d, 0x64,
@@ -709,6 +726,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn select() {
         let t = PinUvPlatformInterface::select_protocol(None);
         assert_eq!(Some(WebauthnCError::NotSupported), t.err());

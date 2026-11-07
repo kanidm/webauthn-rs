@@ -15,6 +15,7 @@ use crypto_glue::{
     ecdsa_p384::{EcdsaP384DerSignature, EcdsaP384SigningKey, EcdsaP384VerifyingKey},
     pkcs8::PrivateKeyInfo,
     rand::{self, Rng},
+    time::now,
     traits::{EncodeDer, Generate, Pkcs8EncodePrivateKey, Signer, ToExtension, Zeroizing},
     x509::{
         pkeyb64,
@@ -29,7 +30,7 @@ use serde_cbor_2::value::Value;
 use std::collections::HashMap;
 use std::iter;
 use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use std::{collections::BTreeMap, fs::File, io::Read};
 use std::{
     collections::BTreeSet,
@@ -64,7 +65,7 @@ pub struct SoftToken {
 fn build_ca(unique_id: Uuid) -> Result<(EcdsaP384SigningKey, Certificate), WebauthnCError> {
     let serial_number = uuid_to_serial(unique_id);
 
-    let now = SystemTime::now();
+    let now = now();
     let not_before = Time::try_from(now).map_err(|err| {
         error!(?err, "Unable to convert system time");
         WebauthnCError::CryptographyX509Builder
@@ -158,7 +159,7 @@ fn build_intermediate(
     let root_serial_uuid = Uuid::new_v4();
     let serial_number = uuid_to_serial(root_serial_uuid);
 
-    let now = SystemTime::now();
+    let now = now();
     let not_before = Time::try_from(now).map_err(|err| {
         error!(?err, "Unable to convert system time");
         WebauthnCError::CryptographyX509Builder
@@ -846,7 +847,6 @@ mod tests {
     };
     use crypto_glue::{traits::DecodeDer, x509::x509_verify_signature};
     use std::time::Duration;
-    use tempfile::tempfile;
     use webauthn_rs_core::{
         error::WebauthnError,
         proto::{AttestationCaList, AttestationCaListBuilder, COSEKey},
@@ -857,11 +857,21 @@ mod tests {
         UserVerificationPolicy,
     };
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     const AUTHENTICATOR_TIMEOUT: Duration = Duration::from_secs(60);
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
+
     fn webauthn_authenticator_wan_softtoken_direct_attest() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "Example RP",
             "example.com",
@@ -1009,9 +1019,13 @@ mod tests {
         ));
     }
 
+    // Test fails on wasm32-wasip2 due to tempfile
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn softtoken_persistence() {
-        let _ = tracing_subscriber::fmt::try_init();
+        use tempfile::tempfile;
+
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let wan = Webauthn::new_unsafe_experts_only(
             "https://example.com/auth",
             "example.com",
@@ -1093,10 +1107,15 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
+
     fn perform_register_auth_with_command() {
         let mut rng = rand::rng();
 
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let (mut soft_token, _) = SoftToken::new(true).unwrap();
         let mut client_data_hash = vec![0; 32];
         let mut user_id = vec![0; 16];

@@ -32,6 +32,7 @@ cable = [
     "dep:hex",
     "dep:tokio",
     "dep:tokio-tungstenite",
+    "tokio/net",
 ]
 
 # Add APIs which allow overriding the caBLE tunnel server protocol and domain.
@@ -136,6 +137,22 @@ image = "0.24.9"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 bluer = { version = "0.17.4", features = ["bluetoothd"] }
+
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dev-dependencies]
+# Per https://docs.rs/getrandom/latest/getrandom/#webassembly-support, we don't want to add
+# dependencies for WASM+JS environments unconditionally to all WASM targets.
+#
+# However, we need these as dev-dependencies for the library's tests, which treats WASM as WASM+JS.
+# If we start testing on other WASM environments, we'll need to revisit this.
+#
+# Sources of time and entropy in a WASM+JS environment, enabling features in transitive dependencies
+# via feature unification. Binary users of this library will need something similar for their target
+# platform.
+getrandom = { version = "0.4.3", features = ["wasm_js"] }
+uuid = { version = "1.20.0", features = ["js"] }
+
+# wasm-bindgen-test is only directly used by tests.
+wasm-bindgen-test = "0.3.0"
 
 [[example]]
 name = "authenticate"

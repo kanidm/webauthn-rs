@@ -296,6 +296,11 @@ pub const NFCCTAP_GETRESPONSE: ISO7816RequestAPDU = ISO7816RequestAPDU {
 mod tests {
     use super::*;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     // Copy of crate::nfc::APPLET_DF, so that the tests don't require NFC.
     const APPLET_DF: [u8; 8] = [0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01];
 
@@ -303,6 +308,10 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, len, expected): (usize, u8, &[u8]) = $value;
                 let mut b = Vec::with_capacity(expected.len());
@@ -317,6 +326,10 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, len): (usize, u8) = $value;
                 let mut b = Vec::with_capacity(0);
@@ -332,6 +345,10 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, form, expected): (ISO7816RequestAPDU, ISO7816LengthForm, &[u8]) = $value;
                 let b = input.to_bytes(&form).expect("serialisation error");
@@ -345,6 +362,10 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, form, expected): (ISO7816RequestAPDU, ISO7816LengthForm, Error) = $value;
                 let err = input.to_bytes(&form).expect_err("expected error");
@@ -358,6 +379,10 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let (input, expected): (&[u8], ISO7816ResponseAPDU) = $value;
                 let r = ISO7816ResponseAPDU::try_from(input).expect("deserialisation error");
@@ -371,6 +396,10 @@ mod tests {
         ($($name:ident: $value:expr,)*) => {
         $(
             #[test]
+            #[cfg_attr(
+                all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+                wasm_bindgen_test
+            )]
             fn $name() {
                 let input: &[u8] = $value;
                 let err = ISO7816ResponseAPDU::try_from(input).expect_err("expected error");
@@ -524,6 +553,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn response_attrs() {
         // OK
         let mut r = ISO7816ResponseAPDU {
