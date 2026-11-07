@@ -258,9 +258,18 @@ where
 mod tests {
     use super::{FakePasskeyDistribution, WebauthnFakeCredentialGenerator};
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_fake_credential_generator() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let cred_gen: WebauthnFakeCredentialGenerator<FakePasskeyDistribution> =
             WebauthnFakeCredentialGenerator::new(&[

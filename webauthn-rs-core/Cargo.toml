@@ -43,3 +43,19 @@ uuid = { workspace = true, features = ["serde"] }
 hex-literal = "1.1"
 tracing-subscriber.workspace = true
 webauthn-rs-device-catalog.workspace = true
+
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dev-dependencies]
+# Per https://docs.rs/getrandom/latest/getrandom/#webassembly-support, we don't want to add
+# dependencies for WASM+JS environments unconditionally to all WASM targets.
+#
+# However, we need these as dev-dependencies for the library's tests, which treats WASM as WASM+JS.
+# If we start testing on other WASM environments, we'll need to revisit this.
+#
+# Sources of time and entropy in a WASM+JS environment, enabling features in transitive dependencies
+# via feature unification. Binary users of this library will need something similar for their target
+# platform.
+getrandom = { version = "0.4.3", features = ["wasm_js"] }
+uuid = { workspace = true, features = ["js"] }
+
+# wasm-bindgen-test is only directly used by tests.
+wasm-bindgen-test = "0.3.0"

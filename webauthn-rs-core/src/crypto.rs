@@ -580,7 +580,16 @@ mod tests {
     use hex_literal::hex;
     use serde_cbor_2::Value;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn cbor_es256() {
         let hex_data = hex!(
                 "A5"         // Map - 5 elements
@@ -612,6 +621,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn cbor_es384() {
         let hex_data = hex!(
                 "A5"         // Map - 5 elements
@@ -651,6 +664,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn cbor_es512() {
         let hex_data = hex!(
                 "A5"         // Map - 5 elements
@@ -690,6 +707,10 @@ mod tests {
 
     /*
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn cbor_ed25519() {
         let hex_data = hex!(
         "A4"         // Map - 4 elements
@@ -714,6 +735,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn cbor_ed448() {
         let hex_data = hex!(
             "A4"         // Map - 4 elements
