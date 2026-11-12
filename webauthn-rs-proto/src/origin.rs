@@ -90,6 +90,8 @@ pub fn origins_match(
 }
 
 /// Serialise a [Url]'s [Origin] for Serde.
+///
+/// This contains the ASCII serialisation of the origin.
 pub(crate) fn serialize<S>(u: &Url, ser: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -102,11 +104,13 @@ where
 }
 
 /// Deserialise a [Url]'s [Origin] for Serde.
+///
+/// This must use the ASCII serialisation of the origin (ie: IDN is not allowed).
 pub(crate) fn deserialize<'de, D>(deser: D) -> Result<Url, D::Error>
 where
     D: Deserializer<'de>,
 {
-    use serde::de::Error;
+    use serde::de::{Error, Unexpected};
 
     let s = String::deserialize(deser)?;
     let u = Url::parse(&s).map_err(Error::custom)?;
@@ -117,8 +121,9 @@ where
         Origin::Opaque(_) => {
             // Check that this round-trips even though opaque
             if s != u.to_string() {
-                return Err(Error::custom(
-                    "Input contains an opaque origin which does not round-trip identically",
+                return Err(Error::invalid_value(
+                    Unexpected::Str(&s),
+                    &"an opaque origin which survives a round-trip serialisation",
                 ));
             }
         }
@@ -127,15 +132,15 @@ where
             // Check that this round-trips correctly.
             let ser_origin = origin.ascii_serialization();
 
-            // Older versions of webauthn-authenticator-rs include a trailing slash on the origin,
-            // and webauthn-rs allowed case mismatches, so we explicitly allow this.
+            // Older versions of webauthn-authenticator-rs include a trailing slash on the origin.
             let sol = ser_origin.len();
             let same_origin_trailing_slash =
                 s.len() == sol + 1 && s[..sol] == ser_origin && s.ends_with("/");
 
             if ser_origin != s && !same_origin_trailing_slash {
-                return Err(Error::custom(
-                    "Input does not match ASCII serialisation of the origin",
+                return Err(Error::invalid_value(
+                    Unexpected::Str(&s),
+                    &"an origin in its ASCII serialisation",
                 ));
             }
         }
@@ -551,9 +556,20 @@ mod tests {
             Url::parse("android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU").unwrap(),
             "android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"
         ),
+        https_idn: (
+            Url::parse("https://maraña.example").unwrap(),
+            "https://xn--maraa-rta.example"
+        ),
+        https_idn_url: (
+            Url::parse("https://xn--maraa-rta.example").unwrap(),
+            "https://xn--maraa-rta.example"
+        ),
     }
 
     origin_serialisation_normalise! {
+        // Old versions of webauthn-authenticator-rs sent an origin with trailing slash, so we need
+        // to accept this non-compliant value for compatibility with clients that use both
+        // webauthn-authenticator-rs and webauthn-rs (like Kanidm).
         http_trailing_slash: (
             Url::parse("http://example.com").unwrap(),
             "http://example.com/",
@@ -581,5 +597,9 @@ mod tests {
 
         http_path: "http://example.com/example/",
         https_path: "https://example.com/example/",
+
+        // We don't accept IDN inside of an origin field.
+        http_idn_de: "http://maraña.example",
+        https_idn_de: "https://maraña.example",
     }
 }
