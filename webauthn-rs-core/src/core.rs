@@ -493,9 +493,7 @@ impl WebauthnCore {
             return Err(WebauthnError::InvalidRPOrigin);
         }
 
-        // ATM most browsers do not send this value, so we must default to
-        // `false`. See [WebauthnConfig::allow_cross_origin] doc-comment for
-        // more.
+        // This field is only sent in WebAuthn L2+, so we must default to `false`.
         if !self.allow_cross_origin && data.client_data_json.cross_origin.unwrap_or(false) {
             return Err(WebauthnError::CredentialCrossOrigin);
         }
@@ -813,6 +811,11 @@ impl WebauthnCore {
             )
         }) {
             return Err(WebauthnError::InvalidRPOrigin);
+        }
+
+        // This field is only sent in WebAuthn L2+, so we must default to `false`.
+        if !self.allow_cross_origin && c.cross_origin.unwrap_or(false) {
+            return Err(WebauthnError::CredentialCrossOrigin);
         }
 
         // Verify that the value of C.tokenBinding.status matches the state of Token Binding for the

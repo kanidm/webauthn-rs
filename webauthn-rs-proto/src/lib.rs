@@ -11,8 +11,6 @@ pub mod auth;
 pub mod cose;
 pub mod extensions;
 pub mod options;
-
-#[cfg(any(test, feature = "origin"))]
 pub mod origin;
 
 #[cfg(feature = "wasm")]

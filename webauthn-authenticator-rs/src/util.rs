@@ -27,6 +27,7 @@ pub fn creation_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClien
         origin,
         token_binding: None,
         cross_origin: None,
+        top_origin: None,
         unknown_keys: Default::default(),
     }
 }
@@ -39,6 +40,7 @@ pub fn get_to_clientdata(origin: Url, challenge: Vec<u8>) -> CollectedClientData
         origin,
         token_binding: None,
         cross_origin: None,
+        top_origin: None,
         unknown_keys: Default::default(),
     }
 }
