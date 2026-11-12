@@ -369,11 +369,8 @@ pub struct CollectedClientData {
     #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
     pub challenge: Vec<u8>,
 
-    /// The rp origin as the browser understood it.
-    // FIXME: https://www.w3.org/TR/webauthn-3/#sctn-validating-origin says `origin` and
-    // `topOrigin` must not have a path component (trailing slash).
-    // https://www.rfc-editor.org/info/rfc6454/#section-6 agrees with this.
-    // This needs to be serialised as `url::Origin`.
+    /// The RP's origin as the browser understood it.
+    #[serde(with = "crate::origin")]
     pub origin: url::Url,
 
     /// The inverse of [the `sameOriginWithAncestors` argument value][2] that was passed into the
@@ -413,7 +410,11 @@ pub struct CollectedClientData {
     /// [0]: https://www.w3.org/TR/webauthn-3/#dom-collectedclientdata-toporigin
     /// [1]: https://github.com/w3c/webauthn/issues/2488
     /// [2]: Self::cross_origin
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::origin::option"
+    )]
     pub top_origin: Option<url::Url>,
 
     /// The state of the [Token Binding protocol][TokenBinding] used when communicating with the RP.
@@ -449,7 +450,7 @@ pub struct TokenBinding {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use std::str::FromStr;
     use url::Url;
@@ -521,6 +522,31 @@ mod test {
         }
     }
 
+    /// [CollectedClientData] normaliser deserialisation tests.
+    macro_rules! ccd_serialisation_normalise {
+        ($($name:ident: $value:expr,)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let (input, expected, normalised): (CollectedClientData, &str, &str) = $value;
+                let output: CollectedClientData = serde_json::from_str(expected)
+                    .expect("deserialising expected JSON");
+                assert_eq!(input, output, "deserialised input data");
+
+                // Re-serialise the value
+                let actual: String = serde_json::to_string(&input)
+                    .expect("serialisation error");
+                assert_ne!(expected, actual, "Re-serialising the value should normalise it");
+                assert_eq!(normalised, actual, "Normalised form should match");
+
+                let output: CollectedClientData = serde_json::from_str(&actual)
+                    .expect("deserialising actual JSON");
+                assert_eq!(input, output, "deserialised roundtripped data");
+            }
+        )*
+        }
+    }
+
     ccd_serialisation_roundtrip! {
         get_l1: (
             CollectedClientData {
@@ -532,7 +558,33 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/"}"#
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com"}"#
+        ),
+
+        get_android: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"}"#
+        ),
+
+        get_ios: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"ios:bundle-id:com.foo.bar"}"#
         ),
 
         get_crossorigin_false: (
@@ -545,7 +597,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":false}"#
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":false}"#
         ),
 
         get_crossorigin_true: (
@@ -558,7 +610,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":true}"#
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true}"#
         ),
 
         get_top_origin: (
@@ -571,7 +623,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":true,"topOrigin":"https://example.net/"}"#
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.net"}"#
         ),
 
         get_top_origin_intermediate: (
@@ -584,7 +636,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":true,"topOrigin":"https://example.com/"}"#
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.com"}"#
         ),
 
         create_l1: (
@@ -597,7 +649,33 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com/"}"#
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com"}"#
+        ),
+
+        create_android: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"}"#
+        ),
+
+        create_ios: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"ios:bundle-id:com.foo.bar"}"#
         ),
 
         create_crossorigin_false: (
@@ -610,7 +688,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":false}"#
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":false}"#
         ),
 
         create_crossorigin_true: (
@@ -623,7 +701,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":true}"#
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true}"#
         ),
 
         create_top_origin: (
@@ -636,7 +714,7 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":true,"topOrigin":"https://example.net/"}"#
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.net"}"#
         ),
 
         create_top_origin_intermediate: (
@@ -649,7 +727,23 @@ mod test {
                 token_binding: None,
                 unknown_keys: Default::default()
             },
-            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com/","crossOrigin":true,"topOrigin":"https://example.com/"}"#
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.com"}"#
+        ),
+    }
+
+    ccd_serialisation_normalise! {
+        get_trailing_slash: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com/").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/"}"#,
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com"}"#
         ),
     }
 }
