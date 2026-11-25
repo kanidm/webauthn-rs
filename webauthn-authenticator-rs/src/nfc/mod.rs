@@ -664,7 +664,7 @@ mod test {
 
     #[test]
     fn ignored_readers() -> Result<(), Box<dyn std::error::Error>> {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // CCID interfaces on tokens
         const IGNORED: [&[u8]; 4] = [

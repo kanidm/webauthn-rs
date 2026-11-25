@@ -10,9 +10,9 @@ pub(crate) struct BerTlvParser<'a> {
     b: &'a [u8],
 }
 
-impl BerTlvParser<'_> {
+impl<'a> BerTlvParser<'a> {
     /// Parses a BER-TLV structure in the given slice.
-    pub fn new(tlv: &[u8]) -> BerTlvParser {
+    pub fn new(tlv: &'a [u8]) -> BerTlvParser<'a> {
         // Skip null bytes at the start
         let mut i = 0;
         while i < tlv.len() && tlv[i] == 0 {
@@ -167,6 +167,11 @@ impl<'a> Iterator for BerTlvParser<'a> {
 mod tests {
     use super::*;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     fn assert_tlv_parser(expected: &[(u8, u16, &[u8])], p: BerTlvParser<'_>) {
         let mut i = 0;
         for (actual_cls, actual_constructed, actual_tag, actual_val) in p {
@@ -184,8 +189,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn yubico_security_key_c_nfc() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let v = hex::decode(concat!(
             "28",     // length byte, not TLV
@@ -232,8 +241,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn yubikey_5c() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let v = hex::decode(concat!(
             "23",       // length byte, not TLV
@@ -274,6 +287,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn low_tag_number_as_high() {
         let b = hex::decode("9f01020000").unwrap();
         let mut p = BerTlvParser::new(&b);
@@ -281,6 +298,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn high_tag_number_padded() {
         let b = hex::decode("9f8001020000").unwrap();
         let mut p = BerTlvParser::new(&b);
@@ -288,6 +309,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn huge_tag_number_not_supported() {
         let b = hex::decode("9f8f8f0f020000").unwrap();
         let mut p = BerTlvParser::new(&b);
@@ -295,6 +320,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn indefinite_form_not_supported() {
         let b = hex::decode("018012340000").unwrap();
         let mut p = BerTlvParser::new(&b);
@@ -302,6 +331,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn really_long_length_not_supported() {
         let b = hex::decode("018500000000020000").unwrap();
         let mut p = BerTlvParser::new(&b);

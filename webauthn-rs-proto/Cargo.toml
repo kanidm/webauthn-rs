@@ -53,3 +53,7 @@ features = [
     "AuthenticationExtensionsClientOutputs",
     "console",
 ]
+
+[target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dev-dependencies]
+# wasm-bindgen-test is only directly used by tests.
+wasm-bindgen-test = "0.3.0"

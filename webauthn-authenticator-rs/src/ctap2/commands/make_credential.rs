@@ -289,9 +289,18 @@ mod test {
     use serde_cbor_2::{from_slice, to_vec, Value};
     use webauthn_rs_proto::{PubKeyCredParams, RelyingParty, User};
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn sample_make_credential_request() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         // https://fidoalliance.org/specs/fido-v2.1-ps-20210615/fido-client-to-authenticator-protocol-v2.1-ps-errata-20220621.html#example-1a030b94
         /*
         {
@@ -491,8 +500,12 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn make_credential() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         // clientDataHash 0x01
         // rp 0x02

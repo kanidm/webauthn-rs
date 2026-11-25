@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn yubikey_5c() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let expected = YubiKeyConfig {
             serial: Some(0xcafe1234),
             form_factor: FormFactor::UsbCKeychain,
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn yubikey_5c_nano() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let expected = YubiKeyConfig {
             serial: Some(0xcafe1234),
             form_factor: FormFactor::UsbCNano,
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn yubico_security_key_c_nfc() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let expected = YubiKeyConfig {
             version: [5, 4, 3],
             form_factor: FormFactor::UsbCKeychain,

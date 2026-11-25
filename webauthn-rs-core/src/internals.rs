@@ -1223,7 +1223,16 @@ mod tests {
     use crate::interface::*;
     use base64::{engine::general_purpose::STANDARD, Engine};
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn deserialise_register_response() {
         let x = r#"
         {   "id":"4oiUggKcrpRIlB-cFzFbfkx_BNeM7UAnz3wO7ZpT4I2GL_n-g8TICyJTHg11l0wyc-VkQUVnJ0yM08-1D5oXnw",
@@ -1239,6 +1248,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn deserialise_attestation_object() {
         let raw_ao = STANDARD.decode(
             "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVjEEsoXtJryKJQ28wPgFmAwoh5SXSZuIJJnQzgBqP1AcaBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAQCgxaVISCxE+DrcxP5/+aPM88CTI+04J+o61SK6mnepjGZYv062AbtydzWmbAxF00VSAyp0ImP94uoy+0y7w9yilAQIDJiABIVggGT9woA+UoX+jBxuiHQpdkm0kCVh75WTj3TXl4zLJuzoiWCBKiCneKgWJgWiwrZedNwl06GTaXyaGrYS4bPbBraInyg=="
@@ -1250,6 +1263,10 @@ mod tests {
     // Add tests for when the objects are too short.
     //
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn deserialise_tpms_attest() {
         let data: Vec<u8> = vec![
             255, 84, 67, 71, // magic
@@ -1278,6 +1295,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn deserialise_tpmt_public() {
         // The TPMT_PUBLIC structure (see [TPMv2-Part2] section 12.2.4) used by the TPM to represent the credential public key.
         let data: Vec<u8> = vec![
@@ -1304,6 +1325,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn deserialise_tpmt_signature() {
         // The attestation signature, in the form of a TPMT_SIGNATURE structure as specified in [TPMv2-Part2] section 11.3.4.
         let data: Vec<u8> = vec![
@@ -1327,6 +1352,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn deserialize_extensions() {
         let data: Vec<u8> = vec![
             161, 107, 99, 114, 101, 100, 80, 114, 111, 116, 101, 99, 116, 3,
@@ -1345,6 +1374,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn credential_protection_policy_conversions() {
         use CredentialProtectionPolicy::*;
         assert_eq!(
@@ -1365,8 +1398,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn authenticator_data_parser_extensions() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let raw = [
             73, 150, 13, 229, 136, 14, 140, 104, 116, 52, 23, 15, 100, 118, 96, 91, 143, 228, 174,
             185, 162, 134, 50, 199, 153, 92, 243, 186, 131, 29, 151, 99, 133, 0, 0, 0, 6, 161, 104,
@@ -1377,8 +1414,12 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn acd_parser_credential_id_length() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let mut valid_acd = vec![0; 16]; // aaguid
         valid_acd.extend_from_slice(&4096_u16.to_be_bytes());
@@ -1394,6 +1435,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn migrate_credentialv3() {
         let legacy_cred = r#"{"cred_id":[185,151,21,12,21,82,235,193,63,50,208,32,121,10,68,148,156,101,116,95,250,113,143,108,74,246,214,171,31,234,70,31,48,138,238,54,151,36,65,70,104,121,200,87,131,254,191,100,215,125,29,49,177,71,4,114,61,69,49,96,116,148,8,205],"cred":{"type_":"ES256","key":{"EC_EC2":{"curve":"SECP256R1","x":[194,126,127,109,252,23,131,21,252,6,223,99,44,254,140,27,230,17,94,5,133,28,104,41,144,69,171,149,161,26,200,243],"y":[143,123,183,156,24,178,21,248,117,159,162,69,171,52,188,252,26,59,6,47,103,92,19,58,117,103,249,0,219,8,95,196]}}},"counter":2,"verified":false,"registration_policy":"preferred"}"#;
 

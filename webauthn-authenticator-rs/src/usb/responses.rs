@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn get_info() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let d: [[u8; 64]; 4] = [
             [
                 0x6f, 0x1c, 0xc9, 0xca, 0x90, 0x00, 0xc5, 0x00, 0xac, 0x01, 0x82, 0x68, 0x46, 0x49,

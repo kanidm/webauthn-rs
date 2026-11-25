@@ -5,6 +5,7 @@ use crate::attestation::verify_attestation_ca_chain;
 use crate::error::*;
 use crypto_glue::{
     ecdsa_p256::{EcdsaP256FieldBytes, EcdsaP256PublicKey, EcdsaP256PublicSec1Point},
+    time::now,
     traits::{DecodeDer, EncodeDer, FromSec1Point},
     x509,
 };
@@ -17,7 +18,6 @@ use serde_with::{
 };
 use std::collections::BTreeMap;
 use std::fmt;
-use std::time::SystemTime;
 use uuid::Uuid;
 use webauthn_rs_proto::cose::*;
 use webauthn_rs_proto::extensions::*;
@@ -361,7 +361,7 @@ impl Credential {
         &'_ self,
         ca_list: &'a AttestationCaList,
     ) -> Result<Option<&'a AttestationCa>, WebauthnError> {
-        let current_time = SystemTime::now();
+        let current_time = now();
         verify_attestation_ca_chain(&self.attestation.data, ca_list, current_time)
     }
 }

@@ -8,12 +8,12 @@ use compact_jwt::{
     crypto::{Certificate, DecodePem, JwsX509VerifierBuilder},
     JwsCompact, JwsVerifier, JwtError,
 };
+use crypto_glue::time::now;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use std::time::SystemTime;
 use uuid::Uuid;
 
 static GLOBAL_SIGN_ROOT_CA_R3: &str = r#"
@@ -1259,7 +1259,7 @@ impl FromStr for FidoMds {
             builder = builder.add_trust_root(root_ca);
         }
 
-        let now = SystemTime::now();
+        let now = now();
         let verifier = builder.build(now).map_err(|_| JwtError::CryptoError)?;
 
         // Now we can release the embedded cert, since we have asserted the trust in the chain

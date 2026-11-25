@@ -640,7 +640,7 @@ mod test {
 
     #[test]
     fn aead_testing() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let cipher = Aes256Gcm::new(&Default::default());
         let mut buf = vec![];
         let tag = cipher
@@ -659,7 +659,7 @@ mod test {
 
     #[test]
     fn noise() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let identity_key = ecdh_p256::new_secret();
         let identity_pub = identity_key.public_key();
         let psk = [0; size_of::<Psk>()];
@@ -697,7 +697,7 @@ mod test {
 
     #[test]
     fn encrypt_decrypt() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let key0: EncryptionKey = Zeroizing::new([123; 32].into());
         let key1: EncryptionKey = Zeroizing::new([231; 32].into());
@@ -723,7 +723,7 @@ mod test {
 
     #[test]
     fn encrypt_decrypt_new() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let key0: EncryptionKey = Zeroizing::new([123; 32].into());
         let key1: EncryptionKey = Zeroizing::new([231; 32].into());
@@ -751,7 +751,7 @@ mod test {
 
     #[test]
     fn encrypt_decrypt_expected() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let key0: EncryptionKey = Zeroizing::new([42; 32].into());
         let key1: EncryptionKey = Zeroizing::new([67; 32].into());
@@ -812,7 +812,7 @@ mod test {
 
     #[test]
     fn construction() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         // Patched chromium to leak its key data
         let write_key: EncryptionKey = Zeroizing::new(
             [

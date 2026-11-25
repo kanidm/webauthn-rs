@@ -512,11 +512,16 @@ cred_struct! {
 
 #[cfg(test)]
 mod test {
+    use super::*;
     use crypto_glue::s256::Sha256Output;
     use webauthn_rs_core::proto::{COSEEC2Key, COSEKeyType, ECDSACurve};
     use webauthn_rs_proto::COSEAlgorithm;
 
-    use super::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     const PIN_UV_AUTH_PARAM: [u8; 32] = [
         0x13, 0xd7, 0xf2, 0xe7, 0xa0, 0xb9, 0x61, 0x78, 0x39, 0xb3, 0xfb, 0xbf, 0xc2, 0xf9, 0x0c,
         0xec, 0x5e, 0xc0, 0xc6, 0xc0, 0x41, 0x54, 0x72, 0x74, 0x22, 0x56, 0xac, 0x6e, 0xd7, 0x9e,
@@ -524,8 +529,12 @@ mod test {
     ];
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn get_cred_metadata() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         const SUBCOMMAND: CredSubCommand = CredSubCommand::GetCredsMetadata;
         assert_eq!(vec![0x01], SUBCOMMAND.prf());
@@ -574,8 +583,12 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn enumerate_rps_begin() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         const SUBCOMMAND: CredSubCommand = CredSubCommand::EnumerateRPsBegin;
         assert_eq!(vec![0x02], SUBCOMMAND.prf());
@@ -695,8 +708,12 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn enumerate_rps_next() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         assert_eq!(
             vec![0x0a, 0xa1, 0x01, 0x03],
@@ -741,8 +758,12 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn enumerate_credentials_begin() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let subcommand: CredSubCommand =
             CredSubCommand::EnumerateCredentialsBegin(Sha256Output::from([
                 0x0b, 0x99, 0x7c, 0xcc, 0xeb, 0x3a, 0xeb, 0x29, 0xc5, 0x5c, 0x94, 0xa8, 0x94, 0xb1,
@@ -870,8 +891,12 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn enumerate_credentials_next() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         assert_eq!(
             vec![0x0a, 0xa1, 0x01, 0x05],
@@ -956,8 +981,12 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn update_user_information() {
-        let _ = tracing_subscriber::fmt::try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
 
         let s = CredSubCommand::UpdateUserInformation(
             vec![

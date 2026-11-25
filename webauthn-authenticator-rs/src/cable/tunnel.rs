@@ -519,7 +519,7 @@ mod test {
     #[test]
     fn posthandshake_android_chrome() {
         // https://source.chromium.org/chromium/chromium/src/+/main:device/fido/cable/v2_authenticator.cc;l=242-273;drc=a0f2b9dcc9512d175ff2cf18322cfdeb5348085c
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let expected = CablePostHandshake {
             info: GetInfoResponse {
                 versions: BTreeSet::from(["FIDO_2_0".to_string(), "FIDO_2_1".to_string()]),
@@ -550,7 +550,7 @@ mod test {
 
     #[test]
     fn posthandshake_ios16() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let expected = CablePostHandshake {
             info: GetInfoResponse {
                 versions: BTreeSet::from(["FIDO_2_0".to_string()]),

@@ -18,7 +18,7 @@ http-body-util.workspace = true
 hyper = { workspace = true, features = ["server"] }
 hyper-util.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["net", "rt-multi-thread"] }
 tokio-native-tls.workspace = true
 tokio-tungstenite.workspace = true
 tracing.workspace = true

@@ -88,8 +88,17 @@ pub fn origins_match(
 mod tests {
     use super::*;
 
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
+
     /// Test `origins_match` with simple case.
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_origins_match_exact() {
         let request_origin = url::Url::parse("https://example.com").unwrap();
         let allowed_origin = url::Url::parse("https://example.com").unwrap();
@@ -125,6 +134,10 @@ mod tests {
 
     /// Test `origins_match` with scheme changes, which should never match.
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_origins_match_scheme() {
         let http_url = url::Url::parse("http://example.com").unwrap();
         let https_url = url::Url::parse("https://example.com").unwrap();
@@ -186,6 +199,10 @@ mod tests {
 
     /// Test `origins_match` with different ports on `localhost`
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_origins_match_localhost_port() {
         let request_origin = url::Url::parse("http://localhost:8000").unwrap();
         let allowed_origin = url::Url::parse("http://localhost:3000").unwrap();
@@ -221,6 +238,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_origin_ios_matches() {
         for allow_subdomains_origin in [true, false] {
             for allow_any_port in [true, false] {
@@ -258,6 +279,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_origin_subdomain_suffix_boundary() {
         let allowed_origin = Url::parse("https://example.com").unwrap();
 

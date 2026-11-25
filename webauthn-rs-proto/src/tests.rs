@@ -1,6 +1,15 @@
 use crate::attest::RegisterPublicKeyCredential;
 
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+use wasm_bindgen_test::*;
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+wasm_bindgen_test_configure!(run_in_browser);
+
 #[test]
+#[cfg_attr(
+    all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+    wasm_bindgen_test
+)]
 fn parse_cred_props() {
     // Old format (extensions)
     let rsp_d: RegisterPublicKeyCredential = serde_json::from_str(r#"{

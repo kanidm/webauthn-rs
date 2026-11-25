@@ -404,11 +404,19 @@ pub struct TokenBinding {
 
 #[cfg(test)]
 mod test {
+    use crate::AuthenticatorTransport;
     use std::str::FromStr;
 
-    use crate::AuthenticatorTransport;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    use wasm_bindgen_test::*;
+    #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+    wasm_bindgen_test_configure!(run_in_browser);
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_authenticator_transports_from_str() {
         let cases: [(&str, AuthenticatorTransport); 6] = [
             ("ble", AuthenticatorTransport::Ble),
@@ -431,6 +439,10 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(
+        all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")),
+        wasm_bindgen_test
+    )]
     fn test_authenticator_transports_serde() {
         let cases: [(&str, AuthenticatorTransport); 9] = [
             ("\"ble\"", AuthenticatorTransport::Ble),

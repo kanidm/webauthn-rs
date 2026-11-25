@@ -4,7 +4,7 @@ extern crate tracing;
 #[cfg(feature = "softtoken")]
 use std::fs::OpenOptions;
 use std::io::{stdin, stdout, Write};
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 #[cfg(any(feature = "cable", feature = "softtoken"))]
 use clap::Args;
@@ -12,6 +12,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crypto_glue::{
     ecdsa_p256,
     rand::{rngs::ThreadRng, Rng, RngExt},
+    time::time_since_epoch,
     x509::Certificate,
 };
 #[cfg(feature = "cable")]
@@ -396,9 +397,7 @@ async fn main() {
 
         let mut unique_id = [0u8; 16];
         rng.fill_bytes(&mut unique_id);
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default();
+        let now = time_since_epoch();
         let user_name = format!("demo-{}", now.as_secs());
         let display_name = format!("Authenticate Demo {}", now.as_secs());
 

@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn yubikey_5_nfc() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let input = [
             0x3b, 0x8d, 0x80, 0x01, 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69,
             0x4b, 0x65, 0xff, 0x7f,
@@ -256,7 +256,7 @@ mod tests {
 
     #[test]
     fn yubico_security_key_c_nfc() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let input = [
             0x3b, 0x8d, 0x80, 0x01, 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59, 0x75, 0x62, 0x69,
             0x4b, 0x65, 0x79, 0xf9,
@@ -281,7 +281,7 @@ mod tests {
 
     #[test]
     fn yubico_yubikey_5c_usb_macos() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let input = [
             0x3b, 0xfd, 0x13, 0x00, 0x00, 0x81, 0x31, 0xfe, 0x15, 0x80, 0x73, 0xc0, 0x21, 0xc0,
             0x57, 0x59, 0x75, 0x62, 0x69, 0x4b, 0x65, 0x79, 0x40,
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn felica_storage_card() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let input = [
             0x3b, 0x8f, 0x80, 0x01, 0x80, 0x4f, 0x0c, 0xa0, 0x00, 0x00, 0x03, 0x06, 0x11, 0x00,
             0x3b, 0x00, 0x00, 0x00, 0x00, 0x42,
@@ -349,7 +349,7 @@ mod tests {
 
     #[test]
     fn short_capabilities() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         // These have a 1 and 2 byte tag 0x7X, so command chaining and extended
         // lc support isn't available.
         let i1 = [0x3b, 0x83, 0x80, 0x01, 0x80, 0x71, 0xc0, 0x33];
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn edge_cases() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let expected = Atr {
             protocols: HashSet::from([0]),
             t1: [].to_vec(),
@@ -393,7 +393,7 @@ mod tests {
 
     #[test]
     fn error_cases() {
-        let _ = tracing_subscriber::fmt().try_init();
+        let _ = tracing_subscriber::fmt().without_time().try_init();
         let i1 = [0x3b];
         let a1 = Atr::try_from(&i1[..]);
         assert_eq!(a1, Err(WebauthnCError::MessageTooShort));
