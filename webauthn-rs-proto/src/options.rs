@@ -359,7 +359,8 @@ pub struct AllowCredentials {
 /// The data collected and hashed in the operation.
 /// <https://www.w3.org/TR/webauthn-2/#dictdef-collectedclientdata>
 #[serde_as]
-#[derive(Debug, Serialize, Clone, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct CollectedClientData {
     /// The credential type
     #[serde(rename = "type")]
@@ -367,17 +368,63 @@ pub struct CollectedClientData {
     /// The challenge.
     #[serde_as(as = "IfIsHumanReadable<Base64<UrlSafe, Unpadded>>")]
     pub challenge: Vec<u8>,
-    /// The rp origin as the browser understood it.
+
+    /// The RP's origin as the browser understood it.
+    #[serde(with = "crate::origin")]
     pub origin: url::Url,
-    /// The inverse of the sameOriginWithAncestors argument value that was
-    /// passed into the internal method.
-    #[serde(rename = "crossOrigin", skip_serializing_if = "Option::is_none")]
+
+    /// The inverse of [the `sameOriginWithAncestors` argument value][2] that was passed into the
+    /// internal method.
+    ///
+    /// **Added in WebAuthn L2.**
+    ///
+    /// This is set when [a WebAuthn request is performed from a cross-origin `<iframe>`][3].
+    /// Hovever, some browsers supported using WebAuthn from a cross-origin `<iframe>` *before* this
+    /// field was standardised.
+    ///
+    /// While [this is an OPTIONAL field per the spec][0], [the limited verification algorithm][1]
+    /// in WebAuthn L2 and L3 make this REQUIRED.
+    ///
+    /// [0]: https://www.w3.org/TR/webauthn-3/#dom-collectedclientdata-crossorigin
+    /// [1]: https://www.w3.org/TR/webauthn-3/#clientdatajson-verification
+    /// [2]: https://www.w3.org/TR/credential-management-1/#same-origin-with-its-ancestors
+    /// [3]: https://www.w3.org/TR/webauthn-3/#sctn-iframe-guidance
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cross_origin: Option<bool>,
-    /// tokenBinding.
-    #[serde(rename = "tokenBinding")]
+
+    /// The fully qualified top-level origin of the requester. It is only set if
+    /// [`cross_origin`][2] is `true`.
+    ///
+    /// **Added in WebAuthn L3.**
+    ///
+    /// While [this is an OPTIONAL field per the spec][0], [the limited verification algorithm][1]
+    /// in WebAuthn L3 makes this REQUIRED when `cross_origin` is `true`.
+    ///
+    /// [This field does not indicate all intermediate cross-origin ancestors][1]. If called from a
+    /// an `<iframe>` chain of origin `A -> B -> A`, then `cross_origin && origin == top_origin`,
+    /// and origin `B` will be invisible. As a result, it's not a useful signal, and `webauthn-rs`
+    /// doesn't check this.
+    ///
+    /// WebAuthn L2 requests may set `cross_origin = true` **without** setting this field.
+    ///
+    /// [0]: https://www.w3.org/TR/webauthn-3/#dom-collectedclientdata-toporigin
+    /// [1]: https://github.com/w3c/webauthn/issues/2488
+    /// [2]: Self::cross_origin
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "crate::origin::option"
+    )]
+    pub top_origin: Option<url::Url>,
+
+    /// The state of the [Token Binding protocol][TokenBinding] used when communicating with the RP.
+    /// Its absence indicates that the client doesn't support token binding.
+    ///
+    /// **Removed in WebAuthn L3.**
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub token_binding: Option<TokenBinding>,
-    /// This struct be extended, so it's important to be tolerant of unknown
-    /// keys.
+
+    /// This struct be extended, so it's important to be tolerant of unknown keys.
     #[serde(flatten)]
     pub unknown_keys: BTreeMap<String, serde_json::value::Value>,
 }
@@ -394,7 +441,7 @@ impl TryFrom<&[u8]> for CollectedClientData {
 */
 
 /// Token binding
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct TokenBinding {
     /// status
     pub status: String,
@@ -403,10 +450,10 @@ pub struct TokenBinding {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
+    use super::*;
     use std::str::FromStr;
-
-    use crate::AuthenticatorTransport;
+    use url::Url;
 
     #[test]
     fn test_authenticator_transports_from_str() {
@@ -450,5 +497,253 @@ mod test {
                 serde_json::from_str(s).expect("Unable to parse transport")
             );
         }
+    }
+
+    /// [CollectedClientData] round-trip serialisation tests.
+    macro_rules! ccd_serialisation_roundtrip {
+        ($($name:ident: $value:expr,)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let (input, expected): (CollectedClientData, &str) = $value;
+                let actual: String = serde_json::to_string(&input)
+                    .expect("serialisation error");
+                assert_eq!(actual, expected);
+
+                let output: CollectedClientData = serde_json::from_str(expected)
+                    .expect("deserialising expected JSON");
+                assert_eq!(input, output, "deserialised input data");
+
+                let output: CollectedClientData = serde_json::from_str(&actual)
+                    .expect("deserialising actual JSON");
+                assert_eq!(input, output, "deserialised roundtripped data");
+            }
+        )*
+        }
+    }
+
+    /// [CollectedClientData] normaliser deserialisation tests.
+    macro_rules! ccd_serialisation_normalise {
+        ($($name:ident: $value:expr,)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let (input, expected, normalised): (CollectedClientData, &str, &str) = $value;
+                let output: CollectedClientData = serde_json::from_str(expected)
+                    .expect("deserialising expected JSON");
+                assert_eq!(input, output, "deserialised input data");
+
+                // Re-serialise the value
+                let actual: String = serde_json::to_string(&input)
+                    .expect("serialisation error");
+                assert_ne!(expected, actual, "Re-serialising the value should normalise it");
+                assert_eq!(normalised, actual, "Normalised form should match");
+
+                let output: CollectedClientData = serde_json::from_str(&actual)
+                    .expect("deserialising actual JSON");
+                assert_eq!(input, output, "deserialised roundtripped data");
+            }
+        )*
+        }
+    }
+
+    ccd_serialisation_roundtrip! {
+        get_l1: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com"}"#
+        ),
+
+        get_android: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"}"#
+        ),
+
+        get_ios: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"ios:bundle-id:com.foo.bar"}"#
+        ),
+
+        get_crossorigin_false: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(false),
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":false}"#
+        ),
+
+        get_crossorigin_true: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(true),
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true}"#
+        ),
+
+        get_top_origin: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(true),
+                top_origin: Some(Url::parse("https://example.net").unwrap()),
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.net"}"#
+        ),
+
+        get_top_origin_intermediate: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(true),
+                top_origin: Some(Url::parse("https://example.com").unwrap()),
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.com"}"#
+        ),
+
+        create_l1: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com"}"#
+        ),
+
+        create_android: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"android:apk-key-hash-sha256:47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU"}"#
+        ),
+
+        create_ios: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("ios:bundle-id:com.foo.bar").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"ios:bundle-id:com.foo.bar"}"#
+        ),
+
+        create_crossorigin_false: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(false),
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":false}"#
+        ),
+
+        create_crossorigin_true: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(true),
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true}"#
+        ),
+
+        create_top_origin: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(true),
+                top_origin: Some(Url::parse("https://example.net").unwrap()),
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.net"}"#
+        ),
+
+        create_top_origin_intermediate: (
+            CollectedClientData {
+                type_: "webauthn.create".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com").unwrap(),
+                cross_origin: Some(true),
+                top_origin: Some(Url::parse("https://example.com").unwrap()),
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.create","challenge":"AAAAAA","origin":"https://example.com","crossOrigin":true,"topOrigin":"https://example.com"}"#
+        ),
+    }
+
+    ccd_serialisation_normalise! {
+        get_trailing_slash: (
+            CollectedClientData {
+                type_: "webauthn.get".to_string(),
+                challenge: vec![0; 4],
+                origin: Url::parse("https://example.com/").unwrap(),
+                cross_origin: None,
+                top_origin: None,
+                token_binding: None,
+                unknown_keys: Default::default()
+            },
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com/"}"#,
+            r#"{"type":"webauthn.get","challenge":"AAAAAA","origin":"https://example.com"}"#
+        ),
     }
 }

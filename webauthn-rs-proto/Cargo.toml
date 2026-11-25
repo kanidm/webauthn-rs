@@ -18,7 +18,8 @@ repository = { workspace = true }
 [features]
 default = []
 
-# Origin-checking, this is an internal implementation detail
+# Origin handling features.
+# This feature flag now does nothing, as these features are always enabled.
 origin = []
 
 # WASM bindings
