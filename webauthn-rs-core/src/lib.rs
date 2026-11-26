@@ -43,6 +43,7 @@ mod core;
 pub mod error;
 mod interface;
 pub mod internals;
+mod time;
 
 /// Protocol bindings
 pub mod proto {
