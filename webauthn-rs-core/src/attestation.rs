@@ -41,9 +41,6 @@ pub trait AttestationX509Extension {
 
 /// The Fido AAGUID x509 extension
 pub struct FidoGenCeAaguid;
-pub(crate) struct AppleAnonymousNonce;
-
-pub(crate) struct AndroidKeyAttestationExtensionData;
 
 impl AttestationX509Extension for FidoGenCeAaguid {
     // If cert contains an extension with OID 1 3 6 1 4 1 45724 1 1 4 (id-fido-gen-ce-aaguid)
@@ -257,6 +254,8 @@ pub(crate) mod android_key_attestation {
     }
 }
 
+pub(crate) struct AndroidKeyAttestationExtensionData;
+
 impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
     // If cert contains an extension with OID 1.3.6.1.4.1.11129.2.1.17 (android key attestation)
     const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.4.1.11129.2.1.17");
@@ -272,6 +271,8 @@ impl AttestationX509Extension for AndroidKeyAttestationExtensionData {
 
     const VALIDATION_ERROR: WebauthnError = WebauthnError::AttestationCertificateNonceMismatch;
 }
+
+pub(crate) struct AppleAnonymousNonce;
 
 impl AttestationX509Extension for AppleAnonymousNonce {
     type Output = [u8; 32];

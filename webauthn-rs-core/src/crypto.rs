@@ -16,12 +16,7 @@ use crypto_glue::{
         self, EcdsaP384PublicKey, EcdsaP384PublicSec1Point, EcdsaP384Signature,
         EcdsaP384VerifyingKey,
     },
-    ecdsa_p521::{
-        self,
-        EcdsaP521PublicKey,
-        // EcdsaP521Signature, EcdsaP521VerifyingKey,
-        EcdsaP521PublicSec1Point,
-    },
+    ecdsa_p521::{self, EcdsaP521PublicKey, EcdsaP521PublicSec1Point},
     rsa::{BigUint, RS256PublicKey, RS256Signature, RS256VerifyingKey},
     s256,
     traits::{Digest, OwnedToRef, Verifier},
@@ -88,10 +83,6 @@ impl<'a> TpmSanDataBuilder<'a> {
             .ok_or(WebauthnError::AttestationCertificateRequirementsNotMet)
     }
 }
-
-// pub(crate) const TCG_AT_TPM_MANUFACTURER: Oid = der_parser::oid!(2.23.133 .2 .1);
-// pub(crate) const TCG_AT_TPM_MODEL: Oid = der_parser::oid!(2.23.133 .2 .2);
-// pub(crate) const TCG_AT_TPM_VERSION: Oid = der_parser::oid!(2.23.133 .2 .3);
 
 pub(crate) const TCG_AT_TPM_MANUFACTURER_RAW: ObjectIdentifier =
     ObjectIdentifier::new_unwrap("2.23.133.2.1");
